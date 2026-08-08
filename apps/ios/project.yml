@@ -15,6 +15,20 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: lol.frens.openmarket
         PRODUCT_NAME: OpenMarket
+        # The two version strings, and they belong here for the same reason the
+        # team below does: this file is the source of truth, and anything typed
+        # into Xcode's General pane lives only in the generated .xcodeproj —
+        # which is gitignored and rewritten wholesale by `xcodegen generate`.
+        # Set there, these survive until the next regenerate and are never
+        # committed, which is the worst of both: it works locally right up until
+        # it silently doesn't.
+        #
+        # `GENERATE_INFOPLIST_FILE` turns them into the two keys Apple actually
+        # reads — MARKETING_VERSION is CFBundleShortVersionString, the version a
+        # user sees, and CURRENT_PROJECT_VERSION is CFBundleVersion, the build
+        # number that has to increase with every upload of a given version.
+        MARKETING_VERSION: "0.0.1"
+        CURRENT_PROJECT_VERSION: "1"
         # The name under the icon, which is the only one a user reads. Kept
         # separate from PRODUCT_NAME so the bundle and scheme can stay a single
         # token while the app presents as two words.
