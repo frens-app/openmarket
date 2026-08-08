@@ -60,9 +60,8 @@ struct DetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                hero
+                gallery
                 priceBlock
-                photoStrip
                 descriptionBlock
                 factsBlock
                 sellerBlock
@@ -158,48 +157,48 @@ struct DetailView: View {
         .accessibilityLabel(isSaved ? "Saved. Tap to remove." : "Save listing")
     }
 
-    /// Every image on this screen has a **fixed height**: the hero below, and
-    /// the 96pt squares in the photo strip. Nothing is sized by the photo that
-    /// lands in it, so the page can't reflow when one decodes.
+    /// The photos, as a paginated deck at a **fixed height** — see
+    /// `PhotoGallery`, which owns the paging, the dots and the full-screen
+    /// viewer.
     ///
-    /// That reflow was the bug. The hero was a bare `AsyncImage` with no height
-    /// — its placeholder is a `Color`, which has no intrinsic size and
-    /// collapses to nothing — so the decoded image expanded the frame to its
-    /// full aspect height and shoved the whole page down. It showed up on
-    /// prefetched listings because everything below is already laid out on the
-    /// first frame; cold ones hid it behind their own loading.
-    private static let heroHeight: CGFloat = 360
+    /// Nothing here is sized by the photo that lands in it, so the page can't
+    /// reflow when one decodes. That reflow was the bug the fixed height fixed:
+    /// a bare `AsyncImage` with no height has a `Color` placeholder, which has
+    /// no intrinsic size and collapses to nothing — so the decoded image
+    /// expanded the frame to its full aspect height and shoved the whole page
+    /// down. It showed up on prefetched listings because everything below is
+    /// already laid out on the first frame; cold ones hid it behind their own
+    /// loading.
+    ///
+    /// The card's thumbnail carries the first frame on its own, before
+    /// enrichment has said how many photos there are — so the deck starts as a
+    /// single page and grows, rather than staying blank until the item page
+    /// lands. `photoURLs` replaces it wholesale once it exists: it starts with
+    /// the same photo, and de-duplicating a CDN URL against itself across two
+    /// different size variants isn't reliable.
+    private var photos: [URL] {
+        if let photos = detail?.photoURLs, !photos.isEmpty { return photos }
+        return [current.thumbnailURL].compactMap { $0 }
+    }
 
-    /// Filled and cropped rather than fitted, which is what a fixed height
-    /// wants: a portrait photo letterboxed into a fixed box is mostly
-    /// background. It also matches `ListingCard`, which fills at a fixed 180 —
-    /// so `matchedGeometryEffect` now animates fill to fill instead of
-    /// distorting fill into fit. The strip below shows every photo uncropped.
-    private var hero: some View {
-        Color(.tertiarySystemFill)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.heroHeight)
-            .overlay {
-                AsyncImage(url: current.thumbnailURL) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
+    private var gallery: some View {
+        PhotoGallery(
+            photos: photos,
+            // Dimmed, not just badged. A sold listing that looks exactly like
+            // an available one until you read a label is a listing someone will
+            // message about.
+            overlay: availability.isGone
+                ? AnyView(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16).fill(.black.opacity(0.45))
+                        soldStamp
                     }
-                }
-            }
-            .overlay {
-                // Dimmed, not just badged. A sold listing that looks exactly
-                // like an available one until you read a label is a listing
-                // someone will message about.
-                if availability.isGone {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(.black.opacity(0.45))
-                }
-            }
-            .overlay(alignment: .center) {
-                if availability.isGone { soldStamp }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .matchedGeometryEffect(id: current.id, in: namespace)
+                    .allowsHitTesting(false)
+                  )
+                : nil,
+            matchedID: current.id,
+            namespace: namespace
+        )
     }
 
     /// Across the photo, because that is where the eye lands first and the
@@ -260,42 +259,6 @@ struct DetailView: View {
                 .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private static let thumbSize: CGFloat = 96
-
-    /// One real thumbnail plus placeholders, filling in left to right. Same
-    /// shape as `hero`: a fixed box that the photo is laid into, never a box
-    /// that takes its size from the photo. The strip's own height is therefore
-    /// identical whether it holds placeholders or twelve loaded images.
-    private var photoStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                if let photos = detail?.photoURLs, !photos.isEmpty {
-                    ForEach(photos, id: \.self) { url in
-                        thumbBox {
-                            AsyncImage(url: url) { phase in
-                                if let image = phase.image {
-                                    image.resizable().scaledToFill()
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    ForEach(0..<3, id: \.self) { _ in
-                        thumbBox { EmptyView() }
-                    }
-                }
-            }
-        }
-        .frame(height: Self.thumbSize)
-    }
-
-    private func thumbBox<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        Color(.tertiarySystemFill)
-            .frame(width: Self.thumbSize, height: Self.thumbSize)
-            .overlay { content() }
-            .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     /// Reserves height so the fade-in doesn't shove the page around. Shows the
