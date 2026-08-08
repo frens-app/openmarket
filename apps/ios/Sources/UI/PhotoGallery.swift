@@ -113,24 +113,89 @@ private struct Index: Identifiable, Equatable {
 /// Photos here are *fitted*, not filled: cropping is right for a fixed slot in
 /// a scrolling page, and wrong for the screen someone opened specifically to
 /// see the whole photo.
+///
+/// A drag up or down dismisses, which is how every photo viewer on the phone
+/// behaves and is far easier to hit than the close button in the corner.
 private struct PhotoViewer: View {
     let photos: [URL]
     @State var index: Int
     @Environment(\.dismiss) private var dismiss
 
+    /// How far the photo has been dragged, and whether this drag counts as a
+    /// dismissal at all — a drag that starts out horizontal belongs to the
+    /// `TabView` paging underneath, so it's ignored for the rest of its life.
+    @State private var drag: CGSize = .zero
+    @State private var dragIsVertical: Bool?
+    /// Set by the page on screen. While zoomed, a drag pans the photo, so the
+    /// dismiss gesture stands down rather than fighting it.
+    @State private var isZoomed = false
+
+    /// Past this much vertical travel the photo goes away on release; a flick
+    /// gets there on velocity alone via the gesture's predicted end.
+    private static let dismissDistance: CGFloat = 100
+
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black.opacity(backdropOpacity).ignoresSafeArea()
 
             TabView(selection: $index) {
                 ForEach(Array(photos.enumerated()), id: \.offset) { offset, url in
-                    ZoomablePhoto(url: url).tag(offset)
+                    ZoomablePhoto(url: url, isZoomed: binding(for: offset)).tag(offset)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            .onChange(of: index) { isZoomed = false }
+            .offset(y: drag.height)
+            .scaleEffect(photoScale)
+            // Simultaneous, not exclusive: the `TabView` keeps its horizontal
+            // paging, and the vertical check below decides which of the two a
+            // given drag was meant for.
+            .simultaneousGesture(dismissDrag)
         }
-        .overlay(alignment: .top) { chrome }
+        .overlay(alignment: .top) { chrome.opacity(backdropOpacity) }
         .statusBarHidden()
+    }
+
+    private var dismissDrag: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard !isZoomed else { return }
+                if dragIsVertical == nil {
+                    dragIsVertical = abs(value.translation.height) > abs(value.translation.width)
+                }
+                guard dragIsVertical == true else { return }
+                drag = value.translation
+            }
+            .onEnded { value in
+                defer { dragIsVertical = nil }
+                guard dragIsVertical == true else { return }
+                if abs(value.predictedEndTranslation.height) > Self.dismissDistance {
+                    dismiss()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        drag = .zero
+                    }
+                }
+            }
+    }
+
+    /// The photo shrinks and the black recedes as it's pulled away, so the drag
+    /// reads as "letting go of this" long before it crosses the threshold.
+    private var dragProgress: CGFloat {
+        min(abs(drag.height) / (Self.dismissDistance * 2), 1)
+    }
+
+    private var backdropOpacity: Double { 1 - Double(dragProgress) * 0.6 }
+
+    private var photoScale: CGFloat { 1 - dragProgress * 0.15 }
+
+    /// Only the page on screen reports its zoom; a neighbour left zoomed would
+    /// otherwise keep the dismiss gesture switched off after paging away.
+    private func binding(for offset: Int) -> Binding<Bool> {
+        Binding(
+            get: { offset == index && isZoomed },
+            set: { if offset == index { isZoomed = $0 } }
+        )
     }
 
     /// Close on the left, count in the middle — the same furniture Facebook's
@@ -166,6 +231,9 @@ private struct PhotoViewer: View {
 /// always live would swallow every page swipe.
 private struct ZoomablePhoto: View {
     let url: URL
+    /// Reported upward so the viewer's swipe-to-dismiss can stand down while
+    /// this photo is zoomed and a drag means "pan" instead.
+    @Binding var isZoomed: Bool
 
     @State private var scale: CGFloat = 1
     @State private var committedScale: CGFloat = 1
@@ -193,6 +261,11 @@ private struct ZoomablePhoto: View {
                 ProgressView().tint(.white)
             }
         }
+        .onChange(of: scale) { isZoomed = scale > 1 }
+        // The binding reads false as soon as this page stops being the one on
+        // screen, which is the cue to drop the zoom: paging back to a photo
+        // shows it whole again, and no off-screen page is left claiming a zoom.
+        .onChange(of: isZoomed) { if !isZoomed && scale > 1 { toggleZoom() } }
     }
 
     private var magnification: some Gesture {
