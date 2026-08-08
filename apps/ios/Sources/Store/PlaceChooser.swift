@@ -31,12 +31,15 @@ final class PlaceChooser: ObservableObject {
 
     /// The device's own fix. Returns whether a place was stored, so a caller
     /// that wants to move on can.
+    ///
+    /// Both callers are a tap on "Use my location", which is the whole reason
+    /// this is one of the few places allowed to raise the permission dialog.
     @discardableResult
     func useDeviceLocation(via location: LocationProvider) async -> Bool {
         failure = nil
         pending = .deviceFix
         defer { pending = nil }
-        guard let coordinate = await location.resolveOnce() else {
+        guard let coordinate = await location.resolveOnce(prompt: .ifNeeded) else {
             failure = location.isDenied
                 ? "Location is off for Open Market. Turn it on in Settings, or search for a city instead."
                 : "Couldn't get a location fix. Try again, or search for a city instead."

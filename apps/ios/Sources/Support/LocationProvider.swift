@@ -43,12 +43,33 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         [.denied, .restricted].contains(manager.authorizationStatus)
     }
 
-    /// Resolves once and caches. Returns nil if the user declines or the fix
-    /// doesn't arrive — searching still works, it just falls back to the
-    /// stored city slug, so this must never block indefinitely.
-    func resolveOnce(timeout: Duration = .seconds(6)) async -> CLLocationCoordinate2D? {
+    /// Whether a call may summon the system permission dialog.
+    ///
+    /// The dialog is a once-per-install event, and iOS gives it to whichever
+    /// call happens to arrive first. That used to be an ordinary search: a user
+    /// who skipped location during onboarding and typed a query got the system
+    /// prompt in the middle of a screen that never mentioned location, with no
+    /// visible reason for the app to be asking.
+    ///
+    /// So asking is opt-in, and the opt-in belongs only to a control the user
+    /// pressed *to enable location* — "Use my location" in onboarding or the
+    /// location sheet, and the enable card under a listing. Everything else
+    /// takes a fix if one is already authorised and quietly does without
+    /// otherwise.
+    enum Prompt {
+        /// The caller is a deliberate tap on an enable-location control.
+        case ifNeeded
+        /// Use an existing authorisation or return nil. Never shows a dialog.
+        case never
+    }
+
+    /// Resolves once and caches. Returns nil if the user declines, hasn't been
+    /// asked, or the fix doesn't arrive — searching still works, it just falls
+    /// back to the stored city slug, so this must never block indefinitely.
+    func resolveOnce(timeout: Duration = .seconds(6),
+                     prompt: Prompt = .never) async -> CLLocationCoordinate2D? {
         if let coordinate { return coordinate }
-        return await requestFix(timeout: timeout)
+        return await requestFix(timeout: timeout, prompt: prompt)
     }
 
     /// Takes a **new** fix, ignoring the cached one.
@@ -61,15 +82,20 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     /// me to get there" is a question about where the user is standing right
     /// now, and answering it from a fix taken when the app launched is how you
     /// get a confident twenty-minute drive that is actually five.
-    func resolveFresh(timeout: Duration = .seconds(6)) async -> CLLocationCoordinate2D? {
-        await requestFix(timeout: timeout)
+    func resolveFresh(timeout: Duration = .seconds(6),
+                      prompt: Prompt = .never) async -> CLLocationCoordinate2D? {
+        await requestFix(timeout: timeout, prompt: prompt)
     }
 
-    private func requestFix(timeout: Duration) async -> CLLocationCoordinate2D? {
+    private func requestFix(timeout: Duration, prompt: Prompt) async -> CLLocationCoordinate2D? {
         guard manager.authorizationStatus != .denied, manager.authorizationStatus != .restricted else {
             state = .denied
             return nil
         }
+        // Undecided and not asked to ask: leave the state alone. `.idle` is
+        // what the enable-location cards key off to know a dialog is still
+        // available, and `.failed` here would be a lie — nothing was tried.
+        if manager.authorizationStatus == .notDetermined, prompt == .never { return nil }
         guard continuation == nil else { return nil }   // a request is already in flight
         state = .requesting
 

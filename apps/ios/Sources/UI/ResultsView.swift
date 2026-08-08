@@ -608,6 +608,13 @@ struct ResultsView: View {
     /// Location is an enhancement, never a gate: searching uses whatever
     /// coordinate is already cached and asks for a fresh one in the background,
     /// so a slow or refused fix can't stall the results.
+    ///
+    /// And never a *prompt*. This runs on every search, including the first one
+    /// after a user skipped the location step, so it takes a fix only where
+    /// permission already exists (`prompt: .never`, the default). Raising the
+    /// system dialog from here put it on a screen that had said nothing about
+    /// location — asking belongs to the controls that offer it: the location
+    /// sheet, onboarding, and the enable card under a listing.
     private func makeQuery(_ kind: SearchQuery.Kind) -> SearchQuery {
         if location.coordinate == nil {
             Task {
