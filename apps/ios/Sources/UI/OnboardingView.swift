@@ -277,6 +277,7 @@ private struct PlacePage: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
+        .locationSettingsAlert(isPresented: $chooser.needsLocationSettings)
         .sheet(isPresented: $showCitySearch) {
             CitySearchSheet(chooser: chooser)
         }

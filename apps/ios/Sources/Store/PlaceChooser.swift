@@ -21,6 +21,17 @@ final class PlaceChooser: ObservableObject {
     @Published private(set) var pending: Pending?
     @Published private(set) var failure: String?
 
+    /// The device fix was *refused*, rather than merely not arriving.
+    ///
+    /// Kept apart from `failure` because the two need different answers. A fix
+    /// that didn't land is worth retrying, and a footnote saying so is enough.
+    /// A refusal can't be retried from inside the app at all — iOS won't show
+    /// the dialog a second time — so it gets an alert with the only action that
+    /// changes anything (`locationSettingsAlert`). Screens bind to this
+    /// directly, which is why it's settable from outside: dismissing the alert
+    /// clears it.
+    @Published var needsLocationSettings = false
+
     var isBusy: Bool { pending != nil }
 
     private let prefs: Preferences
@@ -40,9 +51,11 @@ final class PlaceChooser: ObservableObject {
         pending = .deviceFix
         defer { pending = nil }
         guard let coordinate = await location.resolveOnce(prompt: .ifNeeded) else {
-            failure = location.isDenied
-                ? "Location is off for Open Market. Turn it on in Settings, or search for a city instead."
-                : "Couldn't get a location fix. Try again, or search for a city instead."
+            if location.isDenied {
+                needsLocationSettings = true
+            } else {
+                failure = "Couldn't get a location fix. Try again, or search for a city instead."
+            }
             return false
         }
         return await apply(coordinate, origin: .deviceFix)

@@ -49,6 +49,7 @@ struct LocationPickerSheet: View {
             .onChange(of: query) { cities.search(query) }
             .navigationTitle("Location")
             .navigationBarTitleDisplayMode(.inline)
+            .locationSettingsAlert(isPresented: $chooser.needsLocationSettings)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
