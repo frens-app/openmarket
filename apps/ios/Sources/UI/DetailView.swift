@@ -122,6 +122,12 @@ struct DetailView: View {
                 Task { await refetchAfterSignIn() }
             }
         }
+        // Keyed on the listing this screen was pushed for, not on `current`:
+        // the id has to be the one the grid card marked itself with, and it
+        // has to stay put for the life of the screen — enrichment replaces
+        // `current` wholesale, and a source id that changes mid-flight is a
+        // transition with nothing to run back into.
+        .zoomTransitionDestination(id: listing.id, in: namespace)
     }
 
     /// Re-reads this listing now that a session exists.
@@ -195,9 +201,7 @@ struct DetailView: View {
                     }
                     .allowsHitTesting(false)
                   )
-                : nil,
-            matchedID: current.id,
-            namespace: namespace
+                : nil
         )
     }
 

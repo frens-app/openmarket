@@ -18,10 +18,6 @@ struct PhotoGallery: View {
     /// slot now, so it also owns the dimming and the stamp that used to sit on
     /// the hero.
     let overlay: AnyView?
-    /// The id `DetailView` animates from the grid card, applied to the first
-    /// page only: that's the photo the card was showing.
-    let matchedID: String
-    let namespace: Namespace.ID
 
     static let height: CGFloat = 360
 
@@ -44,7 +40,6 @@ struct PhotoGallery: View {
             }
             .overlay { overlay }
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .matchedGeometryEffect(id: matchedID, in: namespace)
             .overlay(alignment: .bottom) {
                 if photos.count > 1 { pageDots.padding(.bottom, 12) }
             }

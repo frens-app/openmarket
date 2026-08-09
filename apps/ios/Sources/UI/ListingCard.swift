@@ -70,7 +70,7 @@ struct ListingCard: View {
             .frame(maxWidth: .infinity)
             .frame(height: 180)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .matchedGeometryEffect(id: listing.id, in: namespace)
+            .zoomTransitionSource(id: listing.id, in: namespace)
 
             if let badge = listing.badgeText {
                 Text(badge)

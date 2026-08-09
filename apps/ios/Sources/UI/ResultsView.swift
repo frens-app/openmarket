@@ -335,9 +335,9 @@ struct ResultsView: View {
     /// here", which is Discover's job now.
     ///
     /// `RecentCard` rather than `ListingCard` also keeps `heroNamespace` ids
-    /// unique across the screen, which `matchedGeometryEffect` requires: a
-    /// saved listing may perfectly well appear in Discover as well, and two
-    /// views claiming one id would break the transition into the detail view.
+    /// unique across the screen, which the zoom transition requires: a saved
+    /// listing may perfectly well appear in Discover as well, and two cards
+    /// claiming one source id leaves the push no single thing to zoom out of.
     private func strip(_ title: String, items: [Listing]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle(title)
@@ -741,9 +741,9 @@ private extension View {
 ///
 /// Deliberately not a `ListingCard`. That card is built for a column of a
 /// staggered grid — variable height, distance line, saved bookmark — and none of
-/// that survives being squeezed into a 128pt horizontal rail. It also carries a
-/// `matchedGeometryEffect`, which would collide with the grid above if the same
-/// listing appeared in both.
+/// that survives being squeezed into a 128pt horizontal rail. It also marks
+/// itself as a zoom-transition source, which would collide with the grid above
+/// if the same listing appeared in both.
 private struct RecentCard: View {
     let listing: Listing
 
