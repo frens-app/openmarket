@@ -299,6 +299,52 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         photos=\(String(format: "%.2f", Date().timeIntervalSince(loadedAt)))s
         """)
         Logger.detail.info("detail ok: desc=\(raw.description != nil) photos=\(raw.photoURLs.count) cond=\(raw.conditionText != nil) sold=\(raw.isSold.map(String.init) ?? "nil", privacy: .public) pending=\(raw.isPending.map(String.init) ?? "nil", privacy: .public) coord=\(raw.latitude ?? "none", privacy: .public),\(raw.longitude ?? "none", privacy: .public)")
+        Logger.detail.info("seller: name=\(raw.sellerName ?? "nil", privacy: .public) rating=\(raw.sellerRatingText ?? "nil", privacy: .public) section=[\(raw.sellerSection ?? "nil", privacy: .public)]")
+
+        // **The seller block lands after the readiness test is satisfied.**
+        //
+        // `until:` waits for the description and the gallery, and the seller
+        // section renders later than both — so a perfectly good page was handed
+        // back before Facebook had built it, and the extractor reported `none of
+        // 1460 nodes` for a section that is there seconds later. That is the
+        // whole bug: seller identity was never part of "ready", so whether it
+        // appeared was a race the app always lost on a fast page.
+        //
+        // **Re-polling is the whole fix; there is deliberately no scroll here.**
+        // One was written on the theory that the block is below the fold, and it
+        // reported `moved: nothing` on the very page that produced a seller
+        // 33 ms later — so it never did the work. It was then removed rather
+        // than kept as insurance, because it is not free: this page keeps its
+        // data in the rendered markup, so scrolling can unmount the nodes the
+        // description and the `Listed …` line are read out of. A step that has
+        // never helped and can cost fields is worse than no step.
+        //
+        // Deliberately *after* the caller already has text and photos on screen,
+        // so it costs the user nothing they are waiting on, and conditional — a
+        // page that already produced a seller, or a login wall, has nothing to
+        // gain.
+        var best = raw
+        if best.sellerName == nil, !best.loginWall {
+            // **Merged, never swapped.** Taking the later snapshot wholesale
+            // regressed the description: this read happens seconds later and
+            // after a scroll, so any field that has degraded in the meantime —
+            // a recycled description block, a `Listed …` line that now abuts a
+            // button — replaced a perfectly good earlier one. The second read
+            // exists to answer one question, so it may only contribute the
+            // answer to that question.
+            if let revealed = await poll(script, as: RawDetail.self,
+                                         until: { $0.sellerName != nil },
+                                         timeout: .seconds(3)),
+               revealed.sellerName != nil {
+                best.sellerName = revealed.sellerName
+                best.sellerJoined = revealed.sellerJoined
+                best.sellerRatingText = revealed.sellerRatingText
+                best.sellerRatingCount = revealed.sellerRatingCount
+                best.sellerIsHighlyRated = revealed.sellerIsHighlyRated
+                best.sellerSection = revealed.sellerSection
+            }
+            Logger.detail.info("seller on re-poll: name=\(best.sellerName ?? "still nil", privacy: .public) desc=\(best.description != nil) section=[\(best.sellerSection ?? "nil", privacy: .public)]")
+        }
         if !raw.matches(expectedID) {
             Logger.detail.warning("wrong page: wanted \(expectedID ?? "none", privacy: .public), got \(raw.itemId ?? "none", privacy: .public)")
             metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: false)
@@ -313,7 +359,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         await pacer.recordSuccess()
 
         metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: true)
-        return raw.listingDetail
+        return best.listingDetail
     }
 
     /// Facebook prints a seller's score as "4.8 (12)" — the star average and

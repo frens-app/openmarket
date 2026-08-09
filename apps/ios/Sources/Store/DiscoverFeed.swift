@@ -2,53 +2,76 @@ import Foundation
 import WebKit
 import os
 
-/// The home screen's feed, built out of what this user has been looking for.
+/// The home screen's feed. **Two of them, and which one you get depends on
+/// whether you are signed in.**
 ///
-/// **Not Facebook's own picks, deliberately.** The first version of this loaded
-/// `/marketplace/<place>/` — the "Today's picks" browse feed — and it was a bad
-/// recommendation surface: three loads of the identical URL in one session gave
-/// 0 of 5 top cards in common between the first and second, 17 of 20 between the
-/// second and third, and a fourth that reverted to the first's contents. The
-/// geography swung with it, from 9-of-20 in San Francisco to an East Bay spread
-/// reaching Napa and Antioch, 50 mi out. It reads as a couple of cached
-/// popularity pools being alternated, and logged out there is nothing much for
-/// Facebook to personalise it with anyway: an IP, an anonymous cookie, and
-/// whatever item pages that cookie has opened.
+/// Signed in, this browses Facebook's own Marketplace feed for the user's place
+/// — the default Discover screen, scrolled — and filters it to the radius the
+/// user set. Signed out, it runs a few of the user's own recent searches and
+/// mixes the results.
 ///
-/// The app knows more than that, and knows it locally. Recent searches are the
-/// one strong statement of interest anyone makes here, so this runs a few of
-/// them and mixes the results. What it loses is novelty — this cannot show you
-/// something in a category you've never asked about — and that is the trade
-/// being made: relevance over surprise, from signals that never leave the
-/// device.
+/// **The split is the design, not a fallback.** Facebook's feed was tried once
+/// before, logged out, and removed: three loads of the identical URL in one
+/// session gave 0 of 5 top cards in common between the first and second, 17 of
+/// 20 between the second and third, and a fourth that reverted to the first's
+/// contents. The geography swung with it, from 9-of-20 in San Francisco to an
+/// East Bay spread reaching Napa and Antioch, 50 mi out. It read as a couple of
+/// cached popularity pools being alternated — which is about all it could be,
+/// since an anonymous session gives Facebook an IP, a cookie, and nothing else
+/// to rank with.
 ///
-/// **Before there is any history**, the seeds are the interests picked during
-/// onboarding (`Interest`, `OnboardingView`). That is what the required
-/// three-interest step is for: this class is the reason it exists, and without
-/// it a new install's home screen was a hardcoded category list searched in a
-/// hardcoded city.
+/// An account changes that input completely. Facebook is ranking against a real
+/// history, which is more than this app can assemble out of search terms on the
+/// device, and the feed scrolls indefinitely instead of stopping at three
+/// searches' worth of cards. So the signed-in user gets the real thing, and the
+/// signed-out user gets the local substitute — which is also the honest place
+/// for a nudge to sign in, since signing in visibly improves the screen.
+///
+/// **The searches, for the signed-out half.** Recent searches are the one strong
+/// statement of interest anyone makes here, so this runs a few and mixes the
+/// results. Before there is any history the seeds are the interests picked
+/// during onboarding (`Interest`, `OnboardingView`) — that is what the required
+/// three-interest step is for. What it loses is novelty: it cannot show you
+/// something in a category you have never asked about or picked.
 ///
 /// **Its own engines**, one per search, for the reason `ComparableSearch` has
 /// one: sharing the browse tab's would mean the home feed and the user's first
 /// search taking turns navigating one webview. One each means the searches
 /// overlap instead of queueing, so a fill is about as long as its slowest page
 /// rather than the sum of three. No extra request budget either — `RequestPacer`
-/// is a shared actor and still spaces the starts.
+/// is a shared actor and still spaces the starts. The browse feed needs only the
+/// first of them: it is one page, scrolled.
 ///
 /// **A fill publishes once, when all of it is in.** The grid used to arrive in
 /// three instalments and reflow twice under whoever was reading it. Cards moving
 /// out from under a thumb is the one thing a feed must not do, and staging the
-/// wait made it look longer than it was.
+/// wait made it look longer than it was. Pagination is exempt — it appends below
+/// what is already on screen, which moves nothing.
 ///
 /// **Session-scoped, and nothing is written to disk.** The feed survives moving
-/// between tabs and opening listings, and is rebuilt only when the app is
-/// launched again or the user pulls to refresh. Nothing persists a feed that is
-/// half random by construction: restoring one from disk would show a shuffle
-/// somebody generated yesterday and call it today's.
+/// between tabs and opening listings, and is rebuilt when the app is launched
+/// again, when the user pulls to refresh, or when the session changes — that
+/// last one because the session decides which of the two feeds this even is.
 @MainActor
 final class DiscoverFeed: ObservableObject {
+    /// Which feed is on screen. Published because the screen's footer differs:
+    /// a search-seeded feed ends in an offer to sign in, and the browse feed
+    /// ends when the area runs out.
+    enum Mode: Equatable {
+        /// Facebook's own Marketplace feed, scrolled. Signed in.
+        case browse
+        /// The user's recent searches and interests, re-run and mixed.
+        case searches
+    }
+
     @Published private(set) var listings: [Listing] = []
     @Published private(set) var isLoading = false
+    /// Scrolling the browse feed for more, with cards already on screen.
+    @Published private(set) var isLoadingMore = false
+    @Published private(set) var mode: Mode = .searches
+    /// Whether there is any point scrolling further. Always true for the
+    /// search-seeded feed, which is a fixed set of cards by construction.
+    @Published private(set) var reachedEnd = false
     /// What this feed was built from, so the screen can say so. A feed
     /// assembled out of someone's history should admit which parts of it.
     @Published private(set) var seeds: [Seed] = []
@@ -83,6 +106,32 @@ final class DiscoverFeed: ObservableObject {
     /// which the user could have got by running them.
     static let perSearch = 10
 
+    /// How many in-radius cards the browse feed tries to have in hand before it
+    /// publishes, and how many each top-up aims to add.
+    ///
+    /// It has to be a target rather than a page count because the two numbers
+    /// are not related: Facebook's feed reaches wherever it feels like reaching,
+    /// and one measured browse load returned 20 cards across 11 cities, of which
+    /// a 6 mi radius kept 9. Paging once and showing what survived would make a
+    /// half-empty screen look like the whole of what's nearby.
+    static let browseTarget = 12
+    /// How many screens one harvest may scroll in total, and how many of those
+    /// may turn up new listings that are *all* too far before it gives up.
+    ///
+    /// The first is a time bound — a screen costs ~0.9s of settling. The second
+    /// is the end-of-area test, and it counts a very specific thing: screens
+    /// that produced new listings, none of which were close enough. A screen
+    /// that produced no new listings at all is **not** counted, because it is
+    /// not evidence of anything.
+    ///
+    /// That distinction is the whole of it. The feed virtualises, and a fill has
+    /// already taken every card in the DOM, so the first several screens of a
+    /// top-up re-read cards we have seen and legitimately yield nothing.
+    /// Counting those as dry ended the feed after 2644px of a 6650px document —
+    /// measured, signed in, with the feed still happily paginating.
+    static let scrollBudget = 14
+    static let dryScreenLimit = 4
+
     /// One engine per search, so the searches can run at the same time.
     ///
     /// They can't share one. An engine is a single `WKWebView` with a single
@@ -98,35 +147,120 @@ final class DiscoverFeed: ObservableObject {
     /// budget either — `RequestPacer` is shared and still spaces the starts.
     private let engines: [DesktopFeedEngine]
     private let prefs: Preferences
+    private let distances: DistanceResolver
     private var hasLoaded = false
+    /// Which session the current cards were fetched under, so a sign-in or a
+    /// sign-out rebuilds the feed rather than leaving the wrong one up. Not the
+    /// same question as "has it loaded": the session decides *which feed this
+    /// is*, so a stale answer here is a screen that belongs to somebody else.
+    private var filledUnder: BrowserSession?
+    /// Listing ids already taken from the browse feed this fill.
+    ///
+    /// Held across scrolls rather than recomputed, because the desktop feed
+    /// virtualises: every harvest returns the cards currently in the DOM, which
+    /// overlaps heavily with the last one.
+    private var browseSeen = Set<String>()
 
     /// All of them have to be in the view hierarchy for WebKit to render them —
     /// see `RootView`. Same constraint as every other engine.
     var webViews: [WKWebView] { engines.map(\.webView) }
 
-    init(engines: [DesktopFeedEngine]? = nil, prefs: Preferences = .shared) {
+    init(engines: [DesktopFeedEngine]? = nil,
+         prefs: Preferences = .shared,
+         distances: DistanceResolver = .shared) {
         self.engines = engines ?? (0..<Self.searchCount).map { _ in DesktopFeedEngine() }
         self.prefs = prefs
+        self.distances = distances
     }
 
-    /// Fills once per launch. `force` is the pull-to-refresh path, and the only
-    /// other thing that rebuilds it.
+    /// Fills once per launch. `force` is the pull-to-refresh path.
     ///
-    /// Note what is *not* a trigger: running a search. Recent searches are the
-    /// seed, so every search would otherwise invalidate the feed the user is
-    /// about to come back to — they'd return from a search to a screen that had
-    /// thrown itself away and was reloading. The new term is picked up by the
-    /// next launch, or by a pull.
+    /// It also refills when the session has changed since the last fill, which
+    /// is not the same kind of trigger as the others: signing in doesn't make
+    /// the feed *stale*, it makes it the wrong feed entirely.
+    ///
+    /// Note what is *not* a trigger: running a search. Recent searches seed the
+    /// signed-out feed, so every search would otherwise invalidate the screen
+    /// the user is about to come back to — they'd return from a search to one
+    /// that had thrown itself away and was reloading. The new term is picked up
+    /// by the next launch, or by a pull.
     func loadIfNeeded(citySlug: String, force: Bool = false) async {
-        guard force || !hasLoaded, !isLoading else { return }
+        guard !isLoading else { return }
+        // Read from the cookie store rather than taken from the caller. The
+        // session is what picks the feed, and `ListingStore.session` is set by
+        // an async check that may not have landed yet on the launch this screen
+        // fills on — starting the wrong feed and marking it done would leave a
+        // signed-in user looking at the signed-out one until they relaunched.
+        let session: BrowserSession = await SessionState.isSignedIn() ? .authed : .unauthed
+        // Re-checked after the await: this is a `@MainActor` method, and an
+        // await lets the next caller in. `RequestPacer` learned the same lesson
+        // the expensive way.
+        guard !isLoading, force || !hasLoaded || session != filledUnder else { return }
+
         isLoading = true
         defer {
             isLoading = false
             hasLoaded = true
+            filledUnder = session
         }
 
+        reachedEnd = false
+        mode = session == .authed ? .browse : .searches
+        switch mode {
+        case .browse: await fillFromMarketplace(citySlug: citySlug)
+        case .searches: await fillFromSearches(citySlug: citySlug)
+        }
+    }
+
+    /// Signed in: Facebook's own Marketplace feed for this place, cut to the
+    /// user's radius.
+    ///
+    /// One engine and one page — this is a scroll, not three searches — so the
+    /// other two sit idle for as long as the session lasts. Cheaper than it
+    /// looks: they are already resident for the app's lifetime, and a sign-out
+    /// puts them straight back to work.
+    private func fillFromMarketplace(citySlug: String) async {
+        guard let engine = engines.first else { return }
+        seeds = []
+        browseSeen = []
+
+        let query = SearchQuery(kind: .browse, radiusKM: prefs.radiusKM,
+                                citySlug: citySlug, coordinate: nil)
+        let cards = await engine.loadCards(query.url)
+
+        // A wall on the feed of a session we believe is signed in means the
+        // cookies outlived whatever Facebook does with them. Fall back to the
+        // signed-out feed rather than showing an empty screen and blaming the
+        // neighbourhood for it — and take its footer with it, since "log in"
+        // is the accurate next step for a session that has stopped working.
+        if engine.state == .loginWall {
+            Logger.discover.info("login wall on the browse feed — falling back to searches")
+            mode = .searches
+            await fillFromSearches(citySlug: citySlug)
+            return
+        }
+
+        var collected = await nearby(cards).kept
+        // Only if the first screen didn't already carry enough. A fill that can
+        // publish immediately should, since this is the screen the app opens on.
+        if collected.count < Self.browseTarget {
+            let harvest = await scrollForMore(engine, wanted: Self.browseTarget - collected.count)
+            collected += harvest.cards
+            reachedEnd = harvest.exhausted
+        }
+        // One assignment, as with the search path: a pull-to-refresh keeps the
+        // old cards exactly where they are until the new feed is ready.
+        listings = collected
+        Logger.discover.info("\(self.listings.count, privacy: .public) cards from Marketplace, end=\(self.reachedEnd, privacy: .public)")
+    }
+
+    /// Signed out: the user's own recent searches, re-run and mixed.
+    private func fillFromSearches(citySlug: String) async {
         let seeds = Self.seeds(recent: prefs.recentSearches, interests: prefs.chosenInterests)
         self.seeds = seeds
+        // A fixed set of cards — there is no page two of three searches — so
+        // this feed is at its end the moment it lands.
+        reachedEnd = true
 
         // All searches at once, one engine each, and nothing is published until
         // every one of them is back.
@@ -154,12 +288,161 @@ final class DiscoverFeed: ObservableObject {
         // can't shrink underneath a reader (`DistanceResolver.resolveAll`).
         // Part of the same fill for the same reason the searches are: this
         // screen shows nothing until all of it is ready.
-        await DistanceResolver.shared.resolveAll(mixed.map(\.locationText))
+        await distances.resolveAll(mixed.map(\.locationText))
         // Replaced in one assignment, which is also what keeps a pull-to-refresh
         // honest: the old cards stay exactly where they are until the whole new
         // feed is ready to take their place.
         listings = mixed
         Logger.discover.info("\(self.listings.count, privacy: .public) cards from \(seeds.count, privacy: .public) searches")
+    }
+
+    /// More of Facebook's feed, triggered a few cards from the bottom.
+    ///
+    /// Only the browse feed has a bottom worth reaching for. The search-seeded
+    /// one is a fixed sample of three searches, so there is nothing to fetch.
+    func loadMoreIfNeeded(currentItem: Listing) async {
+        guard mode == .browse, !reachedEnd, !isLoading, !isLoadingMore,
+              let engine = engines.first,
+              let index = listings.firstIndex(of: currentItem),
+              index >= listings.count - 6 else { return }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        let harvest = await scrollForMore(engine, wanted: Self.browseTarget)
+        // Appended, never reassigned. New cards land below everything already
+        // on screen, so nothing moves under whoever is reading.
+        listings.append(contentsOf: harvest.cards)
+        reachedEnd = harvest.exhausted
+    }
+
+    /// Scrolls the browse feed a screen at a time, keeping what is inside the
+    /// radius, until it has `wanted` of them or there is no point continuing.
+    ///
+    /// Harvesting *between* scrolls rather than once at the end is not
+    /// defensive: the desktop feed virtualises, recycling cards out of the DOM
+    /// as they leave the viewport, so a single read at the bottom returns the
+    /// last window rather than the feed (`docs/logged-in-findings.md` §3).
+    ///
+    /// `exhausted` means "stop asking", and it has two causes worth telling
+    /// apart in the log but not in the UI: the document stopped growing, which
+    /// is the literal end of the feed, or several screens in a row carried
+    /// nothing within the radius, which is the end of the part of it that this
+    /// app is for. Running out of scroll budget is neither — it is just this
+    /// call's turn ending, and the next one picks up where it left off.
+    private func scrollForMore(_ engine: DesktopFeedEngine,
+                               wanted: Int) async -> (cards: [Listing], exhausted: Bool) {
+        var found: [Listing] = []
+        var dryScreens = 0
+        var screens = 0
+
+        while found.count < wanted, dryScreens < Self.dryScreenLimit, screens < Self.scrollBudget {
+            screens += 1
+            guard await engine.scrollOnce() else {
+                Logger.discover.info("browse feed stopped growing after \(screens, privacy: .public) screens")
+                return (found, true)
+            }
+            let batch = await nearby(await engine.renderedCards())
+            found += batch.kept
+            // Only a screen that turned up something new and rejected all of it
+            // counts against the area. Re-reading cards the fill already took
+            // says nothing about how much is out there.
+            if batch.newCards > 0 {
+                dryScreens = batch.kept.isEmpty ? dryScreens + 1 : 0
+            }
+        }
+
+        let exhausted = dryScreens >= Self.dryScreenLimit
+        Logger.discover.info("harvest: \(found.count, privacy: .public) kept over \(screens, privacy: .public) screens, dry \(dryScreens, privacy: .public), exhausted \(exhausted, privacy: .public)")
+        return (found, exhausted)
+    }
+
+    /// Rendered cards, minus everything this feed shouldn't carry: duplicates,
+    /// shipping-only listings, and anything outside the user's radius.
+    ///
+    /// **The radius is applied here rather than left to the view**, which is the
+    /// difference between this feed and every other list in the app. Everywhere
+    /// else the app fetches a page and the view hides what's too far; that works
+    /// when the page is a search the user aimed at their own city. Facebook's
+    /// feed is aimed by Facebook, and it wanders — 20 cards across 11 cities on
+    /// one measured load. Filtering downstream of the fetch would page in twenty
+    /// and show four, with no way for the fill to know it should keep going.
+    /// Knowing it here is what lets a fill scroll until it has enough.
+    ///
+    /// Listings whose distance isn't known are **kept**, same rule as the grid:
+    /// geocoding is asynchronous and lossy, and filtering on missing data hides
+    /// listings for being unrecognised rather than for being far away.
+    /// - Returns: what survived, and how many listings were new to this fill at
+    ///   all. The caller needs both to tell "this area has run out" from "we are
+    ///   re-reading the window the fill already took" — see `scrollForMore`.
+    private func nearby(_ cards: [DesktopRawCard]) async -> (kept: [Listing], newCards: Int) {
+        var parsed: [Listing] = []
+        var unparsed = 0, ships = 0, dupes = 0
+        var sample: DesktopRawCard?
+        for (index, card) in cards.enumerated() {
+            guard let listing = DesktopCardParser.parse(card, cardIndex: index) else {
+                unparsed += 1
+                // What a rejected card actually looked like. A count of
+                // failures says a selector matched nothing; the sample says
+                // *why*, and this project has twice concluded "no data" from a
+                // selector that was simply pointing at the wrong thing
+                // (`docs/probe-checklist.md` §2).
+                if sample == nil { sample = card }
+                continue
+            }
+            // A local marketplace's home screen isn't a shipping catalogue. The
+            // browse feed has no delivery filter to ask for, so this is the only
+            // thing keeping them out.
+            guard listing.badgeText != "Ships" else {
+                ships += 1
+                continue
+            }
+            guard browseSeen.insert(listing.id).inserted else {
+                dupes += 1
+                continue
+            }
+            parsed.append(listing)
+        }
+        // Every stage counted separately. "No new cards" has four different
+        // causes here — nothing rendered, labels not hydrated so nothing parsed,
+        // every id already taken, everything too far — and they are
+        // indistinguishable downstream while looking identical to the user.
+        // Lumping the middle two together already cost one wrong diagnosis.
+        let tally = "\(cards.count) raw, \(unparsed) unparsed, \(ships) ships, \(dupes) dupes"
+        if let sample {
+            Logger.discover.info("rejected card: id=\(sample.id, privacy: .public) label=[\(sample.label.prefix(90), privacy: .public)] img=\(!sample.imageURL.isEmpty, privacy: .public) text=[\(sample.text.replacingOccurrences(of: "\n", with: " ").prefix(90), privacy: .public)]")
+        }
+        guard !parsed.isEmpty else {
+            Logger.discover.info("batch: \(tally, privacy: .public), 0 new")
+            return ([], 0)
+        }
+
+        await distances.resolveAll(parsed.map(\.locationText))
+        guard prefs.radiusKM > 0 else { return (parsed, parsed.count) }
+        let kept = parsed.filter { listing in
+            let coordinate = distances.enrichedCoordinate(for: listing)
+            guard let km = distances.distanceKM(for: listing.locationText,
+                                                coordinate: coordinate) else {
+                // **Unknown distance is dropped here**, which is the opposite of
+                // the rule everywhere else in the app. Everywhere else the list
+                // is a search Facebook already localised, so an unresolved place
+                // is probably nearby and hiding it would punish a card for being
+                // unrecognised. This feed is not localised in any comparable
+                // sense — it reaches across state lines, and a signed-in Seattle
+                // feed served Vancouver WA, Bellingham, Wilsonville OR and a
+                // cardboard cutout in Citrus Heights, California — so here an
+                // unresolved place is far more likely to be far away.
+                //
+                // Safe to drop rather than defer because `resolveAll` above has
+                // already had its turn: this runs after geocoding, not during,
+                // so the card never enters the feed and nothing vanishes from
+                // under a reader later.
+                return false
+            }
+            return km <= Double(prefs.radiusKM)
+        }
+        Logger.discover.info("batch: \(tally, privacy: .public), \(parsed.count, privacy: .public) new, \(kept.count, privacy: .public) in radius")
+        return (kept, parsed.count)
     }
 
     /// Drops the "already filled" flag without touching what's on screen.
@@ -205,7 +488,19 @@ final class DiscoverFeed: ObservableObject {
     /// Load-bearing, not decoration: a shuffled feed with no stated basis is
     /// indistinguishable from a random one, which is exactly the complaint that
     /// got the previous version of this screen deleted.
+    ///
+    /// The browse feed states its *radius* rather than its basis, because the
+    /// basis is "Facebook's feed" and the radius is the one thing this app did
+    /// to it. It also carries the only remaining disclosure of the distance
+    /// filter, now that the footer counting what it removed is gone — a caption
+    /// beside the heading is where someone who scrolls until something catches
+    /// their eye will actually read it, which the footer never was.
     var caption: String? {
+        if mode == .browse {
+            let place = prefs.locationName ?? "you"
+            guard prefs.radiusKM > 0 else { return "Facebook Marketplace, near \(place)" }
+            return "Facebook Marketplace, within \(SearchQuery.kilometresToMiles(prefs.radiusKM)) mi of \(place)"
+        }
         guard !seeds.isEmpty else { return nil }
         let names = seeds.map(\.label).joined(separator: " · ")
         switch (seeds.contains { $0.origin == .search }, seeds.contains { $0.origin == .interest }) {

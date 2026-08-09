@@ -330,39 +330,65 @@ struct DetailView: View {
         // description and map it sits between.
     }
 
-    /// Seller identity requires a signed-in desktop session. A rating is
-    /// optional even then — plenty of sellers have never been rated — so the
-    /// stars appear only when there is a real score behind them.
+    /// Seller identity requires a signed-in desktop session.
+    ///
+    /// Laid out as a card with one fact per line, rather than name-and-stars
+    /// crammed onto one row. That row was fine for "Kelsey Jones ★★★★★ 4.8
+    /// (44)" and fell apart for everything else: a long name pushed the rating
+    /// off the edge, and an unrated seller left a lone name floating under a
+    /// heading with no indication whether the rating was missing or the seller
+    /// simply had none.
+    ///
+    /// **The unrated case is stated, not omitted.** Plenty of sellers have
+    /// never been rated — it tracks the category, with plant sellers rated and
+    /// one-off furniture sellers mostly not (`logged-in-findings.md` §1a) — so
+    /// silence there reads as a broken screen rather than as information. It is
+    /// also the case the user hit when reporting the stars "missing".
     @ViewBuilder
     private var sellerBlock: some View {
         if let name = detail?.sellerName {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Seller").font(.subheadline).foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    Text(name).font(.body.weight(.medium))
-                    if let rating = detail?.sellerRating {
-                        HStack(spacing: 2) {
-                            ForEach(1...5, id: \.self) { star in
-                                Image(systemName: Double(star) <= rating.rounded()
-                                      ? "star.fill" : "star")
-                                    .font(.caption2)
-                                    .foregroundStyle(.orange)
-                            }
-                            Text(String(format: "%.1f", rating)).font(.caption)
-                            if let count = detail?.sellerRatingCount {
-                                Text("(\(count))").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Rated \(String(format: "%.1f", rating)) out of 5"
-                            + (detail?.sellerRatingCount.map { " from \($0) ratings" } ?? ""))
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    // Initials, because no seller photo is extracted from this
+                    // surface. A generic silhouette would take the same space
+                    // and say less.
+                    Text(Self.initials(from: name))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(Color(.tertiarySystemFill)))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        // One line, always. A name is a name; if extraction
+                        // ever hands this a paragraph again it should look
+                        // wrong and stay small rather than becoming a
+                        // three-line heading (which is exactly what a
+                        // flattened seller block did here).
+                        Text(name)
+                            .font(.body.weight(.semibold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        ratingLine
                     }
+                    Spacer(minLength: 0)
+                }
+
+                if detail?.sellerIsHighlyRated == true {
+                    Label("Highly rated on Marketplace", systemImage: "rosette")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
                 }
                 if let joined = detail?.sellerJoined {
-                    Text(joined).font(.caption).foregroundStyle(.secondary)
+                    Label(joined, systemImage: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 14))
             .padding(.top, 4)
         } else if store.session == .unauthed, !isEnriching {
             // Only once enrichment has settled: offering this while the fetch
@@ -370,6 +396,56 @@ struct DetailView: View {
             // user a moment before their seller details arrived.
             sellerSignInPrompt
         }
+    }
+
+    /// Stars, score and count — or an explicit statement that there are none.
+    @ViewBuilder
+    private var ratingLine: some View {
+        if let rating = detail?.sellerRating {
+            HStack(spacing: 3) {
+                HStack(spacing: 1) {
+                    ForEach(1...5, id: \.self) { star in
+                        Image(systemName: Self.starSymbol(star, rating: rating))
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Text(String(format: "%.1f", rating))
+                    .font(.caption.weight(.medium))
+                if let count = detail?.sellerRatingCount {
+                    Text("· \(count) rating\(count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Rated \(String(format: "%.1f", rating)) out of 5"
+                + (detail?.sellerRatingCount.map { " from \($0) ratings" } ?? ""))
+        } else {
+            Text("No ratings yet")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Half-filled where the score is genuinely between two stars.
+    ///
+    /// The previous version compared against `rating.rounded()`, which drew a
+    /// 4.5 as five full stars — rounding a rating *up* in the seller's favour
+    /// is exactly the kind of small dishonesty this screen shouldn't commit.
+    static func starSymbol(_ index: Int, rating: Double) -> String {
+        if rating >= Double(index) - 0.25 { return "star.fill" }
+        if rating >= Double(index) - 0.75 { return "star.leadinghalf.filled" }
+        return "star"
+    }
+
+    /// "Kelsey Jones" → "KJ". Falls back to one letter, then to nothing at all
+    /// rather than rendering a stray character for an unusual name.
+    static func initials(from name: String) -> String {
+        let letters = name.split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first(where: \.isLetter) }
+        return String(letters).uppercased()
     }
 
     @ViewBuilder

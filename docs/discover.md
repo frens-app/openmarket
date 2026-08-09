@@ -1,10 +1,10 @@
 # Discover: the home screen feed
 
-**Date:** 2026-08-07
+**Date:** 2026-08-08
 **Code:** `apps/ios/Sources/Store/DiscoverFeed.swift`,
 `ResultsView.discoverSection`
 **Related:** `embedded-payload.md` §8, `filter-parameters.md` §3 and §11,
-`mobile-location-radius-notes.md` §3
+`logged-in-findings.md` §2–§4, `mobile-location-radius-notes.md` §3
 
 The home screen is three sections: **Recently viewed** and **Saved**, one
 horizontal rail each and both read from disk, then **Discover**, which runs to
@@ -18,7 +18,189 @@ of something to type before the app would do anything.
 
 ---
 
-## 1. What it does now
+## 0. There are two Discovers, and the session picks
+
+**Signed in:** Facebook's own Marketplace feed for the user's place — the default
+Discover screen — scrolled, and cut to the radius the user set.
+
+**Signed out:** up to three of the user's own recent searches, re-run and mixed.
+This is the feed §1 describes, and it is unchanged.
+
+The split replaced a single search-seeded feed on 2026-08-08. §3 is the case
+against Facebook's feed and every measurement in it still stands — **logged
+out.** All of it was measured with no account, and the two objections it raises
+are both objections to *anonymity* rather than to the feed:
+
+| §3's finding | Why an account changes it |
+|---|---|
+| 0–100% churn between identical loads; geography swinging 50 mi | That is what a couple of cached popularity pools look like. Facebook serves them because an anonymous session gives it an IP and a cookie to rank with |
+| Nothing to personalise with | An account is a real history — more than this app can assemble from search terms held on the device |
+| Markup-only, no embedded payload | Still true, signed in or out (§0.2). Now a cost we accept rather than a reason not to |
+
+What the signed-in user gets that the search-seeded feed structurally cannot
+give them is **novelty** — §3's closing trade, taken the other way. The
+search-seeded feed cannot show you anything in a category you have never asked
+about or picked at onboarding; Facebook's feed is under no such limit.
+
+And the signed-out user keeps a feed built entirely from signals that never
+leave the device, which is the app's position when there is no account in play.
+That the better screen is behind a login is the honest shape of the situation
+rather than a lever: the offer at the bottom of the signed-out feed (§0.3)
+describes something that actually happens.
+
+### 0.1 Paging Facebook's feed
+
+One engine, one page, scrolled a screen at a time with a harvest between each —
+the desktop feed virtualises, so reading once at the bottom returns the last
+window rather than the feed (`logged-in-findings.md` §3). The other two engines
+sit idle for as long as the session lasts.
+
+**Infinite scroll works, and confirming it took four bugs off the pile.** The
+first signed-in build showed ~19 cards and then "There's nothing else in your
+area" immediately. Measured on a real session, Seattle, 10 mi:
+
+| | Symptom | Cause |
+|---|---|---|
+| 1 | Discover built the *signed-out* feed for a signed-in account | `allCookies()` answers before WebKit has read its store off disk, and answers empty. Discover asked at launch+0.5s and got `false`; the scene-phase check 400ms later got `authed` from the identical call. Now an empty jar is retried and anything else is trusted at once (`SessionState.isSignedIn`) |
+| 2 | `scrollOnce()` returned false on its **first** call, every time | It moved `webView.scrollView.contentOffset`. At 1280x900 the document is exactly one viewport tall and the feed is an inner `overflow-y:auto` div — 900 over 3102 — so `contentSize - bounds` was 0. `window.scrollTo(0,5000)` left `scrollY` at 0. Now an element is scrolled, found by walking up from a card |
+| 3 | Every reading silently discarded | `scrollTop` is fractional; `moved` arrived as `0.5` and failed to decode into an `Int`. Then the read-only script omitted `moved` entirely — Swift's synthesized `Decodable` does not fall back to property defaults. Both failures returned nil, and nil reads as "can't scroll", which reads as the end of the feed |
+| 4 | 0 cards kept over 14 screens, while scrolling 0 → 8647px | **Cards past the first page carry no `aria-label`.** 16-of-16, 21-of-21, 23-of-23 rejected per screen, anchors and images present, `label=[]`. See below |
+
+Only bug 2 was specific to Discover. **Search pagination had the same defect and
+had never worked either** — `canLoadMore` is false without a session, so the only
+callers were signed-in ones, and the app has been developed signed out.
+
+Two properties of this feed defeat the obvious end-of-feed tests, and both cost a
+wrong "nothing else in your area" before being understood:
+
+- **Document height is not a progress signal.** The recycler collapses content
+  above the viewport as well as below, so `scrollHeight` oscillates while paging
+  *forward*: 8515, 4711, 5043, 6330, 6854, 7954, 6748, 4247. A shrink can even
+  clamp the scroll position backwards (3800 → 3469). The test is therefore
+  whether the position *advanced*, with one retry for a clamp.
+- **"No new cards" does not mean "no more cards".** A fill has already taken
+  every card in the DOM, so the first several screens of a top-up legitimately
+  return nothing but duplicates. Counting those as evidence ended the feed at
+  2644px of a 6650px document. Only a screen that produced *new* listings and
+  rejected all of them on distance counts against the area.
+
+### 0.1a The first page and the rest are different markup
+
+`aria-label` — which carries title, price, city and the listing id in one string
+— exists **only on the server-rendered first page**. Every card the infinite
+scroll inserts has an empty one:
+
+```
+id=1409179587931105  label=[]  img=true  text=[$0 / Free Baby Grand Piano! / Bellingham, WA]
+```
+
+So `DesktopCardParser` has two routes. The label route is unchanged and still
+preferred; `parseLines` reads the card's own visible text, one field per line,
+matching by shape — a `$`-prefixed line is the price, a line ending in a
+two-letter uppercase state is the city, the longest remainder is the title.
+
+This is why the `renderedCards` extractor now returns `lines` rather than a
+flat 140-character `text`: the newlines *are* the field boundaries, and the old
+slice both flattened them and truncated longer titles before the city.
+
+The label route cannot be dropped in favour of this one. It carries the
+was-price and the empty-city shipping signal, neither of which the text route
+can see — `parseLines` therefore never claims `Ships`, because "no city line"
+and "card mid-render" look identical to it.
+
+**The radius is applied inside `DiscoverFeed`, not in the view.** This is the
+one list in the app that filters distance before it publishes, and the reason is
+that the fill has to *know*: Facebook's feed reaches wherever Facebook feels
+like reaching — one measured load returned 20 cards across 11 cities, of which a
+6 mi radius kept 9 — so a page-once-and-hide-the-rest design shows four cards
+and calls it the neighbourhood. Filtering during the harvest is what lets a fill
+keep scrolling until it has `browseTarget` (12) cards actually worth showing.
+`ResultsView.winnowed` still runs afterwards; it is a few cached lookups and it
+keeps one distance rule in one place for every list on screen.
+
+**Listings whose distance isn't known are dropped here** — the opposite of the
+rule everywhere else in the app, and the exception is deliberate. Everywhere
+else the list is a search Facebook already localised, so an unresolved place is
+probably nearby and hiding it punishes a card for being unrecognised. This feed
+is not localised in any comparable sense: a signed-in Seattle feed served
+Vancouver WA, Bellingham, Wilsonville OR, and a cardboard cutout of a US senator
+in Citrus Heights, California — the last of which reached the screen under the
+keep-if-unknown rule, with no distance line, ~700 miles out.
+
+Safe to drop rather than defer because `resolveAll` has already had its turn by
+then: this runs after geocoding, not during it, so the card never enters the feed
+and nothing vanishes from under a reader later. Geocoding is lossy — one measured
+batch resolved 1 of 2 places — so this does discard the occasional real
+neighbour, which is the price of not showing California.
+
+A harvest stops on one of three things:
+
+| | Meaning | `reachedEnd` |
+|---|---|---|
+| Scroll position stops advancing (after a retry) | The literal end of the feed | yes |
+| 4 screens that produced new listings and kept none | The end of the part of it this app is for | yes |
+| 14 screens scrolled | This call's turn is over | no — the next scroll resumes |
+
+Note what the middle row counts, and §0.1 for why: screens that produced nothing
+*new* are not counted at all.
+
+Measured after the fixes, signed in, 10 mi: a fill publishes 19 cards, and a
+top-up returned `26 raw, 0 unparsed, 2 dupes, 24 new, 9 in radius` — 12 kept over
+6 screens, `exhausted false`. Roughly a third of what Facebook offers survives
+the radius.
+
+### 0.2 What a browse card is worth
+
+Markup only, and permanently: the browse page embeds no usable listing payload —
+6 `"listing"` blocks against 20 rendered cards, none carrying a title, price or
+photo (`embedded-payload.md` §8) — and signing in does not extend the payload on
+any surface (`logged-in-findings.md` §2). So every card in a signed-in Discover
+is at the quality level §4.6 describes, from the first one rather than from the
+sixteenth. Titles, prices, cities and ids all come off the `aria-label`, which
+carries them; timestamps, delivery types and sold state do not exist until the
+card is opened.
+
+This is why the engine has `loadCards` alongside `load`. Putting the browse page
+through the payload harvester would spend its full 20-second timeout waiting for
+something that is never coming — on the screen the app opens with.
+
+### 0.3 What the bottom of the screen says
+
+The footer counting what the distance filter removed, with a button offering to
+widen the radius by five miles, is **gone**. So is `Preferences.widenedRadiusKM`.
+
+It was wrong in two independent ways. It was addressed to nobody: §4.3 records
+that a home feed is scrolled until something catches the eye, so a disclosure
+placed after the grid is functionally invisible — that criticism was already
+written down and the fix proposed there (move it into the header) is what
+happened. And §4.4 records that the offer it made is a lie for exactly the users
+who now get Facebook's feed: signed in, the account's own radius is a floor the
+app cannot raise, so tapping "try 15 mi" changes a number and not the results.
+
+What replaces it:
+
+| | Bottom of Discover |
+|---|---|
+| Signed out | The offer to log in — nothing else |
+| Signed in, more to come | Nothing (a spinner while a top-up runs) |
+| Signed in, `reachedEnd` | "There's nothing else in your area." |
+
+The radius moved into the caption beside the heading — "Facebook Marketplace,
+within 10 mi of Seattle, WA" — which is where §4.3 said to put it and is read
+before the scrolling rather than after it stops.
+
+The same footers now end a **search result set**, which previously ended in
+silence for a signed-in user; `ListingStore.reachedEnd` records three scrolls
+that produced nothing. The "already viewed" notice keeps its own line and its
+own undo, because that filter is the app's own and has something to undo.
+
+The blanket empty state — a full-screen "Nothing saved yet" with advice about
+bookmarks — is gone with them. An empty home screen is a statement about the
+area or the session, and Discover's own footer makes it.
+
+---
+
+## 1. The signed-out feed
 
 Up to three of the user's own recent searches, re-run and mixed.
 
@@ -85,26 +267,42 @@ filter. The chip is what the user chose; the term is what finds anything.
 
 ## 2. Cache lifetime
 
-Three things rebuild it: **relaunching the app, pulling to refresh, and editing
-interests in Settings.** Nothing else.
+Four things rebuild it: **relaunching the app, pulling to refresh, editing
+interests in Settings, and the session changing.** Nothing else.
 
-The third is new with interests and is the exception that proves the rule below:
-it doesn't change what the feed *contains*, it changes what the feed is *for*.
-It doesn't refill on the spot either — the Settings sheet is over the top of the
-feed, so there'd be nothing to watch — it marks the feed stale and rebuilds when
-the sheet closes.
+Editing interests doesn't change what the feed *contains*, it changes what the
+feed is *for*. It doesn't refill on the spot either — the Settings sheet is over
+the top of the feed, so there'd be nothing to watch — it marks the feed stale and
+rebuilds when the sheet closes.
 
-Not a new search — recent searches are the seed, so every search would otherwise
-throw away the feed the user is about to return to, and they'd come back from a
-search to a screen mid-reload. Not a change of city or signing in either, for the
-same reason: a reshuffle under someone who is halfway down the feed is worse than
-a feed that is an hour old.
+**Signing in or out is a stronger trigger than any of them**, and it used to be
+explicitly excluded. It no longer can be: the session decides which of the two
+feeds this is (§0), so a stale answer isn't an hour-old shuffle, it is somebody
+else's screen. `DiscoverFeed` records the session it filled under and compares
+on every `loadIfNeeded`, so both sign-in routes and a Facebook-side expiry are
+covered without any of them having to remember to call it.
+
+It reads the cookie store itself rather than taking `ListingStore.session` from
+the caller, because that value is set by an async check that may not have landed
+on the launch this screen fills on — starting the wrong feed and marking it done
+would leave a signed-in user on the signed-out one until they relaunched.
+
+Not a new search — recent searches seed the signed-out feed, so every search
+would otherwise throw away the screen the user is about to return to, and they'd
+come back from a search to one mid-reload. Not a change of city either: a
+reshuffle under someone halfway down the feed is worse than a feed that is an
+hour old.
 
 **Nothing is written to disk.** Restoring a shuffle from yesterday and presenting
 it as today's would be a lie the cache tells for free. The cost is a slower cold
 start, which §4 tracks.
 
-## 3. Why not Facebook's own feed
+## 3. Why not Facebook's own feed — *logged out*
+
+> **Scope note, 2026-08-08.** Everything below was measured with no account, and
+> it is why the signed-*out* feed is still built from the user's own searches.
+> It is no longer an argument against Facebook's feed in general; §0 sets out
+> which of these findings an account changes and which it doesn't.
 
 The first version loaded `/marketplace/<place>/` — "Today's picks". Measured,
 logged out, three loads of the identical URL in one session:
@@ -175,25 +373,32 @@ which exists for honesty (§2), not for speed.
 
 ### 4.3 The distance-filter disclosure is at the bottom, where nobody is
 
-Discover states what it removed — "11 more further than 6 mi", with a widen
-button — but only *after* the grid. On a result set that works, because the user
-reads to the end. On a home feed people scroll until something catches their eye
-and stop, so the disclosure is functionally invisible.
+**Fixed 2026-08-08**, roughly as proposed. The footer is gone and the radius is
+stated in the caption beside the heading (§0.3).
 
-Measured case: Facebook's browse feed returned 20 cards across 11 cities and the
-6 mi radius cut 11 of them, leaving a screen that looked like "San Francisco has
-nine things in it". The current search-seeded feed is more local by construction,
-but the same failure mode applies whenever a seed term is sparse nearby.
-
-Candidate fix: move the count into the section header, next to the seed terms.
+What went with it is the *count*: nothing now says "11 were further than 6 mi",
+only that the feed is limited to 6 mi. That is a deliberate trade — a standing
+statement of the constraint, read before scrolling, against a per-load tally read
+after it — but it does mean a feed that came back thin and a feed that was cut
+to ribbons look identical on screen. The counts are still in the log.
 
 ### 4.4 Signed in, Facebook's own radius is a floor we cannot raise
 
 An account carries its own Marketplace radius, it is the only thing that actually
 filters server-side, and the URL parameter is ignored (`filter-parameters.md`
 §11). So a signed-in user whose account says 10 mi cannot see a 30-mile listing
-in Discover no matter what the app's control says — including "Any". The widen
-button is honest logged out and potentially a lie signed in.
+in Discover no matter what the app's control says — including "Any".
+
+**This got worse before it got better.** The widen button — a lie for exactly
+these users — is gone (§0.3). But the signed-in feed is now *entirely* Facebook's,
+so the account radius is the outer bound on the whole home screen rather than on
+one section of a search. The app's own radius can only narrow what arrives. A
+user whose account says 10 mi and whose app says 40 will see 10 miles of
+listings and nothing to say why.
+
+The honest fix is to read the account's radius off the feed's own location pill
+(`DesktopFeedEngine.readLocation` already parses it) and say so when it is
+tighter than the app's. Not implemented.
 
 ### 4.5 A saved listing can appear twice on the same screen
 
@@ -204,10 +409,11 @@ it is the same card twice within one scroll.
 
 ### 4.6 Discover cards are markup-grade until opened
 
-Cards come from search results, so the first ~15 of each search carry the
-embedded payload and anything past that is markup only. Nothing downstream should
-assume an exact `creation_time`, `delivery_types` or sold state on a Discover
-card. Opening one enriches it from its item page.
+Signed out, cards come from search results, so the first ~15 of each search carry
+the embedded payload and anything past that is markup only. Signed in, **every**
+card is markup only from the first one (§0.2). Nothing downstream should assume
+an exact `creation_time`, `delivery_types` or sold state on a Discover card.
+Opening one enriches it from its item page.
 
 ### 4.7 Three searches retire the interests completely
 
@@ -222,6 +428,9 @@ interest, say, so a chosen category keeps a seat. Not implemented, because it
 wants a real feed to judge — the alternative failure is a home screen that keeps
 showing furniture to someone who has moved on to bike parts.
 
+Note this only bites logged out now, which lowers the priority without changing
+the argument.
+
 ### 4.8 An interest's search term is a guess
 
 Each interest searches for the searchable half of its category, and some of
@@ -231,6 +440,57 @@ match how people title listings; `home decor` for "Home & garden" and
 that category actually says. None of them have been measured against result
 counts, and a term that under-returns costs a third of a fresh install's feed —
 the same failure as 4.1, with nobody to blame it on.
+
+### 4.9 "There's nothing else in your area" is inferred, never observed
+
+**It was also, for a while, simply wrong** — it fired on the first scroll of
+every signed-in session, for the four reasons in §0.1, none of which had anything
+to do with the area. Fixed; the wider point stands and is worth keeping.
+
+The message fires on either of §0.1's two `reachedEnd` conditions, and only one
+of them is what it says. A position that stops advancing is the end of *the
+feed*, which may be a cap rather than an exhausted area — the logged-out browse
+surface caps at ~24 (README's surface table), and whether the signed-in one caps
+has still never been observed, because in testing it never stopped. Four dry
+screens is a heuristic about a ranking nobody has documented.
+
+So the sentence is a reasonable summary of "we scrolled and found nothing else
+close enough", stated more confidently than the evidence supports. The two causes
+are now logged separately, which is what makes the next round of this decidable.
+
+The general lesson, which cost most of the debugging: **every failure path in the
+scroll returned the same value as "the feed ended"** — a nil script result, an
+undecodable reading, a clamped scroll — so four unrelated bugs all surfaced as
+one confident sentence about the user's neighbourhood. `feedScroll` now logs why
+it returned nil, and `nearby` counts raw, unparsed, ships, dupes and in-radius
+separately rather than reporting "0 new".
+
+### 4.10 The signed-in feed ignores the user's filters
+
+The browse URL carries no parameters at all: no `sortBy`, no `deliveryMethod`,
+no price bounds. That is what "the default Discover screen" means, and those
+parameters have never been verified on a browse path — the README's surface
+table lists them `?` for Web browse, and only `/search/` has been tested.
+
+The visible consequence is that someone who has set "Under $50" or "Local pickup
+only" sees a home screen that ignores both, while their searches honour them.
+The delivery half is partly covered — `Ships`-badged cards are dropped on the
+device, same as before — and the rest is not. Contrast §1's rule for the
+signed-out feed, which deliberately does apply them.
+
+Worth measuring before adding: send one filter to a browse URL and check whether
+the result set moves, using the §3 discipline of comparing result sets rather
+than trusting the chip.
+
+### 4.11 A top-up can cost several seconds of silent scrolling
+
+A `loadMoreIfNeeded` may scroll up to 10 screens at ~0.9s of settling each before
+returning anything, and the spinner only appears under cards that are already on
+screen. In a sparse area — where most screens are dry — the user reaches the
+bottom and waits with nothing to read.
+
+Untested against a real sparse feed. The levers are `scrollBudget`,
+`dryScreenLimit`, and triggering the top-up earlier than 6 cards from the end.
 
 ## 5. If Discover ever draws on external or older sources
 
@@ -289,6 +549,14 @@ now", the more it needs to state its own age rather than imply freshness.
 Picked during onboarding, required, three minimum, stored as `Interest` ids in
 `Preferences.interests` (`docs/onboarding.md`). They exist for this file and
 nothing else: they are what Discover is made of before there is any history.
+
+Since §0, that is *signed-out* Discover, which puts onboarding in an awkward
+place — it requires three interests from everyone, including users who sign in
+immediately and will never see a feed built from them. They still drive the
+search field's "Try" suggestions (below), and they are what the home screen falls
+back to on a sign-out, so the step is not wasted. But "required, three minimum"
+was set when this file was the only consumer, and that is no longer true for
+everybody.
 
 Ids rather than labels or terms, so a category can be re-worded or its search
 term improved without emptying anybody's saved choices — and `Interest.resolve`

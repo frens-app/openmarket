@@ -6,6 +6,10 @@ struct DesktopRawCard: Decodable {
     let label: String
     let imageURL: String
     let text: String
+    /// The card's own visible text, one entry per rendered line. The only
+    /// source of fields for cards past the first server-rendered page, which
+    /// carry no `aria-label` — see `DesktopCardParser.parse(lines:)`.
+    var lines: [String] = []
 }
 
 /// Turns a desktop card's `aria-label` into a listing.
@@ -24,6 +28,92 @@ struct DesktopRawCard: Decodable {
 enum DesktopCardParser {
 
     static func parse(_ raw: DesktopRawCard, cardIndex: Int) -> Listing? {
+        parseLabel(raw, cardIndex: cardIndex) ?? parseLines(raw, cardIndex: cardIndex)
+    }
+
+    /// Cards past the first server-rendered page, which have no `aria-label`.
+    ///
+    /// **Infinite scroll produces a different card.** The label route above only
+    /// ever works on what the server rendered; every card the feed lazy-inserts
+    /// has `aria-label=""` while its anchor, image and text are all present.
+    /// Reading only the label meant that past the first ~20 cards the app
+    /// harvested nothing at all — measured signed in, 16-of-16 and 23-of-23
+    /// cards rejected per screen while the feed happily paginated.
+    ///
+    /// The visible text is laid out one field per line, in a fixed order:
+    ///
+    ///     $300
+    ///     6 foot LED crouching warewolf animatronic Halloween display
+    ///     Vancouver, WA
+    ///
+    /// Matched by *shape* rather than position, because the leading line is
+    /// sometimes a badge and the trailing city is absent on shipping listings.
+    /// No listing id is needed — the caller already has it from the href.
+    static func parseLines(_ raw: DesktopRawCard, cardIndex: Int) -> Listing? {
+        var lines = raw.lines.filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return nil }
+
+        // Price: the first line that is one. Free is spelled both ways across
+        // surfaces, hence the case-insensitive compare the label path also uses.
+        var priceText: String?
+        if let index = lines.firstIndex(where: { isPrice($0) }) {
+            priceText = lines[index]
+            lines.remove(at: index)
+        }
+
+        // A was-price sits immediately after the price and is also a price. Take
+        // it only if one was already found, so a lone "$70" stays the price.
+        var originalPriceText: String?
+        if priceText != nil, let index = lines.firstIndex(where: { isPrice($0) }) {
+            originalPriceText = lines[index]
+            lines.remove(at: index)
+        }
+
+        // City: "Seattle, WA" — a trailing two-letter state is the only
+        // reliable marker, and titles routinely contain commas.
+        var locationText: String?
+        if let index = lines.lastIndex(where: { isPlace($0) }) {
+            locationText = lines[index]
+            lines.remove(at: index)
+        }
+
+        // Whatever is left, longest first: badges ("Price drop", "Just listed")
+        // are short and the title is the substantial line.
+        guard let title = lines.max(by: { $0.count < $1.count }), title.count > 2 else { return nil }
+
+        let thumbnail = raw.imageURL.isEmpty ? nil : URL(string: raw.imageURL)
+        return Listing(
+            id: thumbnail.flatMap(Listing.photoFBID).map { "p:\($0)" } ?? "fb:\(raw.id)",
+            title: title,
+            priceText: priceText,
+            originalPriceText: originalPriceText,
+            locationText: locationText,
+            conditionText: nil,
+            thumbnailURL: thumbnail,
+            itemURL: URL(string: "https://www.facebook.com/marketplace/item/\(raw.id)/"),
+            // No empty-city signal on this route — a shipping listing simply has
+            // no place line, which is also what a card mid-render looks like. So
+            // this route never claims `Ships`, rather than guessing.
+            badgeText: nil,
+            cardIndex: cardIndex,
+            detail: nil,
+            capturedAt: Date()
+        )
+    }
+
+    private static func isPrice(_ line: String) -> Bool {
+        line.hasPrefix("$") || line.caseInsensitiveCompare("free") == .orderedSame
+    }
+
+    /// "Seattle, WA" — trailing comma plus a two-letter uppercase state.
+    private static func isPlace(_ line: String) -> Bool {
+        let parts = line.components(separatedBy: ", ")
+        guard parts.count >= 2, let state = parts.last else { return false }
+        return state.count == 2 && state == state.uppercased()
+            && state.allSatisfy(\.isLetter)
+    }
+
+    static func parseLabel(_ raw: DesktopRawCard, cardIndex: Int) -> Listing? {
         var segments = raw.label
             .components(separatedBy: ", ")
             .map { $0.trimmingCharacters(in: .whitespaces) }

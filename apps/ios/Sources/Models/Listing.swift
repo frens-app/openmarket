@@ -33,6 +33,13 @@ struct ListingDetail: Codable, Equatable, Hashable {
     var sellerJoined: String?      // "Joined Facebook in 2011"
     var sellerRating: Double?      // 4.8
     var sellerRatingCount: Int?    // 12
+    /// Facebook's own "Highly rated on Marketplace" badge.
+    ///
+    /// Carried rather than derived from the score, because it is Facebook's
+    /// judgement against its own bar — which it does not publish — and a
+    /// threshold invented here would put the badge on sellers Facebook doesn't.
+    /// Optional for the usual reason: nil is "nothing said", not "no".
+    var sellerIsHighlyRated: Bool?
 
     /// Facebook's published approximate point for this listing, from the item
     /// page only — cards carry no coordinate. Fuzzed by Facebook and labelled

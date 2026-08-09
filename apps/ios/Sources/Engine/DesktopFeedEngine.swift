@@ -81,6 +81,57 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         return payload
     }
 
+    /// Loads a page whose cards are markup only, returning the moment any of
+    /// them render.
+    ///
+    /// The browse feed is that page: `/marketplace/<place>/` embeds no usable
+    /// listing payload — 6 `"listing"` blocks against 20 rendered cards, none
+    /// of them carrying a title, price or photo (`docs/embedded-payload.md`
+    /// §8). Putting it through `load` would spend the full 20-second harvest
+    /// timeout waiting for something that is never coming, on the screen the
+    /// app opens with.
+    ///
+    /// So this polls the DOM instead of the payload, and everything it returns
+    /// is markup-grade by construction — no exact timestamps, no delivery
+    /// types, no sold state. Cards are enriched when one is opened.
+    func loadCards(_ url: URL, timeout: Duration = .seconds(20)) async -> [DesktopRawCard] {
+        guard await pacer.waitForSlot() else {
+            state = .failed("Paused — too many requests. Try again shortly.")
+            return []
+        }
+        state = .loading
+        Logger.desktop.info("loading cards from \(url.absoluteString, privacy: .public)")
+        await navigate(to: url)
+
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            let cards = await renderedCards()
+            if !cards.isEmpty {
+                state = .ready
+                coverage = PayloadCoverage(rendered: cards.count, withPayload: 0)
+                await pacer.recordSuccess()
+                Logger.desktop.info("\(cards.count, privacy: .public) markup cards")
+                return cards
+            }
+            // Only once nothing has rendered — a wall is the one explanation
+            // for an empty feed that isn't "still loading", and it needs a
+            // different answer from the caller.
+            if await evaluate(DesktopScripts.detectLoginWall) == "wall" {
+                state = .loginWall
+                Logger.desktop.info("login wall on browse")
+                return []
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+
+        // Empty is not a failure here. A browse feed with nothing in it is a
+        // real answer — see `DiscoverFeed`, which says so rather than drawing
+        // an error over a screen that simply has nothing nearby.
+        state = .ready
+        Logger.desktop.info("no markup cards before timeout")
+        return []
+    }
+
     /// Polls for the payload rather than waiting on `didFinish`.
     ///
     /// On item pages the payload is readable ~0.9s into a ~1.85s load, so
@@ -236,20 +287,93 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         let href: String?
     }
 
-    /// Scrolls one screen and reports whether the document grew.
+    /// Scrolls one screen and reports whether there is any point scrolling
+    /// again.
     ///
     /// Deliberately one screen at a time with a harvest between: the caller has
     /// to read the DOM before the cards it just loaded are recycled back out.
+    ///
+    /// **This drives an element, not the webview.** It used to move
+    /// `webView.scrollView.contentOffset`, which on this surface does nothing at
+    /// all: desktop Marketplace lays its feed out inside an `overflow-y: auto`
+    /// div and leaves the document exactly one viewport tall, so
+    /// `contentSize.height - bounds.height` is zero and the old implementation
+    /// returned `false` on its very first call — every time, on both the browse
+    /// feed and search results.
+    ///
+    /// That made pagination a no-op wherever it ran. It went unnoticed for a
+    /// long time because `canLoadMore` is false without a session, so the only
+    /// code paths that ever called this were signed-in ones, and the app has
+    /// been developed signed out. Measured logged out at 1280x900:
+    /// `document.documentElement.scrollHeight` 900, `window.innerHeight` 900,
+    /// feed container 900 over 3102.
+    /// **The test is whether we advanced, not whether the document grew.**
+    ///
+    /// Document height is not a usable signal on this feed. The recycler
+    /// collapses content above the viewport as well as below it, so
+    /// `scrollHeight` oscillates while paging *forward* — measured signed in:
+    /// 8515, 4711, 5043, 6330, 6854, 7954, 6748, 4247, all while scrolling down
+    /// through cards that kept arriving. Worse, a shrink can clamp the scroll
+    /// position *backwards* (3800 → 3469), which an earlier version of this read
+    /// as the end of the feed and reported to the user as an exhausted
+    /// neighbourhood.
+    ///
+    /// Advancing is unambiguous: either the scroll position ended higher than it
+    /// started, or new cards appeared. A clamp gets one retry, because the
+    /// recycler re-expands a moment later and the second attempt goes through.
     @discardableResult
     func scrollOnce() async -> Bool {
-        let before = webView.scrollView.contentSize.height
-        let maxY = max(0, before - webView.scrollView.bounds.height)
-        guard maxY > 10 else { return false }
-        let next = min(webView.scrollView.contentOffset.y + webView.scrollView.bounds.height * 0.85, maxY)
-        webView.scrollView.setContentOffset(CGPoint(x: 0, y: next), animated: false)
-        try? await Task.sleep(for: .milliseconds(900))
-        return webView.scrollView.contentSize.height > before + 50
-            || webView.scrollView.contentOffset.y < maxY - 10
+        for attempt in 0..<2 {
+            guard let step = await feedScroll(DesktopScripts.scrollFeedStep) else { return false }
+            try? await Task.sleep(for: .milliseconds(900))
+            guard let after = await feedScroll(DesktopScripts.readFeedScroll) else { return false }
+
+            let reached = max(step.top, after.top)
+            let advanced = reached > step.from
+            let gainedCards = after.cards > step.cards
+            if advanced || gainedCards {
+                Logger.desktop.info("scroll: \(step.from, privacy: .public)->\(reached, privacy: .public) of \(after.scrollHeight, privacy: .public), cards \(step.cards, privacy: .public)->\(after.cards, privacy: .public), isDocument \(after.isDocument, privacy: .public)")
+                return true
+            }
+            if attempt == 0 {
+                Logger.desktop.debug("scroll: clamped at \(step.from, privacy: .public), retrying")
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+        }
+        Logger.desktop.info("scroll: no further movement")
+        return false
+    }
+
+    /// One reading of whatever is scrolling the feed.
+    private struct FeedScroll: Decodable {
+        var top = 0
+        var scrollHeight = 0
+        var clientHeight = 0
+        var cards = 0
+        var isDocument = false
+        var moved = 0
+        /// Where the scroll started, for the step script. Zero on a plain read.
+        var from = 0
+    }
+
+    /// One reading, or nil with a reason in the log.
+    ///
+    /// The reason is the point. This returned a bare `nil` on any failure, and
+    /// `scrollOnce` reads nil as "can't scroll" — which is indistinguishable
+    /// from the end of the feed and produced exactly that message to the user.
+    /// A fractional `moved` value failing to decode into an `Int` cost an
+    /// afternoon precisely because it looked like a feed that had run out.
+    private func feedScroll(_ script: String) async -> FeedScroll? {
+        guard let json = await evaluate(script), let data = json.data(using: .utf8) else {
+            Logger.desktop.error("scroll: script returned nothing")
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(FeedScroll.self, from: data)
+        } catch {
+            Logger.desktop.error("scroll: undecodable — \(json.prefix(160), privacy: .public)")
+            return nil
+        }
     }
 
     // MARK: - The login overlay

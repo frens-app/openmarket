@@ -119,6 +119,102 @@ a plain path segment that works on both.
 
 The route that makes arbitrary targeting possible.
 
+### 5.0 Getting the dialog open — three bugs, all invisible logged out
+
+**Added 2026-08-09.** Everything below assumes the "Change location" dialog is
+open. Opening it broke completely the first time a signed-in account used the
+app, in three independent ways, and all three were latent for months because
+the logged-out page happened to tolerate them.
+
+> This is the location-specific half. The general pattern — what the signed-in
+> page renders differently, and which other selectors in the app carry the same
+> untested exposure — is in `logged-in-findings.md` §7. Read that before
+> trusting any selector in this file against a session.
+
+**Verified in both auth states**, on 2026-08-09, after the three fixes. Signed
+in, on a real session; logged out, on a *fresh install in a second simulator*
+with no cookie jar at all — which is the only way to test this honestly, since
+signing out to check would destroy the session under test.
+
+| | logged out | signed in |
+|---|---|---|
+| pill matched | `by label` — "Location: San Francisco, California" | `by label` — "Location: New York, New York, Within 5 mi" |
+| pill rect | `344x27` | `344x27` |
+| "Use my current location" | `[sanfrancisco]`, confirmed | `[sanfrancisco]`, confirmed |
+| city from the list | Denver, CO → `[denver]`, confirmed | Portland, OR → `[portland]`, confirmed |
+| round trip | ~15.5 s | ~8.5 s |
+
+Two incidental findings from that run. The pill's label carries the radius only
+when signed in — logged out it is the place alone — so **anything parsing that
+label must tolerate both forms**. And the radius it reports is the *account's*
+(5 mi) against Facebook's logged-out default (40 mi), which is the floor
+described in `discover.md` §4.4 showing up in a second place.
+
+The logged-out run also exercised the no-fix path by accident: a fresh simulator
+has no simulated location, CoreLocation returned nothing, and the screen said
+"Couldn't get a location fix. Try again, or search for a city instead." — the
+correct answer, reached without touching Facebook, and worth recording as
+observed rather than assumed.
+
+**1. The pill was matched by its text.** The selector took the first
+`div[role="button"]` whose text looked like `San Francisco · 40 mi`. Logged out
+that matched exactly one element. Signed in, the logged-in chrome puts more
+buttons on the page, the first match was **the notifications button**, and the
+dialog we then searched for a centring arrow contained `Notification Actions |
+Notifications filters | 3 days ago`.
+
+Match the label instead:
+
+```
+div[role="button"][aria-label^="Location"]      // "Location: San Francisco, California"
+```
+
+Written for a screen reader, so it spells the place out in full regardless of
+how the visible chip is abbreviated, and it carries no distance formatting to
+disagree about. `role="button"` is load-bearing — the dialog's own search field
+is an `input[role="combobox"]` whose label is also `Location`.
+`DesktopScripts.extractLocationPill` had already reached this conclusion for the
+same reason; `GeoPickerScripts` never got the benefit of it.
+
+**2. The pill was clicked before it had a box.** "Present" was tested as
+"exists in the DOM". Measured across consecutive runs, the same element reported
+`344x27 @8,569` on one attempt and `0x0 @0,0` on the next — the element is
+inserted before layout, and clicking it in that state does nothing. This is why
+the failure was intermittent rather than constant. Wait for a non-zero
+`getBoundingClientRect`.
+
+**3. `element.click()` is not enough.** Facebook's pill opens on the pointer
+sequence, so the click is now `pointerover → pointerenter → pointermove →
+pointerdown → mousedown → pointerup → mouseup → click`, dispatched at the
+element's own centre with `composed: true`, and aimed via `elementFromPoint` so
+it lands on the descendant that actually carries the handler. Same family as the
+WebLite tap problem in `feasibility-2026-07-31.md`: a synthesized event that
+satisfies the DOM and not the framework.
+
+Note the ordering trap in 2 and 3 together — with a zero box,
+`elementFromPoint(0, 0)` returns whatever is in the top-left corner, so the
+hit-test *introduces* a wrong-element click unless the layout wait is in place
+first.
+
+After all three: dialog at +4.1 s, arrow clicked immediately, applied at
++4.8 s, confirmed at +8.5 s.
+
+**Diagnosis was slow because every failure reported the same thing.** "No
+centring arrow" was returned when the dialog held notifications, when no dialog
+existed at all, and when the arrow was genuinely missing. `openDialog` now logs
+what it clicked and by which route, and the `.noArrow` path dumps every
+`[role="dialog"]` with its visibility, plus whether any geolocation or `Apply`
+control exists anywhere on the page. That last field is what settled it: `Apply`
+was absent document-wide, so the dialog was not open in any form, which no
+amount of staring at the arrow selector would have shown.
+
+One red herring worth recording: a `[role="dialog"]` labelled `Notifications` is
+mounted on the signed-in page permanently, `visible: false`. It is not open and
+it is not a symptom. Check visibility before drawing conclusions from a dialog's
+presence.
+
+### 5.1 The centring arrow
+
 In the "Change location" dialog, at the top-right of the map:
 
 ```

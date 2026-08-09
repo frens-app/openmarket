@@ -201,17 +201,140 @@ enum DesktopScripts {
           var src = img ? (img.getAttribute('src') || '') : '';
           if (src.indexOf('scontent') === -1) src = '';
 
+          // `lines` is the fallback for everything past the first page.
+          //
+          // Only the server-rendered cards carry an `aria-label`; every card
+          // the infinite scroll inserts has an empty one. Measured signed in:
+          // the first ~20 cards parse from their label, and screens 6 onward
+          // came back 16-of-16, 21-of-21, 23-of-23 unparseable — anchors and
+          // images present, label empty. The text is all there:
+          //
+          //     $300 / 6 foot LED crouching warewolf ... / Vancouver, WA
+          //
+          // Split here rather than sliced flat, because the newlines are the
+          // field boundaries and flattening throws them away. Classification
+          // still happens in Swift (`DesktopCardParser`) — this hands over the
+          // pieces, it doesn't decide what they mean.
+          var lines = (a.innerText || '').split(String.fromCharCode(10));
+          var kept = [];
+          for (var L = 0; L < lines.length && kept.length < 8; L++) {
+            var t = lines[L].trim();
+            if (t) kept.push(t.slice(0, 120));
+          }
+
           out.push({
             id: id,
             label: a.getAttribute('aria-label') || '',
             imageURL: src,
-            text: (a.innerText || '').slice(0, 140)
+            text: (a.innerText || '').slice(0, 140),
+            lines: kept
           });
         }
         return JSON.stringify({ cards: out, count: out.length });
       } catch (e) {
         return JSON.stringify({ cards: [], count: 0, error: String(e.message) });
       }
+    })()
+    """
+
+    /// Finds whatever is actually scrolling the feed, and reports its state.
+    ///
+    /// **Desktop Marketplace does not scroll the document.** Measured at
+    /// 1280x900 on both `/marketplace/<place>/` and `/marketplace/<place>/search/`:
+    /// `document.documentElement.scrollHeight` equals `window.innerHeight`
+    /// exactly, and every card sits inside an `overflow-y: auto` div — 900px of
+    /// viewport over 3102px of content on the browse feed. `window.scrollTo` is
+    /// a no-op there, and so is moving `webView.scrollView.contentOffset`, which
+    /// is what this engine used to do.
+    ///
+    /// So the scroller is found by walking *up* from a card rather than assumed.
+    /// Walking up from the thing we want to page is the only definition that
+    /// stays correct if Facebook re-nests the layout, and it costs one
+    /// `querySelector` — scanning every `div` for overflow finds several
+    /// candidates on this page, including a 563px one holding no cards at all.
+    ///
+    /// Falls back to `document.scrollingElement`, so a surface that genuinely
+    /// scrolls its document still works.
+    private static let feedScrollerJS = """
+      function feedScroller(){
+        var card = document.querySelector('a[href*="/marketplace/item/"]');
+        var el = card;
+        while (el && el !== document.body) {
+          var s = getComputedStyle(el);
+          if ((s.overflowY === 'auto' || s.overflowY === 'scroll') &&
+              el.scrollHeight > el.clientHeight + 50) return el;
+          el = el.parentElement;
+        }
+        return document.scrollingElement || document.documentElement;
+      }
+      // `moved` is always present, including on the read-only path where it is
+      // meaningless. Swift's synthesized `Decodable` does not fall back to a
+      // property's default value for a missing key — it throws — so the two
+      // scripts have to agree on one shape or the reading is discarded.
+      function feedState(el){
+        return {
+          top: Math.round(el.scrollTop),
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          cards: document.querySelectorAll('a[href*="/marketplace/item/"]').length,
+          isDocument: el === (document.scrollingElement || document.documentElement),
+          moved: 0,
+          from: 0
+        };
+      }
+    """
+
+    /// Scrolls the feed one screen and reports where it landed.
+    static let scrollFeedStep = """
+    (function(){
+      try {
+    \(feedScrollerJS)
+        var el = feedScroller();
+        // Rounded before it is used for anything. `scrollTop` is fractional on
+        // this surface — it came back as 2202.5 — and an unrounded difference
+        // reaches Swift as `0.5`, which fails to decode into an Int and threw
+        // the entire reading away without a word.
+        var before = Math.round(el.scrollTop);
+        el.scrollTop = before + Math.max(200, Math.round(el.clientHeight * 0.85));
+        var out = feedState(el);
+        out.from = before;
+        out.moved = out.top - before;
+        return JSON.stringify(out);
+      } catch (e) {
+        return JSON.stringify({ error: String(e.message) });
+      }
+    })()
+    """
+
+    /// The same reading, without scrolling — for after the page has had a
+    /// moment to load whatever the scroll asked for.
+    static let readFeedScroll = """
+    (function(){
+      try {
+    \(feedScrollerJS)
+        return JSON.stringify(feedState(feedScroller()));
+      } catch (e) {
+        return JSON.stringify({ error: String(e.message) });
+      }
+    })()
+    """
+
+    // A `scrollToBottom` lived here, to force a below-the-fold seller block to
+    // render. It never did anything — `moved: nothing` on the very page that
+    // produced a seller 33 ms later — and it was not harmless: this surface
+    // keeps its data in the rendered markup, so scrolling can unmount the nodes
+    // the description and the "Listed ..." line are read from. Re-polling is the
+    // fix (`DetailEngine.loadDetail`).
+
+    /// The login wall, on its own.
+    ///
+    /// `extractSearchPayload` already reports this, but that script flattens
+    /// the whole document to find it — far too expensive to run in a poll loop
+    /// on a page that has no payload to find. The browse feed is one such page,
+    /// so it needs the cheap half by itself.
+    static let detectLoginWall = """
+    (function(){
+      return (document.body.innerText || '').indexOf('You must log in') !== -1 ? 'wall' : 'none';
     })()
     """
 
@@ -288,6 +411,30 @@ enum DesktopScripts {
             function firstMatch(re) {
               var m = body.match(re);
               return m ? m[0] : null;
+            }
+
+            // "Listed 6 days ago in San Francisco, CA"
+            //
+            // Bounded twice, because a fixed character count is not a boundary.
+            // The old version took 40 characters from "Listed " and handed back
+            // whatever followed — which on this page is the button next to it,
+            // producing "Listed 6 days ago in San Francisco, CA Send sel". The
+            // controls abut the timestamp with no separator, exactly like the
+            // seller block, so the cut has to be made on meaning rather than
+            // length: the end of the line first, then the start of any control
+            // that ran into it.
+            function postedLine() {
+              var raw = firstMatch(/Listed [^]{0,80}/);
+              if (!raw) return null;
+              var line = raw.split(String.fromCharCode(10))[0];
+              var stops = [' Send', ' Message', ' Save', ' Share', ' Seller',
+                           ' Details', ' Condition', ' Make offer'];
+              for (var i = 0; i < stops.length; i++) {
+                var at = line.indexOf(stops[i]);
+                if (at > 0) line = line.slice(0, at);
+              }
+              line = line.trim();
+              return line.length > 6 ? line : null;
             }
 
             // The listing's own coordinates: the pair inside the object that
@@ -400,17 +547,48 @@ enum DesktopScripts {
               }
             }
             if (section) {
-              var lines = section.split(String.fromCharCode(10));
-              for (var L = 0; L < lines.length; L++) {
-                var line = lines[L].trim();
-                if (!line || line === 'Seller information' || line === 'Seller details') continue;
-                if (line.indexOf('Joined Facebook') === 0) { joined = line; continue; }
-                if (line.indexOf('Highly rated') === 0) continue;
-                var paren = line.match(/^[(]([0-9]+)[)]$/);
-                if (paren) { ratingCount = paren[1]; continue; }
-                if (!sellerName) sellerName = line;
-              }
+              // **Flattened first, then matched by shape.**
+              //
+              // This used to split on newlines and treat each line as a field.
+              // That works only when the block renders with line breaks between
+              // its parts, and it does not always: observed signed in, the whole
+              // section arrived as one run with no separators at all —
+              //
+              //   "Seller information Seller detailsDana Whitfield(17)Highly
+              //    rated on MarketplaceJoined Facebook in 2009"
+              //
+              // note "detailsKatrina" and "MarketplaceJoined" with no space, so
+              // even a space-split would not have recovered the boundaries.
+              // With one "line", every skip test missed and the entire block
+              // became the seller's name, which the detail screen then rendered
+              // as a three-line heading beside the stars.
+              //
+              // The fields have reliable shapes, so match those instead and let
+              // the name be what is left in front of them.
+              var flat = section.replace(/\\s+/g, ' ').trim();
+
+              var joinedMatch = flat.match(/Joined Facebook in\\s+[0-9]{4}/i);
+              if (joinedMatch) joined = joinedMatch[0];
+
+              // The rating count renders as "(N)" beside the stars.
+              var countMatch = flat.match(/[(]([0-9]+)[)]/);
+              if (countMatch) ratingCount = countMatch[1];
+
+              var rest = flat.replace(/^Seller information\\s*/i, '')
+                             .replace(/^Seller details\\s*/i, '');
+              // Everything before the first thing that cannot be part of a name.
+              var cut = rest.search(/[(]\\s*[0-9]+\\s*[)]|Highly rated|Joined Facebook|Very responsive|Active [0-9]/i);
+              var name = (cut === -1 ? rest : rest.slice(0, cut)).trim();
+              // Bounded: an unrecognised layout should yield nothing rather than
+              // a paragraph. `sellerName` nil reads as "not available", which is
+              // handled; a wrong name is presented as fact.
+              if (name && name.length > 1 && name.length < 60) sellerName = name;
             }
+            var sellerSection = section ? section.replace(/\\s+/g, ' ').slice(0, 90)
+                                        : ('none of ' + candidates.length + ' nodes');
+            // Facebook's own badge, kept verbatim rather than inferred from the
+            // score — it is their bar, not ours, and they do not publish it.
+            var highlyRated = section ? /Highly rated/i.test(section) : null;
             var starLabel = null;
             var labelled = document.querySelectorAll('[aria-label]');
             for (var a = 0; a < labelled.length && !starLabel; a++) {
@@ -501,9 +679,11 @@ enum DesktopScripts {
               sellerJoined: joined,
               sellerRatingText: ratingScore,
               sellerRatingCount: ratingCount,
+              sellerSection: sellerSection,
+              sellerIsHighlyRated: highlyRated,
               description: description,
               photoURLs: photos,
-              postedText: firstMatch(/Listed [^]{0,40}/),
+              postedText: postedLine(),
               conditionText: conditionText,
               locationText: firstMatch(/[A-Z][A-Za-z .'-]+, [A-Z]{2}/),
               latitude: lat,

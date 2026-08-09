@@ -16,13 +16,28 @@ struct SearchQuery: Equatable {
     enum Kind: Equatable {
         case search(String)
         case category(String)
+        /// No search term: Facebook's own Marketplace feed for a place.
+        ///
+        /// Back, after being removed once. It was dropped because logged out it
+        /// is a rotating popularity pool rather than a recommendation — three
+        /// loads of the identical URL gave 0 of 5 cards in common, then 17 of
+        /// 20, then a revert to the first (`docs/discover.md` §3).
+        ///
+        /// **With an account behind it that objection doesn't apply.** Facebook
+        /// has the user's own history to rank against, which is more than this
+        /// app can assemble from search terms on the device, and the feed
+        /// scrolls indefinitely instead of stopping at three searches' worth.
+        /// So Discover browses it when signed in and keeps the search-seeded
+        /// feed for everyone else.
+        ///
+        /// Note what this URL carries: **nothing**. No sort, no delivery
+        /// method, no price bounds — this is the default Discover screen as
+        /// Facebook serves it, and those parameters have never been verified on
+        /// a browse path anyway (README's surface table lists them `?`). The one
+        /// constraint that survives is the radius, applied on the device like
+        /// everywhere else.
+        case browse
     }
-
-    // A `browse` kind — no search term, Facebook's own feed for a place — lived
-    // here briefly, for the home screen's Discover section. Removed with it: the
-    // feed it produced was a rotating popularity pool rather than a
-    // recommendation, and the page it loaded carries no usable embedded payload
-    // (`docs/embedded-payload.md` §8). Discover runs real searches now.
 
     /// Verified against result sets, not just parameter survival.
     /// `creation_time_descend` is genuinely newest-first — the first and last of
@@ -133,6 +148,7 @@ struct SearchQuery: Equatable {
         switch kind {
         case .search(let term): return term
         case .category(let name): return name
+        case .browse: return "Nearby"
         }
     }
 
@@ -148,6 +164,13 @@ struct SearchQuery: Equatable {
             items.append(URLQueryItem(name: "query", value: term))
         case .category(let name):
             components.path = "/marketplace/\(citySlug)/\(Self.categorySlug(name))/"
+        case .browse:
+            // Bare, and returned early: the point of this path is to be the
+            // screen Facebook would have shown, so it carries no parameters at
+            // all — not even the `radius` that every other query sends for
+            // shape. Distance is enforced on the device.
+            components.path = "/marketplace/\(citySlug)/"
+            return components.url!
         }
 
         if sort != .bestMatch {

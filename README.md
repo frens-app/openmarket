@@ -44,7 +44,8 @@ Legend: **yes** · **no** · **~** partial or conditional · **?** not yet verif
 | Seller rating | — | — | ~ when present | — | — | no |
 | Dimensions | — | — | yes | — | — | yes |
 | Category breadcrumb | — | — | yes | — | — | yes |
-| **Pagination past first batch** | **yes** (26→50→74→99) | **yes** | n/a | **no** (~16 cap) | **no** (~24 cap) | n/a |
+| **Pagination past first batch** | **yes** (26→50→74→99) | **yes** | n/a | **no** (~16 cap) | **no** (~24 cap) logged out; **yes**, unbounded, signed in | n/a |
+| Cards carry `aria-label` | yes | yes | n/a | yes | **first page only** — scroll-inserted cards have none | n/a |
 | **Embedded GraphQL payload** | **no** | **no** | **no** | **yes** (per card) | ? | **yes** |
 | Exact posting timestamp | no | no | **no** | **yes** (`creation_time`) | ? | **yes** |
 | Location settable by URL | **yes** (place id; slug only if it exists) | ~ entry point only | n/a | **yes** (same) | yes | n/a |
@@ -819,8 +820,8 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/mobile-location-radius-notes.md` | Why mobile's location and radius don't behave as the URL implies |
 | `docs/filter-parameters.md` | Every sort/filter parameter, which surface honours it, and what's measured |
 | `docs/embedded-payload.md` | The GraphQL response Facebook ships inside desktop pages, and why the API isnt worth calling |
-| `docs/logged-in-findings.md` | What a signed-in session changes: seller identity yes, structured depth no |
-| `docs/discover.md` | The home screen feed: how it's seeded, why Facebook's own picks were rejected, its open issues, and what breaks if it ever holds older cards |
+| `docs/logged-in-findings.md` | What a signed-in session changes: seller identity yes, structured depth no — and §7, the *rendered* page differences that broke four things built logged out |
+| `docs/discover.md` | The home screen feed — Facebook's own, scrolled, when signed in; the user's own searches when not. Why that split, how the paging works, its open issues, and what breaks if it ever holds older cards |
 | `docs/onboarding.md` | The two things the app requires before it will show a home screen, why neither can be skipped, and how the gate is written |
 | **`docs/location.md`** | **Everything about location, both surfaces — start here.** What Facebook accepts, why a refusal is silent, the coordinate route, the verification protocol, the fuzz lattice, and where distances are measured from |
 | `docs/location-targeting.md` | The raw desktop session record: slugs vs place ids, and the §5a/§5b correction that found the coordinate route |

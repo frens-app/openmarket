@@ -125,23 +125,12 @@ final class Preferences: ObservableObject {
     /// find things, close enough that collecting them is still plausible.
     static let defaultRadiusKM = 16
 
-    /// How far to reach out when the radius has hidden everything.
-    ///
-    /// Five miles rather than the ladder's next rung, which from 10 mi would be
-    /// a jump to 20 and from 40 a jump to 100. A search that comes up empty is
-    /// usually empty by a little, and the useful move is to look slightly
-    /// further — not to abandon the constraint that makes this a local browser.
-    static let widenStepMiles = 5
-
-    /// The radius to offer when everything nearby has been filtered out.
-    ///
-    /// Nil at "Any distance", where there is nothing to widen — though the
-    /// prompt can't arise there, since an unbounded radius hides nothing.
-    var widenedRadiusKM: Int? {
-        guard radiusKM > 0 else { return nil }
-        let miles = SearchQuery.kilometresToMiles(radiusKM) + Self.widenStepMiles
-        return SearchQuery.milesToKilometres(miles)
-    }
+    // `widenStepMiles` and `widenedRadiusKM` lived here, for a footer that
+    // offered "try 15 mi" when the distance filter had hidden things. Both are
+    // gone with that footer (`ResultsView.discoverFooter`). The radius is a
+    // deliberate setting, changed where it is set, and offering to widen it was
+    // a lie for a signed-in user in any case: Facebook's account radius is a
+    // floor this app cannot raise (`docs/filter-parameters.md` §11).
 
     /// The chosen interests, as things with labels and search terms.
     ///
@@ -179,12 +168,12 @@ final class Preferences: ObservableObject {
         // Stored as-is, off-ladder values included.
         //
         // This used to snap to the nearest rung, from a one-time migration when
-        // the ladder changed from round kilometres to round miles. That snap is
-        // now actively wrong: widening by five miles from the results screen
-        // produces values the ladder doesn't contain, and snapping would undo
-        // the user's last action the next time the app launched. The picker
-        // renders whatever is set (`LocationPickerSheet`), so nothing depends
-        // on the value being a rung any more.
+        // the ladder changed from round kilometres to round miles. Nothing
+        // writes an off-ladder value any more — the results screen's "try 15 mi"
+        // button was the last one — but installs carrying one from that era are
+        // still out there, and silently moving somebody's radius on launch is
+        // worse than showing a number the picker didn't offer. It renders
+        // whatever is set (`LocationPickerSheet`), so nothing needs a rung.
         radiusKM = defaults.object(forKey: Key.radiusKM) as? Int ?? Self.defaultRadiusKM
         interests = defaults.stringArray(forKey: Key.interests) ?? []
         // Deliberately a new key rather than a rename of `hasSeenFirstRun`.
@@ -261,6 +250,12 @@ final class Preferences: ObservableObject {
         case .category(let name):
             lastQueryKind = "category"
             lastQueryValue = name
+        // Nothing to remember: browse is the home screen, which is where an
+        // app with no last query opens anyway. Recording it would make
+        // "reopen where I left off" mean "reopen on the screen you get for
+        // free", and it isn't a query the user ran.
+        case .browse:
+            break
         }
     }
 

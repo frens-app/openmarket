@@ -93,13 +93,19 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         _ = await js(GeoPickerScripts.arm(latitude: coordinate.latitude,
                                           longitude: coordinate.longitude))
 
-        guard await waitFor(GeoPickerScripts.pillPresent),
-              await flag(GeoPickerScripts.openDialog, "opened") else {
+        guard await waitFor(GeoPickerScripts.pillPresent) else {
+            Logger.place.error("resolve: no location pill")
+            return .failure(.noPill)
+        }
+        let opened = await js(GeoPickerScripts.openDialog)
+        Logger.place.info("opened dialog: \(opened, privacy: .public)")
+        guard opened.contains("\"opened\":true") else {
             Logger.place.error("resolve: no location pill")
             return .failure(.noPill)
         }
         guard await waitFor(GeoPickerScripts.arrowPresent) else {
-            Logger.place.error("resolve: no centring arrow")
+            let seen = await js(GeoPickerScripts.describeDialog)
+            Logger.place.error("resolve: no centring arrow — \(seen, privacy: .public)")
             return .failure(.noArrow)
         }
         mark("dialog")

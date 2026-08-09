@@ -14,6 +14,13 @@ final class ListingStore: ObservableObject {
     @Published private(set) var isLoadingFirstPage = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var health = ParseHealth()
+    /// Whether scrolling this result set has stopped producing anything.
+    ///
+    /// Reported so the grid can say so rather than ending in silence. Only ever
+    /// true for a signed-in session: without one the feed stops at the login
+    /// wall after ~15 cards, which is a different fact and gets a different
+    /// footer.
+    @Published private(set) var reachedEnd = false
     @Published var query: SearchQuery?
 
     /// The primary search path. Desktop is the only surface with working
@@ -103,6 +110,7 @@ final class ListingStore: ObservableObject {
         listings = []
         seenIDs = []
         health = ParseHealth()
+        reachedEnd = false
 
         // Last session's cards for this exact query, on the first frame. The
         // live load underneath takes 5.13s to produce anything; there is no
@@ -154,7 +162,11 @@ final class ListingStore: ObservableObject {
             guard await desktop.scrollOnce() else { break }
             await ingest(cards: await desktop.renderedCards())
         }
+        // Three screens that produced nothing is the end of this result set as
+        // far as anyone can tell from here. Recorded rather than only logged, so
+        // the grid can say the results ran out instead of just stopping.
         if listings.count == before {
+            reachedEnd = true
             Logger.store.info("loadMore: no new cards")
         }
     }

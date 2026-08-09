@@ -107,9 +107,15 @@ struct ResultsView: View {
                     // A signed-in query returns a different result set, not
                     // merely a longer one, so this re-runs rather than
                     // appending to what's already on screen.
+                    //
+                    // Discover is rebuilt for a stronger reason: signing in
+                    // changes which feed it *is*, from three of the user's own
+                    // searches to Facebook's own picks. `loadIfNeeded` notices
+                    // the session changed on its own, so this is a plain reload.
                     Task {
                         store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
                         await store.retry()
+                        await loadDiscover()
                     }
                 }
             }
@@ -262,7 +268,7 @@ struct ResultsView: View {
             if store.isLoadingFirstPage {
                 SkeletonGrid()
             } else if store.listings.isEmpty && store.query != nil {
-                InlineNotice(text: "Nothing found nearby. Try a wider radius.", actionTitle: nil, action: nil)
+                InlineNotice(text: "Nothing found nearby.", actionTitle: nil, action: nil)
                     .padding()
             } else if store.query == nil {
                 home
@@ -285,7 +291,13 @@ struct ResultsView: View {
     /// Either personal section disappears when it's empty rather than showing a
     /// placeholder. A new install therefore lands directly on Discover, and the
     /// screen fills in from the top as the app gets used.
-    @ViewBuilder
+    ///
+    /// **Discover is always here, even with nothing in it.** There used to be a
+    /// blanket empty state — "Nothing saved yet", plus advice about bookmarks —
+    /// covering the whole screen when every section came back empty. It answered
+    /// the wrong question: an empty feed is a statement about the area or the
+    /// session, not about the user's bookmarking habits, and both of those now
+    /// have something better to say under the heading (`discoverFooter`).
     private var home: some View {
         let savedItems = store.listings(for: saved.ids)
         // Saved listings are excluded from the recent strip: the same card in
@@ -296,21 +308,16 @@ struct ResultsView: View {
         let recentItems = store.listings(for: Array(recentIDs))
         let discovered = winnowed(discover.listings, hidingViewed: false)
 
-        if savedItems.isEmpty, recentItems.isEmpty,
-           discovered.items.isEmpty, discover.listings.isEmpty, !discover.isLoading {
-            EmptyStatePrompt(hasSavedNothing: saved.isEmpty)
-        } else {
-            VStack(alignment: .leading, spacing: 24) {
-                if !recentItems.isEmpty {
-                    strip("Recently viewed", items: recentItems)
-                }
-                if !savedItems.isEmpty {
-                    strip("Saved", items: savedItems)
-                }
-                discoverSection(discovered)
+        return VStack(alignment: .leading, spacing: 24) {
+            if !recentItems.isEmpty {
+                strip("Recently viewed", items: recentItems)
             }
-            .padding(.top, 4)
+            if !savedItems.isEmpty {
+                strip("Saved", items: savedItems)
+            }
+            discoverSection(discovered)
         }
+        .padding(.top, 4)
     }
 
     private func sectionTitle(_ text: String) -> some View {
@@ -346,20 +353,21 @@ struct ResultsView: View {
         }
     }
 
-    /// A shuffled mix drawn from the user's own recent searches.
+    /// Facebook's own Marketplace feed when there's an account behind it, and a
+    /// mix drawn from the user's own recent searches when there isn't.
     ///
     /// It runs to the bottom of the scroll, because it is the only section here
     /// that can — the other two are bounded by what the user has done to
-    /// individual listings, and this one is bounded by what those searches
-    /// returned.
+    /// individual listings. Signed in, "the bottom" means the bottom of
+    /// Facebook's feed, reached a screen at a time as the user gets near it.
     ///
-    /// The seeds are named under the heading, and that is not decoration. A
-    /// shuffled feed with no stated basis is indistinguishable from a random
-    /// one — which is exactly the complaint that got Facebook's own feed
-    /// removed from this screen. Saying "from lamp · couch · desk" is what makes
-    /// the mix legible as a consequence of something the user did, and on a new
-    /// install "from your interests" says the same about something they picked
-    /// during onboarding rather than implying a history they don't have.
+    /// The caption under the heading is not decoration. A feed with no stated
+    /// basis is indistinguishable from a random one — which is exactly the
+    /// complaint that got Facebook's own feed removed from this screen the
+    /// first time. Signed out it names the seeds ("from lamp · couch · desk"),
+    /// which makes the mix legible as a consequence of something the user did;
+    /// signed in it names the place and the radius, which is the only thing
+    /// this app did to a feed it didn't build.
     @ViewBuilder
     private func discoverSection(_ w: Winnowed) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -388,25 +396,78 @@ struct ResultsView: View {
                 StaggeredGrid(items: w.items, columns: 2, spacing: 12) { listing in
                     ListingCard(listing: listing, namespace: heroNamespace)
                         .onTapGesture { selected = listing }
+                        // A no-op unless this is the browse feed and the card is
+                        // near the end of it.
+                        .task { await discover.loadMoreIfNeeded(currentItem: listing) }
                 }
                 .padding(.horizontal, 12)
-                // Same reasoning as over a result set: cards removed on this
-                // device with nothing said about it are indistinguishable from
-                // a feed that came back thin.
-                if w.hiddenByDistance > 0 {
-                    hiddenNotice(w)
+
+                if discover.isLoadingMore {
+                    ProgressView().frame(maxWidth: .infinity).padding()
                 }
+                discoverFooter(isEmpty: w.items.isEmpty)
             }
         }
     }
 
+    /// What sits under Discover once there is nothing more to add.
+    ///
+    /// There used to be a count of what the distance filter had removed, with a
+    /// button to widen the radius. It is gone. On a result set that footer works
+    /// — the user reads to the end — but a home feed is scrolled until something
+    /// catches the eye, so it was addressed to nobody, and the offer it made was
+    /// a lie for exactly the users who now get this feed: signed in, Facebook's
+    /// own account radius is a floor the app cannot raise, so tapping "try 15
+    /// mi" would change the number and not the results
+    /// (`docs/filter-parameters.md` §11). The radius is stated in the caption
+    /// instead, where it is read before the scrolling starts rather than after
+    /// it stops.
+    @ViewBuilder
+    private func discoverFooter(isEmpty: Bool) -> some View {
+        switch discover.mode {
+        // Signed out the feed is a fixed sample of three searches, so its end is
+        // always the end — and the honest thing to offer there is the account
+        // that turns this screen into Facebook's real one.
+        case .searches:
+            endOfResultsSignIn
+        case .browse:
+            if discover.reachedEnd {
+                endOfArea(isEmpty: isEmpty)
+            }
+        }
+    }
+
+    /// The end of what's nearby.
+    ///
+    /// Deliberately about the *area* rather than the feed, because the area is
+    /// what ran out: Facebook keeps going, and this is the point at which
+    /// nothing it offers next is close enough to be worth showing.
+    ///
+    /// "Nothing else" would be a small lie on a screen that never had anything
+    /// on it, so an empty one drops the word.
+    private func endOfArea(isEmpty: Bool) -> some View {
+        Text(isEmpty ? "There's nothing in your area." : "There's nothing else in your area.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
+    }
+
     /// The grid, after the two filters Facebook won't apply for us — and the
-    /// count of what each one took, because a filter that removes cards without
-    /// saying so is indistinguishable from a broken search.
+    /// count the one with an undo took, because a filter that removes cards
+    /// without saying so is indistinguishable from a broken search.
+    ///
+    /// Distance is no longer counted here. It used to be, to feed a footer that
+    /// offered to widen the radius; that footer is gone (`discoverFooter`), and
+    /// the radius is stated on the filter bar over a result set and in the
+    /// caption over Discover — both of them before the scrolling rather than
+    /// after it.
     private struct Winnowed {
         var items: [Listing] = []
         var hiddenAsViewed = 0
-        var hiddenByDistance = 0
     }
 
     /// Distance is enforced here because no surface honours `radius` — the chip
@@ -415,9 +476,11 @@ struct ResultsView: View {
     /// asynchronous, and filtering on missing data would make cards disappear
     /// and come back as the queue drains.
     ///
-    /// Already-viewed goes first, so the distance count that reaches the user
-    /// describes only cards they could otherwise have seen — counting the same
-    /// listing under both headings would overstate what's being held back.
+    /// Signed in, Discover has already been through this once —
+    /// `DiscoverFeed.nearby` filters as it pages, because a feed that can't tell
+    /// how much it dropped can't tell whether to keep scrolling. Running it
+    /// again here costs a few cached lookups and keeps one rule in one place for
+    /// every list on the screen.
     ///
     /// `hidingViewed` is off for Discover. That filter means "only listings new
     /// to me *in this search*", and a home feed nobody asked for is not a
@@ -440,10 +503,9 @@ struct ResultsView: View {
             let coordinate = distances.enrichedCoordinate(for: listing)
             if let km = distances.distanceKM(for: listing.locationText, coordinate: coordinate),
                km > Double(prefs.radiusKM) {
-                result.hiddenByDistance += 1
-            } else {
-                result.items.append(listing)
+                continue
             }
+            result.items.append(listing)
         }
         return result
     }
@@ -464,76 +526,54 @@ struct ResultsView: View {
                 }
             }
 
-            // Both filters run here rather than at Facebook, so listings
-            // disappear with no explanation unless one is given. That matters
-            // most with "Newest first", which genuinely does return results
-            // 60-90 mi out — a search can go from fifteen cards to one, and
-            // without this it just looks broken.
-            if winnowed.hiddenAsViewed > 0 || winnowed.hiddenByDistance > 0 {
-                hiddenNotice(winnowed)
+            // "Only new listings" runs here rather than at Facebook, so the
+            // cards it removes disappear with no explanation unless one is
+            // given — and it has an undo, which is the point of naming it.
+            //
+            // The distance filter used to be reported alongside it, with an
+            // offer to widen. Both are gone; see `discoverFooter` for why the
+            // offer had to go, and note that the radius is already stated on the
+            // bar pinned above these results, which is where it belongs.
+            if winnowed.hiddenAsViewed > 0 {
+                viewedNotice(winnowed)
             }
 
-            if store.session == .unauthed, !items.isEmpty {
-                endOfResultsSignIn
+            if store.session == .unauthed {
+                if !items.isEmpty { endOfResultsSignIn }
+            } else if store.reachedEnd || items.isEmpty {
+                endOfArea(isEmpty: items.isEmpty)
             }
         }
     }
 
-    /// One footer for both on-device filters, with a way out of each — which is
-    /// the point of naming them separately. "Nothing found" plus a single
-    /// undo button leaves the user guessing which filter emptied the screen.
-    private func hiddenNotice(_ w: Winnowed) -> some View {
+    /// What "only new listings" is holding back, and the way out of it.
+    private func viewedNotice(_ w: Winnowed) -> some View {
         let showingNothing = w.items.isEmpty
         return VStack(spacing: 8) {
-            Text(hiddenSummary(w))
+            Text(showingNothing
+                 ? "You've opened all \(w.hiddenAsViewed) of these already"
+                 : "\(w.hiddenAsViewed) you've already viewed")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            HStack(spacing: 20) {
-                if w.hiddenAsViewed > 0 {
-                    Button("Show viewed") { prefs.hideViewed = false }
-                }
-                // Widen a little, rather than abandoning the radius.
-                //
-                // This used to be "Show any distance", which set the radius to
-                // unbounded — one tap from a 10-mile search to results 90 miles
-                // out, and no way back except the filter sheet. A search is
-                // usually empty by a little, so the offer is to look a little
-                // further. Tapping again goes another five.
-                if w.hiddenByDistance > 0, let wider = prefs.widenedRadiusKM {
-                    Button("Try \(SearchQuery.kilometresToMiles(wider)) mi") {
-                        withAnimation(.easeOut(duration: 0.2)) { prefs.radiusKM = wider }
-                    }
-                }
-            }
-            .font(.subheadline.weight(.semibold))
+            Button("Show viewed") { prefs.hideViewed = false }
+                .font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 32)
         .padding(.vertical, showingNothing ? 40 : 24)
     }
 
-    private func hiddenSummary(_ w: Winnowed) -> String {
-        let miles = SearchQuery.kilometresToMiles(prefs.radiusKM)
-        switch (w.hiddenAsViewed > 0, w.hiddenByDistance > 0, w.items.isEmpty) {
-        case (true, true, true):
-            return "Nothing new within \(miles) mi"
-        case (true, true, false):
-            return "\(w.hiddenAsViewed) already viewed, \(w.hiddenByDistance) further than \(miles) mi"
-        case (true, false, true):
-            return "You've opened all \(w.hiddenAsViewed) of these already"
-        case (true, false, false):
-            return "\(w.hiddenAsViewed) you've already viewed"
-        case (false, _, true):
-            return "Nothing within \(miles) mi"
-        default:
-            return "\(w.hiddenByDistance) more further than \(miles) mi"
-        }
-    }
-
-    /// The bottom of an anonymous result set really is the bottom — Facebook
-    /// serves about fifteen listings to a signed-out session and then blocks
-    /// scrolling behind an overlay that can be dismissed exactly once.
+    /// The bottom of anything an anonymous session can see, which really is the
+    /// bottom — Facebook serves about fifteen listings to a signed-out session
+    /// and then blocks scrolling behind an overlay that can be dismissed exactly
+    /// once.
+    ///
+    /// It ends Discover as well as a result set now, and there it is the whole
+    /// reason the signed-out home screen is built the way it is: signing in
+    /// replaces three of the user's own searches with Facebook's own feed,
+    /// scrollable, so the offer below is a description of what happens rather
+    /// than a nag.
     ///
     /// The offer alone carries it; explaining the cap out loud only draws
     /// attention to the ceiling.
@@ -735,31 +775,10 @@ private struct RecentCard: View {
     }
 }
 
-struct EmptyStatePrompt: View {
-    /// Distinguishes "you haven't saved anything yet" from "search for
-    /// something" — the home screen is the saved list now, so an empty one
-    /// should say what would fill it.
-    var hasSavedNothing = true
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: hasSavedNothing ? "bookmark" : "magnifyingglass")
-                .font(.largeTitle)
-                .foregroundStyle(.tertiary)
-            Text(hasSavedNothing ? "Nothing saved yet" : "Search for something nearby")
-                .font(.headline)
-            Text(hasSavedNothing
-                 ? "Search for something, then tap the bookmark to keep it here."
-                 : "Or pick a category above.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 32)
-        .padding(.top, 80)
-    }
-}
+// `EmptyStatePrompt` lived here: a full-screen "Nothing saved yet" with advice
+// about bookmarks, shown when every home section came back empty. Removed with
+// the blanket empty state (`home`) — an empty home screen is a statement about
+// the area or the session, and Discover's own footer makes it.
 
 /// §3.3 — no login form, ever. Just an honest explanation and a way out.
 struct LoginWallCard: View {

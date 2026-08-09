@@ -239,3 +239,114 @@ Does not hold up:
 The honest summary: signing in fixes the *item page* (seller identity) and
 leaves the *feed* essentially where it was. If login is adopted, the argument
 for it is seller data and account-tightened locality — not depth.
+
+---
+
+## 7. The signed-in page is a different document
+
+**Added 2026-08-09, from the first real signed-in session.** §1–§6 measured what
+Facebook *returns* signed in. This section is about what it *renders*, which
+turned out to matter more: login was adopted, and four separate pieces of the
+app broke on contact with a session. None of them were about data.
+
+| What broke | Why | Fixed in |
+|---|---|---|
+| Location picker — both routes | Pill matched by text; first `div[role="button"]` reading `City · N mi` was the **notifications button** | `location.md` §5.0 |
+| Location picker, intermittently | Pill clicked before layout — same element measured `344x27` and `0x0` on consecutive runs | `location.md` §5.0 |
+| Location picker | `element.click()` ignored; the control opens on the pointer sequence | `location.md` §5.0 |
+| Discover pagination | Cards past the first page carry **no `aria-label`** | `discover.md` §0.1a |
+| Seller name unreadable | The block renders as one unseparated run — `Seller detailsDana Whitfield(17)Highly rated on Marketplace…` — and the parser split it on newlines, so the whole block became the name | §7.4 |
+| Seller absent entirely | It renders *after* the detail poll's readiness test is satisfied | §7.4 |
+
+### 7.1 What is actually different in the DOM
+
+- **More chrome, so more collisions.** The logged-in shell adds navigation and
+  jewel buttons ahead of the Marketplace content in document order. Any selector
+  that takes "the first element that looks like X" is exposed, and the failure
+  is silent: it finds *an* element and clicks it.
+- **Panels are mounted but hidden.** A `[role="dialog"]` labelled
+  `Notifications` sits in the page permanently with `visible: false`. Presence
+  of a dialog is not evidence a dialog is open — check the bounding box.
+- **`aria-label` coverage is inconsistent within one page.** The server-rendered
+  first page of the feed labels its cards; everything infinite scroll inserts
+  does not. Both states are the same surface, same session, same session — the
+  label is a property of *how a node was created*, not of the page.
+
+### 7.2 The exposure this leaves
+
+Everything in this app was built and verified **logged out**, over months, and
+the four failures above all sat latent that whole time. That is the finding
+worth keeping, more than any individual selector:
+
+> A selector verified logged out is untested, not confirmed.
+
+Still verified only logged out, and worth re-checking against a session before
+being trusted: the item-page detail extractor (`DesktopScripts.extractDetail`),
+the seller-tools flow, and the login-wall detection itself. None have been
+observed failing — they have simply never been watched with cookies present.
+
+The cheap habit that would have caught all four: when a selector matches
+nothing, log **what was there instead**. Every one of these presented as an
+empty result from a selector, and in three of the four the honest answer was
+"you are looking at the wrong element", which no amount of re-reading the
+selector reveals.
+
+### 7.3 The account carries its own location
+
+Independent of anything the app sets. On this session the picker's own pill read
+`Location: New York, New York, Within 5 mi` while the app was browsing Seattle
+at 10 mi.
+
+That radius is a **floor the app cannot raise** (§4, `filter-parameters.md` §11)
+— the app can narrow what arrives and never widen it — and it now bounds the
+whole home screen rather than one section of a search, because signed-in
+Discover is Facebook's own feed (`discover.md` §4.4). Nothing currently tells
+the user this. The pill is readable, so saying so is possible; it is not done.
+
+### 7.4 The seller block: two bugs stacked, and a wrong diagnosis
+
+Both only reachable signed in, so both shipped unexercised.
+
+**It renders as one run.** §1a records the block with separators
+(`Seller information | Seller details | Kelsey Jones | (44) | …`). Observed here
+it arrived with none at all, and not merely without newlines — without *spaces*:
+
+```
+Seller information Seller detailsDana Whitfield(17)Highly rated on MarketplaceJoined Facebook in 2009
+```
+
+`detailsKatrina`, `MarketplaceJoined`. The parser split on newlines and took the
+first non-heading line as the name, so with one "line" the entire block became
+the seller's name and the detail screen rendered it as a three-line heading
+beside the stars. It now flattens and matches by shape — `(N)` for the count,
+`Joined Facebook in YYYY`, name is what precedes them — which handles both the
+separated and the run-together forms. **Do not assume either form**; this block
+has now been seen both ways on the same surface.
+
+**It arrives late.** Separately, the detail poll's readiness test is
+"description and gallery", both of which are at the top of the page. Seller
+identity renders after both, so a fast page was handed back before the block
+existed: `none of 1460 nodes` scanned for a section that is present seconds
+later. Fixed with one short re-poll once the caller already has text and photos,
+so it costs nothing anyone is waiting on.
+
+**What the block carries, now that it parses.** Name, join year, star score,
+rating count, and Facebook's own `Highly rated on Marketplace` badge — the last
+of which was being matched and thrown away. It is stored as
+`ListingDetail.sellerIsHighlyRated` rather than derived from the score, because
+it is Facebook's bar against its own unpublished threshold; inventing one here
+would put the badge on sellers Facebook doesn't.
+
+Ratings are commoner than §1a's "tracks the category" suggested — a casual
+5-rating furniture seller carried one — so the unrated case is the minority, but
+it exists (a named seller with a join year and no score at all), and the detail
+screen now says "No ratings yet" rather than leaving the line blank. Absence and
+breakage look identical otherwise.
+
+**The wrong diagnosis is the part worth keeping.** The obvious explanation was
+"it's below the fold and unbuilt until something scrolls there", and a scroll
+was written to fix it. The scroll reported `moved: nothing` on the very page
+that then produced a seller 33 ms later — the re-poll did the work. The scroll
+survives as cheap insurance, labelled as such in the code, because a mechanism
+credited with a fix it did not perform is worse than no mechanism at all: the
+next person removes the wrong one.

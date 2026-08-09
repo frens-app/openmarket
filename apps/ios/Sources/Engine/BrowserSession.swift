@@ -93,11 +93,30 @@ enum SessionState {
     /// Facebook sets `c_user` (the account id) and `xs` (the session) on a
     /// successful login. Both present is the cheapest reliable signal, and it
     /// needs no request of our own.
-    static func isSignedIn() async -> Bool {
-        let cookies = await BrowserSession.dataStore.httpCookieStore.allCookies()
-        let facebook = cookies.filter { $0.domain.contains("facebook.com") }
-        return facebook.contains { $0.name == "c_user" }
-            && facebook.contains { $0.name == "xs" }
+    ///
+    /// **An empty jar on a cold start means "not loaded yet", not "signed
+    /// out".** `allCookies()` answers before WebKit has finished reading its
+    /// store off disk, and the answer it gives is an empty array. Observed:
+    /// Discover asked at launch+0.5s, got false, and built the signed-out feed
+    /// for a signed-in account; the scene-phase check 400ms later on the same
+    /// launch got `authed` from the identical call.
+    ///
+    /// So an *entirely* empty jar is retried, and anything else is trusted
+    /// immediately. That split is what keeps this cheap: a signed-out user who
+    /// has ever loaded Facebook still has `datr` and `sb`, so they answer on the
+    /// first pass. Only a genuinely fresh install waits, once, for a deadline it
+    /// will always hit.
+    static func isSignedIn(settleFor timeout: Duration = .milliseconds(1500)) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while true {
+            let cookies = await BrowserSession.dataStore.httpCookieStore.allCookies()
+            if !cookies.isEmpty || ContinuousClock.now >= deadline {
+                let facebook = cookies.filter { $0.domain.contains("facebook.com") }
+                return facebook.contains { $0.name == "c_user" }
+                    && facebook.contains { $0.name == "xs" }
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     /// Signs out by discarding the store's contents.
