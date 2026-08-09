@@ -59,6 +59,11 @@ radius control is currently decorative) is in `mobile-location-radius-notes.md`.
     is exactly the trap in `docs/probe-checklist.md` §6: a broken image, a
     mechanism invented to explain it, and signing parameters that happened to
     fit the story — recorded without ever fetching the URL.
+
+    That one-off failure is fixed: `ImageLoader` retries, coalesces and caps
+    image traffic, and `RemoteImage` gives a dead photo one visible state
+    everywhere (`MissingPhoto`) instead of grey in some views and a glyph in
+    others. Expiry itself is unchanged and still wants cached bytes.
 - **Saving a listing.** A bookmark in the detail toolbar, keyed on `Listing.id`
   — the photo FBID out of the thumbnail CDN URL. That key is why the grid shows
   a save with no plumbing between the screens, and why the badge follows the

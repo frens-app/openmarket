@@ -754,9 +754,11 @@ private struct RecentCard: View {
             Color(.tertiarySystemFill)
                 .frame(width: Self.side, height: Self.side)
                 .overlay {
-                    AsyncImage(url: listing.thumbnailURL) { phase in
+                    RemoteImage(url: listing.thumbnailURL) { phase in
                         if let image = phase.image {
                             image.resizable().scaledToFill()
+                        } else if phase.hasFailed {
+                            MissingPhoto()
                         }
                     }
                 }

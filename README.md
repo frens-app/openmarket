@@ -794,18 +794,32 @@ item — several of these are harder or easier than they look. Items marked
       to persist indefinitely, so a saved card older than that will render its
       price, title and city from the local store with a dead image. Fix is to
       cache the image bytes for saved listings rather than the URL.
-- [ ] **`AsyncImage` never retries, so cards lose their image under load.**
-      Reproducible: a card renders a permanent grey placeholder in the search
-      grid while the *same URL* loads first try on the saved home, returns HTTP
-      200 to `curl`, and has four days left on its expiry. The trigger is
-      contention — the search grid loads ~26 thumbnails at once while two hidden
-      `WKWebView`s render full pages. Requests that lose report `.failure`, and
-      nothing retries. Scrolling away and back doesn't help: `LazyVStack` keeps
-      the view alive rather than rebuilding it. Needs a retrying image view.
-      **Partly mitigated:** the 8-listing prefetch that was the largest
-      contributor is gone (`docs/decision-desktop-primary.md`), so this should
-      be re-measured before being fixed — the remaining contention may be small
-      enough not to trigger it.
+      **Partly mitigated:** `ImageLoader`'s `URLSession` has a 256 MB disk
+      cache and fbcdn sends a long `max-age`, so bytes already fetched keep
+      rendering after the URL that fetched them expires. An evicted entry is
+      still a dead card, so this stays open.
+      A dead one now says so, rather than sitting grey — `MissingPhoto`.
+      **Not fixable by asking for a smaller image.** The `stp` resize directive
+      is inside the `oh` signature: measured 2026-08-09, mutating it to
+      `p280x280`/`s280x280`, removing it, or corrupting it all return 403 where
+      the untouched URL returns 200. Size is chosen by whatever rendered the
+      page, so the only lever is the capture surface's viewport (or a `srcset`,
+      if the grid carries one — unverified).
+- [x] **`AsyncImage` never retries, so cards lose their image under load.**
+      Fixed 2026-08-09 by `ImageLoader` + `RemoteImage`, which replace
+      `AsyncImage` at all five call sites. The trigger was contention — the grid
+      asks for ~26 thumbnails at once (measured: avg 95 KB each, **2.4 MB in one
+      burst**) while three `WKWebView`s render full pages; requests that lost
+      reported `.failure` and nothing retried, and `LazyVStack` keeps the view
+      alive so scrolling away and back didn't rebuild it either. Now: six
+      concurrent requests at most, one in-flight request per URL however many
+      views want it, a shared decode cache, and up to three attempts backing off
+      *outside* the gate. 403/404 is treated as permanent and never retried,
+      since an expired signature never recovers.
+      **Unexercised in the verification run:** live browsing produced zero
+      transient failures, so the retry-and-recover path is reviewed but has not
+      been observed firing. The permanent path was forced end-to-end and
+      behaves (one 403 per URL, no retry storm, `MissingPhoto` rendered).
 
 ---
 

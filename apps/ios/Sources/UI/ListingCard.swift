@@ -57,14 +57,13 @@ struct ListingCard: View {
 
     private var thumbnail: some View {
         ZStack(alignment: .topLeading) {
-            AsyncImage(url: listing.thumbnailURL) { phase in
+            RemoteImage(url: listing.thumbnailURL) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFill()
-                case .failure:
-                    Color(.tertiarySystemFill)
-                        .overlay(Image(systemName: "photo").foregroundStyle(.tertiary))
-                default:
+                case .failed:
+                    MissingPhoto()
+                case .loading:
                     Color(.tertiarySystemFill)
                 }
             }

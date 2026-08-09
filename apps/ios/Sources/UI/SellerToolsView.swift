@@ -299,9 +299,11 @@ private struct CompCard: View {
             Color(.tertiarySystemFill)
                 .frame(width: Self.side, height: Self.side)
                 .overlay {
-                    AsyncImage(url: comp.listing.thumbnailURL) { phase in
+                    RemoteImage(url: comp.listing.thumbnailURL) { phase in
                         if let image = phase.image {
                             image.resizable().scaledToFill()
+                        } else if phase.hasFailed {
+                            MissingPhoto()
                         }
                     }
                 }

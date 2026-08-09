@@ -64,9 +64,11 @@ struct PhotoGallery: View {
                 // `ListingCard` so the transition animates fill to fill.
                 Color.clear
                     .overlay {
-                        AsyncImage(url: url) { phase in
+                        RemoteImage(url: url) { phase in
                             if let image = phase.image {
                                 image.resizable().scaledToFill()
+                            } else if phase.hasFailed {
+                                MissingPhoto()
                             }
                         }
                     }
@@ -243,7 +245,7 @@ private struct ZoomablePhoto: View {
     private static let maxScale: CGFloat = 4
 
     var body: some View {
-        AsyncImage(url: url) { phase in
+        RemoteImage(url: url) { phase in
             if let image = phase.image {
                 image
                     .resizable()
@@ -253,7 +255,7 @@ private struct ZoomablePhoto: View {
                     .gesture(magnification)
                     .gesture(scale > 1 ? pan : nil)
                     .onTapGesture(count: 2) { toggleZoom() }
-            } else if phase.error != nil {
+            } else if phase.hasFailed {
                 Image(systemName: "photo")
                     .font(.largeTitle)
                     .foregroundStyle(.white.opacity(0.5))
