@@ -787,6 +787,19 @@ item — several of these are harder or easier than they look. Items marked
 
 **Known defects**
 
+- [x] **A marked-down card showed both prices as one number.** Fixed
+      2026-08-09. Facebook renders the new price and the struck-through old one
+      as *inline* spans in the same block, so `innerText` returns them joined —
+      "$50$60", "$250$1,000", "$0$25" — and every route that tests a run with
+      `hasPrefix("$")` accepted the whole thing as the price. Cards and detail
+      screens drew "$50$60" in one bold string, no strikethrough, no was-price.
+      `PriceRun.split` takes a run apart only when it is *nothing but* two
+      amounts that ascend, so ranges ("$20 - $40"), single prices, "Free" and
+      anything with a word in it are left alone rather than relabelled into a
+      discount Facebook never showed. A multi-character symbol run
+      ("CA$50CA$60") is not split — it stays whole, as before.
+      Cached listings keep the old joined string until they're re-fetched;
+      nothing migrates them.
 - [ ] **A saved listing's thumbnail dies after ~4.5 days.** fbcdn URLs are
       signed and time-limited: `oh` is a signature and `oe` is a hex unix
       expiry. Measured across three cached listings on 2026-08-04, the window is

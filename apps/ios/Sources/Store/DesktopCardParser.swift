@@ -69,6 +69,11 @@ enum DesktopCardParser {
             lines.remove(at: index)
         }
 
+        // …but on a marked-down card the two aren't separate lines at all: the
+        // struck-through original is an inline span, so `innerText` hands over
+        // "$50$60" as one run and the loop above finds no second price to take.
+        (priceText, originalPriceText) = PriceRun.resolve(price: priceText, original: originalPriceText)
+
         // City: "Seattle, WA" — a trailing two-letter state is the only
         // reliable marker, and titles routinely contain commas.
         var locationText: String?
@@ -161,6 +166,11 @@ enum DesktopCardParser {
             priceText = candidate
             segments.removeLast()
         }
+
+        // The label normally spells a markdown out ("reduced from $70") and is
+        // handled above, but it is built from the same rendered text, so the
+        // run-together form can reach here too.
+        (priceText, originalPriceText) = PriceRun.resolve(price: priceText, original: originalPriceText)
 
         // Whatever is left is the title, commas and all.
         let title = segments.joined(separator: ", ")

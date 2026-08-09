@@ -22,7 +22,9 @@ enum CardParser {
         let remaining = runs.filter { $0 != badge }
 
         let priceRuns = remaining.filter(isPrice)
-        // A struck-through original price follows the current one ("$25" "$40").
+        // A struck-through original price follows the current one ("$25" "$40")
+        // — when the two are separate runs at all. Inline, they arrive as one
+        // ("$25$40"), which `PriceRun` takes apart below.
         let originalPrice = priceRuns.count > 1 ? priceRuns[1] : nil
 
         let renderedTitle = remaining
@@ -35,17 +37,21 @@ enum CardParser {
         // also carry the struck-through original, which the label omits.
         let title = label?.title ?? renderedTitle
         let location = label?.locationText ?? remaining.first(where: isLocation)
-        let price = priceRuns.first ?? label?.priceText
+        let (price, resolvedOriginal) = PriceRun.resolve(price: priceRuns.first ?? label?.priceText,
+                                                        original: originalPrice)
         let thumbnail = card.imageURL.flatMap(URL.init(string:))
 
         // A card with neither a price nor a title is chrome, not a listing.
         guard price != nil || title != nil else { return nil }
 
         return Listing(
+            // Identity is unaffected by the split above wherever it matters:
+            // this falls back to a title+price hash only for a card with no
+            // photo, and a card with no photo has no thumbnail to lose.
             id: Listing.identity(thumbnailURL: thumbnail, title: title, priceText: price),
             title: title,
             priceText: price,
-            originalPriceText: originalPrice,
+            originalPriceText: resolvedOriginal,
             locationText: location,
             conditionText: label?.conditionText,
             thumbnailURL: thumbnail,
