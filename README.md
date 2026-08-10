@@ -463,7 +463,7 @@ is allowed to claim, all measured 2026-08-07:
 - **There is no sale date.** `creation_time` is the only time field on a
   listing, sold or not. So "recently sold" is an inference — listed *n* days
   ago, gone now, therefore sold in **at most** *n* days — and the UI states it
-  as the bound it is ("Sold in ≤4 days").
+  approximately ("Sold in ~4 days").
 - **The prices are still asking prices.** Facebook publishes what a sold item
   was *listed* at, never what changed hands. An accepted offer below asking is
   invisible.
