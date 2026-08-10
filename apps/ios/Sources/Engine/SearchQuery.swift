@@ -18,17 +18,20 @@ struct SearchQuery: Equatable {
         case category(String)
         /// No search term: Facebook's own Marketplace feed for a place.
         ///
-        /// Back, after being removed once. It was dropped because logged out it
-        /// is a rotating popularity pool rather than a recommendation — three
-        /// loads of the identical URL gave 0 of 5 cards in common, then 17 of
-        /// 20, then a revert to the first (`docs/discover.md` §3).
+        /// Back, after being removed once, and now the whole of Discover.
         ///
-        /// **With an account behind it that objection doesn't apply.** Facebook
-        /// has the user's own history to rank against, which is more than this
-        /// app can assemble from search terms on the device, and the feed
-        /// scrolls indefinitely instead of stopping at three searches' worth.
-        /// So Discover browses it when signed in and keeps the search-seeded
-        /// feed for everyone else.
+        /// It was dropped because logged out it is a rotating popularity pool
+        /// rather than a recommendation — three loads of the identical URL gave
+        /// 0 of 5 cards in common, then 17 of 20, then a revert to the first
+        /// (`docs/discover.md` §3). That measurement still stands; what changed
+        /// is what it is being compared against. The replacement was three of
+        /// the user's own searches re-run per fill, which cost three page loads
+        /// before anything could be drawn and could never show a category the
+        /// user hadn't already asked for.
+        ///
+        /// With an account behind it the objection lifts as well: Facebook has
+        /// the user's own history to rank against, and the feed scrolls
+        /// indefinitely rather than stopping at ~24 cards.
         ///
         /// Note what this URL carries: **nothing**. No sort, no delivery
         /// method, no price bounds — this is the default Discover screen as

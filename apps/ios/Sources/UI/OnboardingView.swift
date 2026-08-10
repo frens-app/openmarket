@@ -14,8 +14,10 @@ import CoreLocation
 ///
 /// * **A place**, because every search this app runs is centred on one, and
 ///   without it there is a hardcoded fallback city standing in for the user's.
-/// * **Three interests**, because Discover is built out of recent searches and
-///   a new install has none (`docs/discover.md` §1).
+/// * **Three interests**, because the search field has nothing to suggest to
+///   someone who has never searched. This used to be the stronger of the two —
+///   Discover itself was built from them — and it no longer is
+///   (`docs/discover.md` §6.1).
 ///
 /// Required is the whole point rather than a default that could be skipped: a
 /// skip link here buys thirty seconds and costs the app any idea of what to
@@ -27,8 +29,9 @@ import CoreLocation
 /// it is the only thing here the app can do a reduced version of without. It is
 /// asked for anyway, and asked for first-class, because the app is measurably
 /// better with it: seller identity, results that keep loading past the first
-/// page, and Facebook's own feed instead of three canned searches
-/// (`docs/logged-in-findings.md`). Logged out is the fallback, not the pitch.
+/// page, and a home feed that keeps scrolling past ~24 cards and is ranked
+/// against a real history (`docs/logged-in-findings.md`). Logged out is the
+/// fallback, not the pitch.
 struct OnboardingView: View {
     /// Called once, from the last step. Sets `hasCompletedOnboarding`, which is
     /// what actually dismisses this — see `Preferences.needsOnboarding`.
@@ -424,10 +427,11 @@ private struct CitySearchSheet: View {
 
 /// Three interests, and they go straight into long-term storage.
 ///
-/// This is the screen that makes the home feed possible on day one. Discover
-/// runs one search per seed and interleaves the results, so what is picked here
-/// is literally what the first Discover is made of — which is also why the
-/// minimum is three rather than one.
+/// What they do now is fill the search field's suggestions, so this screen is
+/// the difference between a first search that starts from something the user
+/// chose and one that starts from a blank field. It used to do more — the first
+/// Discover was literally made of these — which is where the minimum of three
+/// came from and is worth revisiting (`docs/discover.md` §6.1).
 ///
 /// The count lives in the button rather than in a separate counter line. It is
 /// the same fact — how many more are needed — and putting it where the user is
@@ -449,7 +453,7 @@ private struct InterestsPage: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("What do you shop for?")
                     .font(.largeTitle.weight(.bold))
-                Text("Pick at least \(Interest.minimum). They fill the home screen until you've searched for a few things of your own — after that, your searches take over.")
+                Text("Pick at least \(Interest.minimum). The search field offers them as a starting point until you've searched for a few things of your own — after that, your searches take over.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

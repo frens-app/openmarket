@@ -31,12 +31,11 @@ final class Preferences: ObservableObject {
     @Published var recentSearches: [String] { didSet { defaults.set(recentSearches, forKey: Key.recentSearches) } }
     /// Whether a search the user runs is added to that list.
     ///
-    /// It stopped being a private matter between the search field and its own
-    /// suggestions the moment Discover started seeding from it: history is now
-    /// the thing that decides what fills the home screen, so anything searched
-    /// once shows up there until it ages out. Someone looking for a gift, or for
-    /// something they'd rather not see on the first screen of the app, needs a
-    /// way to run that search without it becoming the wallpaper.
+    /// A matter between the search field and its own suggestions again, now
+    /// that Discover no longer seeds from it — but the toggle stays, because
+    /// the suggestion list is still a list of what you looked for, drawn on
+    /// screen whenever the field takes focus. Someone looking for a gift needs
+    /// a way to run that search without it waiting for them the next time.
     ///
     /// Off does not clear anything — existing history stays until cleared
     /// explicitly, which is the honest reading of "stop recording".
@@ -46,10 +45,9 @@ final class Preferences: ObservableObject {
     /// The categories the user said they shop for, as `Interest` ids.
     ///
     /// Long-term storage on purpose: this is a standing statement about the
-    /// person, not about a session, and it is the only thing the home screen
-    /// has to go on before they've searched for anything. Order is the order
-    /// they were picked in — Discover reads it as a preference ranking when it
-    /// has to take a subset.
+    /// person, not about a session, and it is the only thing the search field
+    /// has to offer before they've searched for anything. Order is the order
+    /// they were picked in.
     @Published var interests: [String] { didSet { defaults.set(interests, forKey: Key.interests) } }
 
     /// Set by the last step of onboarding, and never cleared.
@@ -136,21 +134,21 @@ final class Preferences: ObservableObject {
     ///
     /// Never empty in a shipped app — onboarding won't let go of the screen
     /// until three are picked — but it falls back rather than trapping, because
-    /// an empty home screen is a worse answer than a generic one if this ever
-    /// does get reached with nothing stored.
+    /// a search field with nothing to suggest is a worse answer than a generic
+    /// one if this ever does get reached with nothing stored.
     var chosenInterests: [Interest] {
         let resolved = Interest.resolve(interests)
         return resolved.isEmpty ? Interest.defaults : resolved
     }
 
     /// Whether the app's two requirements are met: somewhere to search, and
-    /// enough interests to build a first screen out of.
+    /// enough interests to suggest.
     ///
     /// Both are re-checked on every launch rather than trusted to the flag
     /// alone, so an install that somehow ends up without a place — or with its
     /// interests emptied — is asked again instead of landing on a home screen
-    /// that has nothing to show. `hasCompletedOnboarding` is what keeps the
-    /// flow on screen while it is being filled in.
+    /// centred on nowhere. `hasCompletedOnboarding` is what keeps the flow on
+    /// screen while it is being filled in.
     var needsOnboarding: Bool {
         !hasCompletedOnboarding
             || resolvedPlace == nil
@@ -272,18 +270,16 @@ final class Preferences: ObservableObject {
         lastQueryValue = nil
     }
 
-    /// Records a search the *user* ran, for the suggestions list and for
-    /// Discover's seeds.
+    /// Records a search the *user* ran, for the suggestions list.
     ///
     /// Two things never reach here, and both are deliberate:
     ///
     /// * **Anything the Seller tab searches.** Those terms are derived from the
     ///   item someone is drafting a listing for — they are the app asking a
     ///   question on the user's behalf, not the user looking for something to
-    ///   buy. Seeding Discover with them would fill the home screen with the
-    ///   thing you are trying to sell, which is precisely backwards.
-    ///   `SellerToolsModel` reads `Preferences` for location and filters and
-    ///   never calls this.
+    ///   buy, and offering them back as suggestions would answer a question
+    ///   nobody asked. `SellerToolsModel` reads `Preferences` for location and
+    ///   filters and never calls this.
     /// * **Anything at all, when `recordSearchHistory` is off.** Enforced here
     ///   rather than at the call site so a future caller can't forget.
     func recordSearch(_ term: String) {
