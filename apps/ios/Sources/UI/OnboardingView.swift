@@ -28,6 +28,7 @@ struct OnboardingView: View {
     let done: () -> Void
 
     @EnvironmentObject private var prefs: Preferences
+    @EnvironmentObject private var chooser: PlaceChooser
 
     @State private var step: Step = .welcome
 
@@ -47,7 +48,7 @@ struct OnboardingView: View {
                     PlacePage { go(to: .interests) }
                         .transition(.opacity)
                 case .interests:
-                    InterestsPage(done: done)
+                    InterestsPage(done: finish)
                         .transition(.opacity)
                 }
             }
@@ -95,6 +96,30 @@ struct OnboardingView: View {
 
     private func go(to next: Step) {
         withAnimation(.easeInOut(duration: 0.22)) { step = next }
+    }
+
+    /// The one place in the app that waits for a location to be agreed.
+    ///
+    /// Everything the place step does is optimistic, which is what keeps a
+    /// first run moving — but the screen on the other side of this button is a
+    /// home feed, and there is no version of it that works without a place
+    /// Facebook recognises. So this is where the two meet: by now the user has
+    /// spent the resolution's ten seconds choosing interests, so `settle`
+    /// almost always returns immediately, and the rare wait replaces a
+    /// guaranteed one.
+    ///
+    /// A place that never landed sends them back to the step that asks for it,
+    /// where the failure is already on screen — rather than through to a home
+    /// screen that would bounce them here anyway (`Preferences.needsOnboarding`
+    /// re-checks the place on every launch, so letting this through would show
+    /// onboarding again on the next start).
+    private func finish() async {
+        await chooser.settle()
+        guard prefs.resolvedPlace != nil else {
+            go(to: .place)
+            return
+        }
+        done()
     }
 }
 
@@ -183,22 +208,41 @@ private struct PlacePage: View {
 
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var location: LocationProvider
-    @StateObject private var chooser = PlaceChooser()
+    @EnvironmentObject private var chooser: PlaceChooser
     @State private var showCitySearch = false
 
+    /// The place being switched to comes first, so the map moves the moment
+    /// there is somewhere to move to rather than ten seconds later.
     private var centre: CLLocationCoordinate2D {
-        prefs.resolvedPlace?.coordinate
+        chooser.switching?.coordinate
+            ?? prefs.resolvedPlace?.coordinate
             ?? location.coordinate
             // The slug every search falls back to with nothing set, so with no
             // place and no fix this is honestly where searching would happen.
             ?? CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
     }
 
+    /// What the card is naming: the pending choice, then the confirmed one.
+    private var mapPlace: String? {
+        chooser.switching?.name ?? prefs.resolvedPlace?.name
+    }
+
+    /// Continue opens on the *choice*, not on the confirmation.
+    ///
+    /// This is the whole of "onboarding isn't blocking": the ten-second round
+    /// trip runs while the user reads the next screen and picks interests,
+    /// instead of holding them on a spinner here. The guarantee that nobody
+    /// reaches a home screen without a real place moves to the last step
+    /// (`OnboardingView.finish`), where it costs nothing in the normal case.
+    private var canContinue: Bool {
+        prefs.resolvedPlace != nil || chooser.switching != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LocationMapCard(place: prefs.resolvedPlace?.name ?? "no location",
+            LocationMapCard(place: mapPlace ?? "no location",
                             coordinate: centre,
-                            precision: prefs.resolvedPlace == nil ? .unset : .city,
+                            precision: mapPlace == nil ? .unset : .city,
                             userLocation: location.coordinate)
                 .padding(.top, 8)
 
@@ -211,9 +255,13 @@ private struct PlacePage: View {
             }
             .padding(.top, 24)
 
+            // Neither button is disabled while a switch runs. The point of not
+            // blocking is that the screen stays usable, and the most likely
+            // reason to touch it again is having picked the wrong Berkeley —
+            // a second choice supersedes the first (`PlaceChooser.resolve`).
             VStack(spacing: 10) {
                 Button {
-                    Task { await chooser.useDeviceLocation(via: location) }
+                    Task { await chooser.switchToDeviceLocation(via: location) }
                 } label: {
                     HStack(spacing: 8) {
                         if chooser.pending == .deviceFix {
@@ -230,7 +278,6 @@ private struct PlacePage: View {
                     .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
-                .disabled(chooser.isBusy)
 
                 Button { showCitySearch = true } label: {
                     HStack(spacing: 8) {
@@ -243,11 +290,22 @@ private struct PlacePage: View {
                     .background(Capsule().stroke(Color(.separator), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .disabled(chooser.isBusy)
             }
             .padding(.top, 24)
 
-            if let place = prefs.resolvedPlace {
+            if let change = chooser.switching {
+                // "Setting up", not "Browsing". On a first run the distinction
+                // is quieter than it is later — there are no results on screen
+                // to be wrong about — but the wording still shouldn't claim a
+                // place Facebook hasn't agreed to.
+                Label {
+                    Text("Setting up **\(change.name)**")
+                } icon: {
+                    ProgressView().controlSize(.small)
+                }
+                .font(.subheadline)
+                .padding(.top, 18)
+            } else if let place = prefs.resolvedPlace {
                 Label {
                     Text("Browsing **\(place.name)**")
                 } icon: {
@@ -258,7 +316,7 @@ private struct PlacePage: View {
             }
 
             if let failure = chooser.failure {
-                Label(failure, systemImage: "exclamationmark.triangle")
+                Label(failure.summary, systemImage: "exclamationmark.triangle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.top, 14)
@@ -272,7 +330,7 @@ private struct PlacePage: View {
                 .padding(.bottom, 12)
 
             OnboardingButton(title: "Continue",
-                             isEnabled: prefs.resolvedPlace != nil,
+                             isEnabled: canContinue,
                              action: next)
         }
         .padding(.horizontal, 24)
@@ -305,9 +363,13 @@ private struct CitySearchSheet: View {
                 }
                 ForEach(cities.suggestions) { suggestion in
                     Button {
-                        Task {
-                            if await chooser.use(suggestion, from: cities) { dismiss() }
-                        }
+                        // Dismisses on the tap, unlike the settings picker,
+                        // which stays open to show the change landing. There is
+                        // nothing on this sheet but the list — the page behind
+                        // is what has the map and the readout, so getting out
+                        // of its way *is* showing the result.
+                        chooser.switchTo(suggestion, from: cities)
+                        dismiss()
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -361,9 +423,14 @@ private struct CitySearchSheet: View {
 /// the same fact — how many more are needed — and putting it where the user is
 /// heading means the disabled state explains itself instead of just refusing.
 private struct InterestsPage: View {
-    let done: () -> Void
+    /// Async because the place chosen two screens ago may still be resolving —
+    /// see `OnboardingView.finish`.
+    let done: () async -> Void
 
     @EnvironmentObject private var prefs: Preferences
+    /// Only true in the rare case where someone picks three interests faster
+    /// than Facebook names a city.
+    @State private var isFinishing = false
 
     /// Counts only ids this build recognises, which is what the minimum has to
     /// mean — a stored id from a retired category would otherwise let someone
@@ -391,8 +458,14 @@ private struct InterestsPage: View {
             .scrollIndicators(.hidden)
 
             OnboardingButton(title: remaining == 0 ? "Start browsing" : "Pick \(remaining) more",
-                             isEnabled: remaining == 0,
-                             action: done)
+                             isEnabled: remaining == 0 && !isFinishing,
+                             isBusy: isFinishing) {
+                Task {
+                    isFinishing = true
+                    await done()
+                    isFinishing = false
+                }
+            }
                 .padding(.top, 8)
         }
         .padding(.horizontal, 24)
@@ -406,11 +479,17 @@ private struct InterestsPage: View {
 private struct OnboardingButton: View {
     let title: String
     let isEnabled: Bool
+    /// Waiting on something the tap started, with the label kept in place so
+    /// the button doesn't change size or meaning underneath the thumb.
+    var isBusy = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            ZStack {
+                Text(title).opacity(isBusy ? 0 : 1)
+                if isBusy { ProgressView().controlSize(.small) }
+            }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)

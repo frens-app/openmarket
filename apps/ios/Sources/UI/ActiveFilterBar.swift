@@ -13,6 +13,9 @@ import SwiftUI
 /// be removed where it is read. Nothing hides behind a badge.
 struct ActiveFilterBar: View {
     @EnvironmentObject private var prefs: Preferences
+    /// A location change in flight, or one that just failed. The bar is where
+    /// the place is read, so it is where a change to it should be reported.
+    @EnvironmentObject private var chooser: PlaceChooser
 
     /// Opens the location picker.
     let onLocation: () -> Void
@@ -29,6 +32,7 @@ struct ActiveFilterBar: View {
             if !chips.isEmpty {
                 chipRow
             }
+            switchNotice
         }
         .padding(.horizontal, 16)
         // Tight to the search field above. The bar reads as belonging to it —
@@ -43,10 +47,13 @@ struct ActiveFilterBar: View {
 
     private var locationReadout: some View {
         Button(action: onLocation) {
-            readout(caption: "LOCATION", value: locationValue)
+            readout(caption: "LOCATION", value: locationValue,
+                    isPending: chooser.switching != nil)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Location, \(locationValue). Change")
+        .accessibilityLabel(chooser.switching == nil
+                            ? "Location, \(locationValue). Change"
+                            : "Location, switching to \(locationValue). Change")
     }
 
     /// A menu rather than a route into the filter sheet: sorting is one of two
@@ -79,16 +86,23 @@ struct ActiveFilterBar: View {
     /// Caption above value, both always legible. The caption is what makes the
     /// pair readable at a glance — two bare strings side by side don't say
     /// which is the place and which is the order.
-    private func readout(caption: String, value: String) -> some View {
+    private func readout(caption: String, value: String,
+                         isPending: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(caption)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.tertiary)
-            Text(value)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            HStack(spacing: 6) {
+                Text(value)
+                    .font(.subheadline.weight(.medium))
+                    // Dimmed while unconfirmed, which is the cheapest honest
+                    // signal available: the name is what the user asked for,
+                    // not yet what the results are.
+                    .foregroundStyle(isPending ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if isPending { ProgressView().controlSize(.mini) }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
@@ -102,10 +116,68 @@ struct ActiveFilterBar: View {
     /// "San Francisco · 10 mi" is one fact — the catchment — and splitting it
     /// across a readout and a removable chip invites the reading that they are
     /// two separate filters that could disagree.
+    /// The place the user has asked for, which is not always the place the
+    /// results are from — `switchNotice` is what keeps that distinction
+    /// visible while a change is in flight.
     private var locationValue: String {
-        let place = prefs.locationName ?? "Choose a location"
+        let place = chooser.displayName ?? "Choose a location"
         guard prefs.radiusKM > 0 else { return place }
         return "\(place) · \(SearchQuery.kilometresToMiles(prefs.radiusKM)) mi"
+    }
+
+    // MARK: - Switching
+
+    /// The one line that stops the optimistic label from being a lie.
+    ///
+    /// A location change takes about ten seconds to agree with Facebook
+    /// (`docs/location.md` §4) and the results on screen belong to the old
+    /// place for all of it. The pill says where the user is going; this says
+    /// what they are currently looking at, and afterwards says whether they got
+    /// there. Both readings matter — a result set that silently belongs to
+    /// another city is this whole area's characteristic failure.
+    @ViewBuilder
+    private var switchNotice: some View {
+        if let change = chooser.switching {
+            notice(icon: "arrow.triangle.2.circlepath", tint: .secondary) {
+                Text(change.previous.map { "Switching to \(change.name) — these results are still \($0)." }
+                     ?? "Switching to \(change.name)…")
+            }
+        } else if let failed = chooser.failure {
+            notice(icon: "exclamationmark.triangle", tint: .orange, onDismiss: chooser.dismissFailure) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(failed.summary)
+                    if failed.hasDetail {
+                        Text(failed.reason).foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func notice<Content: View>(icon: String,
+                                       tint: Color,
+                                       onDismiss: (() -> Void)? = nil,
+                                       @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        // Announced rather than left to be noticed: the user's attention is on
+        // the grid, which is the part that hasn't changed yet.
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     // MARK: - Chips

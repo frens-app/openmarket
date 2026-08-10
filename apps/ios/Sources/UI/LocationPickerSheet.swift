@@ -18,10 +18,18 @@ struct LocationPickerSheet: View {
     @StateObject private var cities = AppleMapsCitySearch()
     /// The two-step resolution and its failure wording, shared with the
     /// location step of onboarding so the two screens can't drift apart.
-    @StateObject private var chooser = PlaceChooser()
+    ///
+    /// From the environment rather than owned here: this sheet now dismisses on
+    /// the tap and the switch carries on without it, so the state has to belong
+    /// to something that outlives the screen.
+    @EnvironmentObject private var chooser: PlaceChooser
     @Environment(\.dismiss) private var dismiss
 
     @State private var query = ""
+    /// Whether the search field has the screen. Bound rather than left to
+    /// itself so that picking a city can put it away — the answer to the search
+    /// is on the screen behind it.
+    @State private var isSearchActive = false
 
     /// Typing takes the screen over.
     ///
@@ -44,7 +52,8 @@ struct LocationPickerSheet: View {
                 }
                 if let failure = chooser.failure { failureSection(failure) }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+            .searchable(text: $query, isPresented: $isSearchActive,
+                        placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Search for a city")
             .onChange(of: query) { cities.search(query) }
             .navigationTitle("Location")
@@ -70,10 +79,21 @@ struct LocationPickerSheet: View {
     /// search falls back to with nothing set (`ResultsView.makeQuery`,
     /// `SellerToolsModel.run`), so with no place and no fix, this is honestly
     /// where searching would happen right now.
+    /// The place being switched to comes first: while a change is in flight it
+    /// is what the screen is about, and seeing it on the map is how "Berkeley,
+    /// CA" is told apart from "Berkeley, NJ" before ten seconds are spent on
+    /// the wrong one.
     private var mapCentre: CLLocationCoordinate2D {
-        prefs.resolvedPlace?.coordinate
+        chooser.switching?.coordinate
+            ?? prefs.resolvedPlace?.coordinate
             ?? location.coordinate
             ?? CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+    }
+
+    /// What the map is showing: the target of a change in flight, then the
+    /// confirmed place, then nothing chosen yet.
+    private var mapPlace: String? {
+        chooser.switching?.name ?? prefs.resolvedPlace?.name
     }
 
     @ViewBuilder
@@ -86,13 +106,23 @@ struct LocationPickerSheet: View {
             // decision, when it can show where you are and therefore what
             // "here" would mean. With nothing set it makes no claim — no
             // circle — and simply orients.
-            LocationMapCard(place: prefs.resolvedPlace?.name ?? "no location",
+            LocationMapCard(place: mapPlace ?? "no location",
                             coordinate: mapCentre,
-                            precision: prefs.resolvedPlace == nil ? .unset : .city,
+                            precision: mapPlace == nil ? .unset : .city,
                             userLocation: location.coordinate)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
 
-            if let place = prefs.resolvedPlace {
+            if let change = chooser.switching {
+                // A change picked but not yet agreed. Said as a change rather
+                // than a fact — the results are still the old city's until
+                // Facebook confirms, and this screen shouldn't be the one place
+                // in the app that implies otherwise.
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("Switching to \(change.name)…")
+                        .font(.subheadline.weight(.semibold))
+                }
+            } else if let place = prefs.resolvedPlace {
                 // Just the name.
                 //
                 // This used to also print the URL segment and a "confirmed on
@@ -110,6 +140,14 @@ struct LocationPickerSheet: View {
                 }
             }
 
+            // Deliberately **not** disabled while a switch is in flight.
+            //
+            // The sheet closes on the tap now, so "busy" is a state the user
+            // can walk back into — and the only reason to reopen this screen
+            // mid-switch is to correct the thing they just picked. Making them
+            // wait ten seconds to fix a mistyped city would be a strange way to
+            // spend the responsiveness this was all for. A second choice
+            // supersedes the first (`PlaceChooser.resolve`).
             Button {
                 Task { await useDeviceLocation() }
             } label: {
@@ -119,7 +157,6 @@ struct LocationPickerSheet: View {
                     if chooser.pending == .deviceFix { ProgressView().controlSize(.small) }
                 }
             }
-            .disabled(chooser.isBusy)
         } header: {
             Text(prefs.resolvedPlace == nil ? "Location" : "Browsing")
         } footer: {
@@ -193,7 +230,7 @@ struct LocationPickerSheet: View {
             }
             ForEach(cities.suggestions) { suggestion in
                 Button {
-                    Task { await use(suggestion) }
+                    use(suggestion)
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -210,14 +247,27 @@ struct LocationPickerSheet: View {
                         }
                     }
                 }
-                .disabled(chooser.isBusy)
             }
         }
     }
 
-    private func failureSection(_ message: String) -> some View {
+    /// Both halves, unlike the bar on the results screen, which leads with the
+    /// headline. This is the screen the user is on *because* they are changing
+    /// location, so the specific reason is worth the second line — "Facebook
+    /// didn't recognise that place" and "too many requests just now" call for
+    /// different next moves.
+    private func failureSection(_ failure: PlaceChooser.Failed) -> some View {
         Section {
-            Label(message, systemImage: "exclamationmark.triangle")
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(failure.summary)
+                    if failure.hasDetail {
+                        Text(failure.reason).foregroundStyle(.tertiary)
+                    }
+                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -225,16 +275,26 @@ struct LocationPickerSheet: View {
 
     // MARK: - Resolution
 
-    /// Both routes live in `PlaceChooser`; what's left here is what the *sheet*
-    /// does about a success — put the search field away, since the list behind
-    /// it is now showing the place that was just chosen.
+    /// Both routes live in `PlaceChooser`. What's left here is what the *sheet*
+    /// does about a choice, and the answer is: shows it.
+    ///
+    /// **Nothing here dismisses.** Choosing a place is the reason this screen
+    /// is open, and closing it on the tap takes the screen away at the exact
+    /// moment it has something to say — the new target, on the map, with the
+    /// change still running. It also makes the choice feel final in a way it
+    /// isn't yet, and leaves nowhere to correct a mistyped city from. The
+    /// optimism is that the ten seconds no longer *hold* the sheet, not that
+    /// the sheet goes away; Done still means done, whenever the user says so.
     private func useDeviceLocation() async {
-        await chooser.useDeviceLocation(via: location)
+        await chooser.switchToDeviceLocation(via: location)
     }
 
-    private func use(_ suggestion: AppleMapsCitySearch.Suggestion) async {
-        guard await chooser.use(suggestion, from: cities) else { return }
+    /// Puts the search away, since what was searched for is now the subject of
+    /// the screen behind it.
+    private func use(_ suggestion: AppleMapsCitySearch.Suggestion) {
+        chooser.switchTo(suggestion, from: cities)
         query = ""
         cities.clear()
+        isSearchActive = false
     }
 }

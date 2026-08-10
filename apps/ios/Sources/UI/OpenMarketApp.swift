@@ -11,6 +11,10 @@ struct OpenMarketApp: App {
     @StateObject private var viewed = ViewedListings.shared
     @StateObject private var seller = SellerToolsModel()
     @StateObject private var discover = DiscoverFeed()
+    /// App-level because a location switch outlives the sheet that starts it:
+    /// the sheet dismisses on the tap and the results screen behind it shows
+    /// the change landing (`PlaceChooser`).
+    @StateObject private var chooser = PlaceChooser.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -24,6 +28,7 @@ struct OpenMarketApp: App {
                 .environmentObject(viewed)
                 .environmentObject(seller)
                 .environmentObject(discover)
+                .environmentObject(chooser)
         }
         // Cache writes are coalesced on a 2s debounce, which is right for a
         // burst of writes and wrong for an app about to be killed. Leaving

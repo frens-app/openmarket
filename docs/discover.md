@@ -289,9 +289,13 @@ would leave a signed-in user on the signed-out one until they relaunched.
 
 Not a new search — recent searches seed the signed-out feed, so every search
 would otherwise throw away the screen the user is about to return to, and they'd
-come back from a search to one mid-reload. Not a change of city either: a
-reshuffle under someone halfway down the feed is worse than a feed that is an
-hour old.
+come back from a search to one mid-reload.
+
+A change of city **is** a trigger, and used not to be. The old reasoning was
+that a reshuffle under someone halfway down the feed beats a feed that is an
+hour old, which is true of a reshuffle of the same place and false here: a home
+screen of listings in the city the user has just left isn't stale, it is wrong,
+and it is exactly what they land on when they clear the search box.
 
 **Nothing is written to disk.** Restoring a shuffle from yesterday and presenting
 it as today's would be a lie the cache tells for free. The cost is a slower cold

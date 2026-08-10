@@ -64,12 +64,17 @@ final class AppleMapsCitySearch: NSObject, ObservableObject, MKLocalSearchComple
         completer.queryFragment = ""
     }
 
-    /// The coordinate behind a suggestion. `MKLocalSearchCompletion` carries no
-    /// coordinate of its own — it's a query, not a place — so this resolves it.
-    func coordinate(for suggestion: Suggestion) async -> CLLocationCoordinate2D? {
-        let request = MKLocalSearch.Request(completion: suggestion.completion)
-        let response = try? await MKLocalSearch(request: request).start()
-        return response?.mapItems.first?.placemark.coordinate
+    /// The search that finds the coordinate behind a suggestion, **built now**
+    /// and run by the caller later. `MKLocalSearchCompletion` carries no
+    /// coordinate of its own — it's a query, not a place.
+    ///
+    /// Building and running are separate because the picker clears its search
+    /// field the moment a suggestion is tapped, which resets the completer that
+    /// vended it, while the coordinate is still wanted a moment afterwards. A
+    /// request captured up front doesn't care what happens to the field behind
+    /// it.
+    func search(for suggestion: Suggestion) -> MKLocalSearch {
+        MKLocalSearch(request: MKLocalSearch.Request(completion: suggestion.completion))
     }
 
     nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {

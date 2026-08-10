@@ -139,6 +139,56 @@ struct ResultsView: View {
             .navigationDestination(item: $selected) { listing in
                 DetailView(listing: listing, namespace: heroNamespace)
             }
+            // A confirmed change of place, and the results catch up.
+            //
+            // The slug is watched rather than the switch finishing, because the
+            // slug is the thing a search is actually made of — every route that
+            // can change it ends up here, including onboarding and the filter
+            // sheet. It only ever changes on confirmation
+            // (`Preferences.setResolvedPlace`), so this can't re-run against a
+            // place Facebook hasn't agreed to.
+            //
+            // This is also the gap the optimistic switch would otherwise widen:
+            // picking a city used to change the pill and leave the old city's
+            // results underneath it until the user thought to pull to refresh.
+            //
+            // **Discover goes with it.** It used to be exempt, on the grounds
+            // that a reshuffle under someone halfway down the feed is worse
+            // than a feed that is an hour old. That reasoning holds for a
+            // reshuffle of the same city and not at all for this: a home screen
+            // full of listings in the city the user just left isn't stale, it
+            // is wrong, and it is the screen they land on when they clear the
+            // search. Order matters — the search is what's on screen, so it
+            // goes first and Discover rebuilds behind it.
+            .onChange(of: prefs.locationSlug) {
+                // **The origin moves first, and synchronously.**
+                //
+                // Every grid on this screen is filtered by distance from
+                // `DistanceResolver.userLocation` (`winnowed`), and that origin
+                // used to be set in only three places: this view appearing, the
+                // device fix landing, and a search being built. None of them is
+                // "the user changed city", so the origin stayed on the *old*
+                // place until something else happened to move it.
+                //
+                // What that looked like: switch San Francisco → Seattle from
+                // the home screen, Discover refetches Seattle correctly, and
+                // every card is then measured from San Francisco, found to be
+                // 1,300 km away, and dropped. Thirty cards in memory, an empty
+                // screen, and nothing anywhere saying why. Running any search
+                // fixed it, because `makeQuery` happened to reset the origin.
+                //
+                // It belongs here rather than inside the `Task` because a grid
+                // can be re-winnowed on the next frame — before any await
+                // resumes — and a frame measured from the wrong city is exactly
+                // the bug.
+                distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace,
+                                                                  deviceFix: location.coordinate))
+                Task {
+                    await rerunCurrentQuery()
+                    discover.markStale()
+                    await loadDiscover()
+                }
+            }
             // The fix can land long after a search starts; hand it straight to
             // the distance resolver whenever it does.
             .onChange(of: location.coordinate?.latitude) {
@@ -186,11 +236,12 @@ struct ResultsView: View {
             // coming back from a listing or the seller tab costs nothing and
             // finds the same cards in the same places.
             //
-            // Nothing else invalidates it — not a new search, not a change of
-            // city, not signing in. It is three page loads, it is deliberately
-            // a shuffle, and rebuilding it under someone who is halfway down it
-            // is worse than showing them a feed that is an hour old. Relaunch
-            // and pull-to-refresh are the two ways to get a new one.
+            // A new search doesn't invalidate it — recent searches seed the
+            // signed-out feed, so every search would throw away the screen the
+            // user is about to come back to. A change of city does, because
+            // then it is a feed for somewhere the user no longer is (see the
+            // `locationSlug` handler below). Relaunch and pull-to-refresh are
+            // the other two ways to get a new one.
             .task { await loadDiscover() }
             // Onboarding just handed over a place and three interests, which is
             // everything the feed was waiting for. `.task` above has already
@@ -422,7 +473,15 @@ struct ResultsView: View {
                 if discover.isLoadingMore {
                     ProgressView().frame(maxWidth: .infinity).padding()
                 }
-                discoverFooter(isEmpty: w.items.isEmpty)
+                // The home feed is where this matters most: it fills itself
+                // without being asked, so an empty one has no user action behind
+                // it to explain it, and there is no filter bar up here to read
+                // the place and radius off.
+                if w.isEmptiedByDistance {
+                    distanceNotice(w)
+                } else {
+                    discoverFooter(isEmpty: w.items.isEmpty)
+                }
             }
         }
     }
@@ -473,18 +532,31 @@ struct ResultsView: View {
             .padding(.bottom, 20)
     }
 
-    /// The grid, after the two filters Facebook won't apply for us — and the
-    /// count the one with an undo took, because a filter that removes cards
-    /// without saying so is indistinguishable from a broken search.
+    /// The grid, after the two filters Facebook won't apply for us — and what
+    /// each of them took, because a filter that removes cards without saying so
+    /// is indistinguishable from a broken search.
     ///
-    /// Distance is no longer counted here. It used to be, to feed a footer that
-    /// offered to widen the radius; that footer is gone (`discoverFooter`), and
-    /// the radius is stated on the filter bar over a result set and in the
-    /// caption over Discover — both of them before the scrolling rather than
-    /// after it.
+    /// Distance is counted again, and the reason is worth being precise about,
+    /// because it was removed once on good grounds. The old count fed a footer
+    /// that offered to widen the radius, and that footer had to go: on a home
+    /// feed it was addressed to nobody, and the offer was a lie for a signed-in
+    /// user whose account radius is a floor the app cannot raise. None of that
+    /// applies to the only question this count now answers — *why is the screen
+    /// empty* — which is asked precisely when nobody has scrolled anywhere, and
+    /// which has a true answer that needs no offer attached.
+    ///
+    /// `nearestHiddenKM` is the diagnostic. The difference between "your radius
+    /// is a bit tight" and "these results are for the wrong city entirely" is
+    /// one number, and without it both look identical: a blank grid.
     private struct Winnowed {
         var items: [Listing] = []
         var hiddenAsViewed = 0
+        var hiddenByDistance = 0
+        var nearestHiddenKM: Double?
+
+        /// Distance removed everything there was. The state that spent an
+        /// afternoon looking like a broken fetch.
+        var isEmptiedByDistance: Bool { items.isEmpty && hiddenByDistance > 0 }
     }
 
     /// Distance is enforced here because no surface honours `radius` — the chip
@@ -520,6 +592,8 @@ struct ResultsView: View {
             let coordinate = distances.enrichedCoordinate(for: listing)
             if let km = distances.distanceKM(for: listing.locationText, coordinate: coordinate),
                km > Double(prefs.radiusKM) {
+                result.hiddenByDistance += 1
+                result.nearestHiddenKM = min(km, result.nearestHiddenKM ?? .greatestFiniteMagnitude)
                 continue
             }
             result.items.append(listing)
@@ -547,20 +621,87 @@ struct ResultsView: View {
             // cards it removes disappear with no explanation unless one is
             // given — and it has an undo, which is the point of naming it.
             //
-            // The distance filter used to be reported alongside it, with an
-            // offer to widen. Both are gone; see `discoverFooter` for why the
-            // offer had to go, and note that the radius is already stated on the
-            // bar pinned above these results, which is where it belongs.
+            // Distance is reported below rather than here, and only when it has
+            // taken everything: over a result set the radius is already stated
+            // on the bar pinned above, so a running count would repeat what is
+            // on screen. An empty grid is the case that readout can't explain.
             if winnowed.hiddenAsViewed > 0 {
                 viewedNotice(winnowed)
             }
 
-            if store.session == .unauthed {
+            // Distance first, because it is the only one of these that can be
+            // *wrong* about the world: "there's nothing in your area" is a claim
+            // about the area, and it is false when listings came back and were
+            // measured out of view.
+            if winnowed.isEmptiedByDistance {
+                distanceNotice(winnowed)
+            } else if store.session == .unauthed {
                 if !items.isEmpty { endOfResultsSignIn }
             } else if store.reachedEnd || items.isEmpty {
                 endOfArea(isEmpty: items.isEmpty)
             }
         }
+    }
+
+    /// Why the screen is empty when the distance filter took all of it.
+    ///
+    /// This exists because of a real afternoon: a city change left the distance
+    /// origin on the previous city, thirty perfectly good listings were measured
+    /// from two thousand miles away, and every one of them was dropped. What the
+    /// user saw was a blank screen. What the logs said was `30 cards from 3
+    /// searches`. Nothing on screen connected the two, and the fix — running any
+    /// search, which happened to reset the origin — was unguessable.
+    ///
+    /// The origin bug is fixed (see the `locationSlug` handler), but the class of
+    /// failure isn't: a client-side filter that can empty a screen must be able
+    /// to say that it did. Anything that produces distant results — a radius set
+    /// tight, a place that resolved to somewhere unexpected, or Facebook quietly
+    /// serving the IP-inferred city (`docs/location.md` §3) — arrives here.
+    ///
+    /// **The nearest distance is the whole diagnostic.** "The nearest is 12 mi"
+    /// is a radius that needs widening. "The nearest is 2,050 mi" is not a
+    /// distance problem at all, and the number says so without the app having to
+    /// guess which it is.
+    private func distanceNotice(_ w: Winnowed) -> some View {
+        VStack(spacing: 8) {
+            Text(placeScopedHeadline)
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
+            if let detail = distanceDetail(w) {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            // The way out, and it has to be offered rather than assumed known:
+            // on the home screen there is no filter bar, so the place and the
+            // radius have no readout at all — the one screen most likely to be
+            // emptied this way is also the one with nothing to tap.
+            Button("Change location or distance") { showLocationPicker = true }
+                .font(.subheadline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 32)
+        .padding(.top, 24)
+        .padding(.bottom, 20)
+    }
+
+    private var placeScopedHeadline: String {
+        let radius = SearchQuery.kilometresToMiles(prefs.radiusKM)
+        guard let place = prefs.locationName else { return "Nothing within \(radius) mi." }
+        return "Nothing within \(radius) mi of \(place)."
+    }
+
+    /// States what *did* come back, so an empty screen reads as a filter working
+    /// rather than a search failing.
+    private func distanceDetail(_ w: Winnowed) -> String? {
+        guard let km = w.nearestHiddenKM else { return nil }
+        // Grouped, because the number is the point of the sentence and this one
+        // gets large: "2051 mi" reads as a typo where "2,051 mi" reads as a
+        // continent, which is exactly the distinction being drawn.
+        let miles = Int((km / 1.60934).rounded()).formatted()
+        let count = w.hiddenByDistance == 1 ? "1 listing" : "\(w.hiddenByDistance) listings"
+        return "\(count) came back, and the nearest is \(miles) mi away."
     }
 
     /// What "only new listings" is holding back, and the way out of it.

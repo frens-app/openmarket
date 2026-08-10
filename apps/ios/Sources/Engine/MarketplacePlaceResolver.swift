@@ -50,6 +50,11 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         /// The pacer refused the request — a backoff is in progress, or the
         /// session cap is spent. Nothing was changed.
         case paced
+        /// The caller cancelled: the user asked for a different place before
+        /// this one finished. Distinct from every failure above because nothing
+        /// went wrong and nobody wants to be told about it — see
+        /// `PlaceChooser.resolve`.
+        case superseded
     }
 
     private let webView: WKWebView
@@ -77,6 +82,15 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
     /// script: every step here is a React re-render that has to land before the
     /// next selector exists, and the picker's own network round-trip sits in
     /// the middle of it.
+    ///
+    /// **Cancellable at every step boundary.** The steps themselves can't be
+    /// interrupted — a navigation or an `evaluateJavaScript` runs to
+    /// completion — but a cancelled run stops between them and returns
+    /// `.superseded` rather than spending the remaining eight-odd seconds
+    /// producing an answer nobody is waiting for. That matters more than a
+    /// saved round trip: a resolution leaves a coordinate in Facebook's session
+    /// state, so a stale one still running when the next begins is the thing
+    /// that makes two switches interfere.
     func resolve(_ coordinate: CLLocationCoordinate2D,
                  origin: ResolvedPlace.Origin) async -> Result<ResolvedPlace, Failure> {
         let started = Date()
@@ -86,14 +100,16 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         }
 
         guard await navigate(to: URL(string: "https://www.facebook.com/marketplace/")!) else {
-            return .failure(.paced)
+            return .failure(Task.isCancelled ? .superseded : .paced)
         }
         mark("loaded")
+        guard !Task.isCancelled else { return .failure(.superseded) }
 
         _ = await js(GeoPickerScripts.arm(latitude: coordinate.latitude,
                                           longitude: coordinate.longitude))
 
         guard await waitFor(GeoPickerScripts.pillPresent) else {
+            guard !Task.isCancelled else { return .failure(.superseded) }
             Logger.place.error("resolve: no location pill")
             return .failure(.noPill)
         }
@@ -104,11 +120,13 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
             return .failure(.noPill)
         }
         guard await waitFor(GeoPickerScripts.arrowPresent) else {
+            guard !Task.isCancelled else { return .failure(.superseded) }
             let seen = await js(GeoPickerScripts.describeDialog)
             Logger.place.error("resolve: no centring arrow — \(seen, privacy: .public)")
             return .failure(.noArrow)
         }
         mark("dialog")
+        guard !Task.isCancelled else { return .failure(.superseded) }
 
         _ = await js(GeoPickerScripts.armArrowLatch)
         let arrow = await js(GeoPickerScripts.clickArrow)
@@ -126,10 +144,16 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         // commits the old place, and `confirm` catches exactly that. A slow
         // failure that reports itself beats a fast one that doesn't.
         _ = await waitFor(GeoPickerScripts.arrowSettled, timeout: .seconds(6))
+        // The last point at which walking away is free. Past `apply`, Facebook's
+        // session state has already moved, so a cancelled run still has to be
+        // assumed to have changed something — which is exactly why the next
+        // switch waits for this one to unwind before starting its own.
+        guard !Task.isCancelled else { return .failure(.superseded) }
         _ = await js(GeoPickerScripts.snapshotURL)
         _ = await js(GeoPickerScripts.apply)
         _ = await waitFor(GeoPickerScripts.urlChanged)
         mark("applied")
+        guard !Task.isCancelled else { return .failure(.superseded) }
 
         let result = await js(GeoPickerScripts.readResult)
         let url = value(in: result, key: "url").flatMap(URL.init(string:))
@@ -171,10 +195,13 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         guard let target = place.browseURL.flatMap(URL.init(string:)) else {
             return .failure(.unresolved)
         }
-        guard await navigate(to: target) else { return .failure(.paced) }
+        guard await navigate(to: target) else {
+            return .failure(Task.isCancelled ? .superseded : .paced)
+        }
         // The pill renders after the payload — measured at up to ~2.5 s — so a
         // single read here would report "no pill" for a page that has one.
         _ = await waitFor(GeoPickerScripts.pillPresent, timeout: .seconds(8))
+        guard !Task.isCancelled else { return .failure(.superseded) }
         let located = await readLocation()
         Logger.place.info("confirm \(place.segment, privacy: .public): \(located.summary, privacy: .public)")
 
@@ -228,7 +255,11 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         let seconds = Double(timeout.components.seconds)
             + Double(timeout.components.attoseconds) / 1e18
         let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
+        // Cancellation ends the poll rather than merely making every sleep
+        // return instantly — `try?` swallows the cancellation error, so without
+        // this the loop would spin flat out until the deadline, hammering the
+        // webview on behalf of a switch the user has already replaced.
+        while !Task.isCancelled, Date() < deadline {
             if await flag(script, "ready") { return true }
             try? await Task.sleep(for: every)
         }
@@ -258,6 +289,9 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
     /// failure rather than a silent partial run.
     @discardableResult
     private func navigate(to url: URL) async -> Bool {
+        // Checked before the slot is claimed: a cancelled run shouldn't spend
+        // one of the session's 300 requests on a page nobody will read.
+        guard !Task.isCancelled else { return false }
         guard await pacer.waitForSlot() else {
             Logger.place.error("navigate: paced out")
             return false
