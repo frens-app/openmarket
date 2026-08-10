@@ -51,7 +51,7 @@ struct SignInView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("You'll sign in on Facebook's own page below.")
                 .font(.subheadline.weight(.medium))
-            Text("This app never sees your password. Signing in adds seller names and ratings, and lets results keep loading past the first page.")
+            Text("Signing in adds seller names and ratings, lets results keep loading past the first page, and builds the home screen from Facebook's own picks. This app has no login form of its own and never sees your password.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -68,7 +68,7 @@ struct SignInView: View {
                 .foregroundStyle(.green)
             Text("Signed in")
                 .font(.headline)
-            Text("Seller details and unlimited scrolling are available.")
+            Text("Seller details, unlimited scrolling and Facebook's own picks are all switched on.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -1,15 +1,17 @@
-# Onboarding: the two things the app asks for
+# Onboarding: the three things the app asks for
 
-**Date:** 2026-08-07
+**Date:** 2026-08-07 (account step added 2026-08-09)
 **Code:** `apps/ios/Sources/UI/OnboardingView.swift`,
 `apps/ios/Sources/UI/InterestPicker.swift`,
 `apps/ios/Sources/Support/Interest.swift`,
-`apps/ios/Sources/Store/PlaceChooser.swift`
+`apps/ios/Sources/Store/PlaceChooser.swift`,
+`apps/ios/Sources/UI/SignInView.swift`
 **Related:** `discover.md` §1 and §6, `location.md`, `location-targeting.md`,
-`filter-parameters.md` §3
+`filter-parameters.md` §3, `logged-in-findings.md`
 
-Three screens — what this is, where you're shopping, what you shop for — and the
-last two are required.
+Four screens — what this is, where you're shopping, what you shop for, and your
+Facebook account. The middle two are required; the account is asked for
+first-class and can be passed.
 
 ---
 
@@ -30,6 +32,12 @@ The two facts it was missing are both cheap to ask for and impossible to infer:
 |---|---|
 | A place | Distance is the app's organising idea and it is applied **on this device** — no Marketplace surface honours `radius` (`filter-parameters.md` §3). Without a place there is nothing to measure from, and the app silently measures from a hardcoded city instead |
 | Three interests | Discover is built from recent searches, and a new install has none (`discover.md` §1). Interests are what stands in until searches exist |
+
+One of those cards has since been retired outright rather than reworded. "No
+login ever" was accurate about this app's own login form and badly wrong as a
+pitch: it sold the signed-out build as the product when the signed-out build is
+the fallback (§5). A first run that talks a user out of the account is a first
+run arguing against the better version of the app.
 
 **No skip link on either.** A skip buys thirty seconds and costs the app any
 idea of what to show — and the screen it skips to is the one that then can't do
@@ -118,7 +126,36 @@ What each interest actually searches for is the searchable half of its category
 Marketplace search is a fuzzy match over listing text rather than a category
 filter. Those terms are unmeasured guesses, tracked as `discover.md` §4.8.
 
-## 5. What onboarding changed elsewhere
+## 5. The account step
+
+The last screen asks for a Facebook sign-in, and it is the only step that can be
+passed. It is also the only step whose value is measured rather than argued:
+`logged-in-findings.md` is what the three lines on it are drawn from.
+
+| Named on the screen | What it rests on |
+|---|---|
+| Seller name, rating, and join date | Desktop item pages carry no seller fields logged out; signed in they carry the seller block *and* a `/marketplace/profile/<id>` link — a stable seller id no surface gives logged out |
+| Results that keep going | Desktop browse caps at ~24 logged out and is unbounded signed in; the login overlay's one free dismissal is what ends a signed-out search |
+| Discover from Facebook's own picks | Signed in, Discover scrolls Marketplace's real feed; signed out it stands in with three interest searches (`discover.md`) |
+
+**Why it isn't a gate.** The other two steps are gates because the screen behind
+them cannot function without an answer. This one can: search, distance, filters,
+saved listings and an interest-seeded Discover all work signed out. Gating on an
+account would be a lie about the app's own capability.
+
+**Why it isn't buried either.** "Not now" is a text button under a full-width
+primary, with one caption saying what the signed-out app still does. The earlier
+flow inverted this — it promised no login at all — which meant every user
+started in the reduced build and only discovered the full one by hitting a
+missing seller name or a search that stopped.
+
+**One wiring detail.** Signing in here calls `store.setSession` directly. The
+usual notice-a-session path is the `scenePhase == .active` re-check in
+`OpenMarketApp`, and an app that has been foregrounded since launch never fires
+it — so without this, the first search after onboarding would run under the
+anonymous cache key.
+
+## 6. What onboarding changed elsewhere
 
 - **Discover doesn't load while the cover is up.** `ResultsView` exists behind
   it from launch, so without the guard the feed would spend three page loads on

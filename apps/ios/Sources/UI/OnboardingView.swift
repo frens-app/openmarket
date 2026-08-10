@@ -10,7 +10,7 @@ import CoreLocation
 /// depended entirely on whether the user happened to live in San Francisco and
 /// happened to want furniture.
 ///
-/// So two of the three screens now ask for something, and **both are required**:
+/// So two of the four screens ask for something, and **both are required**:
 ///
 /// * **A place**, because every search this app runs is centred on one, and
 ///   without it there is a hardcoded fallback city standing in for the user's.
@@ -22,6 +22,13 @@ import CoreLocation
 /// show, and the screen it skips to is the one that then can't do its job. The
 /// explaining is folded into the first screen instead, where it costs one tap
 /// rather than three.
+///
+/// The fourth screen asks for a Facebook account, and that one *is* skippable —
+/// it is the only thing here the app can do a reduced version of without. It is
+/// asked for anyway, and asked for first-class, because the app is measurably
+/// better with it: seller identity, results that keep loading past the first
+/// page, and Facebook's own feed instead of three canned searches
+/// (`docs/logged-in-findings.md`). Logged out is the fallback, not the pitch.
 struct OnboardingView: View {
     /// Called once, from the last step. Sets `hasCompletedOnboarding`, which is
     /// what actually dismisses this — see `Preferences.needsOnboarding`.
@@ -33,7 +40,7 @@ struct OnboardingView: View {
     @State private var step: Step = .welcome
 
     private enum Step: Int, CaseIterable {
-        case welcome, place, interests
+        case welcome, place, interests, account
     }
 
     var body: some View {
@@ -48,7 +55,10 @@ struct OnboardingView: View {
                     PlacePage { go(to: .interests) }
                         .transition(.opacity)
                 case .interests:
-                    InterestsPage(done: finish)
+                    InterestsPage { go(to: .account) }
+                        .transition(.opacity)
+                case .account:
+                    AccountPage(done: finish)
                         .transition(.opacity)
                 }
             }
@@ -56,7 +66,7 @@ struct OnboardingView: View {
         .background(Color(.systemBackground))
     }
 
-    /// A back chevron and three dots.
+    /// A back chevron and a dot per screen.
     ///
     /// The dots are there because two of these screens ask for work, and a
     /// required question with no visible end is a different experience from the
@@ -104,9 +114,9 @@ struct OnboardingView: View {
     /// first run moving — but the screen on the other side of this button is a
     /// home feed, and there is no version of it that works without a place
     /// Facebook recognises. So this is where the two meet: by now the user has
-    /// spent the resolution's ten seconds choosing interests, so `settle`
-    /// almost always returns immediately, and the rare wait replaces a
-    /// guaranteed one.
+    /// spent the resolution's ten seconds choosing interests and deciding about
+    /// an account, so `settle` almost always returns immediately, and the rare
+    /// wait replaces a guaranteed one.
     ///
     /// A place that never landed sends them back to the step that asks for it,
     /// where the failure is already on screen — rather than through to a home
@@ -128,9 +138,9 @@ struct OnboardingView: View {
 /// The old first run, compressed into one screen.
 ///
 /// It was three swipeable cards, which is three taps to read three sentences
-/// that fit on one page together. The no-login promise is the one that has to
-/// survive the edit — it is the first question anyone asks about an app that
-/// shows Facebook listings, and the answer is genuinely yes.
+/// that fit on one page together. What survives the edit is what the app is for
+/// and how it connects to Facebook — including, plainly, that it works best
+/// with the user's own account, which the fourth screen then asks for.
 private struct WelcomePage: View {
     let next: () -> Void
 
@@ -144,12 +154,12 @@ private struct WelcomePage: View {
         Promise(symbol: "square.grid.2x2",
                 title: "Local listings, fast",
                 body: "A clean way to browse what's for sale near you — no feed, no clutter, no ads in the way."),
-        Promise(symbol: "lock.open",
-                title: "No login. Ever.",
-                body: "This app browses public listings without signing in. It never asks for your Facebook password, and it can't see your account."),
+        Promise(symbol: "person.crop.circle.badge.checkmark",
+                title: "Best with your Facebook account",
+                body: "Sign in and you get seller names and ratings, results that keep loading past the first page, and a home screen built from Facebook's own picks."),
         Promise(symbol: "arrow.up.forward.app",
                 title: "Messaging opens Facebook",
-                body: "When you want to message a seller or make an offer, we hand you to the Facebook app to finish up.")
+                body: "When you want to message a seller or make an offer, we hand you to the Facebook app to finish up — already signed in, if you are.")
     ]
 
     var body: some View {
@@ -324,7 +334,7 @@ private struct PlacePage: View {
 
             Spacer(minLength: 16)
 
-            Text("Your coordinate is sent to Facebook once, to name the place. Searches after that use the place name, not your position.")
+            Text("Facebook names the place from your coordinate, and every search runs against that place — same as Marketplace itself.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 12)
@@ -423,14 +433,9 @@ private struct CitySearchSheet: View {
 /// the same fact — how many more are needed — and putting it where the user is
 /// heading means the disabled state explains itself instead of just refusing.
 private struct InterestsPage: View {
-    /// Async because the place chosen two screens ago may still be resolving —
-    /// see `OnboardingView.finish`.
-    let done: () async -> Void
+    let next: () -> Void
 
     @EnvironmentObject private var prefs: Preferences
-    /// Only true in the rare case where someone picks three interests faster
-    /// than Facebook names a city.
-    @State private var isFinishing = false
 
     /// Counts only ids this build recognises, which is what the minimum has to
     /// mean — a stored id from a retired category would otherwise let someone
@@ -457,19 +462,148 @@ private struct InterestsPage: View {
             }
             .scrollIndicators(.hidden)
 
-            OnboardingButton(title: remaining == 0 ? "Start browsing" : "Pick \(remaining) more",
-                             isEnabled: remaining == 0 && !isFinishing,
-                             isBusy: isFinishing) {
-                Task {
-                    isFinishing = true
-                    await done()
-                    isFinishing = false
-                }
-            }
+            OnboardingButton(title: remaining == 0 ? "Continue" : "Pick \(remaining) more",
+                             isEnabled: remaining == 0,
+                             action: next)
                 .padding(.top, 8)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
+    }
+}
+
+// MARK: - 4. Who
+
+/// The account step: asked for properly, and the only step that can be passed.
+///
+/// Everything measured about a signed-in session says this is the version of
+/// the app worth having (`docs/logged-in-findings.md`): a stable seller id, so
+/// a listing can be attributed rather than shrugged at; results that keep
+/// loading instead of stopping at the first batch; and a Discover made of
+/// Facebook's own picks rather than three searches derived from the previous
+/// screen. Handing off to message a seller lands in an app that already knows
+/// who you are.
+///
+/// So the primary action here is signing in, and "not now" is a text button
+/// underneath it — with the reduced version described honestly next to it,
+/// because someone declining should know what they are getting rather than
+/// discovering it as a series of small absences later. The reduced version is
+/// genuinely usable, which is the reason this step isn't a gate like the other
+/// two: nothing on the home screen is broken without an account, it is just
+/// thinner. Both routes run `done`, and the app can be signed into afterwards
+/// from Settings or from any of the prompts that point at what's missing.
+private struct AccountPage: View {
+    /// Async for the same reason the interests step used to be: the place
+    /// chosen two screens ago may still be resolving — see
+    /// `OnboardingView.finish`.
+    let done: () async -> Void
+
+    /// The session is the store's cache key, and signing in here happens while
+    /// the app is already foregrounded — so the scene-phase re-check in
+    /// `OpenMarketApp` won't fire before the first search runs.
+    @EnvironmentObject private var store: ListingStore
+
+    @State private var showSignIn = false
+    @State private var isSignedIn = false
+    @State private var isFinishing = false
+
+    private struct Perk {
+        let symbol: String
+        let title: String
+        let body: String
+    }
+
+    private let perks = [
+        Perk(symbol: "person.text.rectangle",
+             title: "Know who you're buying from",
+             body: "Seller name, rating and how long they've been on Facebook — none of which a signed-out page carries."),
+        Perk(symbol: "arrow.down.circle",
+             title: "Results that keep going",
+             body: "Signed out, a search stops after the first couple of dozen listings. Signed in, it keeps loading as you scroll."),
+        Perk(symbol: "sparkles",
+             title: "A home screen from Facebook",
+             body: "Discover shows Marketplace's own picks for your area instead of standing in with your interests.")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(isSignedIn ? "You're signed in" : "Sign in to Facebook")
+                    .font(.largeTitle.weight(.bold))
+                Text(isSignedIn
+                     ? "Seller details, unlimited scrolling and Facebook's own picks are all switched on."
+                     : "Open Market works best with your account. You'll sign in on Facebook's own page — this app has no login form of its own.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 24)
+
+            VStack(alignment: .leading, spacing: 22) {
+                ForEach(perks.indices, id: \.self) { index in
+                    HStack(alignment: .top, spacing: 14) {
+                        Image(systemName: perks[index].symbol)
+                            .font(.title2)
+                            .foregroundStyle(isSignedIn ? Color.green : Color.accentColor)
+                            .frame(width: 30)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(perks[index].title)
+                                .font(.headline)
+                            Text(perks[index].body)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(.top, 32)
+
+            Spacer(minLength: 24)
+
+            if isSignedIn {
+                OnboardingButton(title: "Start browsing",
+                                 isEnabled: !isFinishing,
+                                 isBusy: isFinishing,
+                                 action: finish)
+            } else {
+                OnboardingButton(title: "Sign in with Facebook",
+                                 isEnabled: !isFinishing) { showSignIn = true }
+
+                Button(action: finish) {
+                    Text("Not now — browse without an account")
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                .disabled(isFinishing)
+
+                // The honest shape of the logged-out app, said once and here
+                // rather than left to be inferred from what doesn't appear.
+                Text("Searching, distances, filters and saved listings all work without signing in. You can sign in later from Settings.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.bottom, 8)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
+        .task { isSignedIn = await SessionState.isSignedIn() }
+        .sheet(isPresented: $showSignIn) {
+            SignInView {
+                Task {
+                    isSignedIn = true
+                    store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
+                }
+            }
+        }
+    }
+
+    private func finish() {
+        Task {
+            isFinishing = true
+            await done()
+            isFinishing = false
+        }
     }
 }
 

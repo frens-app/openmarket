@@ -320,7 +320,8 @@ struct ResultsView: View {
     private var content: some View {
         switch store.feedState {
         case .loginWall:
-            LoginWallCard { Task { await store.retry() } }
+            LoginWallCard(signIn: { showSignIn = true },
+                          retry: { Task { await store.retry() } })
                 .padding()
         // A failure replaces the screen only when there is nothing to replace.
         //
@@ -940,22 +941,30 @@ private struct RecentCard: View {
 // the blanket empty state (`home`) — an empty home screen is a statement about
 // the area or the session, and Discover's own footer makes it.
 
-/// §3.3 — no login form, ever. Just an honest explanation and a way out.
+/// §3.3 — no login form of this app's own, ever. Facebook's page, or a way out.
+///
+/// This is the one moment where being signed out has stopped the app rather
+/// than merely thinned it, so signing in leads: it is the fix, not a suggestion.
+/// Retry and the handoff stay, because a rate limit does pass on its own and
+/// not everyone wants to sign in mid-search.
 struct LoginWallCard: View {
+    let signIn: () -> Void
     let retry: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Facebook is limiting anonymous browsing right now.")
+            Text("Facebook is limiting browsing without an account.")
                 .font(.headline)
-            Text("You can keep browsing in a moment, or open Marketplace in the Facebook app.")
+            Text("Signing in clears this and keeps results loading. You can also wait a moment and try again, or open Marketplace in the Facebook app.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack {
+                Button("Sign in", action: signIn)
+                    .buttonStyle(.borderedProminent)
                 Button("Try again", action: retry)
                     .buttonStyle(.bordered)
                 Button("Open Facebook") { Handoff.openMarketplace() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

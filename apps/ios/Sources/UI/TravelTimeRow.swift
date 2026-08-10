@@ -65,7 +65,7 @@ struct TravelTimeRow: View {
                 // system dialog; nothing here asks for anything itself.
                 LocationPrompt(
                     title: "Enable location for travel estimates",
-                    subtitle: "Walking, driving and transit times from where you are. Your location never leaves your device.",
+                    subtitle: "Walking, driving and transit times from where you are.",
                     action: { Task { freshOrigin = await location.resolveFresh(prompt: .ifNeeded) } }
                 )
             } else if location.isDenied {

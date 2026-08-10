@@ -14,13 +14,13 @@ struct SettingsView: View {
             Form {
                 Section("Facebook account") {
                     LabeledContent("Status",
-                                   value: store.session == .authed ? "Signed in" : "Browsing anonymously")
+                                   value: store.session == .authed ? "Signed in" : "Not signed in")
                     Button(store.session == .authed ? "Manage account" : "Sign in") {
                         showSignIn = true
                     }
                     Text(store.session == .authed
-                         ? "Seller names and ratings are visible, and results keep loading past the first page."
-                         : "Signing in adds seller names and ratings, and lets results load past the first ~15. Optional — everything else works without it.")
+                         ? "Seller names and ratings are visible, results keep loading past the first page, and the home screen uses Facebook's own picks."
+                         : "This is the reduced version of the app. Signing in adds seller names and ratings, lets results load past the first ~15, and builds the home screen from Facebook's own picks.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -64,7 +64,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("Signing in is optional and happens on Facebook's own page — this app never asks for, stores, or sees your password. Anonymous browsing uses a separate store that shares nothing with your account. Messaging a seller opens the Facebook app.")
+                    Text("Signing in happens on Facebook's own page — this app has no login form of its own. It's the version of the app worth having, and browsing without it still works. Messaging a seller opens the Facebook app.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -41,7 +41,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Used to centre your search on your area, and to estimate how long it takes to reach a listing. Your location never leaves your device."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Used to centre your search on your area, and to estimate how long it takes to reach a listing."
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         TARGETED_DEVICE_FAMILY: "1"
         # Signing lives here, not in Xcode.

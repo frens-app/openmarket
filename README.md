@@ -1,9 +1,19 @@
 # Open Market
 
-A native iOS app for browsing local Facebook Marketplace listings without
-signing in. SwiftUI renders everything the user sees; a hidden `WKWebView` is
-the data layer. Any action that needs an account — messaging, offers, saving on
-Facebook — hands off to the Facebook app via a universal link.
+A native iOS app for browsing local Facebook Marketplace listings. SwiftUI
+renders everything the user sees; a hidden `WKWebView` is the data layer. Any
+action that needs an account — messaging, offers, saving on Facebook — hands off
+to the Facebook app via a universal link.
+
+**The app is built for a signed-in user.** A Facebook session is what makes
+sellers identifiable, keeps results loading past the first page, and lets
+Discover show Marketplace's own picks instead of three canned searches — the
+measurements are in `docs/logged-in-findings.md`. Signing in happens on
+Facebook's own page inside the app; there is no login form of this project's
+own, and there won't be. Browsing without an account still works and is worth
+shipping — search, distance, filters, saved listings and interest-seeded
+Discover all function — but it is the reduced version, and the app says so
+rather than selling it as the point.
 
 Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
 describe something you own and it finds what similar things are listed for near
@@ -322,10 +332,11 @@ can't price at all.
 
 ---
 
-## Onboarding asks for two things, and requires both
+## Onboarding asks for three things, and requires two
 
-Three screens: what this is, **where you're shopping**, and **what you shop
-for**. The last two are gates rather than greetings.
+Four screens: what this is, **where you're shopping**, **what you shop for**,
+and **your Facebook account**. The middle two are gates rather than greetings;
+the account is asked for properly and can be passed.
 
 The first run used to be three explanatory cards and a Start button. They were
 honest and completely inert — the app came out of them knowing nothing, so the
@@ -346,6 +357,16 @@ what to show, and the screen it skips to is the one that then can't do its job.
 The explaining is folded into the first screen, where it costs one tap instead
 of three. Interests stay editable afterwards in Settings → Interests, and
 changing them refills Discover when the sheet closes.
+
+- **A Facebook account**, on the last screen, with the three things it changes
+  named on it: seller identity, results that keep loading, and a Discover made
+  of Facebook's own picks. The primary button signs in — on Facebook's own page,
+  presented by `SignInView` — and "Not now" is a text button underneath it,
+  next to an honest line about what the signed-out app still does. This is the
+  one step that isn't a gate, because the reduced version genuinely works;
+  it is not, for the same reason, buried or apologised for. Signing in here also
+  updates the store's session immediately, since the scene-phase re-check that
+  normally notices a session won't fire for an app that never backgrounded.
 
 Both requirements are re-checked on every launch rather than trusted to a
 one-time flag, so an install that ends up without a place, or with its interests
