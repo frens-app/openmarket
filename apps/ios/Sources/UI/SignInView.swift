@@ -26,10 +26,26 @@ struct SignInView: View {
                 if model.isSignedIn {
                     signedIn
                 } else {
-                    explanation
                     LoginWebView(webView: model.webView)
                 }
             }
+            // Keyboard avoidance is WebKit's job here, and only WebKit's.
+            //
+            // Left to itself SwiftUI shrinks this view to sit above the
+            // keyboard, while WebKit independently insets the same webview's
+            // scroll view by the keyboard height — two avoidances for one
+            // keyboard, so the page ends up with roughly twice the keyboard's
+            // height of dead space and the focused field lands under the fold.
+            // Worse, WebKit's scroll-the-field-into-view runs while the frame
+            // is still animating, computes against the geometry it had a
+            // moment ago, and stops short: the two-factor code box on
+            // Facebook's own login stays off screen until you tap it enough
+            // times that one attempt happens to land after layout settles.
+            //
+            // Holding the frame still leaves exactly one inset — the keyboard
+            // safe area still reaches the scroll view, which is the half that
+            // was always correct.
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             .navigationTitle(model.isSignedIn ? "Signed in" : "Sign in to Facebook")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -42,23 +58,6 @@ struct SignInView: View {
                 if signedIn { onSignedIn() }
             }
         }
-    }
-
-    /// Says plainly what signing in buys and what it costs, because the honest
-    /// answer to "why does a browsing app want my Facebook account" is neither
-    /// obvious nor trivial.
-    private var explanation: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("You'll sign in on Facebook's own page below.")
-                .font(.subheadline.weight(.medium))
-            Text("Signing in adds seller names and ratings, lets results keep loading past the first page, and builds the home screen from Facebook's own picks. This app has no login form of its own and never sees your password.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
     }
 
     private var signedIn: some View {
@@ -89,7 +88,13 @@ struct SignInView: View {
 
 private struct LoginWebView: UIViewRepresentable {
     let webView: WKWebView
-    func makeUIView(context: Context) -> WKWebView { webView }
+    func makeUIView(context: Context) -> WKWebView {
+        // An escape hatch that doesn't depend on any of the above being right:
+        // dragging down puts the keyboard away, so a field the page has hidden
+        // under it is always reachable by hand.
+        webView.scrollView.keyboardDismissMode = .interactive
+        return webView
+    }
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
@@ -105,7 +110,11 @@ final class SignInModel: ObservableObject {
         // unusable at phone width. The cookie jar is shared across user agents,
         // so the desktop engines pick the session up afterwards.
         let config = WKWebViewConfiguration.make()
-        webView = WKWebView(frame: .zero, configuration: config)
+        // Born at phone size rather than `.zero`: the first layout is the one
+        // Facebook picks a login form for, and a zero-width viewport is not a
+        // width any of its breakpoints expect.
+        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 402, height: 874),
+                            configuration: config)
         webView.customUserAgent = Surface.mobile.userAgent
     }
 
