@@ -374,6 +374,44 @@ is the half that lived in session state. For "browse somewhere I'm not" that
 costs nothing (§1 already said a centroid loses nothing there). For "where I
 actually am" it costs the thing the ten seconds were for.
 
+#### Direct anonymous URL resolution (2026-08-09)
+
+The logged-out picker makes two GraphQL requests after it receives a
+coordinate:
+
+| operation | measured response | needed by the app? |
+|---|---|---|
+| `MarketplaceBuyLocationDialogLocationQuery` | display name and city page id | no — Apple already supplied the display name |
+| `MarketplaceBuyLocationDialogLocationUrlQuery` | `marketplace_vanity_id`, the exact path component the picker applies | **yes** |
+
+The second operation succeeds without cookies, `fb_dtsg`, `lsd`, or `jazoest`.
+Its minimum form is `__user=0`, `__a=1`, `__comet_req=15`, `av=0`, the Relay
+caller and friendly names, `server_timestamps=true`, the coordinate in
+`variables`, and the operation's `doc_id`. It returns either a real slug
+(`sanjose`, `london`) or a numeric place id (`113857331958379` for Berkeley).
+That field is used verbatim; the app still never guesses a slug.
+
+`UnauthenticatedMarketplacePlaceResolver` now sends only this request in an
+ephemeral, cookie-disabled `URLSession`. Measured through the app on Simulator:
+
+| target | returned segment | request time |
+|---|---|---|
+| London | `london` | **81 ms** |
+| Berkeley, CA | `113857331958379` | **90 ms** |
+
+The subsequent feed loads independently rendered London and Berkeley, so both
+slug and numeric-id forms were exercised end to end. The request uses a native
+UA: advertising it as full Safari makes Facebook expect browser-page CSRF
+fields and reject the otherwise identical token-free call.
+
+This is the signed-out fast path only. It deliberately gives up the precise
+session-local centring point described above and keeps the city in the URL.
+Signed-in users still run the picker so the point is attached to their durable
+account session. The GraphQL document id is private and can rotate, so ordinary
+decode or HTTP failures fall back to the picker rather than rejecting the
+user's location; explicit rate-limit responses still respect the shared
+backoff instead of immediately retrying through a browser.
+
 #### How much does it move, within one city? (New York, 2026-08-07)
 
 Five coordinates across New York, same URL every time
@@ -410,17 +448,14 @@ couldn't set it and every run above used Facebook's default 5 mi. Driving that
 dropdown is the next probe, and it doubles as the first real test of whether
 the picker's radius does anything at all (§7).
 
-**This has a direct consequence for the app, currently unfixed.**
-`MarketplacePlaceResolver` runs on the `.unauthed` store, which is a *fresh
-non-persistent* store per instance, while `DesktopFeedEngine` searches on
-`.authed`. The session state carrying the coordinate is therefore discarded the
-moment the resolution finishes, and never reaches a search. The app gets the
-city and drops the precision it just paid ten seconds for.
-
-Fixing it means running the picker in the same store the searches use. That is
-a design decision rather than a bug fix: it would associate the coordinate with
-the signed-in session, where today the resolution is anonymous and touches
-nothing.
+**This exposed a direct consequence for the app, fixed later that day.** The
+resolver used to run on a fresh non-persistent store while the feed searched on
+the persistent one, so it discarded the coordinate immediately. The webview
+picker now shares the feed's store. That knowingly associates the coordinate
+with a signed-in session, where the precision persists and is valuable. The
+anonymous fast path added on 2026-08-09 makes the opposite trade: it skips the
+session coordinate and keeps only the URL segment (§5's direct resolution
+section), because that session-local precision is short-lived.
 
 One read is unreliable and is left in rather than quietly dropped: the
 Williamsburg row's pill still said "London", the place the trial reset from.
@@ -443,8 +478,8 @@ Units follow the *place*, not the viewer: a Canadian location renders `km`.
 
 ## 6. Verification: "applied" is not "worked"
 
-Because of §3, setting a location and believing it are different acts.
-`MarketplacePlaceResolver.confirm` runs after every resolution:
+Because of §3, setting a location and believing it are different acts. On the
+signed-in picker path, `MarketplacePlaceResolver.confirm` runs after resolution:
 
 1. **Load the resulting URL from scratch.** Not the page still on screen — that
    one was mutated client-side by React and reports what the *picker* believes.
@@ -459,9 +494,11 @@ Because of §3, setting a location and believing it are different acts.
    pill is not a failure (the page may not have drawn one); a pill naming
    somewhere else is.
 
-Only a confirmed place is stored. The UI says so — "Confirmed on Facebook —
-San Francisco · 40 mi" — because a place that resolved and then quietly served
-somewhere else must never look identical to one that worked.
+Only a Facebook-resolved place is stored. The picker path proves that with a
+cold page and pill. The anonymous direct path gets the path component from
+Facebook's URL-resolution response itself, so it records a verification time
+without a pill or a second page load. If that response is missing or malformed,
+the app falls back to the fully confirmed picker path.
 
 ### What gets kept
 
@@ -565,13 +602,13 @@ favour of MapKit's reverse-geocoding request. The app still uses it in
 
 * One-shot `CLLocationManager` fix, when-in-use, `kCLLocationAccuracyHundredMeters`.
   Never continuous tracking.
-* It goes to Facebook **exactly once**, as the coordinate fed to the picker, and
-  what comes back is a place name. Searches after that carry the place, not the
-  position.
+* It goes to Facebook **exactly once**. Signed in, it is fed to the picker;
+  signed out, it is sent to the picker's direct URL resolver. What comes back is
+  a place segment. Searches after that carry the place, not the position.
 * The reverse-geocode writes a **display name only**. It used to write
   `city.lowercased()` into the slug on every fix, which was §3's failure by
   another route *and* silently overwrote whichever city the user had chosen.
-  `MarketplacePlaceResolver` is the only writer of a slug in the app.
+  `PlaceChooser` is the only writer of a place segment in the app.
 
 ### Where distances are measured from
 
@@ -599,7 +636,9 @@ would fix it at the cost of two meanings for one number.
 | type | job |
 |---|---|
 | `GeoPickerScripts` | the document-start shim and the picker-driving JS |
-| `MarketplacePlaceResolver` | coordinate → confirmed `ResolvedPlace`, in a throwaway unauthed webview |
+| `UnauthenticatedMarketplacePlaceResolver` | coordinate → Facebook URL segment in one cookie-free request; signed-out fast path |
+| `MarketplacePlaceResolver` | coordinate → cold-page-confirmed `ResolvedPlace`; signed-in path and anonymous fallback |
+| `PlaceChooser` | chooses the resolver from auth state, owns fallback, cancellation, and the one preferences write |
 | `ResolvedPlace` | the stored answer (§6) |
 | `AppleMapsCitySearch` | `MKLocalSearchCompleter` → coordinate, for "browse another city" |
 | `MarketplaceURLPlace` | what place, if any, is in a URL — and whether it was refused |
@@ -613,11 +652,12 @@ it calls* the place containing that point.
 
 ### Two rules for anyone changing this
 
-1. **Never substitute a slug for a coordinate on the user's own location.**
-   Caching city → place id is a fine optimisation for "browse somewhere else",
-   where no particular point was meant. It is a downgrade for "where I am",
-   because the slug cannot carry the ranking (§5) and the user will silently
-   get a different, worse set of results with nothing on screen to explain it.
+1. **Never substitute a slug for a signed-in coordinate.** Caching city → place
+   id is a fine optimisation for "browse somewhere else", where no particular
+   point was meant. It is a downgrade for "where I am", because the slug cannot
+   carry the ranking (§5). Signed out, the app now accepts that downgrade
+   deliberately: the point is short-lived, while the URL segment survives and
+   cuts a roughly fifteen-second picker trip to one sub-100-ms request.
 2. **The coordinate only survives inside the session that set it.** It lives in
    session state, not the URL, so any webview that searches without having run
    the picker gets city-level ranking regardless of what `ResolvedPlace` says.

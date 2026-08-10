@@ -4,9 +4,10 @@ import CoreLocation
 /// A place Facebook itself chose, and the coordinate that produced it.
 ///
 /// The app never invents a slug. Every slug it holds came back from Facebook's
-/// own picker after being handed a coordinate, which is what makes it safe to
-/// use: a slug Facebook returned is by construction one Facebook recognises,
-/// where a slug we derived from a city name has roughly even odds
+/// location resolver after being handed a coordinate — either through its own
+/// picker, or through the picker's anonymous URL query — which is what makes it
+/// safe to use: a slug Facebook returned is by construction one Facebook
+/// recognises, where a slug we derived from a city name has roughly even odds
 /// (`docs/location-targeting.md` §2 — five of twelve shipped slugs were not
 /// real places, and `richmond` is in Virginia).
 ///
@@ -39,7 +40,9 @@ struct ResolvedPlace: Codable, Equatable, Identifiable {
     var browseURL: String?
 
     /// The pill text seen on a **fresh load** of `browseURL`, e.g.
-    /// "Toronto · 8 km", and when that check ran.
+    /// "Toronto · 8 km", and when verification ran. Anonymous direct
+    /// resolutions have a verification date but no pill: Facebook's URL query
+    /// itself supplied the segment, so there was deliberately no page load.
     ///
     /// Nil means never confirmed. That is different from confirmed-and-wrong,
     /// and the UI says so, because a silent refusal is this whole area's

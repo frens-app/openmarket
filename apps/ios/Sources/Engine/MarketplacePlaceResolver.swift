@@ -7,6 +7,184 @@ extension Logger {
     static let place = Logger(subsystem: "lol.frens.openmarket", category: "place")
 }
 
+/// The cheap location resolver available while there is no Facebook account
+/// session to preserve.
+///
+/// Facebook's logged-out location dialog ultimately makes this single GraphQL
+/// request to turn a coordinate into the path component Marketplace expects.
+/// Calling it directly avoids loading Marketplace, opening the React dialog,
+/// waiting for its map, applying, and loading the result again. The request is
+/// deliberately cookie-free: it resolves a URL, but does not try to preserve
+/// the dialog's more precise session-local coordinate. That precision is useful
+/// to a signed-in session; for an anonymous session it is short-lived and not
+/// worth the roughly fifteen-second UI round trip.
+///
+/// This is an internal Facebook operation and its document id can rotate. A
+/// failure therefore means "use the picker", not "the location is invalid" —
+/// `PlaceChooser` owns that fallback.
+struct UnauthenticatedMarketplacePlaceResolver {
+    private static let endpoint = URL(string: "https://www.facebook.com/api/graphql/")!
+    private static let friendlyName = "MarketplaceBuyLocationDialogLocationUrlQuery"
+    private static let documentID = "9608405655935574"
+
+    private let pacer: RequestPacer
+
+    init(pacer: RequestPacer = .shared) {
+        self.pacer = pacer
+    }
+
+    func resolve(_ coordinate: CLLocationCoordinate2D,
+                 name: String,
+                 origin: ResolvedPlace.Origin) async
+        -> Result<ResolvedPlace, MarketplacePlaceResolver.Failure> {
+        guard !Task.isCancelled else { return .failure(.superseded) }
+        guard await pacer.waitForSlot() else { return .failure(.paced) }
+        guard !Task.isCancelled else { return .failure(.superseded) }
+
+        let started = ContinuousClock.now
+        guard let request = request(for: coordinate) else {
+            return .failure(.unresolved)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // Successful probes are ~80–200 ms. Do not let a rotating internal
+        // operation add another long wait before the proven picker fallback.
+        configuration.timeoutIntervalForRequest = 2
+        configuration.timeoutIntervalForResource = 3
+        configuration.waitsForConnectivity = false
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        do {
+            let (body, response) = try await session.data(for: request)
+            guard !Task.isCancelled else { return .failure(.superseded) }
+            guard let http = response as? HTTPURLResponse else {
+                return .failure(.unresolved)
+            }
+            if http.statusCode == 403 || http.statusCode == 429 {
+                await pacer.recordBlock()
+                Logger.place.error("anonymous direct resolve was blocked (HTTP \(http.statusCode, privacy: .public))")
+                return .failure(.paced)
+            }
+            guard (200..<300).contains(http.statusCode),
+                  let answer = decode(body),
+                  let segment = safeSegment(answer.marketplaceVanityID) else {
+                Logger.place.error("anonymous direct resolve returned no usable URL segment (HTTP \(http.statusCode, privacy: .public))")
+                return .failure(.unresolved)
+            }
+
+            await pacer.recordSuccess()
+            let elapsed = started.duration(to: .now)
+            let milliseconds = elapsed.components.seconds * 1_000
+                + elapsed.components.attoseconds / 1_000_000_000_000_000
+            let browseURL = "https://www.facebook.com/marketplace/\(segment)/"
+            Logger.place.info("anonymous direct resolve -> \(name, privacy: .public) [\(segment, privacy: .public)] in \(milliseconds, privacy: .public)ms")
+            return .success(ResolvedPlace(name: name,
+                                          segment: segment,
+                                          coordinate: coordinate,
+                                          origin: origin,
+                                          browseURL: browseURL,
+                                          verifiedAt: Date()))
+        } catch is CancellationError {
+            return .failure(.superseded)
+        } catch {
+            Logger.place.error("anonymous direct resolve failed: \(error.localizedDescription, privacy: .public)")
+            return .failure(.unresolved)
+        }
+    }
+
+    private func request(for coordinate: CLLocationCoordinate2D) -> URLRequest? {
+        let variablesObject: [String: Any] = [
+            "buy_location": [
+                "latitude": coordinate.latitude,
+                "longitude": coordinate.longitude
+            ]
+        ]
+        guard JSONSerialization.isValidJSONObject(variablesObject),
+              let variablesData = try? JSONSerialization.data(withJSONObject: variablesObject),
+              let variables = String(data: variablesData, encoding: .utf8) else { return nil }
+
+        var form = URLComponents()
+        form.queryItems = [
+            URLQueryItem(name: "__user", value: "0"),
+            URLQueryItem(name: "__a", value: "1"),
+            URLQueryItem(name: "__comet_req", value: "15"),
+            URLQueryItem(name: "av", value: "0"),
+            URLQueryItem(name: "fb_api_caller_class", value: "RelayModern"),
+            URLQueryItem(name: "fb_api_req_friendly_name", value: Self.friendlyName),
+            URLQueryItem(name: "server_timestamps", value: "true"),
+            URLQueryItem(name: "variables", value: variables),
+            URLQueryItem(name: "doc_id", value: Self.documentID)
+        ]
+        guard let body = form.percentEncodedQuery?.data(using: .utf8) else { return nil }
+
+        var request = URLRequest(url: Self.endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.timeoutInterval = 2
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // A browser UA makes Facebook expect browser-page CSRF fields. This is
+        // intentionally a native, token-free anonymous request instead.
+        request.setValue("OpenMarket/0.0.1 (iOS)", forHTTPHeaderField: "User-Agent")
+        return request
+    }
+
+    private func decode(_ body: Data) -> BuyLocation? {
+        // Facebook sometimes protects JSON endpoints with this non-JSON prefix.
+        let guardPrefix = Data("for (;;);".utf8)
+        let json = body.starts(with: guardPrefix) ? Data(body.dropFirst(guardPrefix.count)) : body
+        return try? JSONDecoder().decode(Response.self, from: json)
+            .data?.viewer?.marketplaceFeedStories?.buyLocation
+    }
+
+    private func safeSegment(_ candidate: String) -> String? {
+        guard !candidate.isEmpty,
+              candidate.utf8.allSatisfy({ byte in
+                  (48...57).contains(byte) || (65...90).contains(byte)
+                      || (97...122).contains(byte) || byte == 45 || byte == 95
+              }) else { return nil }
+        return candidate
+    }
+
+    private struct Response: Decodable {
+        let data: Payload?
+    }
+
+    private struct Payload: Decodable {
+        let viewer: Viewer?
+    }
+
+    private struct Viewer: Decodable {
+        let marketplaceFeedStories: FeedStories?
+
+        enum CodingKeys: String, CodingKey {
+            case marketplaceFeedStories = "marketplace_feed_stories"
+        }
+    }
+
+    private struct FeedStories: Decodable {
+        let buyLocation: BuyLocation?
+
+        enum CodingKeys: String, CodingKey {
+            case buyLocation = "buy_location"
+        }
+    }
+
+    private struct BuyLocation: Decodable {
+        let marketplaceVanityID: String
+
+        enum CodingKeys: String, CodingKey {
+            case marketplaceVanityID = "marketplace_vanity_id"
+        }
+    }
+}
+
 /// Turns a coordinate into a place Facebook recognises, by asking Facebook.
 ///
 /// Named for what it does and where the answer comes from: the resolution is
