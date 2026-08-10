@@ -8,12 +8,12 @@ import Combine
 /// input in a hidden webview and scraping a portal — brittle, and it was only
 /// ever a means to an end. Apple already has a complete, fast, offline-capable
 /// place index, and what the picker actually needs from a search box is a
-/// *coordinate*: once there's a coordinate, `MarketplacePlaceResolver` hands it
-/// to Facebook and Facebook names the place itself.
+/// *coordinate*: once there is one, `PlaceChooser` asks Facebook for its URL
+/// segment through either the direct anonymous resolver or the full picker.
 ///
 /// So the division is clean. Apple answers "where is the place the user typed",
-/// Facebook answers "what do you call that place", and neither is asked to do
-/// the other's job.
+/// Facebook answers "what URL represents that place", and neither is asked to
+/// do the other's job.
 @MainActor
 final class AppleMapsCitySearch: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
     struct Suggestion: Identifiable, Equatable {

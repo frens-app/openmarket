@@ -8,10 +8,10 @@ import CoreLocation
 /// feature — it was a workaround for the app having to guess slugs, and it
 /// guessed wrong for five of the twelve it originally shipped.
 ///
-/// Both routes end in the same place: a coordinate is handed to Facebook's own
-/// picker and Facebook names the place (`MarketplacePlaceResolver`). Apple
-/// answers "where is what the user typed", Facebook answers "what do you call
-/// that", and the slug is valid because Facebook produced it.
+/// Both routes end in the same place: Apple supplies a coordinate and display
+/// name, and Facebook supplies the URL segment. Account sessions go through its
+/// picker; anonymous sessions ask the picker's URL resolver directly. The slug
+/// is valid in either case because Facebook produced it.
 struct LocationPickerSheet: View {
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var location: LocationProvider
@@ -81,7 +81,7 @@ struct LocationPickerSheet: View {
     /// where searching would happen right now.
     /// The place being switched to comes first: while a change is in flight it
     /// is what the screen is about, and seeing it on the map is how "Berkeley,
-    /// CA" is told apart from "Berkeley, NJ" before ten seconds are spent on
+    /// CA" is told apart from "Berkeley, NJ" before any resolution is spent on
     /// the wrong one.
     private var mapCentre: CLLocationCoordinate2D {
         chooser.switching?.coordinate
@@ -145,9 +145,9 @@ struct LocationPickerSheet: View {
             // The sheet closes on the tap now, so "busy" is a state the user
             // can walk back into — and the only reason to reopen this screen
             // mid-switch is to correct the thing they just picked. Making them
-            // wait ten seconds to fix a mistyped city would be a strange way to
-            // spend the responsiveness this was all for. A second choice
-            // supersedes the first (`PlaceChooser.resolve`).
+            // wait for fallback resolution to fix a mistyped city would be a
+            // strange way to spend the responsiveness this was all for. A
+            // second choice supersedes the first (`PlaceChooser.resolve`).
             Button {
                 Task { await useDeviceLocation() }
             } label: {
@@ -283,8 +283,8 @@ struct LocationPickerSheet: View {
     /// moment it has something to say — the new target, on the map, with the
     /// change still running. It also makes the choice feel final in a way it
     /// isn't yet, and leaves nowhere to correct a mistyped city from. The
-    /// optimism is that the ten seconds no longer *hold* the sheet, not that
-    /// the sheet goes away; Done still means done, whenever the user says so.
+    /// optimism is that resolution no longer *holds* the sheet, not that the
+    /// sheet goes away; Done still means done, whenever the user says so.
     private func useDeviceLocation() async {
         await chooser.switchToDeviceLocation(via: location)
     }

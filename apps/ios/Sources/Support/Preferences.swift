@@ -60,7 +60,7 @@ final class Preferences: ObservableObject {
     @Published var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: Key.hasCompletedOnboarding) } }
     /// Human-readable place name for the UI ("San Francisco, CA").
     @Published var locationName: String? { didSet { defaults.set(locationName, forKey: Key.locationName) } }
-    /// Facebook's city slug used in the search path ("sanfrancisco").
+    /// Facebook's place segment used in the search path — a slug or numeric id.
     @Published var locationSlug: String? { didSet { defaults.set(locationSlug, forKey: Key.locationSlug) } }
     /// The place Facebook resolved, and the coordinate that produced it.
     ///
@@ -190,11 +190,10 @@ final class Preferences: ObservableObject {
         // That check existed because the app used to *guess* slugs, and five of
         // the twelve it shipped were not places Facebook recognises — a
         // rejected slug doesn't fail, it silently serves the IP-inferred city
-        // (`docs/location-targeting.md` §1). Slugs now come back from
-        // Facebook's own picker (`MarketplacePlaceResolver`), so they are valid
-        // by construction, and a whitelist would do nothing but delete
-        // perfectly good ones the moment a user picked a city nobody thought
-        // to curate.
+        // (`docs/location-targeting.md` §1). Segments now come back from
+        // Facebook's own location resolvers, so they are valid by construction,
+        // and a whitelist would do nothing but delete perfectly good ones the
+        // moment a user picked a city nobody thought to curate.
         locationSlug = defaults.string(forKey: Key.locationSlug)
         resolvedPlace = (defaults.data(forKey: Key.resolvedPlace))
             .flatMap { try? JSONDecoder().decode(ResolvedPlace.self, from: $0) }

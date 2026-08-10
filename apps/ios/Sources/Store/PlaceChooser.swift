@@ -1,31 +1,35 @@
 import Foundation
 import CoreLocation
+import os
 
 /// Turning "here" or "that city" into a place Facebook recognises.
 ///
-/// Both routes end in the same three steps — get a coordinate, hand it to
-/// Facebook's own picker, store what Facebook calls the result — and there are
+/// Both routes end in the same three steps — get a coordinate, ask Facebook
+/// what URL represents it, store what Facebook calls the result — and there are
 /// now two screens that need them: the location sheet, and the location step of
-/// onboarding. This holds the in-flight state and the failure wording so the
-/// two can't drift apart; each screen keeps its own `AppleMapsCitySearch`,
-/// which is view state and doesn't survive nesting inside another
-/// `ObservableObject` anyway.
+/// onboarding. Signed-in sessions use Facebook's own picker because its precise
+/// coordinate becomes durable session state. Signed-out sessions call the
+/// picker's URL-resolution request directly and fall back to the picker if that
+/// internal endpoint changes. This holds the in-flight state and the failure
+/// wording so the two screens can't drift apart; each screen keeps its own
+/// `AppleMapsCitySearch`, which is view state and doesn't survive nesting inside
+/// another `ObservableObject` anyway.
 ///
 /// ## Optimistic, and precisely how far
 ///
-/// Resolution is a ten-second round trip through Facebook's own picker — 8.5 s
-/// signed in, 15.5 s signed out (`docs/location.md` §4) — and holding a sheet
-/// open for it made choosing a city feel like submitting a form. So the **label
-/// is committed immediately**: Apple has already named the place, or the device
-/// fix has, and that name is good enough to put in the pill while the real
-/// resolution runs underneath.
+/// Picker resolution is a ten-second round trip — 8.5 s signed in, 15.5 s
+/// signed out (`docs/location.md` §4). The anonymous direct route is normally a
+/// few hundred milliseconds, but the UI remains optimistic because fallback
+/// still has to be correct. So the **label is committed immediately**: Apple has
+/// already named the place, or the device fix has, and that name is good enough
+/// to put in the pill while the real resolution runs underneath.
 ///
 /// What is deliberately *not* committed is the **segment**. Nothing may search
 /// without one, and the app never derives one — it only ever stores a segment
-/// Facebook handed back (`MarketplacePlaceResolver`). Searching optimistically
-/// would mean searching the old city under the new city's name, which is the
-/// exact silent failure `MarketplacePlaceResolver.confirm` exists to catch. So
-/// `Preferences.resolvedPlace` still changes exactly once, on confirmation.
+/// Facebook handed back. Searching optimistically would mean searching the old
+/// city under the new city's name, this area's characteristic silent failure.
+/// So `Preferences.resolvedPlace` still changes exactly once, after Facebook's
+/// direct URL response or the picker confirmation.
 ///
 /// That split is also what makes rollback free: a failed switch has written
 /// nothing, so undoing it is dropping `switching`, and an app killed mid-switch
@@ -229,11 +233,12 @@ final class PlaceChooser: ObservableObject {
         let previous = inFlight
         // Cancelled *and* waited for.
         //
-        // A resolution feeds a coordinate into Facebook's session state and
-        // reads the result back out of it (`MarketplacePlaceResolver`), so two
-        // overlapping ones don't merely waste a round trip — the second can
-        // read the first's answer and store a place nobody asked for. The
-        // resolver checks for cancellation between steps, so the old one
+        // The signed-in resolution feeds a coordinate into Facebook's session
+        // state and reads the result back out, so two overlapping ones don't
+        // merely waste a round trip — the second can read the first's answer
+        // and store a place nobody asked for. The anonymous route is isolated,
+        // but sharing this cancellation rule keeps both paths ordered. The
+        // picker resolver checks for cancellation between steps, so the old one
         // unwinds in about a poll interval rather than the full ten seconds.
         previous?.cancel()
         inFlight = Task {
@@ -251,7 +256,8 @@ final class PlaceChooser: ObservableObject {
             // in a list and not at all the same on a map.
             switching?.coordinate = point
 
-            switch await MarketplacePlaceResolver().resolve(point, origin: origin) {
+            let name = switching?.name ?? "that place"
+            switch await resolveForCurrentSession(point, name: name, origin: origin) {
             case .success(let place):
                 guard mine == generation else { return }
                 // The one write, and only ever from here: a confirmed place.
@@ -264,6 +270,34 @@ final class PlaceChooser: ObservableObject {
             case .failure(let error):
                 finish(mine, failure: Self.message(for: error))
             }
+        }
+    }
+
+    /// Anonymous sessions only need Facebook's URL identifier. The exact
+    /// coordinate the picker also writes into its cookie-backed session is
+    /// intentionally skipped: it disappears with that short-lived session and
+    /// costs most of the location-change latency. Account sessions retain the
+    /// full picker route so their more precise ranking state is preserved.
+    private func resolveForCurrentSession(_ coordinate: CLLocationCoordinate2D,
+                                          name: String,
+                                          origin: ResolvedPlace.Origin) async
+        -> Result<ResolvedPlace, MarketplacePlaceResolver.Failure> {
+        guard !Task.isCancelled else { return .failure(.superseded) }
+
+        if await SessionState.isSignedIn(settleFor: .milliseconds(300)) {
+            guard !Task.isCancelled else { return .failure(.superseded) }
+            return await MarketplacePlaceResolver().resolve(coordinate, origin: origin)
+        }
+
+        let direct = await UnauthenticatedMarketplacePlaceResolver()
+            .resolve(coordinate, name: name, origin: origin)
+        switch direct {
+        case .success, .failure(.paced), .failure(.superseded):
+            return direct
+        case .failure:
+            guard !Task.isCancelled else { return .failure(.superseded) }
+            Logger.place.info("anonymous direct resolver unavailable; falling back to location picker")
+            return await MarketplacePlaceResolver().resolve(coordinate, origin: origin)
         }
     }
 

@@ -129,12 +129,13 @@ struct ActiveFilterBar: View {
 
     /// The one line that stops the optimistic label from being a lie.
     ///
-    /// A location change takes about ten seconds to agree with Facebook
-    /// (`docs/location.md` §4) and the results on screen belong to the old
-    /// place for all of it. The pill says where the user is going; this says
-    /// what they are currently looking at, and afterwards says whether they got
-    /// there. Both readings matter — a result set that silently belongs to
-    /// another city is this whole area's characteristic failure.
+    /// A signed-in location change or anonymous fallback can take about ten
+    /// seconds to agree with Facebook (`docs/location.md` §4), and the results
+    /// on screen belong to the old place for all of it. The pill says where the
+    /// user is going; this says what they are currently looking at, and
+    /// afterwards says whether they got there. Both readings matter — a result
+    /// set that silently belongs to another city is this area's characteristic
+    /// failure.
     @ViewBuilder
     private var switchNotice: some View {
         if let change = chooser.switching {
