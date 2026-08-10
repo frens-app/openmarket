@@ -298,7 +298,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         text=\(textAt.map { String(format: "%.2f", $0.timeIntervalSince(loadedAt)) } ?? "n/a")s \
         photos=\(String(format: "%.2f", Date().timeIntervalSince(loadedAt)))s
         """)
-        Logger.detail.info("detail ok: desc=\(raw.description != nil) photos=\(raw.photoURLs.count) cond=\(raw.conditionText != nil) sold=\(raw.isSold.map(String.init) ?? "nil", privacy: .public) pending=\(raw.isPending.map(String.init) ?? "nil", privacy: .public) coord=\(raw.latitude ?? "none", privacy: .public),\(raw.longitude ?? "none", privacy: .public)")
+        Logger.detail.info("detail ok: desc=\(raw.description != nil) photos=\(raw.photoURLs.count) cond=\(raw.conditionText != nil) sold=\(raw.isSold.map(String.init) ?? "nil", privacy: .public) pending=\(raw.isPending.map(String.init) ?? "nil", privacy: .public) coord=\(raw.latitude ?? "none", privacy: .public),\(raw.longitude ?? "none", privacy: .public) delivery=\(raw.deliveryTypes?.joined(separator: "+") ?? "nil", privacy: .public)")
         Logger.detail.info("seller: name=\(raw.sellerName ?? "nil", privacy: .public) rating=\(raw.sellerRatingText ?? "nil", privacy: .public) section=[\(raw.sellerSection ?? "nil", privacy: .public)]")
 
         // **The seller block lands after the readiness test is satisfied.**

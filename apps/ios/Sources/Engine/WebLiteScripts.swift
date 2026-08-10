@@ -395,6 +395,20 @@ enum WebLiteScripts {
       var _coord = null;
       try { _coord = _coordFromMapURL() || _coordFromJSON(); } catch (e) { _coord = null; }
 
+      // Delivery, from rendered text — mobile embeds no listing JSON at all
+      // (docs/embedded-payload.md §5), so the phrasing is the only source here.
+      // Safe to read from `mainText` specifically: that walk stops dead at the
+      // first related-content heading, so it holds this listing's words and
+      // not the picks rail's.
+      var _delivery = null;
+      var _ships = /Ships to you|Ships for [$]|Shipping available/i.test(mainText);
+      var _pickup = /Local pickup|Pickup only|Pick up in person/i.test(mainText);
+      if (_ships || _pickup) {
+        _delivery = [];
+        if (_ships) _delivery.push('SHIPPING_ONSITE');
+        if (_pickup) _delivery.push('IN_PERSON');
+      }
+
       var _p = location.pathname, _i = _p.indexOf('/item/');
       return JSON.stringify({
         itemId: _i === -1 ? null : _p.slice(_i + 6).split('/')[0],
@@ -406,6 +420,7 @@ enum WebLiteScripts {
         photoURLs: photos.slice(0, 12),
         postedText: listed,
         conditionText: after('Condition'),
+        deliveryTypes: _delivery,
         // Detail pages phrase this as "Listed 3 days ago in Berkeley, CA";
         // keep only the place itself so it can be geocoded and shown plainly.
         locationText: (function(){

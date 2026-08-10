@@ -115,12 +115,49 @@ times, not an artefact of proximity in the markup.
 | Page | Values seen |
 |---|---|
 | default search (15 cards) | `IN_PERSON`, `IN_PERSON,DOOR_PICKUP`, `IN_PERSON,PUBLIC_MEETUP` — no shipping token anywhere |
+| re-survey, 35 arrays across two pages | adds **`DOOR_DROPOFF`**, missed above. Full vocabulary: `SHIPPING_ONSITE`, `IN_PERSON`, `DOOR_PICKUP`, `DOOR_DROPOFF`, `PUBLIC_MEETUP` |
 | `deliveryMethod=shipping` (24 cards) | `SHIPPING_ONSITE` in **24 of 24**, alone on 5 and combined with local options on 19 |
+
+`DOOR_DROPOFF` is rare — 1 of 21 arrays on one item page, 1 of 14 on a search
+page — and is the only token meaning *delivery without shipping*: the seller
+brings it to the buyer. `DOOR_PICKUP` is the opposite direction. Treating the
+two as one thing states the reverse of what the seller offered, so they are
+carried separately.
 
 `SHIPPING_ONSITE` is therefore the reliable marker, and it is finer than the
 "card has no city line" heuristic in `mobile-location-radius-notes.md` §4: it
 separates *ships only* (5 cards) from *ships or collect in person* (19), which
 are different things for a local-browsing app.
+
+**Item pages carry it too, confirmed.** The detail extractor reads
+`delivery_types` from the listing's own object, anchored on `location_text` like
+`is_sold`. Verified end to end against a live Oakland listing that sat *past*
+the payload's ~15-card reach — so its card had no delivery data of its own and
+the item page was the only possible source: `delivery=IN_PERSON` in the log, and
+the badge rendered.
+
+**The anchor is what makes it safe, and it was measured.** On a live item page:
+21 `delivery_types` arrays present (the picks rail), `"location_text"` occurring
+**exactly once**, and **exactly one** `delivery_types` inside the ±4000-char
+window around it — the one belonging to the page's own listing. Same property
+`is_sold` relies on, now confirmed for this field rather than assumed.
+
+Worth noting there is no DOM route to fall back on: zero `aria-label`s on that
+page matched `/ship|pickup|deliver/i`. Delivery is payload-only, so the
+structured read is not a shortcut past a more stable rendered source — it is the
+only source.
+
+A rendered-text fallback ("Ships to you", "Local pickup", read only from nodes
+outside any `a[href*="/marketplace/item/"]`) covers pages that don't embed the
+array. It has not been observed firing, since the payload has answered every
+time so far. `DetailEngine` logs `delivery=` on every open, so which source won
+is readable rather than guessed.
+
+Still unconfirmed on a live page: `SHIPPING_ONSITE` reaching the detail screen.
+A `deliveryMethod=shipping` search returns nothing at all logged out, so no
+shipping listing has been openable to check. The token mapping itself is
+exercised over all eight documented token sets (`Fulfillment`), and the shipping
+branch differs from the verified local one only in which token matches.
 
 `created_with_seller_app` is also per-card and is a plausible business /
 drop-shipper signal, but every card on the pages measured was `false`, so it is

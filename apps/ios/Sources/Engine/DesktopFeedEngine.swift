@@ -46,11 +46,32 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     @Published private(set) var coverage = PayloadCoverage(rendered: 0, withPayload: 0)
 
     let webView: WKWebView
-    let session: BrowserSession
+
+    /// Which session this engine is running under.
+    ///
+    /// **A `var`, and it must be kept current** — `ListingStore.setSession`
+    /// owns that. It used to be a `let` fixed at init, which quietly disabled
+    /// the only thing it is read for: the engine is constructed with the
+    /// `.authed` default before anyone has asked whether there is a session, so
+    /// `canLoadMore` below was permanently true and a signed-out grid
+    /// paginated into the login overlay on every scroll.
+    ///
+    /// It selects nothing — `BrowserSession.dataStore` is one process-wide
+    /// store either way — so this is a label describing the world, and a label
+    /// that never updates is just a wrong one.
+    var session: BrowserSession
     private let pacer: RequestPacer
     private var navContinuation: CheckedContinuation<Void, Never>?
 
-    init(session: BrowserSession = .authed, pacer: RequestPacer = .shared) {
+    /// Defaults to `.unauthed`, deliberately.
+    ///
+    /// This is the value in force between construction and the first
+    /// `setSession`, i.e. before anything has read the cookie jar, and the two
+    /// wrong guesses are not equally wrong. Guessing signed-in paginates
+    /// against a wall; guessing signed-out declines to paginate for a few
+    /// hundred milliseconds and then corrects itself. Only one of those is
+    /// visible to the user.
+    init(session: BrowserSession = .unauthed, pacer: RequestPacer = .shared) {
         self.session = session
         self.pacer = pacer
         let config = WKWebViewConfiguration.make()

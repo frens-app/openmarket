@@ -59,6 +59,10 @@ struct PayloadListing: Decodable, Equatable {
     var offersLocalPickup: Bool { deliveryTypes.contains("IN_PERSON") }
     var isShippingOnly: Bool { shipsToBuyer && !offersLocalPickup }
 
+    /// The same tokens as the model the screens read. Nil past the first
+    /// ~15 cards, where there is no payload to carry them.
+    var fulfillment: Fulfillment? { Fulfillment(tokens: deliveryTypes) }
+
     /// The identity the rest of the app uses. Built from the fbcdn filename
     /// segment, **not** `photoID` — those are adjacent but different numbers
     /// (6 of 6 sampled differ), and the filename segment is the one that is
@@ -114,6 +118,7 @@ extension PayloadListing {
             originalPriceText: strikethroughFormatted,
             locationText: locationText,
             conditionText: nil,          // desktop cards don't carry it; the item page does
+            fulfillment: fulfillment,
             thumbnailURL: photoURL.flatMap(URL.init(string:)),
             itemURL: URL(string: "https://www.facebook.com/marketplace/item/\(id)/"),
             badgeText: (isSold == true) ? "Sold" : nil,
@@ -133,6 +138,7 @@ extension PayloadListing {
         if let priceFormatted { listing.priceText = priceFormatted }
         if let strikethroughFormatted { listing.originalPriceText = strikethroughFormatted }
         if let locationText { listing.locationText = locationText }
+        if let fulfillment { listing.fulfillment = fulfillment }
         if listing.itemURL == nil {
             listing.itemURL = URL(string: "https://www.facebook.com/marketplace/item/\(id)/")
         }

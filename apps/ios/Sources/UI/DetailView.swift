@@ -62,6 +62,7 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 gallery
                 priceBlock
+                fulfillmentBlock
                 descriptionBlock
                 factsBlock
                 sellerBlock
@@ -262,6 +263,56 @@ struct DetailView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// Two sources, card first.
+    ///
+    /// The desktop search payload carries `delivery_types` per card, so for
+    /// anything in the first server-rendered page this is known before the item
+    /// page has loaded and can draw on the first frame. The item page's own
+    /// answer replaces it when it lands — it is the listing's own object rather
+    /// than a search result's, and it is the only source for everything past
+    /// the payload's ~15-card reach.
+    private var fulfillment: Fulfillment? {
+        detail?.fulfillment ?? current.fulfillment
+    }
+
+    /// Directly under the price, because "do I have to drive somewhere" is
+    /// decided in the same glance as "can I afford it" — and above the
+    /// description, so it can't be missed by anyone who doesn't scroll.
+    ///
+    /// **Absent, not guessed.** Mobile-sourced cards and cards past the
+    /// payload's reach have no delivery information at all, and the mistake
+    /// available here would be to render "Local pickup" for them because it is
+    /// usually true. A buyer reads a badge as a fact about the listing; drawing
+    /// nothing is the honest form of not knowing.
+    @ViewBuilder
+    private var fulfillmentBlock: some View {
+        if let fulfillment {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(fulfillment.headline, systemImage: fulfillment.symbol)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(Color(.secondarySystemBackground), in: Capsule())
+                    // Grey when there's nothing to buy, for the same reason the
+                    // price is struck through: the delivery terms of a sold
+                    // listing are trivia, not a call to action.
+                    .foregroundStyle(availability.isGone ? AnyShapeStyle(.secondary)
+                                                         : AnyShapeStyle(.tint))
+
+                // One caption line rather than a second row of pills. These
+                // qualify the headline, and a badge of equal weight beside it
+                // reads as a separate option the seller is offering.
+                if !fulfillment.refinements.isEmpty {
+                    Text(fulfillment.refinements.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(fulfillment.accessibilityDescription)
         }
     }
 

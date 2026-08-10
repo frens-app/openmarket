@@ -1,4 +1,12 @@
 import Foundation
+import os
+
+extension Logger {
+    /// Extractor-level complaints: a value came back that our model of Facebook
+    /// does not account for. Its own category so the whole class is one filter
+    /// away — `docs/parsing-conventions.md` §1.
+    static let parse = Logger(subsystem: "lol.frens.openmarket", category: "parse")
+}
 
 /// A card as it appears in the results grid.
 ///
@@ -13,6 +21,11 @@ struct Listing: Identifiable, Codable, Equatable, Hashable {
     var originalPriceText: String?
     var locationText: String?   // from the card's aria-label; detail fills gaps
     var conditionText: String?  // "Used - Good" — the card label carries it
+    /// How the item changes hands, when the surface said. Card-level because
+    /// the desktop search payload carries `delivery_types` per card, which lets
+    /// the detail screen draw it on the first frame instead of waiting for the
+    /// item page — the same reason `conditionText` lives here.
+    var fulfillment: Fulfillment?
     var thumbnailURL: URL?
     var itemURL: URL?           // nil until resolved by tapping through
     var badgeText: String?      // "Price drop", "Sold", …
@@ -61,6 +74,98 @@ struct ListingDetail: Codable, Equatable, Hashable {
     /// Someone has agreed to buy it and not yet collected. Weaker than sold and
     /// worth distinguishing: a pending listing can fall through.
     var isPending: Bool?
+
+    /// Shipping, collection, or both — as the item page reported it.
+    ///
+    /// Optional for the usual reason: nil is "this surface didn't say", never
+    /// "collection only". Guessing the common case would be the wrong kind of
+    /// helpful, because the whole value of the field is that it is Facebook's
+    /// answer rather than ours.
+    var fulfillment: Fulfillment?
+}
+
+/// How a listing can change hands, from Facebook's `delivery_types`.
+///
+/// Five tokens have been observed (`docs/embedded-payload.md` §4):
+/// `SHIPPING_ONSITE`, `IN_PERSON`, `DOOR_PICKUP`, `DOOR_DROPOFF` and
+/// `PUBLIC_MEETUP`. `SHIPPING_ONSITE` is measured hardest — it marked 24 of 24
+/// cards on a shipping-filtered page and none on a local one.
+///
+/// Everything except `SHIPPING_ONSITE` was seen only ever *alongside*
+/// `IN_PERSON`, never instead of it, so they are modelled as refinements of
+/// collecting in person rather than as modes of their own. That keeps the
+/// headline to the three answers someone actually wants — ships, collect, or
+/// either — and leaves the arrangements as the smaller print they are.
+///
+/// **`DOOR_PICKUP` and `DOOR_DROPOFF` are different directions, not synonyms**,
+/// which is the whole reason both are carried: one has the buyer collecting
+/// from the seller's door, the other has the seller bringing it to the buyer's.
+/// `DOOR_DROPOFF` is the only one of the five that is genuinely delivery
+/// without being shipping, so folding it into "pickup" would state the opposite
+/// of what the seller offered.
+///
+/// An unrecognised token is dropped from the badge but logged as an error —
+/// `docs/parsing-conventions.md` §1, a rule this type is the reason for. The
+/// original survey found four tokens and the `default:` here silently ate the
+/// fifth for as long as it existed.
+struct Fulfillment: Codable, Equatable, Hashable {
+    var ships = false
+    var inPerson = false
+    var doorPickup = false
+    var doorDropoff = false
+    var publicMeetup = false
+
+    /// Nil rather than an all-false value when nothing was recognised, so the
+    /// screen can tell "Facebook says local pickup" from "nobody told us".
+    /// An unrecognised token set is the second of those, not the first.
+    init?(tokens: [String]) {
+        for token in tokens {
+            switch token.uppercased() {
+            case "SHIPPING_ONSITE", "SHIPPING": ships = true
+            case "IN_PERSON": inPerson = true
+            case "DOOR_PICKUP": doorPickup = true
+            case "DOOR_DROPOFF": doorDropoff = true
+            case "PUBLIC_MEETUP": publicMeetup = true
+            default:
+                // Still dropped — but on the record. See the type's note above.
+                Logger.parse.error("unknown delivery_type: \(token, privacy: .public)")
+                continue
+            }
+        }
+        guard ships || collectsInPerson else { return nil }
+    }
+
+    var collectsInPerson: Bool { inPerson || doorPickup || doorDropoff || publicMeetup }
+
+    /// The one line worth reading. Deliberately not four separate badges: a
+    /// buyer is deciding whether they have to drive somewhere, and that is a
+    /// three-way question.
+    var headline: String {
+        switch (ships, collectsInPerson) {
+        case (true, true): "Ships or local pickup"
+        case (true, false): "Ships to you"
+        default: "Local pickup"
+        }
+    }
+
+    var symbol: String { ships ? "shippingbox" : "figure.walk" }
+
+    /// The arrangements underneath the headline, in Facebook's own terms.
+    ///
+    /// Ordered by how much they change the buyer's day: being brought the item
+    /// beats collecting it from a doorstep, which beats arranging to meet.
+    var refinements: [String] {
+        var out: [String] = []
+        if doorDropoff { out.append("Seller drops off") }
+        if doorPickup { out.append("Doorstep pickup") }
+        if publicMeetup { out.append("Meets in public") }
+        return out
+    }
+
+    /// Read as one phrase, so VoiceOver doesn't spell out a row of pills.
+    var accessibilityDescription: String {
+        ([headline] + refinements).joined(separator: ", ")
+    }
 }
 
 extension Listing {

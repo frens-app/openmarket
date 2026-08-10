@@ -565,16 +565,22 @@ enum DesktopScripts {
               //
               // The fields have reliable shapes, so match those instead and let
               // the name be what is left in front of them.
-              var flat = section.replace(/\\s+/g, ' ').trim();
+              //
+              // Named `flatSection`, not `flat`. `var` is function-scoped, so
+              // a second `var flat` in here is not a local — it overwrites the
+              // page HTML that the description, the coordinates and the sold
+              // state are all read out of further down, on exactly the pages
+              // where this branch runs (signed in, seller section present).
+              var flatSection = section.replace(/\\s+/g, ' ').trim();
 
-              var joinedMatch = flat.match(/Joined Facebook in\\s+[0-9]{4}/i);
+              var joinedMatch = flatSection.match(/Joined Facebook in\\s+[0-9]{4}/i);
               if (joinedMatch) joined = joinedMatch[0];
 
               // The rating count renders as "(N)" beside the stars.
-              var countMatch = flat.match(/[(]([0-9]+)[)]/);
+              var countMatch = flatSection.match(/[(]([0-9]+)[)]/);
               if (countMatch) ratingCount = countMatch[1];
 
-              var rest = flat.replace(/^Seller information\\s*/i, '')
+              var rest = flatSection.replace(/^Seller information\\s*/i, '')
                              .replace(/^Seller details\\s*/i, '');
               // Everything before the first thing that cannot be part of a name.
               var cut = rest.search(/[(]\\s*[0-9]+\\s*[)]|Highly rated|Joined Facebook|Very responsive|Active [0-9]/i);
@@ -655,6 +661,56 @@ enum DesktopScripts {
               if (pm2) isPending = pm2[1] === 'true';
             }
 
+            // Shipping vs collection, from the listing's own object — same
+            // `location_text` anchor, same reason. An item page carries the
+            // picks rail's twenty `delivery_types` arrays alongside its own,
+            // and "does this one ship" answered with a neighbour's array is
+            // worse than no answer: it sends someone to message a seller about
+            // delivery that was never on offer.
+            //
+            // `null` until something is actually found, so the Swift side can
+            // tell an absent field from an empty one.
+            var deliveryTypes = null;
+            if (anchor !== -1) {
+              var dwin = flat.slice(Math.max(0, anchor - 4000), anchor + 4000);
+              var dkey = dwin.indexOf('"delivery_types"');
+              if (dkey !== -1) {
+                var dopen = dwin.indexOf('[', dkey);
+                var dclose = dwin.indexOf(']', dopen);
+                if (dopen !== -1 && dclose > dopen) {
+                  deliveryTypes = [];
+                  dwin.slice(dopen + 1, dclose).split(',').forEach(function(p){
+                    var t = p.replace(/["' ]/g, '').trim();
+                    if (t) deliveryTypes.push(t);
+                  });
+                }
+              }
+            }
+
+            // Fallback to what the page renders, for item pages that carry no
+            // payload array. Read off the same `candidates` list the seller
+            // block already walked rather than re-querying the document, and
+            // skipped entirely for any node sitting inside an item link —
+            // that is the picks rail, i.e. somebody else's listing.
+            if (deliveryTypes === null) {
+              var shipsText = false, pickupText = false;
+              for (var d = 0; d < candidates.length; d++) {
+                var dnode = candidates[d];
+                var dtext = (dnode.innerText || '').trim();
+                // Long runs are containers, and a container's text is every
+                // card underneath it.
+                if (!dtext || dtext.length > 40) continue;
+                if (dnode.closest && dnode.closest('a[href*="/marketplace/item/"]')) continue;
+                if (/^(Ships to you|Shipping available|Ships for )/i.test(dtext)) shipsText = true;
+                else if (/^(Local pickup|Pickup only|Pick up in person)/i.test(dtext)) pickupText = true;
+              }
+              if (shipsText || pickupText) {
+                deliveryTypes = [];
+                if (shipsText) deliveryTypes.push('SHIPPING_ONSITE');
+                if (pickupText) deliveryTypes.push('IN_PERSON');
+              }
+            }
+
             // "Condition" and its value render as adjacent lines in Details.
             var conditionText = null;
             var cm = body.match(/Condition[^]{0,3}(New|Used - Like New|Used - Good|Used - Fair)/i);
@@ -690,6 +746,7 @@ enum DesktopScripts {
               longitude: lng,
               isSold: isSold,
               isPending: isPending,
+              deliveryTypes: deliveryTypes,
               profileLinks: document.querySelectorAll('a[href*="/marketplace/profile/"]').length,
               loginWall: body.indexOf('You must log in') !== -1
             });

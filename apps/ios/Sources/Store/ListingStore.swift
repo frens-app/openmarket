@@ -56,7 +56,16 @@ final class ListingStore: ObservableObject {
 
     /// Records the session the engines are currently running under. Called
     /// after a sign-in or sign-out, since it changes what a fetch will return.
+    /// **Propagates to the engines, not just this object.** `canLoadMore` is
+    /// the desktop engine's answer, and for a long time it was answering from
+    /// an init-time constant nobody ever updated — so a signed-out grid kept
+    /// trying to paginate against a page Facebook had already pinned shut.
     func setSession(_ session: BrowserSession) {
+        // Before the guard, not after. The guard exists to keep an unchanged
+        // session from republishing and redrawing the grid — but an injected
+        // engine can start out of step with this object, and then the one call
+        // that would have corrected it is the one that returns early.
+        desktop.session = session
         guard session != self.session else { return }
         self.session = session
         Logger.store.info("session -> \(session.rawValue, privacy: .public)")

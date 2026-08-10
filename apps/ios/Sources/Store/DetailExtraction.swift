@@ -29,6 +29,13 @@ struct RawDetail: Decodable {
     /// "this surface didn't say", never "still available".
     let isSold: Bool?
     let isPending: Bool?
+    /// Facebook's `delivery_types` for this listing, verbatim.
+    ///
+    /// Optional, and the difference from `[]` is the point: nil means the
+    /// extractor found no delivery information at all on this surface, where an
+    /// empty array would mean it found the field and it named nothing. Both
+    /// produce no badge, but only the first is a gap worth chasing in the log.
+    let deliveryTypes: [String]?
     let loginWall: Bool
     /// Facebook's "Highly rated on Marketplace" badge, when the section says so.
     var sellerIsHighlyRated: Bool?
@@ -63,7 +70,8 @@ struct RawDetail: Decodable {
             latitude: latitude.flatMap(Double.init),
             longitude: longitude.flatMap(Double.init),
             isSold: isSold,
-            isPending: isPending
+            isPending: isPending,
+            fulfillment: deliveryTypes.flatMap(Fulfillment.init(tokens:))
         )
     }
 

@@ -861,6 +861,7 @@ item — several of these are harder or easier than they look. Items marked
 
 | File | What's in it |
 |---|---|
+| **`docs/parsing-conventions.md`** | **Rules every extractor follows.** An unknown value is logged, never silently dropped; absent ≠ empty; a value found near the right place is not the right value |
 | `docs/probe-checklist.md` | How to measure this site without recording false negatives |
 | `docs/data-model.md` | Proposed schema for storing listings across devices |
 | `docs/status.md` | What's built and verified, and the open gaps |
