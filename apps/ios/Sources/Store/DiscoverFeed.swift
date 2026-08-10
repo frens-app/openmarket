@@ -218,6 +218,7 @@ final class DiscoverFeed: ObservableObject {
         }
 
         reachedEnd = false
+        deepestIndexSeen = -1
         mode = session == .authed ? .browse : .searches
         switch mode {
         case .browse: await fillFromMarketplace(citySlug: citySlug)
@@ -321,21 +322,49 @@ final class DiscoverFeed: ObservableObject {
     /// immediately, which is correct — that is a fast scroller, not a treadmill.
     private var scrolledSinceLastTopUp = false
 
+    /// How far down the feed the user has been, as an index into `listings`.
+    ///
+    /// Tracked because a card announces itself exactly once: `.task` fires when
+    /// the lazy stack *creates* a cell and never again, so the margin can only
+    /// be tested at the moment a cell happens to be built — which is not the
+    /// moment the answer changes. Remembering the depth makes it testable
+    /// whenever, which is what lets a drag re-check it. Reset with the feed,
+    /// never on append: a top-up lands below everything already scrolled past.
+    private var deepestIndexSeen = -1
+
     /// Called when the user drags the feed. See `scrolledSinceLastTopUp`.
+    ///
+    /// Arming re-checks the margin, and that re-check is the whole of the bug
+    /// that made this gate look broken. The card that triggers top-up N+1 is
+    /// built *the instant top-up N lands* — three cards into a batch of twelve,
+    /// well inside the lazy stack's build-ahead — and at that instant the gate
+    /// has just closed. It announced itself to a closed gate, and a cell is only
+    /// built once, so it never announced itself again: the feed stopped paging
+    /// for good. Re-arming while already armed is a no-op, so a drag firing this
+    /// continuously still costs one check.
     func noteScroll() {
+        guard !scrolledSinceLastTopUp else { return }
         scrolledSinceLastTopUp = true
+        Task { await topUpIfAtMargin() }
     }
 
-    /// More of Facebook's feed, triggered about two screens from the bottom.
+    /// Records how far the user has reached, then asks whether that is far
+    /// enough. Called from each card as it is built.
+    func loadMoreIfNeeded(currentItem: Listing) async {
+        guard let index = listings.firstIndex(of: currentItem) else { return }
+        deepestIndexSeen = max(deepestIndexSeen, index)
+        await topUpIfAtMargin()
+    }
+
+    /// More of Facebook's feed, about two screens from the bottom.
     ///
     /// Only the browse feed has a bottom worth reaching for. The search-seeded
     /// one is a fixed sample of three searches, so there is nothing to fetch.
-    func loadMoreIfNeeded(currentItem: Listing) async {
+    private func topUpIfAtMargin() async {
         guard mode == .browse, !reachedEnd, !isLoading, !isLoadingMore,
               scrolledSinceLastTopUp,
               let engine = engines.first,
-              let index = listings.firstIndex(of: currentItem),
-              index >= listings.count - Self.prefetchMargin else { return }
+              deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
 
         isLoadingMore = true
         // Spent here rather than on completion: the next batch has to be earned
@@ -343,6 +372,10 @@ final class DiscoverFeed: ObservableObject {
         // trigger has already been spent reaching it.
         scrolledSinceLastTopUp = false
         defer { isLoadingMore = false }
+        Logger.discover.info("""
+            top-up: at \(self.deepestIndexSeen, privacy: .public) \
+            of \(self.listings.count, privacy: .public)
+            """)
 
         let harvest = await scrollForMore(engine, wanted: Self.browseTarget)
         // Appended, never reassigned. New cards land below everything already

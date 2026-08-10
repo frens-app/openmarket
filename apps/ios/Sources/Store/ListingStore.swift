@@ -109,6 +109,7 @@ final class ListingStore: ObservableObject {
         self.query = query
         listings = []
         seenIDs = []
+        deepestIndexSeen = -1
         health = ParseHealth()
         reachedEnd = false
 
@@ -148,19 +149,55 @@ final class ListingStore: ObservableObject {
     /// `DiscoverFeed.scrolledSinceLastTopUp` — same gate, same reasoning.
     private var scrolledSinceLastPage = false
 
+    /// How far down the grid the user has been, as an index into `listings`.
+    ///
+    /// Tracked because a card announces itself exactly once. `.task` fires when
+    /// the lazy stack *creates* a cell and never again, so "are we near the end"
+    /// cannot be asked at the moment the answer changes — only at the moment a
+    /// cell happens to be built. Remembering the depth makes the question
+    /// answerable at any time, which is what lets a drag re-check it.
+    ///
+    /// Reset with the list, never on append: appending doesn't move anything the
+    /// user has already scrolled past, so the index stays true.
+    private var deepestIndexSeen = -1
+
     /// Called when the user drags the grid. See `scrolledSinceLastPage`.
+    ///
+    /// Arming has to re-check the margin itself, and this is the whole of the
+    /// bug that made the gate look broken. The trigger card for page N+1 is
+    /// created *the instant page N lands* — it is three cards into a batch of
+    /// twelve, well inside the lazy stack's build-ahead — and at that instant
+    /// the gate has just closed. So it announced itself to a closed gate, and
+    /// since a cell is only ever built once, it never announced itself again:
+    /// the grid stopped paging for good, no matter how far it was scrolled.
+    ///
+    /// Re-arming while already armed is a no-op, so a drag that fires this sixty
+    /// times a second still costs one check.
     func noteScroll() {
+        guard !scrolledSinceLastPage else { return }
         scrolledSinceLastPage = true
+        Task { await topUpIfAtMargin() }
     }
 
-    /// §3.1 — triggered about two screens from the end, and only for a user who
-    /// has scrolled since the last page; never speculatively. One batch at a
-    /// time (§7.3: one page ahead, maximum).
+    /// §3.1 — records how far the user has reached, then asks whether that is
+    /// far enough. Called from each cell as it is built.
     func loadMoreIfNeeded(currentItem: Listing) async {
+        guard let index = listings.firstIndex(of: currentItem) else { return }
+        deepestIndexSeen = max(deepestIndexSeen, index)
+        await topUpIfAtMargin()
+    }
+
+    /// One page, about two screens from the end, for a user who has scrolled
+    /// since the last one; never speculatively. One batch at a time (§7.3: one
+    /// page ahead, maximum).
+    private func topUpIfAtMargin() async {
         guard !isLoadingMore, canLoadMore, scrolledSinceLastPage,
-              let index = listings.firstIndex(of: currentItem),
-              index >= listings.count - Self.prefetchMargin else { return }
+              deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
         scrolledSinceLastPage = false
+        Logger.store.info("""
+            prefetch: at \(self.deepestIndexSeen, privacy: .public) \
+            of \(self.listings.count, privacy: .public)
+            """)
         await loadMore()
     }
 
