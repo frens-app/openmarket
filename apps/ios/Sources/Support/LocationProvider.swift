@@ -15,6 +15,12 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
 
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+    /// Gives up on a fix that never arrives. Started when the fix is asked for
+    /// — see `askForFix`.
+    private var watchdog: Task<Void, Never>?
+    /// How long this request is willing to wait, kept because the authorisation
+    /// callback is where a first-run fix actually starts and it has no caller.
+    private var pendingTimeout: Duration = .seconds(6)
 
     override init() {
         super.init()
@@ -98,26 +104,50 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         if manager.authorizationStatus == .notDetermined, prompt == .never { return nil }
         guard continuation == nil else { return nil }   // a request is already in flight
         state = .requesting
-
-        Task { [weak self] in
-            try? await Task.sleep(for: timeout)
-            guard let self, let pending = self.continuation else { return }
-            self.continuation = nil
-            if self.state == .requesting { self.state = .failed }
-            pending.resume(returning: nil)
-        }
+        pendingTimeout = timeout
 
         return await withCheckedContinuation { cont in
             continuation = cont
             if manager.authorizationStatus == .notDetermined {
+                // No clock yet. The permission dialog is up and however long
+                // somebody takes to read it is not the location system being
+                // slow — `askForFix` starts the timer once they've answered.
                 manager.requestWhenInUseAuthorization()
             } else {
-                manager.requestLocation()
+                askForFix()
             }
         }
     }
 
+    /// Asks for the fix and starts the clock in the same breath.
+    ///
+    /// The two used to be separate, and the gap between them was the first
+    /// thing a new user hit: the six seconds began the moment the permission
+    /// dialog appeared, so anyone who read it before tapping Allow granted
+    /// permission and was told "Couldn't get a location fix. Try again" — with
+    /// the fix arriving moments later, into a request that had already given
+    /// up. Timing the wait from the request means it measures the thing it is
+    /// supposed to be measuring.
+    private func askForFix() {
+        manager.requestLocation()
+        // The authorisation callback also fires at launch for an app that was
+        // already granted permission, which is where the cached coordinate
+        // comes from before anyone asks for one. Nobody is waiting on that, so
+        // it needs no clock.
+        guard continuation != nil else { return }
+        watchdog?.cancel()
+        watchdog = Task { [weak self] in
+            try? await Task.sleep(for: self?.pendingTimeout ?? .seconds(6))
+            guard !Task.isCancelled, let self, let pending = self.continuation else { return }
+            self.continuation = nil
+            if self.state == .requesting { self.state = .failed }
+            pending.resume(returning: nil)
+        }
+    }
+
     private func finish(_ coord: CLLocationCoordinate2D?) {
+        watchdog?.cancel()
+        watchdog = nil
         continuation?.resume(returning: coord)
         continuation = nil
     }
@@ -125,7 +155,9 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
             switch manager.authorizationStatus {
-            case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
+            // Granted just now, which on a first run is where the fix — and
+            // therefore its timeout — actually begins.
+            case .authorizedWhenInUse, .authorizedAlways: askForFix()
             case .denied, .restricted: state = .denied; finish(nil)
             default: break
             }
