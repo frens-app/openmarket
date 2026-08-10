@@ -252,7 +252,7 @@ The absence is the thing that matters. `creation_time` is the **only** time
 field anywhere in the block — no sale, close, sold-at or updated timestamp
 exists. So "recently sold" can only ever be inferred: an item listed *n* days
 ago that is now gone sold in **at most** *n* days. That is an upper bound, and
-the app states it as one ("Sold in ≤4 days") rather than as a fact.
+the app states it approximately ("Sold in ~4 days") rather than as a fact.
 
 It also means every price here is still an **asking** price. Facebook publishes
 what a sold item was listed at, never what changed hands, so an accepted offer
