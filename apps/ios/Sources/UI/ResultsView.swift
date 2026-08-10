@@ -45,6 +45,23 @@ struct ResultsView: View {
                     content
                 }
             }
+            // The engagement half of the read-ahead. Both grids start their next
+            // batch about two screens from the end, which is early enough to
+            // land before the user does — but only for a user who has moved the
+            // screen since the last one arrived. This is where that is noticed.
+            //
+            // A simultaneous gesture rather than a scroll-offset observer: it
+            // recognises alongside the scroll instead of competing with it,
+            // taps still reach the cards under it, and the question being asked
+            // is "is someone dragging this?", not "how far down are they?".
+            // `minimumDistance` keeps a tap that drifts a pixel from counting.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { _ in
+                        store.noteScroll()
+                        discover.noteScroll()
+                    }
+            )
             .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Open Market")
             .navigationBarTitleDisplayMode(.inline)

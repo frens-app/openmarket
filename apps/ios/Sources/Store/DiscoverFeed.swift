@@ -132,6 +132,19 @@ final class DiscoverFeed: ObservableObject {
     static let scrollBudget = 14
     static let dryScreenLimit = 4
 
+    /// How many cards from the end a top-up starts.
+    ///
+    /// Ten is roughly two screens of a two-column grid, and it is chosen against
+    /// the cost of the fetch rather than the length of the feed: a top-up is a
+    /// webview scrolled a screen at a time at ~0.9s a screen, so a trigger three
+    /// cards from the bottom guarantees the spinner is seen. Two screens of
+    /// runway is enough for a normal scroll to arrive after the cards do.
+    ///
+    /// This is not a read-ahead cache. Nothing is fetched that the user was not
+    /// already scrolling towards, and see `scrolledSinceLastTopUp` for what
+    /// stops the margin from turning into a treadmill.
+    static let prefetchMargin = 10
+
     /// One engine per search, so the searches can run at the same time.
     ///
     /// They can't share one. An engine is a single `WKWebView` with a single
@@ -296,17 +309,39 @@ final class DiscoverFeed: ObservableObject {
         Logger.discover.info("\(self.listings.count, privacy: .public) cards from \(seeds.count, privacy: .public) searches")
     }
 
-    /// More of Facebook's feed, triggered a few cards from the bottom.
+    /// Whether the user has moved the feed since the last batch landed.
+    ///
+    /// The gate on the read-ahead, and the reason a two-screen margin doesn't
+    /// become an automatic crawl down Facebook's entire feed. `prefetchMargin`
+    /// alone would re-arm the instant a batch arrived — the card that triggered
+    /// it is still within ten of the new end — so the feed would page forever
+    /// under a screen nobody is touching. Requiring a fresh drag per batch keeps
+    /// §7.3's pacing rule intact: one page ahead, and only for someone still
+    /// reading. A finger already dragging when a batch lands re-arms it
+    /// immediately, which is correct — that is a fast scroller, not a treadmill.
+    private var scrolledSinceLastTopUp = false
+
+    /// Called when the user drags the feed. See `scrolledSinceLastTopUp`.
+    func noteScroll() {
+        scrolledSinceLastTopUp = true
+    }
+
+    /// More of Facebook's feed, triggered about two screens from the bottom.
     ///
     /// Only the browse feed has a bottom worth reaching for. The search-seeded
     /// one is a fixed sample of three searches, so there is nothing to fetch.
     func loadMoreIfNeeded(currentItem: Listing) async {
         guard mode == .browse, !reachedEnd, !isLoading, !isLoadingMore,
+              scrolledSinceLastTopUp,
               let engine = engines.first,
               let index = listings.firstIndex(of: currentItem),
-              index >= listings.count - 6 else { return }
+              index >= listings.count - Self.prefetchMargin else { return }
 
         isLoadingMore = true
+        // Spent here rather than on completion: the next batch has to be earned
+        // by scrolling through this one, and the scrolling done to reach the
+        // trigger has already been spent reaching it.
+        scrolledSinceLastTopUp = false
         defer { isLoadingMore = false }
 
         let harvest = await scrollForMore(engine, wanted: Self.browseTarget)

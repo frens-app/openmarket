@@ -134,12 +134,33 @@ final class ListingStore: ObservableObject {
         cache.saveResults(listings, for: query, session: session)
     }
 
-    /// §3.1 — triggered when the user is a few rows from the end, never
-    /// speculatively. One batch at a time (§7.3: one page ahead, maximum).
+    /// How many cards from the end a page starts loading — about two screens of
+    /// the two-column grid. A page is three webview scrolls with a settle after
+    /// each, so a trigger three cards from the bottom guarantees the spinner is
+    /// seen; this buys enough runway for the cards to arrive first.
+    static let prefetchMargin = 10
+
+    /// Whether the user has moved the grid since the last page landed.
+    ///
+    /// What keeps the wider margin from reading ahead on its own: the trigger
+    /// card is still within ten of the end after a page arrives, so without this
+    /// the results would page themselves to exhaustion untouched. See
+    /// `DiscoverFeed.scrolledSinceLastTopUp` — same gate, same reasoning.
+    private var scrolledSinceLastPage = false
+
+    /// Called when the user drags the grid. See `scrolledSinceLastPage`.
+    func noteScroll() {
+        scrolledSinceLastPage = true
+    }
+
+    /// §3.1 — triggered about two screens from the end, and only for a user who
+    /// has scrolled since the last page; never speculatively. One batch at a
+    /// time (§7.3: one page ahead, maximum).
     func loadMoreIfNeeded(currentItem: Listing) async {
-        guard !isLoadingMore, canLoadMore,
+        guard !isLoadingMore, canLoadMore, scrolledSinceLastPage,
               let index = listings.firstIndex(of: currentItem),
-              index >= listings.count - 6 else { return }
+              index >= listings.count - Self.prefetchMargin else { return }
+        scrolledSinceLastPage = false
         await loadMore()
     }
 
