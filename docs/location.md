@@ -21,7 +21,9 @@ own — but its location picker has a "use my current location" button that
 *does* ask, and it accepts any answer. What comes back in the URL is a city:
 every Manhattan neighbourhood reduces to `/marketplace/nyc`. What is *not* in
 the URL is the exact point, which Facebook keeps in session state and uses to
-rank results. Radius is decorative everywhere; distance is ours to enforce.
+rank results — and **logged out, keeps only until the browser closes** (§5), so
+there the path is the only durable carrier of location. Radius is decorative
+everywhere; distance is ours to enforce.
 
 > ### The thing most likely to be got wrong
 >
@@ -324,6 +326,54 @@ So there are two granularities, and they disagree:
 * **the centring** — the exact point, held in session state, invisible in the
   URL, and *not* reproducible from a slug or a place id
 
+#### Logged out, none of it survives the session (2026-08-09)
+
+**The coordinate is kept for exactly as long as the browser is open.** Change
+location logged out, close the browser, come back: you are on the IP-inferred
+city again. Nothing above is wrong — the re-ranking was measured inside one
+live session and holds there — but its *durability* is bounded, and the bound
+is much tighter than "until the user changes it".
+
+The consequence is the important part:
+
+> **Logged out, the URL path is the only durable carrier of location.** The
+> place segment survives because it is in the address. The point behind it
+> does not survive anything.
+
+So a resolution buys two different things depending on auth state:
+
+| | what the ten seconds buy |
+|---|---|
+| logged out | the **segment**, and a ranking point good until the browser closes |
+| signed in | the segment, and a point that sticks to the account |
+
+For this app that has teeth, because the app is *made of* short-lived browsers.
+Every engine is its own `WKWebView`, Discover runs one per seed search, and all
+of them are rebuilt on the next launch. A shared cookie jar carries the
+session; it does not carry this. So logged out, any request that does not name
+the place in its own path is a request for the IP-inferred city — whatever was
+resolved ten seconds earlier in a different webview.
+
+Both path shapes were then confirmed logged out, from a San Francisco IP, in a
+**cold browser with no session state at all** — no prior location change, no
+`c_user`, one `wd` cookie, login links on the page. That is the strongest form
+of the test: nothing but the path was carrying the location.
+
+| URL | result |
+|---|---|
+| `/marketplace/toronto/?radius_in_km=8` | Toronto |
+| `/marketplace/toronto/search/?query=desk` | 15 cards, every one `Toronto, ON`, prices in `CA$`; path not rewritten |
+
+So the place segment does its job unaided on **both** the browse and the search
+path, across a national border, with no session behind it. A logged-out request
+that names the place gets that place.
+
+Which sharpens what the loss actually is. Logged out you keep the *city* for
+free and lose only the *centring* — §5's 62%-overlap re-ranking — because that
+is the half that lived in session state. For "browse somewhere I'm not" that
+costs nothing (§1 already said a centroid loses nothing there). For "where I
+actually am" it costs the thing the ten seconds were for.
+
 #### How much does it move, within one city? (New York, 2026-08-07)
 
 Five coordinates across New York, same URL every time
@@ -592,6 +642,12 @@ it calls* the place containing that point.
   probe couldn't set it and every run used the default 5 mi. A 1 mi radius
   would turn §5's re-ranking into outright filtering, which would be a much
   stronger claim than anything measured so far. (§7)
+* ~~Does `/marketplace/<place>/search/` honour the place logged out at national
+  distance?~~ **Answered 2026-08-09: yes**, from a cold browser with no session
+  state (§5). Recorded because it was nearly the basis of a product decision —
+  a logged-out Discover rebuilt on browse or category paths, or location
+  switching gated behind a Facebook login. None of it was necessary; the URL
+  already carries the place.
 * Does any of §5 hold for a **signed-in** session? It was all measured logged
   out, where the ~15 result cap is what makes re-ranking decisive. Signed in
   the feed scrolls indefinitely, so distant listings stay reachable and the
