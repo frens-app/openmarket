@@ -25,6 +25,10 @@ struct ResultsView: View {
 
     @State private var showSignIn = false
 
+    /// Whether either sheet that can change the radius is up. Discover rebuilds
+    /// when this goes false — see the `radiusKM` handler.
+    private var isCoveredBySheet: Bool { showSettings || showLocationPicker }
+
     /// Which listings the "only new" filter is hiding *right now*.
     ///
     /// A snapshot of `ViewedListings`, taken when a search runs or when the
@@ -125,10 +129,11 @@ struct ResultsView: View {
                     // merely a longer one, so this re-runs rather than
                     // appending to what's already on screen.
                     //
-                    // Discover is rebuilt for a stronger reason: signing in
-                    // changes which feed it *is*, from three of the user's own
-                    // searches to Facebook's own picks. `loadIfNeeded` notices
-                    // the session changed on its own, so this is a plain reload.
+                    // Discover is rebuilt for the same reason: an account
+                    // changes what Facebook serves on the browse page, and
+                    // whether it paginates past ~24 cards at all.
+                    // `loadIfNeeded` notices the session changed on its own, so
+                    // this is a plain reload.
                     Task {
                         store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
                         await store.retry()
@@ -236,28 +241,32 @@ struct ResultsView: View {
             // coming back from a listing or the seller tab costs nothing and
             // finds the same cards in the same places.
             //
-            // A new search doesn't invalidate it — recent searches seed the
-            // signed-out feed, so every search would throw away the screen the
-            // user is about to come back to. A change of city does, because
-            // then it is a feed for somewhere the user no longer is (see the
-            // `locationSlug` handler below). Relaunch and pull-to-refresh are
-            // the other two ways to get a new one.
+            // A new search doesn't invalidate it — nothing on this feed is
+            // built from what the user searched for. A change of city does,
+            // because then it is a feed for somewhere the user no longer is
+            // (see the `locationSlug` handler below). Relaunch and
+            // pull-to-refresh are the other two ways to get a new one.
             .task { await loadDiscover() }
-            // Onboarding just handed over a place and three interests, which is
-            // everything the feed was waiting for. `.task` above has already
-            // run and returned empty-handed by then, so this is the fill for
-            // every first launch.
+            // Onboarding just handed over a place, which is what the feed was
+            // waiting for. `.task` above has already run and returned
+            // empty-handed by then, so this is the fill for every first launch.
             .onChange(of: prefs.needsOnboarding) { _, needed in
                 if !needed { Task { await loadDiscover() } }
             }
-            // Editing interests changes what Discover is *for*, unlike the
-            // things that deliberately don't invalidate it. It doesn't refill
-            // on the spot — the Settings sheet is over the top of the feed, and
-            // there'd be nothing to watch — so it's marked stale here and
-            // rebuilt when the sheet closes.
-            .onChange(of: prefs.interests) { discover.markStale() }
-            .onChange(of: showSettings) { _, shown in
-                if !shown { Task { await loadDiscover() } }
+            // The radius is the one preference this feed applies *while it
+            // fetches* rather than on the way to the screen, so widening it
+            // can't be honoured by re-filtering what's in hand — the cards it
+            // would now keep were dropped during the fill and never stored.
+            //
+            // Marked rather than refilled on the spot, because the sheet that
+            // changed it is over the top of the feed and there'd be nothing to
+            // watch. Both sheets that can reach the radius rebuild on close —
+            // the reload is a no-op if nothing marked it stale — and they are
+            // watched as one flag because `body` is already at the type
+            // checker's limit.
+            .onChange(of: prefs.radiusKM) { discover.markStale() }
+            .onChange(of: isCoveredBySheet) { _, covered in
+                if !covered { Task { await loadDiscover() } }
             }
             .refreshable {
                 // The gesture means "get me a fresh version of this screen",
@@ -422,39 +431,33 @@ struct ResultsView: View {
         }
     }
 
-    /// Facebook's own Marketplace feed when there's an account behind it, and a
-    /// mix drawn from the user's own recent searches when there isn't.
+    /// Facebook's own Marketplace feed for this place, cut to the user's radius.
     ///
     /// It runs to the bottom of the scroll, because it is the only section here
     /// that can — the other two are bounded by what the user has done to
-    /// individual listings. Signed in, "the bottom" means the bottom of
-    /// Facebook's feed, reached a screen at a time as the user gets near it.
+    /// individual listings. "The bottom" means the bottom of Facebook's feed,
+    /// reached a screen at a time as the user gets near it: ~24 cards signed
+    /// out, and never yet observed signed in.
     ///
-    /// The caption under the heading is not decoration. A feed with no stated
-    /// basis is indistinguishable from a random one — which is exactly the
-    /// complaint that got Facebook's own feed removed from this screen the
-    /// first time. Signed out it names the seeds ("from lamp · couch · desk"),
-    /// which makes the mix legible as a consequence of something the user did;
-    /// signed in it names the place and the radius, which is the only thing
-    /// this app did to a feed it didn't build.
+    /// The caption under the heading names the place and the radius, which is
+    /// the only thing this app did to a feed it didn't build — and it is the
+    /// only place the distance filter is disclosed at all.
     @ViewBuilder
     private func discoverSection(_ w: Winnowed) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 sectionTitle("Discover")
-                if let caption = discover.caption {
-                    Text(caption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                }
+                Text(discover.caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
             }
             // The skeleton holds for the whole fill.
             //
-            // The searches run concurrently and publish together, so there is
-            // no half-built state to show — and nothing that could be shown
-            // would survive: a partial feed reflows when the rest lands, which
-            // moves cards out from under whoever is already reading them.
+            // A fill publishes once, so there is no half-built state to show —
+            // and nothing that could be shown would survive: a partial feed
+            // reflows when the rest lands, which moves cards out from under
+            // whoever is already reading them.
             //
             // On a refresh the current cards stay up instead, because there is
             // something better than a skeleton to look at and the gesture was
@@ -465,8 +468,7 @@ struct ResultsView: View {
                 StaggeredGrid(items: w.items, columns: 2, spacing: 12) { listing in
                     ListingCard(listing: listing, namespace: heroNamespace)
                         .onTapGesture { selected = listing }
-                        // A no-op unless this is the browse feed and the card is
-                        // near the end of it.
+                        // A no-op unless the card is near the end of the feed.
                         .task { await discover.loadMoreIfNeeded(currentItem: listing) }
                 }
                 .padding(.horizontal, 12)
@@ -501,14 +503,15 @@ struct ResultsView: View {
     /// it stops.
     @ViewBuilder
     private func discoverFooter(isEmpty: Bool) -> some View {
-        switch discover.mode {
-        // Signed out the feed is a fixed sample of three searches, so its end is
-        // always the end — and the honest thing to offer there is the account
-        // that turns this screen into Facebook's real one.
-        case .searches:
-            endOfResultsSignIn
-        case .browse:
-            if discover.reachedEnd {
+        if discover.reachedEnd {
+            // Signed out, the end of this feed is Facebook's ~24-card cap far
+            // more often than it is the end of the neighbourhood, so "there's
+            // nothing else in your area" would be a claim about the area made
+            // on evidence about the session. The offer to log in is the one
+            // that describes what actually happens next.
+            if discover.isAnonymous {
+                endOfResultsSignIn
+            } else {
                 endOfArea(isEmpty: isEmpty)
             }
         }
@@ -566,7 +569,7 @@ struct ResultsView: View {
     /// asynchronous, and filtering on missing data would make cards disappear
     /// and come back as the queue drains.
     ///
-    /// Signed in, Discover has already been through this once —
+    /// Discover has already been through this once —
     /// `DiscoverFeed.nearby` filters as it pages, because a feed that can't tell
     /// how much it dropped can't tell whether to keep scrolling. Running it
     /// again here costs a few cached lookups and keeps one rule in one place for
@@ -728,11 +731,10 @@ struct ResultsView: View {
     /// and then blocks scrolling behind an overlay that can be dismissed exactly
     /// once.
     ///
-    /// It ends Discover as well as a result set now, and there it is the whole
-    /// reason the signed-out home screen is built the way it is: signing in
-    /// replaces three of the user's own searches with Facebook's own feed,
-    /// scrollable, so the offer below is a description of what happens rather
-    /// than a nag.
+    /// It ends Discover as well as a result set, and there it is the same
+    /// claim about the same ceiling: the browse feed stops at ~24 cards for an
+    /// anonymous session and has never been seen to stop for an account, so the
+    /// offer below is a description of what happens rather than a nag.
     ///
     /// The offer alone carries it; explaining the cap out loud only draws
     /// attention to the ceiling.
@@ -795,9 +797,8 @@ struct ResultsView: View {
     /// screen are looking at the same city.
     ///
     /// Held back while onboarding is up. This view exists behind that cover
-    /// from launch, so without the guard the feed would spend three page loads
-    /// on a fallback city and a default category list — and then be marked
-    /// filled, so the place and interests the user was in the middle of
+    /// from launch, so without the guard the feed would fetch a fallback city —
+    /// and then be marked filled, so the place the user was in the middle of
     /// choosing wouldn't reach it until the next launch.
     private func loadDiscover(force: Bool = false) async {
         guard !prefs.needsOnboarding else { return }
@@ -864,13 +865,14 @@ private struct SearchSuggestions: View {
                 }
             }
         }
-        // The user's own interests rather than a fixed list of five.
+        // The user's own interests rather than a fixed list of five. Since
+        // Discover stopped being built from them, this is the only thing they
+        // do — the standing answer to "what would you search for", offered
+        // where searching happens.
         //
-        // Same list Discover seeds from, which is the point: what the home
-        // screen offers and what the search field offers should be the same
-        // answer to the same question. The completion is the interest's search
-        // *term*, not its label — running a search for "Home & garden" would
-        // find nothing, because Marketplace matches listing text.
+        // The completion is the interest's search *term*, not its label —
+        // running a search for "Home & garden" would find nothing, because
+        // Marketplace matches listing text.
         Section(prefs.recentSearches.isEmpty ? "Try" : "Your interests") {
             ForEach(prefs.chosenInterests) { interest in
                 Label(interest.label, systemImage: "square.grid.2x2")

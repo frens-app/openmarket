@@ -348,11 +348,12 @@ So a resolution buys two different things depending on auth state:
 | signed in | the segment, and a point that sticks to the account |
 
 For this app that has teeth, because the app is *made of* short-lived browsers.
-Every engine is its own `WKWebView`, Discover runs one per seed search, and all
-of them are rebuilt on the next launch. A shared cookie jar carries the
-session; it does not carry this. So logged out, any request that does not name
-the place in its own path is a request for the IP-inferred city — whatever was
-resolved ten seconds earlier in a different webview.
+Every engine is its own `WKWebView` — the browse tab, Discover, the detail
+reader, the seller tab's comparables — and all of them are rebuilt on the next
+launch. A shared cookie jar carries the session; it does not carry this. So
+logged out, any request that does not name the place in its own path is a
+request for the IP-inferred city — whatever was resolved ten seconds earlier in
+a different webview.
 
 Both path shapes were then confirmed logged out, from a San Francisco IP, in a
 **cold browser with no session state at all** — no prior location change, no

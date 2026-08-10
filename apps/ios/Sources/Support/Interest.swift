@@ -2,12 +2,18 @@ import Foundation
 
 /// Something the user says they shop for.
 ///
-/// The only piece of taste this app collects, and it exists for one specific
-/// failure. Discover is assembled out of the user's own recent searches
-/// (`DiscoverFeed`) — and a new install has none, so the screen the app opens on
-/// was seeded with a shuffled default list that had nothing to do with anybody.
-/// Onboarding asks for three of these instead, and they stand in until the
-/// user's own searches take over.
+/// The only piece of taste this app collects. It exists to answer "what would
+/// you type" for someone who hasn't typed anything yet: the search field offers
+/// these under "Try", where a new install would otherwise get a fixed list of
+/// categories that had nothing to do with anybody.
+///
+/// **It used to be load-bearing and no longer is.** Discover was assembled out
+/// of the user's own recent searches, topped up from these when there was no
+/// history, so on a new install this list was literally what the home screen
+/// was made of. Discover is now Facebook's own browse feed for everybody
+/// (`DiscoverFeed`), which leaves the search suggestions as the whole of the
+/// job — and leaves onboarding asking for three of these on the strength of a
+/// requirement that has moved (`docs/discover.md` §6.1).
 ///
 /// Stored as `id` strings in `Preferences.interests`, never as labels or search
 /// terms. Both of those are presentation decisions that should be changeable —
@@ -41,11 +47,11 @@ struct Interest: Identifiable, Hashable {
 
     /// How many have to be chosen before the app lets anyone past onboarding.
     ///
-    /// Three, matching `DiscoverFeed.searchCount`: the feed runs three searches
-    /// per fill and interleaves them, so three is exactly the number that fills
-    /// it without repeating a category. Fewer would leave a first screen built
-    /// from one or two topics, which is the "this is just random" reading that
-    /// got the previous home feed deleted.
+    /// Three because it was `DiscoverFeed.searchCount` — the home feed ran one
+    /// search per interest, so three was exactly the number that filled a
+    /// screen without repeating a category. That feed is gone, and the number
+    /// now only decides how many suggestions the search field can offer, which
+    /// is a much weaker case for making anybody stop and choose.
     static let minimum = 3
 
     /// Ordered broad-first, which is also roughly the order people scan.

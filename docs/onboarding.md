@@ -1,12 +1,13 @@
 # Onboarding: the three things the app asks for
 
-**Date:** 2026-08-07 (account step added 2026-08-09)
+**Date:** 2026-08-07 (account step added 2026-08-09; interests unwired from
+Discover 2026-08-10)
 **Code:** `apps/ios/Sources/UI/OnboardingView.swift`,
 `apps/ios/Sources/UI/InterestPicker.swift`,
 `apps/ios/Sources/Support/Interest.swift`,
 `apps/ios/Sources/Store/PlaceChooser.swift`,
 `apps/ios/Sources/UI/SignInView.swift`
-**Related:** `discover.md` §1 and §6, `location.md`, `location-targeting.md`,
+**Related:** `discover.md` §0, §4.7 and §6, `location.md`, `location-targeting.md`,
 `filter-parameters.md` §3, `logged-in-findings.md`
 
 Four screens — what this is, where you're shopping, what you shop for, and your
@@ -31,7 +32,7 @@ The two facts it was missing are both cheap to ask for and impossible to infer:
 | Asked | Why it can't be skipped |
 |---|---|
 | A place | Distance is the app's organising idea and it is applied **on this device** — no Marketplace surface honours `radius` (`filter-parameters.md` §3). Without a place there is nothing to measure from, and the app silently measures from a hardcoded city instead |
-| Three interests | Discover is built from recent searches, and a new install has none (`discover.md` §1). Interests are what stands in until searches exist |
+| Three interests | The search field has nothing to offer someone who has never searched. **This was the stronger of the two until 2026-08-10** — Discover itself was built from interests and search history, and now isn't (`discover.md` §0). What remains is the "Try" list, which is a thinner reason for a gate than this table was written against (`discover.md` §4.7) |
 
 One of those cards has since been retired outright rather than reworded. "No
 login ever" was accurate about this app's own login form and badly wrong as a
@@ -112,14 +113,16 @@ five carry the layout and the specific ones sit in the gaps. It is an editorial
 judgement about how many people shop for a category, not a measurement, and
 ranking one wrong costs a few points of type size.
 
-**Three minimum**, matching `DiscoverFeed.searchCount` — the feed runs one
-search per seed, so three is exactly what fills it without repeating a category.
-The count lives in the button ("Pick 2 more" → "Start browsing") rather than in
-a separate counter, so the disabled state explains itself instead of refusing.
+**Three minimum**, which came from `DiscoverFeed.searchCount` — the home feed
+ran one search per interest, so three was exactly what filled it without
+repeating a category. That constant is gone and the minimum outlived it; it now
+sets how many suggestions the search field can offer, which is not obviously
+worth stopping anybody for. The count lives in the button ("Pick 2 more" →
+"Start browsing") rather than in a separate counter, so the disabled state
+explains itself instead of refusing.
 
 **Stored as ids**, in the order they were tapped. Not labels and not search
-terms: both are presentation decisions that should stay changeable, and Discover
-reads the order as a ranking when it takes a subset.
+terms: both are presentation decisions that should stay changeable.
 
 What each interest actually searches for is the searchable half of its category
 — `home decor` for "Home & garden", `jewelry` for "Jewellery" — because
@@ -136,11 +139,11 @@ passed. It is also the only step whose value is measured rather than argued:
 |---|---|
 | Seller name, rating, and join date | Desktop item pages carry no seller fields logged out; signed in they carry the seller block *and* a `/marketplace/profile/<id>` link — a stable seller id no surface gives logged out |
 | Results that keep going | Desktop browse caps at ~24 logged out and is unbounded signed in; the login overlay's one free dismissal is what ends a signed-out search |
-| Discover from Facebook's own picks | Signed in, Discover scrolls Marketplace's real feed; signed out it stands in with three interest searches (`discover.md`) |
+| A home feed that keeps scrolling | Discover is Facebook's own feed either way; anonymous it is the one page Facebook serves and stops, signed in it pages indefinitely (`discover.md` §0.0) |
 
 **Why it isn't a gate.** The other two steps are gates because the screen behind
 them cannot function without an answer. This one can: search, distance, filters,
-saved listings and an interest-seeded Discover all work signed out. Gating on an
+saved listings and a one-page Discover all work signed out. Gating on an
 account would be a lie about the app's own capability.
 
 **Why it isn't buried either.** "Not now" is a text button under a full-width
@@ -158,13 +161,13 @@ anonymous cache key.
 ## 6. What onboarding changed elsewhere
 
 - **Discover doesn't load while the cover is up.** `ResultsView` exists behind
-  it from launch, so without the guard the feed would spend three page loads on
-  a fallback city and a default category list — and mark itself filled, so the
-  answers being typed in wouldn't reach it until the next launch. It fills on
-  the transition out instead.
-- **Editing interests refills Discover** when the Settings sheet closes
-  (`DiscoverFeed.markStale`).
+  it from launch, so without the guard the feed would fetch a fallback city —
+  and mark itself filled, so the place being typed in wouldn't reach it until
+  the next launch. It fills on the transition out instead.
+- **Changing the city or the radius refills Discover** when the sheet that
+  changed it closes (`DiscoverFeed.markStale`). Editing interests used to be on
+  this list and no longer does anything to the feed.
 - **The search field's "Try" list is the user's interests**, not a fixed five.
-  Same list Discover seeds from, which is the point.
+  Since Discover stopped reading them, this is the only thing they do.
 - **`Preferences.suggestedCategories` is gone.** `Interest.defaults` — the broad
   row of the catalogue — is the one place categories are named now.

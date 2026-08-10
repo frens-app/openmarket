@@ -85,22 +85,22 @@ struct InterestPicker: View {
 ///
 /// Onboarding asks once and never again, which would leave a standing statement
 /// about what someone shops for frozen at whatever they tapped in their first
-/// thirty seconds with the app. Interests decide what the home screen shows
-/// before there's search history, so they have to be editable for as long as
-/// that's true.
+/// thirty seconds with the app. What it drives is smaller than it was — the
+/// search field's suggestions, not the home feed — but it is still a statement
+/// about the user, and those go stale.
 struct InterestSettingsView: View {
     @EnvironmentObject private var prefs: Preferences
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Discover falls back to these when you haven't searched for anything lately, and the search field offers them as a starting point.")
+                Text("The search field offers these as a starting point, so what you pick here is what it suggests when you haven't searched for anything lately.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 InterestPicker(selected: $prefs.interests, enforcesMinimum: true)
 
-                Text("At least \(Interest.minimum) — the home feed runs one search per interest, so below that it would be built from a single topic.")
+                Text("At least \(Interest.minimum), so there's a choice to make rather than one thing to tap.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

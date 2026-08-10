@@ -380,14 +380,15 @@ same `aria-label` shape the search tail is parsed from
 **Consequence.** Category paths remain untested; assume the same until someone
 measures them.
 
-> **The caller this was measured for is gone.** `DiscoverFeed` briefly read the
-> browse page's DOM to fill the home screen. It now runs the user's own recent
-> searches instead — the browse feed turned out to be a rotating popularity pool
-> rather than a recommendation (README, "Why not Facebook's own feed"), and
-> being markup-only was the smaller of its two problems. Nothing in the app
-> loads a browse path today. The measurement stands on its own: it is the answer
-> to half of §7's open question, and the reason to be suspicious of any future
-> plan that assumes payload coverage off a `/search/` path.
+> **The caller came back.** `DiscoverFeed` read the browse page's DOM, was
+> rewritten to run the user's own recent searches instead — the browse feed
+> being a rotating popularity pool rather than a recommendation, of which
+> markup-only was the smaller problem — and as of 2026-08-10 reads the browse
+> page again for everybody (`discover.md` §0). So this table describes the home
+> screen the app ships: every Discover card is markup-grade, from the first one,
+> signed in or out, and `DesktopFeedEngine.loadCards` exists precisely so the
+> payload harvester isn't left waiting out its timeout for something that never
+> arrives.
 
 **One parsing bug fell out of this.** The browse feed spells a free listing's
 price `FREE`, where search results spell it `Free`. `DesktopCardParser` matched

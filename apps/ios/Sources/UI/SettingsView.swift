@@ -36,11 +36,11 @@ struct SettingsView: View {
                 // results screen couldn't be represented, and opening Settings
                 // would show some other value as selected.
 
-                // Picked once during onboarding, and editable ever after: they
-                // decide what the home screen shows before there is any search
-                // history, so freezing them at whatever was tapped in the first
-                // thirty seconds would be a strange thing to do with a standing
-                // statement about what someone shops for.
+                // Picked once during onboarding, and editable ever after:
+                // freezing a standing statement about what someone shops for at
+                // whatever they tapped in their first thirty seconds would be a
+                // strange thing to do with it, even now that all it drives is
+                // the search field's suggestions.
                 Section("Interests") {
                     NavigationLink {
                         InterestSettingsView()
@@ -55,7 +55,7 @@ struct SettingsView: View {
                         .disabled(prefs.recentSearches.isEmpty)
                     Button("Clear viewing history") { viewed.clear() }
                         .disabled(viewed.isEmpty)
-                    Text("Search history fills the suggestions under the search field, and seeds Discover on the home screen. Turn it off to search without changing either — what's already saved stays until you clear it. Seller drafts never search into your history.")
+                    Text("Search history fills the suggestions under the search field. Turn it off to search without adding to it — what's already saved stays until you clear it. Seller drafts never search into your history.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text("Viewing history is what \"Only new listings\" filters against, and what fills Recently viewed. It stays on this device — Facebook is never told which listings you opened.")
