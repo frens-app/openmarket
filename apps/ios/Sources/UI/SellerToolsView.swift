@@ -16,6 +16,10 @@ import UIKit
 /// reason. They are the working, not an illustration.
 struct SellerToolsView: View {
     @EnvironmentObject private var model: SellerToolsModel
+    /// The description being typed, held here rather than on the model — see
+    /// `SellerToolsModel.input` for why the field must not be re-rendered from
+    /// a `@Published` value while a run is publishing.
+    @State private var draft = ""
     @FocusState private var isTyping: Bool
     @State private var selected: Listing?
     @Namespace private var heroNamespace
@@ -37,6 +41,17 @@ struct SellerToolsView: View {
                 .padding(.bottom, 60)
             }
             .scrollDismissesKeyboard(.interactively)
+            // Dragging already puts the keyboard away; tapping off the field
+            // should too, and on a phone most of this screen is "off the
+            // field" — the transcript and both comparable strips arrive
+            // underneath the keyboard, so a keyboard that only leaves on a
+            // drag is a keyboard sitting on top of the answer.
+            //
+            // Simultaneous rather than `onTapGesture`, so it never competes
+            // with the button or the cards for the same tap: they run their
+            // own action and the keyboard goes away either way.
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded { isTyping = false })
             .navigationTitle("Seller")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $selected) { listing in
@@ -46,6 +61,19 @@ struct SellerToolsView: View {
     }
 
     // MARK: - Asking
+
+    /// The one way a run starts, whether it came from the button or from Done.
+    ///
+    /// Guarded rather than trusting the caller: the button is disabled below
+    /// three characters, and Done has no such thing — it is on the keyboard
+    /// whatever the field holds.
+    private func submit() {
+        guard !model.phase.isRunning,
+              draft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
+        else { return }
+        isTyping = false
+        model.start(draft)
+    }
 
     private var prompt: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -59,18 +87,32 @@ struct SellerToolsView: View {
             }
 
             TextField("A white IKEA Malm dresser, six drawers, a few scratches on top",
-                      text: $model.input,
+                      text: $draft,
                       axis: .vertical)
                 .lineLimit(3...6)
                 .textFieldStyle(.plain)
                 .focused($isTyping)
+                .submitLabel(.done)
+                // A vertical-axis field treats Return as a newline and never
+                // calls `onSubmit`, so Done is caught here: the newline that
+                // arrives is the tap on the key, and it goes back out again
+                // rather than being left in the description.
+                //
+                // Same three things the button does, in the same order, so
+                // Done and the button cannot drift apart.
+                .onChange(of: draft) { _, text in
+                    guard text.contains("\n") else { return }
+                    draft = text.replacingOccurrences(of: "\n", with: " ")
+                    // Down either way. Done on a description too short to
+                    // search is still the user saying they're finished
+                    // typing, and leaving the keyboard up would ignore that.
+                    isTyping = false
+                    submit()
+                }
                 .padding(12)
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
 
-            Button {
-                isTyping = false
-                model.start()
-            } label: {
+            Button(action: submit) {
                 HStack(spacing: 8) {
                     if model.phase.isRunning {
                         ProgressView().controlSize(.small).tint(.white)
@@ -82,7 +124,7 @@ struct SellerToolsView: View {
                 .padding(.vertical, 12)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.phase.isRunning || model.input.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+            .disabled(model.phase.isRunning || draft.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
         }
     }
 
@@ -219,11 +261,14 @@ struct SellerToolsView: View {
     // MARK: - Endings
 
     private func failureCard(_ message: String) -> some View {
-        InlineNotice(text: message, actionTitle: "Try again") { model.start() }
+        InlineNotice(text: message, actionTitle: "Try again") { model.start(draft) }
     }
 
     private var startOver: some View {
-        Button("Start over", role: .destructive) { model.reset() }
+        Button("Start over", role: .destructive) {
+            model.reset()
+            draft = ""
+        }
             .font(.subheadline)
             .frame(maxWidth: .infinity)
     }

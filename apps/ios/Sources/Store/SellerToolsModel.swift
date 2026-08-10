@@ -58,7 +58,19 @@ final class SellerToolsModel: ObservableObject {
         var isRunning: Bool { self == .running }
     }
 
-    @Published var input = ""
+    /// What the last run was asked about. Written when a run starts, never
+    /// bound to the text field.
+    ///
+    /// The field used to bind straight to this. That put a `@Published` write
+    /// in the middle of every keystroke, and this object republishes constantly
+    /// once a run is going — `steps`, `comps`, `sold` and `phase` all change
+    /// within seconds of each other. A SwiftUI `TextField` re-rendered from its
+    /// binding while the keyboard has an *uncommitted* autocorrect composition
+    /// open loses that composition: the field goes blank and the value it hands
+    /// back has the marked substring doubled, which is how a search for
+    /// "anthurium" went out as "anthuriumium" (FRE-6471). The field owns its
+    /// own text now and hands it over once, on the tap that starts the run.
+    @Published private(set) var input = ""
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var steps: [Step] = []
     @Published private(set) var comps: [MarketComp] = []
@@ -102,9 +114,10 @@ final class SellerToolsModel: ObservableObject {
 
     // MARK: - The run
 
-    func start() {
-        let item = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    func start(_ text: String) {
+        let item = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard item.count >= 3 else { return }
+        input = item
         task?.cancel()
         task = Task { await run(item) }
     }
