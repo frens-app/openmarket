@@ -28,10 +28,20 @@ import (
 // config.requireAPIValues panics if the list is non-empty with env=production.
 type BypassSender struct {
 	numbers map[string]struct{}
-	code    string
-	next    Sender
-	logger  *zap.Logger
+	// Set by the "*" entry: every number bypasses, whatever it is.
+	all    bool
+	code   string
+	next   Sender
+	logger *zap.Logger
 }
+
+// BypassAll is the list entry that turns the allowlist into "any number".
+//
+// It rides on the list rather than being its own setting so that it inherits the
+// list's production guard for free — `config.requireAPIValues` already refuses to
+// boot with a non-empty list under env=production, and a separate boolean would
+// be a second thing to remember to check there.
+const BypassAll = "*"
 
 // NewBypassSender wraps next so that the listed E.164 numbers accept code
 // without contacting the provider. An empty list returns next unchanged, so
@@ -53,6 +63,16 @@ func NewBypassSender(numbers []string, code string, next Sender, logger *zap.Log
 		return nil, fmt.Errorf("bypass code must not be empty")
 	}
 
+	if _, all := set[BypassAll]; all {
+		// Louder still. This is every number, so the fixed code is a way into
+		// any account on this server — which is exactly what you want on a
+		// laptop and catastrophic anywhere else.
+		logger.Warn("verification bypass active for ALL numbers — no SMS will be sent",
+			zap.String("code", code),
+		)
+		return &BypassSender{all: true, code: code, next: next, logger: logger}, nil
+	}
+
 	listed := make([]string, 0, len(set))
 	for n := range set {
 		listed = append(listed, n)
@@ -68,6 +88,9 @@ func NewBypassSender(numbers []string, code string, next Sender, logger *zap.Log
 }
 
 func (b *BypassSender) bypasses(e164 string) bool {
+	if b.all {
+		return true
+	}
 	_, ok := b.numbers[e164]
 	return ok
 }

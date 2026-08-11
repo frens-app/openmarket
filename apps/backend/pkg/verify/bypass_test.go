@@ -124,3 +124,29 @@ func TestBypassRequiresSomethingToFallThroughTo(t *testing.T) {
 		t.Fatal("bypass with no wrapped sender = nil error, want error")
 	}
 }
+
+// "*" is what a laptop runs on: any number the developer types is intercepted,
+// so nothing is sent and Prelude's per-number limit never enters into it.
+func TestBypassAllInterceptsEveryNumber(t *testing.T) {
+	next := &recordingSender{result: ResultApproved}
+	s, err := NewBypassSender([]string{BypassAll}, "111111", next, zap.NewNop())
+	if err != nil {
+		t.Fatalf("NewBypassSender: %v", err)
+	}
+
+	if err := s.Start(context.Background(), normal, Signals{}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if got, _ := s.Check(context.Background(), normal, "111111"); got != ResultApproved {
+		t.Fatalf("Check with the dev code = %v, want approved", got)
+	}
+	// Still the bypass code and not "any code" — a wrong one has to fail, or the
+	// code screen can't be tested at all.
+	if got, _ := s.Check(context.Background(), normal, "999999"); got != ResultDenied {
+		t.Fatalf("Check with a wrong code = %v, want denied", got)
+	}
+
+	if len(next.started) != 0 || len(next.checked) != 0 {
+		t.Fatalf("provider was contacted: started=%v checked=%v", next.started, next.checked)
+	}
+}

@@ -27,12 +27,16 @@ is defaulted in quietly: that is what keeps dev running the same code production
 does. The panic names the `cp` above.
 
 **There is no local substitute for Prelude and no base-URL override.** Dev talks
-to the real API, so two ways to sign in and the difference matters:
+to the real API, and what keeps that free is `DEV_BYPASS_PHONE_NUMBERS`:
 
-- the **Skip verification (dev)** button on the login screen, which uses the
-  reserved test number on `DEV_BYPASS_PHONE_NUMBERS`. Handled in-process by
-  `verify.BypassSender` — nothing is sent and nothing is billed.
-- **any other number**, which sends a real text message and is billed.
+- **`*`**, which development ships with. Every number is intercepted in-process
+  by `verify.BypassSender`: type any number, then the dev code (`123456`, or the
+  **Skip verification (dev)** button on each step). Nothing is sent, nothing is
+  billed, and Prelude's per-number rate limit never applies.
+- **explicit E.164 numbers**, which bypasses only those and sends a real,
+  **billed** text to anything else. Use it to confirm the provider path works.
+
+The code is checked either way, so a wrong one is still rejected.
 
 ```bash
 make generate     # protobuf (Go + Swift) and sqlc, from /protos

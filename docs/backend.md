@@ -149,11 +149,25 @@ What makes that liveable is that the skip is **in-process**:
   normally, so both modes work at once. An empty list returns the wrapped sender
   unchanged, so production carries no bypass code at all — not a disabled one.
 
-That gives two ways to sign in locally, and the honest trade between them: the
-**skip button** on the login screen (`#if DEBUG`, the reserved `+1 500 555 xxxx`
-test number) costs nothing and reaches nobody, and **any other number** sends a
-real text and is billed. The Simulator cannot receive SMS, which is why the first
-one exists.
+**The list takes `*`, and that is what development ships with.** Every number is
+then intercepted, so a developer types their own number — or a made-up one — and
+no text is sent, nothing is billed, and Prelude's per-number limit never enters
+into it. That limit is the reason: it is the provider's defence against exactly
+the pattern of signing in over and over with one number, so a developer testing
+the login screen looks like abuse and gets `repeated_attempts` after a handful of
+tries. Set the list back to explicit E.164 numbers when you want the ones you
+type to reach Prelude for real, which is the only way to confirm the provider
+path still works.
+
+`*` rides on the list rather than being its own setting so that it inherits the
+list's production guard: `requireAPIValues` already refuses to boot on a
+non-empty list under `ENV=production`, and a separate boolean would be a second
+thing to remember there.
+
+**The dev code is still checked.** `BypassSender.Check` compares against
+`DEV_VERIFICATION_CODE` rather than accepting anything, so the code screen — its
+error state, its resend, its autofill sizing — is testable rather than skipped
+past.
 
 The cost of dropping the stand-in is that provider *failure* paths — blocked,
 repeated attempts, landline — are no longer reachable by typing a magic number
@@ -414,10 +428,11 @@ migration step and the schema can never be older than the code that expects it.
 **Put a real Prelude key in `.env.local`.** It is required in development as well
 as production, and nothing is defaulted in quietly, because a config that fills
 itself in is a config where dev and prod quietly diverge. There is no offline
-mode: dev talks to the same Prelude the deployed service does, so signing in with
-an ordinary number sends a real text and is billed. Sign in with the reserved
-number on `DEV_BYPASS_PHONE_NUMBERS` — the skip button does this — and nothing
-leaves the process. The boot panic names the `cp` if you forget.
+mode: dev talks to the same Prelude the deployed service does. What keeps that
+from costing anything is `DEV_BYPASS_PHONE_NUMBERS=*`, which development ships
+with — every number is handled in-process and nothing leaves it. Narrow the list
+to real numbers when you want to exercise the provider. The boot panic names the
+`cp` if you forget the key either way.
 
 ```bash
 make generate            # protobuf (Go + Swift) and sqlc

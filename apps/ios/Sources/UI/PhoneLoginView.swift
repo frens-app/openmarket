@@ -147,23 +147,25 @@ struct PhoneLoginView: View {
     }
 
     #if DEBUG
-    /// Signs in without waiting for a text.
+    /// Skips the *text message*, once per step, and nothing else.
     ///
     /// Compiled out of release builds entirely — the `#if DEBUG` is the first of
     /// two independent gates, the second being that the server only bypasses
     /// numbers on `DEV_BYPASS_PHONE_NUMBERS`, which it refuses to populate in
     /// production.
     ///
-    /// It skips the *SMS*, not the flow. The button fills in the reserved test
-    /// number and its code and then runs the ordinary
-    /// StartPhoneVerification/VerifyPhone pair, so the send ceiling, user
-    /// creation, device upsert and session issue all still execute — which is
-    /// the point of it not being a separate code path.
+    /// **It appears on both steps rather than doing both at once.** One button
+    /// that filled in a number and a code and landed you signed in meant the
+    /// code screen was the one screen in the app nobody ever looked at — you
+    /// could only reach it by waiting for a real SMS, which is the thing the
+    /// button exists to avoid. Now it advances one step at a time, through the
+    /// ordinary StartPhoneVerification/VerifyPhone pair, so the send ceiling,
+    /// user creation, device upsert and session issue all still execute.
     private var devSkip: some View {
         VStack(spacing: 6) {
             Divider().padding(.vertical, 4)
             Button {
-                Task { await model.signInWithTestNumber() }
+                Task { await model.devAdvance() }
             } label: {
                 Label("Skip verification (dev)", systemImage: "hammer.fill")
                     .font(.footnote)
@@ -175,9 +177,13 @@ struct PhoneLoginView: View {
             }
             .buttonStyle(.bordered)
             .disabled(model.isBusy)
-            Text("Debug builds only. Uses \(PhoneLoginModel.testNumberDisplay) against the local server.")
+            Text(model.step == .phone
+                 ? "Debug builds only. Any number, no text sent — empty uses \(PhoneLoginModel.testNumberDisplay)."
+                 : "Debug builds only. Fills the dev code (\(PhoneLoginModel.testCode)).")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
     }
     #endif
@@ -203,21 +209,34 @@ final class PhoneLoginModel: ObservableObject {
     private var countdownTask: Task<Void, Never>?
 
     #if DEBUG
-    /// Must match a number in the server's `DEV_BYPASS_PHONE_NUMBERS`.
+    /// The fallback number, used only when the field is empty.
+    ///
     /// +1 500 555 xxxx is a reserved test range, so it can never reach a person
-    /// even if this somehow ran against a real provider.
+    /// even if this somehow ran against a real provider — which is why it is the
+    /// default rather than something that looks like a real number.
     static let testNumber = "5005550100"
+    /// Must match the server's `DEV_VERIFICATION_CODE`.
     static let testCode = "123456"
     static var testNumberDisplay: String { format(testNumber) }
 
-    /// Runs the ordinary two-call flow with canned values rather than a
-    /// shortcut around it — see the comment on the button.
-    func signInWithTestNumber() async {
-        nationalNumber = Self.testNumber
-        await sendCode()
-        guard errorMessage == nil else { return }
-        code = Self.testCode
-        await submit()
+    /// Takes one ordinary step with the tedious part filled in.
+    ///
+    /// Deliberately not a shortcut around the two RPCs: the phone step still
+    /// calls StartPhoneVerification and the code step still calls VerifyPhone,
+    /// so everything that hangs off them runs. What the server does with the
+    /// number is the server's business — the code is only accepted without a
+    /// send for numbers on `DEV_BYPASS_PHONE_NUMBERS`, and typing a number that
+    /// isn't covered gets you a real text, which is a useful thing to be able to
+    /// do on purpose.
+    func devAdvance() async {
+        switch step {
+        case .phone:
+            if digits.count != 10 { nationalNumber = Self.testNumber }
+            await sendCode()
+        case .code:
+            code = Self.testCode
+            await submit()
+        }
     }
     #endif
 
