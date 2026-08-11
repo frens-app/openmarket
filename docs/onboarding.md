@@ -1,13 +1,13 @@
 # Onboarding: the four things the app asks for
 
-**Date:** 2026-08-07 (account step added 2026-08-09; rebuilt around phone login
-2026-08-10)
+**Date:** 2026-08-07 (account step added 2026-08-09; interests unwired from
+Discover and the flow rebuilt around phone login, both 2026-08-10)
 **Code:** `apps/ios/Sources/UI/OnboardingView.swift`,
 `apps/ios/Sources/UI/PhoneLoginView.swift`,
 `apps/ios/Sources/Account/PushRegistrar.swift`,
 `apps/ios/Sources/Store/PlaceChooser.swift`,
 `apps/ios/Sources/UI/SignInView.swift`
-**Related:** `backend.md` §3, `discover.md` §1 and §6, `location.md`,
+**Related:** `backend.md` §3, `discover.md` §0, §4.7 and §6, `location.md`,
 `location-targeting.md`, `filter-parameters.md` §3, `logged-in-findings.md`
 
 Four steps: **phone**, **Facebook**, **location**, **notifications**. The first
@@ -41,13 +41,18 @@ with it. Each step carries its own reason at the moment its question is asked,
 which is where an explanation is worth reading — rather than three screens of
 argument before anything is asked at all.
 
-**Interests were dropped in the same pass.** They were the weakest of the
-questions: a required statement about taste, asked before the person had seen a
-single listing, enforced at three because `DiscoverFeed` runs three searches per
-fill. Discover falls back to `Interest.defaults` without them and stops needing
-them at all once there is real search history, so the cost of not asking is a
-generic first screen for a few minutes. They moved to Settings, where somebody
-who wants to aim Discover can and nobody else has to.
+**Interests were dropped, and the reason changed underneath them.** They were
+always the weakest question — a required statement about taste, asked before the
+person had seen a single listing, with a minimum of three that came from
+`DiscoverFeed` running one search per interest. Then Discover stopped reading
+them at all: it loads Facebook's own browse page for everyone now
+(`discover.md` §0), which left the minimum enforcing an answer the home screen
+never consults.
+
+What interests still do is fill the search field's "Try" list. That is a real
+thing, and nowhere near enough to stop a first run over. They moved to Settings,
+where somebody who wants to aim those suggestions can, and nobody else has to;
+`Interest.defaults` fills the row for everyone who doesn't.
 
 ## 2. The order, and why it is derived
 
@@ -146,17 +151,21 @@ Skippable, and the only step whose value is measured rather than argued:
 |---|---|
 | Seller name, rating, and join date | Desktop item pages carry no seller fields logged out; signed in they carry the seller block *and* a `/marketplace/profile/<id>` link — a stable seller id no surface gives logged out |
 | Results that keep going | Desktop browse caps at ~24 logged out and is unbounded signed in; the login overlay's one free dismissal is what ends a signed-out search |
-| Discover from Facebook's own picks | Signed in, Discover scrolls Marketplace's real feed; signed out it stands in with interest searches (`discover.md`) |
+| Personalized results | Discover is Facebook's own feed either way, but anonymous it is a rotating popularity pool with no user in it; signed in it is ranked against the account's own history (`discover.md` §0.0) |
 
-**Why it isn't a gate.** Search, distance, filters, saved listings and a
-default-seeded Discover all work without it. Gating would be a lie about the
-app's own capability.
+**Why it isn't a gate.** Phone and location are gates because the screen behind
+them cannot function without an answer. This one can: search, distance, filters,
+saved listings and a one-page Discover all work without it. Gating on a Facebook
+account would be a lie about the app's own capability.
 
 **Why it isn't buried either.** "Not now" is a text button under a full-width
-primary, with one caption saying what the unconnected app still does. The
-earliest flow inverted this — it promised no login at all — so every user started
-in the reduced build and discovered the full one by hitting a missing seller name
-or a search that stopped.
+primary, and the three lines above them are the whole argument. A caption under
+the decline used to list what still works without an account; it went because it
+answered a question nobody has yet at the moment they are being asked to say
+yes, which made the cheaper option look like the considered one. The earliest
+flow inverted this more severely — it promised no login at all — so every user
+started in the reduced build and discovered the full one by hitting a missing
+seller name or a search that stopped.
 
 **One wiring detail.** Signing in here calls `store.setSession` and
 `account.reportFacebookConnection` directly. The usual notice-a-session path is

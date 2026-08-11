@@ -70,25 +70,30 @@ struct InterestPicker: View {
 
 /// The only place interests are chosen.
 ///
-/// Onboarding used to require three of these before it would let go of the
-/// screen. It was the weakest of the four questions — a required answer about
-/// taste, asked before the person had seen a single listing — and Discover falls
-/// back to a sensible generic set without it, then stops needing it at all once
-/// there is real search history. So it moved here, where somebody who wants to
-/// aim the home screen can, and nobody else has to.
+/// The only place these are chosen now — onboarding stopped asking.
+///
+/// It used to require three before it would let go of the screen, which was
+/// already the weakest of its questions: a required answer about taste, asked
+/// before the person had seen a single listing. Then Discover stopped reading
+/// interests altogether, leaving them to drive the search field's suggestions
+/// and nothing else — far too little to charge a required question for.
+///
+/// They stay editable here for the reason they always were: a standing statement
+/// about what someone shops for shouldn't be frozen at whatever they tapped in
+/// their first thirty seconds with the app.
 struct InterestSettingsView: View {
     @EnvironmentObject private var prefs: Preferences
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Discover falls back to these when you haven't searched for anything lately, and the search field offers them as a starting point.")
+                Text("The search field offers these as a starting point, so what you pick here is what it suggests when you haven't searched for anything lately.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 InterestPicker(selected: $prefs.interests)
 
-                Text("Pick as many as you like, or none — with nothing chosen, Discover uses a broad default set until your searches take over.")
+                Text("Pick as many as you like, or none — with nothing chosen, the field suggests a broad default set until your own searches take over.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

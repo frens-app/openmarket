@@ -225,12 +225,12 @@ struct SellerToolsView: View {
         }
     }
 
-    /// "Sold in ≤4 days" — the bound, stated as a bound. It was listed then and
+    /// "Sold in ~4 days" — approximate, because it is. It was listed then and
     /// it is gone now; it may have gone in an hour.
     private func soldFootnote(_ comp: MarketComp) -> String? {
         guard let days = comp.daysListed else { return "Sold" }
         if days <= 1 { return "Sold within a day" }
-        return "Sold in ≤\(days) days"
+        return "Sold in ~\(days) days"
     }
 
     // MARK: - The answer

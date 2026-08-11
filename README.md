@@ -7,13 +7,13 @@ to the Facebook app via a universal link.
 
 **The app is built for a signed-in user.** A Facebook session is what makes
 sellers identifiable, keeps results loading past the first page, and lets
-Discover show Marketplace's own picks instead of three canned searches — the
-measurements are in `docs/logged-in-findings.md`. Signing in happens on
-Facebook's own page inside the app; there is no login form of this project's
-own, and there won't be. Browsing without an account still works and is worth
-shipping — search, distance, filters, saved listings and interest-seeded
-Discover all function — but it is the reduced version, and the app says so
-rather than selling it as the point.
+Discover keep scrolling instead of stopping at the one page Facebook serves an
+anonymous session — the measurements are in `docs/logged-in-findings.md`.
+Signing in happens on Facebook's own page inside the app; there is no login form
+of this project's own, and there won't be. Browsing without an account still
+works and is worth shipping — search, distance, filters, saved listings and a
+one-page Discover all function — but it is the reduced version, and the app says
+so rather than selling it as the point.
 
 Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
 describe something you own and it finds what similar things are listed for near
@@ -353,19 +353,19 @@ happened to live in San Francisco and happened to want furniture.
   Facebook's own picker, so the slug is one Facebook recognises
   (`PlaceChooser`). Distance is the app's organising idea and it is applied on
   this device, so without a place there is nothing to measure from.
-- **Three interests**, stored long-term as an array of ids and used as Discover's
-  seeds until there's search history. Three because Discover runs three searches
-  per fill; fewer would make a first screen out of one topic.
+- **Three interests**, stored long-term as an array of ids and offered by the
+  search field as a starting point until there's search history. Three because
+  they used to be Discover's seeds, one search each — a number that has outlived
+  its reason and is worth revisiting now that Discover is Facebook's own feed.
 
 No skip link on either. A skip buys thirty seconds and costs the app any idea of
 what to show, and the screen it skips to is the one that then can't do its job.
 The explaining is folded into the first screen, where it costs one tap instead
-of three. Interests stay editable afterwards in Settings → Interests, and
-changing them refills Discover when the sheet closes.
+of three. Interests stay editable afterwards in Settings → Interests.
 
 - **A Facebook account**, on the last screen, with the three things it changes
-  named on it: seller identity, results that keep loading, and a Discover made
-  of Facebook's own picks. The primary button signs in — on Facebook's own page,
+  named on it: seller identity, results that keep loading, and a home feed that
+  keeps scrolling. The primary button signs in — on Facebook's own page,
   presented by `SignInView` — and "Not now" is a text button underneath it,
   next to an honest line about what the signed-out app still does. This is the
   one step that isn't a gate, because the reduced version genuinely works;
@@ -392,41 +392,42 @@ at", "the thing I kept" — and both are a route back to one specific listing
 rather than something to browse, which is why they're rails: two rows, and then
 the screen belongs to something else.
 
-**Discover** is that something else: up to three of the user's own recent
-searches, re-run and shuffled together. Before it existed, a new install landed
-on an empty state and a search field and had to think of something to type
-before the app would do anything at all.
+**Discover** is that something else: Facebook's own Marketplace feed for the
+user's place — the default Discover screen — cut to the radius they set. Before
+it existed, a new install landed on an empty state and a search field and had to
+think of something to type before the app would do anything at all.
 
-**With no search history, the seeds are the interests picked during
-onboarding** — that is what the required three-interest step is for. Searches
-are about *now* and always come first; interests are a standing statement made
-once, and they recede as history accumulates. The heading says which it used,
-because "from your searches for lamp · desk" would be a lie on a screen built
-out of a list somebody picked off a menu thirty seconds ago.
+**The session decides how far it goes, and nothing else.** Signed in it pages
+indefinitely, a screen at a time as the user nears the end. Anonymous it is one
+page: Facebook serves about twenty cards to a session it doesn't recognise and
+then never loads more, so that feed publishes what it got and ends in the offer
+to log in, which is a description of what happens next rather than a nag.
 
-Each search's results are shuffled *before* being cut to ten and the three are
-interleaved, so Discover is a random sample of three searches rather than their
-top rows — which the user could have got by running them. The seed terms are
-printed under the heading, because a shuffled feed with no stated basis is
-indistinguishable from a random one.
+**This replaced a feed built from the user's own recent searches**, topped up
+from interests picked at onboarding, three re-run and shuffled together per
+fill. What that cost: three page loads before anything could be drawn, and a
+home screen that structurally could not show a category the user had never
+asked about. Measured on the same city and radius, the signed-out fill went from
+~10 s to ~3.9 s.
 
-**Facebook's own "Today's picks" was tried first and rejected on measurement:**
+**What it gives up is honesty about ranking, and the caption is where that
+lands.** Facebook's picks were tried once before and rejected on measurement:
 three loads of one URL in a single session shared 0 of 5 top cards between the
 first and second and 17 of 20 between the second and third, with the geography
-swinging from mostly-San-Francisco to an East Bay spread reaching Napa. A
-rotating popularity pool, not a ranking — and logged out there is little to
-personalise it with anyway.
+swinging from mostly-San-Francisco to an East Bay spread reaching Napa. Logged
+out that is what it still is — a rotating popularity pool ranked on an IP and a
+cookie — so the caption claims only what is true of it: "Facebook Marketplace,
+within 10 mi of San Francisco". No claim about the user appears on a screen
+that isn't built from anything they did.
 
-**It rebuilds on relaunch, on pull-to-refresh, and when interests change.** Not
-on a new search — recent searches are the seed, so every search would throw away
-the feed the user is about to return to.
+**It rebuilds on relaunch, on pull-to-refresh, on a change of city or radius,
+and when the session changes.** Not on a new search: nothing here is built from
+search history any more, so a search has no bearing on it.
 
-**The three searches run at once, one engine each, and the grid appears in one
-piece.** It used to run them sequentially and republish after each, which took
-13–20 s and reflowed the grid twice under whoever was reading it; concurrent it
-measured 2.0 s and 3.3 s on two launches, which is short enough to hold a
-skeleton through. Nothing is written to disk, so that fetch happens on every
-cold start.
+**The grid appears in one piece.** A fill publishes once — cards moving out from
+under a thumb is the one thing a feed must not do — while pagination appends
+below what is already on screen, which moves nothing. Nothing is written to
+disk, so the fetch happens on every cold start.
 
 The distance filter applies, as it does to search results. The "only new
 listings" filter does *not* — that one means "new to me in this search", and
@@ -436,13 +437,15 @@ app.
 Full design, the measurements behind it, the open issues, and what breaks if
 Discover ever holds older cards: **`docs/discover.md`**.
 
-### Search history is a home-screen input now
+### Search history
 
-Seeding Discover from `recentSearches` changed what recording a search means —
-anything searched once becomes the home screen until it ages out. So Settings →
-History carries **"Include searches in history"**, and the **Seller tab never
-records**: its terms come from whatever the user is drafting a listing for, and
-recording them would fill the home screen with the thing they're trying to sell.
+`recentSearches` fills the suggestions under the search field and nothing else —
+it seeded Discover for a while, which is where Settings → History and its
+**"Include searches in history"** toggle came from. Both stay: a suggestion list
+is still a list of what you looked for, drawn whenever the field takes focus. The
+**Seller tab never records**, because its terms come from whatever the user is
+drafting a listing for, and offering those back as suggestions answers a
+question nobody asked.
 Both rules live in `Preferences.recordSearch` rather than at the call sites.
 
 ---
@@ -468,7 +471,7 @@ is allowed to claim, all measured 2026-08-07:
 - **There is no sale date.** `creation_time` is the only time field on a
   listing, sold or not. So "recently sold" is an inference — listed *n* days
   ago, gone now, therefore sold in **at most** *n* days — and the UI states it
-  as the bound it is ("Sold in ≤4 days").
+  approximately ("Sold in ~4 days").
 - **The prices are still asking prices.** Facebook publishes what a sold item
   was *listed* at, never what changed hands. An accepted offer below asking is
   invisible.
@@ -877,7 +880,7 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/filter-parameters.md` | Every sort/filter parameter, which surface honours it, and what's measured |
 | `docs/embedded-payload.md` | The GraphQL response Facebook ships inside desktop pages, and why the API isnt worth calling |
 | `docs/logged-in-findings.md` | What a signed-in session changes: seller identity yes, structured depth no — and §7, the *rendered* page differences that broke four things built logged out |
-| `docs/discover.md` | The home screen feed — Facebook's own, scrolled, when signed in; the user's own searches when not. Why that split, how the paging works, its open issues, and what breaks if it ever holds older cards |
+| `docs/discover.md` | The home screen feed — Facebook's own, scrolled. How the paging works, why the search-seeded version it replaced is gone, its open issues, and what breaks if it ever holds older cards |
 | `docs/onboarding.md` | The two things the app requires before it will show a home screen, why neither can be skipped, and how the gate is written |
 | **`docs/location.md`** | **Everything about location, both surfaces — start here.** What Facebook accepts, why a refusal is silent, the coordinate route, the verification protocol, the fuzz lattice, and where distances are measured from |
 | `docs/location-targeting.md` | The raw desktop session record: slugs vs place ids, and the §5a/§5b correction that found the coordinate route |

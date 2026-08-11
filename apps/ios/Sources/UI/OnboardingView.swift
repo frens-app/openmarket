@@ -183,16 +183,25 @@ private struct FacebookPage: View {
         let body: String
     }
 
+    /// Benefits, stated as benefits.
+    ///
+    /// Every line here used to name the thing you lose without an account —
+    /// "none of which a signed-out page carries", "a search stops after the
+    /// first couple of dozen". Accurate, and the wrong shape for a screen
+    /// asking somebody to say yes: half of each sentence described the option
+    /// they were being talked out of, which is how a pitch ends up arguing with
+    /// itself. The comparison also only lands for someone who already knows
+    /// what the reduced version looks like, and nobody on their first run does.
     private let perks = [
         Perk(symbol: "person.text.rectangle",
              title: "Know who you're buying from",
-             body: "Seller name, rating and how long they've been on Facebook — none of which a signed-out page carries."),
+             body: "Seller names, ratings, and how long they've been on Facebook."),
         Perk(symbol: "arrow.down.circle",
              title: "Results that keep going",
-             body: "Signed out, a search stops after the first couple of dozen listings. Signed in, it keeps loading as you scroll."),
+             body: "Listings keep loading for as long as you keep scrolling."),
         Perk(symbol: "sparkles",
              title: "Personalized results",
-             body: "Marketplace ranks what it shows you against your own account, so the listings that come back are picked for you rather than for nobody in particular.")
+             body: "Marketplace ranks listings against your own account, so what comes back is picked for you.")
     ]
 
     var body: some View {
@@ -202,7 +211,7 @@ private struct FacebookPage: View {
                     .font(.largeTitle.weight(.bold))
                 Text(isSignedIn
                      ? "Seller details, unlimited scrolling and Facebook's own picks are all switched on."
-                     : "Open Market works best with your account. You'll sign in on Facebook's own page — this app has no login form of its own.")
+                     : "Open Market works best with your account. You'll sign in on Facebook's own page.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
