@@ -166,6 +166,7 @@ func buildSender(cfg config.ServiceConfig, logger *zap.Logger) (verify.Sender, e
 	provider, err := verify.NewPreludeSender(verify.PreludeOptions{
 		APIKey:     cfg.PreludeAPIKey,
 		CodeLength: cfg.VerificationCodeLength,
+		Logger:     logger.Named("prelude"),
 	})
 	if err != nil {
 		return nil, err

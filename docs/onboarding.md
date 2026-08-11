@@ -7,8 +7,9 @@ Discover and the flow rebuilt around phone login, both 2026-08-10)
 `apps/ios/Sources/Account/PushRegistrar.swift`,
 `apps/ios/Sources/Store/PlaceChooser.swift`,
 `apps/ios/Sources/UI/SignInView.swift`
-**Related:** `backend.md` §3, `discover.md` §0, §4.7 and §6, `location.md`,
-`location-targeting.md`, `filter-parameters.md` §3, `logged-in-findings.md`
+**Related:** `phone-login.md`, `backend.md` §3, `discover.md` §0, §4.7 and §6,
+`location.md`, `location-targeting.md`, `filter-parameters.md` §3,
+`logged-in-findings.md`
 
 Four steps: **phone**, **Facebook**, **location**, **notifications**. The first
 and third are required; the second and fourth are asked properly and can be
