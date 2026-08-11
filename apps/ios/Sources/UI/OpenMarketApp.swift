@@ -106,46 +106,105 @@ struct RootView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
 
-    private var isOnboarding: Bool {
-        !account.isSignedIn || prefs.needsOnboarding
-    }
+    /// Whether the flow is on screen. `nil` until the session check comes back.
+    ///
+    /// **A latch, not a derivation, and that is the whole point.** It used to be
+    /// `!account.isSignedIn || prefs.needsOnboarding` recomputed on every change,
+    /// which meant any answer landing early could dismiss the flow out from under
+    /// the person still using it — the location step resolves a place in the
+    /// background, and the moment it landed `needsOnboarding` went false and the
+    /// notifications step was never shown. `openIfNeeded` can only *open* this;
+    /// only `finish` closes it.
+    @State private var isOnboarding: Bool?
 
     var body: some View {
         Group {
-            switch account.state {
-            case .unknown:
-                // `restore()` asks the server whether the stored session is
-                // still live, so there is a round trip between launch and
-                // knowing. Showing the login screen during it would flash it at
-                // every user who is already signed in.
+            // `restore()` asks the server whether the stored session is still
+            // live, so there is a round trip between launch and knowing. Showing
+            // the login screen during it would flash it at every user who is
+            // already signed in.
+            if account.state == .unknown || isOnboarding == nil {
                 LaunchView()
-            case .signedOut, .signedIn:
-                if isOnboarding {
-                    OnboardingView {
-                        prefs.hasCompletedOnboarding = true
-                        // Recorded on the account too, so the answer survives a
-                        // reinstall rather than living only in this install's
-                        // defaults.
-                        Task { await account.markOnboardingComplete() }
-                    }
-                } else {
-                    SignedInView()
-                }
+            } else if isOnboarding == true {
+                OnboardingView { finish() }
+            } else {
+                SignedInView()
             }
         }
         .task {
             if account.state == .unknown { await account.restore() }
         }
+        .onAppear { openIfNeeded() }
+        .onChange(of: prefs.needsOnboarding) { _, _ in openIfNeeded() }
         // The server is the authority on whether this account has ever been
         // onboarded, so a reinstall or a second device doesn't repeat the parts
         // that are account-shaped. The parts that are *install*-shaped — a
         // place, a Facebook cookie jar, a notification permission — are still
         // asked, because a new install genuinely has none of them.
+        //
+        // **Both directions, and that is a bug fix.** This used to only ever
+        // set the flag true, which meant the answer belonged to whichever
+        // account had last set it rather than to the account signing in. Sign a
+        // brand-new user in on an install that had already onboarded — delete
+        // your account and sign up again, or hand someone your phone — and the
+        // server's `false` was ignored: `needsOnboarding` went false the instant
+        // the session landed and tore the flow away mid-flight, straight past
+        // the Facebook, location and notification steps to the home screen.
         .onChange(of: account.state) { _, state in
-            if case .signedIn(let viewer) = state, viewer.onboardingCompleted {
-                prefs.hasCompletedOnboarding = true
+            if case .signedIn(let viewer) = state {
+                // A different account than the one this install last saw means
+                // a different person is holding the phone, and the answers that
+                // are install-shaped were the last person's. Signing back into
+                // the *same* account deliberately keeps them: that is routine,
+                // and making somebody pick their city again for it is a
+                // punishment for signing out.
+                if let last = prefs.lastAccountID, last != viewer.id {
+                    prefs.resetOnboarding()
+                }
+                prefs.lastAccountID = viewer.id
+                // After the reset, so the server's answer for the account that
+                // is actually signing in wins.
+                prefs.hasCompletedOnboarding = viewer.onboardingCompleted
+            }
+            openIfNeeded()
+        }
+    }
+
+    /// Opens the flow when something is outstanding, and never closes it.
+    ///
+    /// The one-way door is what keeps `RootView` and `OnboardingView` from
+    /// disagreeing. They test different things — this one asks whether anything
+    /// is missing, the flow asks which step is next — so letting both decide when
+    /// to dismiss means the stricter answer wins at whatever moment it happens to
+    /// change, mid-step.
+    private func openIfNeeded() {
+        switch account.state {
+        case .unknown:
+            // Nothing is known yet, and guessing here is how you flash a login
+            // screen at somebody who is already signed in.
+            return
+        case .signedOut:
+            // The phone screen is the first step, so signing out — or being
+            // signed out by an expired session — starts the flow rather than
+            // dropping the user somewhere with no account.
+            isOnboarding = true
+        case .signedIn:
+            // First decision after launch settles it either way; after that this
+            // can only open.
+            if isOnboarding == nil {
+                isOnboarding = prefs.needsOnboarding
+            } else if prefs.needsOnboarding {
+                isOnboarding = true
             }
         }
+    }
+
+    private func finish() {
+        prefs.hasCompletedOnboarding = true
+        isOnboarding = false
+        // Recorded on the account too, so the answer survives a reinstall rather
+        // than living only in this install's defaults.
+        Task { await account.markOnboardingComplete() }
     }
 }
 

@@ -54,7 +54,7 @@ thing, and nowhere near enough to stop a first run over. They moved to Settings,
 where somebody who wants to aim those suggestions can, and nobody else has to;
 `Interest.defaults` fills the row for everyone who doesn't.
 
-## 2. The order, and why it is derived
+## 2. The order, and why it is fixed
 
 | Step | Required | Why here |
 |---|---|---|
@@ -63,35 +63,46 @@ where somebody who wants to aim those suggestions can, and nobody else has to;
 | Location | **Yes** | Distance is the organising idea and it is applied **on this device** — no Marketplace surface honours `radius` (`filter-parameters.md` §3). Without a place the app measures from a hardcoded city and presents it as the user's |
 | Notifications | No | Price alerts (§6). iOS shows the system prompt once, ever |
 
-`OnboardingView.current` computes which step is outstanding rather than
-advancing a cursor:
+`OnboardingView.current` is a cursor. Every step advances it by being completed,
+and nothing else moves it:
 
 ```swift
-if !account.isSignedIn        { return .phone }
-if !prefs.hasAskedFacebook    { return .facebook }
-if !prefs.hasChosenLocation   { return .location }
-return .notifications
+@State private var current: Step = .phone
+private func advance() { current = current.next }
 ```
 
-A stored cursor would have to be kept in step with four independent sources of
-truth — a session, a cookie jar, a resolved place, a system permission — every
-one of which can change from outside this view. Deriving it also makes the flow
-resumable for free: quit halfway and the next launch reopens on the step still
-outstanding.
+**It used to be derived, and that is what kept breaking.** The old version asked
+which step was still outstanding — reading the session, two stored "asked" flags
+and the resolved place, recomputed on every change — so any answer that arrived
+early moved the flow:
 
-**The two skippable steps store "asked", not "answered".** A declined Facebook
-connection and an unasked one look identical from outside, so the outcome cannot
-drive the flow — and re-asking every launch is how an optional step becomes a
-nag. The answers live where they belong: the cookie jar, and the system.
+- a place resolving in the background dismissed the rest of the run, so
+  Continue was never pressed and the notifications step was never seen;
+- a second account on the same install inherited the first one's flags and
+  opened on the last screen, browsing the first one's city;
+- a returning account's server-side `onboardingCompleted` dismissed the flow
+  mid-step.
 
-**`hasChosenLocation` is stored rather than derived from `resolvedPlace`, and
-that is a bug fix.** The step is deliberately optimistic — Continue opens on the
-*choice*, so Facebook's ten-second round trip to name the place runs while the
-user reads the next screen. The first version expressed that as
-`resolvedPlace == nil && chooser.switching == nil`, which meant the flow
-advanced itself the instant the button was tapped: the location screen slid away
-while the system's location alert was still on top of it. The optimistic
-condition belongs to the *button*, not to the step.
+Each was a real bug, each was fixed by pinning one more input down, and the
+third one settled the argument: a flow whose position is computed from state has
+as many ways to jump as it has inputs. `hasAskedFacebook`, `hasChosenLocation`
+and `hasAskedNotifications` were deleted with it — nothing else ever read them.
+
+**The one thing still read is whether a session exists, and it is read once.**
+You cannot ask somebody for their phone number when they already have one
+verified, so a run that opened because the *place* went missing starts at step 2.
+That happens in `onAppear`, not in `current`, so signing in later in the same run
+cannot retroactively move anything.
+
+**The one backwards move is explicit.** If `chooser.settle()` finishes with no
+place, `finish` sets `current = .location` rather than letting the user through
+to a home screen with nowhere to search — the step it returns to is already
+showing the error.
+
+**What this costs is resumability.** Quitting halfway now restarts the four
+screens instead of resuming on the outstanding one. Two of them are a single tap
+to pass, and a flow that always does the same thing is worth more than one that
+saves a returning user two taps.
 
 ## 3. The gate
 
@@ -104,9 +115,8 @@ condition belongs to the *button*, not to the step.
 **The place is re-checked, not latched.** It is the one answer the app cannot
 work without, so an install that somehow ends up without one is asked again
 rather than landing on a home screen with nowhere to search. `finish` settles
-the pending resolution before letting go and clears `hasChosenLocation` if it
-never landed, so a failure returns to the step that asks — where the error is
-already on screen.
+the pending resolution before letting go and sends the cursor back to the
+location step if it never landed — where the error is already on screen.
 
 **The skippable steps are deliberately absent from this expression.** Including
 them would make "no" read as unfinished business and put the whole flow back on
@@ -117,6 +127,52 @@ screen at every launch.
 sign-in, so a reinstall or a second device doesn't repeat the account-shaped
 part. The install-shaped parts — a place, a cookie jar, a notification
 permission — are asked again, because a new install genuinely has none of them.
+
+**That copy goes both ways, and used to only go one.** Writing the flag only
+when the server said `true` meant it belonged to whichever account set it last
+rather than to the account signing in, so a *new* user on an install that had
+already onboarded inherited a `true` nobody had earned. `PhoneLoginView`'s
+`isNewUser` used to set the same flag and no longer does — two writers of one
+flag, and the near-synonym was the wrong fact anyway, since an account created
+and abandoned halfway is a returning user who has never finished.
+
+**Whether the flow is on screen is a latch, not a derivation.** `RootView` used
+to recompute `!account.isSignedIn || prefs.needsOnboarding` on every change, and
+that is a screen that can dismiss itself out from under the person using it.
+Every step here answers its question somewhere other than this view, and two of
+those answers arrive *early*: a session lands the moment the code is accepted,
+and the location step resolves a place in the background while the user is still
+looking at the map. Either one could drop `needsOnboarding` to false mid-flight
+and cut straight to the home screen — the reported symptom was tapping "Use my
+current location" and never seeing Continue, let alone the notifications step.
+
+So `RootView.openIfNeeded` can only *open* the flow; only `finish` closes it.
+The first decision after `restore()` settles it either way, a sign-out reopens
+it at the phone step, and after that nothing outside `OnboardingView` can take
+the screen away. This is what keeps the two derivations from fighting: `RootView`
+asks whether anything is outstanding, `OnboardingView` asks which step is next,
+and letting both decide when to *dismiss* means whichever goes false first wins,
+at whatever moment it happens to change.
+
+**A change of account clears the install-shaped answers**
+(`Preferences.resetOnboarding`). They belong to whoever is holding the phone, not
+to the device: sign out and sign in as somebody else and the flow used to open on
+notifications, because "Facebook was offered" and "a place was chosen" were both
+still true from the last person — who was also the person whose city the new one
+would have been browsing.
+
+`Preferences.lastAccountID` is what makes that detectable. Nothing else in the
+app can tell "signed back in" from "somebody else signed in", and the difference
+decides the behaviour: signing back into the **same** account deliberately keeps
+everything, because that is routine and making that person pick their city again
+would be a punishment for signing out. Deleting an account resets on its own
+account, since there may not be a next sign-in to notice.
+
+**Debug builds carry a "Restart onboarding" button** under Settings → Build.
+Four screens that an install sees exactly once are otherwise checked by deleting
+the app or deleting the account. It signs out as part of the reset, because the
+phone screen is the first step — clearing the flags alone reopens the flow on
+Facebook.
 
 ## 4. The location step
 

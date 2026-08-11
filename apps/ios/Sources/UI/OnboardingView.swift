@@ -28,10 +28,25 @@ import CoreLocation
 /// reason at the moment the question is asked, which is where an explanation is
 /// worth reading.
 ///
-/// **Step order is derived, never stored as a cursor.** Each step asks what is
-/// still outstanding — see `current` — so quitting halfway resumes in the right
-/// place, and a step whose answer arrives from outside the flow (a session
-/// restored on launch, a place already set) is simply never shown.
+/// **The sequence is fixed, and it is a cursor.** Once this view is on screen it
+/// runs `phone → facebook → location → notifications` in that order, every time,
+/// and each step advances it by being *completed* — not by some persisted flag
+/// going true.
+///
+/// This replaced a derived order, which read the session, the saved flags and the
+/// resolved place on every change and showed whichever step was still
+/// outstanding. It was resumable and it was wrong three separate ways, all the
+/// same shape: an answer that landed early moved the flow. A place resolving in
+/// the background skipped the rest of the run; a second account inherited the
+/// first one's answers and opened on the last screen; a returning account's
+/// server-side `onboardingCompleted` dismissed the flow mid-step. Each was a real
+/// bug, each was fixed by pinning one more thing down, and the pattern was the
+/// argument: a flow whose position is computed from state has as many ways to
+/// jump as it has inputs.
+///
+/// What it costs is resumability. Quitting halfway starts the four screens over
+/// rather than resuming — two of which are one tap to pass — and that is the
+/// trade being made deliberately.
 struct OnboardingView: View {
     /// Called once every step has been answered or passed. Sets
     /// `hasCompletedOnboarding`, which is what dismisses this.
@@ -45,23 +60,13 @@ struct OnboardingView: View {
     /// a live screen behind the spinner.
     @State private var isFinishing = false
 
+    /// Where the flow is. The only thing that decides which screen is showing.
+    @State private var current: Step = .phone
+
     enum Step: Int, CaseIterable {
         case phone, facebook, location, notifications
-    }
 
-    /// The first step that still has an outstanding answer.
-    ///
-    /// Derived rather than advanced by hand. A `@State` cursor would have to be
-    /// kept in step with four different sources of truth — the session, the
-    /// cookie jar, the resolved place and the system's notification setting —
-    /// and every one of them can change from outside this view.
-    private var current: Step {
-        if !account.isSignedIn { return .phone }
-        if !prefs.hasAskedFacebook { return .facebook }
-        if !prefs.hasChosenLocation { return .location }
-        // The last step is also the terminus. `done` is what dismisses this
-        // view, so there is no state after it left to represent.
-        return .notifications
+        var next: Step { Step(rawValue: rawValue + 1) ?? .notifications }
     }
 
     var body: some View {
@@ -70,21 +75,21 @@ struct OnboardingView: View {
             ZStack {
                 switch current {
                 case .phone:
-                    // Signing in *is* the advance: `current` recomputes the
-                    // moment the session lands, so there is nothing to call.
-                    PhoneLoginView { isNewUser in
-                        // A returning account has already been onboarded, and
-                        // the server is the authority — otherwise a reinstall,
-                        // or a second device, walks the user through it again.
-                        if !isNewUser { prefs.hasCompletedOnboarding = true }
+                    PhoneLoginView { _ in
+                        // Whether this account has been onboarded is read off
+                        // the viewer in `RootView`, not decided here. `isNewUser`
+                        // is close but not the same fact — an account that was
+                        // created and abandoned halfway is a returning user who
+                        // has never finished.
                         Task { await account.reportFacebookConnection(await SessionState.isSignedIn()) }
+                        advance()
                     }
                     .transition(.opacity)
                 case .facebook:
-                    FacebookPage { prefs.hasAskedFacebook = true }
+                    FacebookPage { advance() }
                         .transition(.opacity)
                 case .location:
-                    LocationPage { prefs.hasChosenLocation = true }
+                    LocationPage { advance() }
                         .transition(.opacity)
                 case .notifications:
                     NotificationsPage(isFinishing: isFinishing) { finish() }
@@ -94,7 +99,15 @@ struct OnboardingView: View {
         }
         .background(Color(.systemBackground))
         .animation(.easeInOut(duration: 0.22), value: current)
+        // The one concession to state, made once and never revisited: you cannot
+        // ask somebody for their phone number when they already have a session,
+        // so a flow that opened because the *place* went missing starts at the
+        // step after it. Read here rather than in `current` so that signing in
+        // later in this run can't retroactively move anything.
+        .onAppear { if account.isSignedIn { current = .facebook } }
     }
+
+    private func advance() { current = current.next }
 
     /// A dot per step, and no back button.
     ///
@@ -135,12 +148,12 @@ struct OnboardingView: View {
             isFinishing = false
 
             guard prefs.resolvedPlace != nil else {
-                // Back to the location step. Clearing the flag is what selects
-                // it — `current` is derived, so there is nothing else to undo.
-                prefs.hasChosenLocation = false
+                // The only backwards move in the flow, and it is an explicit
+                // one: the required answer isn't there, so return to the screen
+                // that asks for it — which is already showing the error.
+                current = .location
                 return
             }
-            prefs.hasAskedNotifications = true
             done()
         }
     }
@@ -580,10 +593,6 @@ private struct NotificationsPage: View {
                 .buttonStyle(.plain)
                 .disabled(isAsking || isFinishing)
 
-                Text("You can change this later in Settings.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom, 8)
             } else {
                 OnboardingButton(title: "Start browsing",
                                  isEnabled: !isFinishing,

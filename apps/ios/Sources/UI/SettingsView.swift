@@ -88,17 +88,33 @@ struct SettingsView: View {
                 #if DEBUG
                 // Which backend this build is talking to, in the app.
                 //
-                // The home-screen name says it ("OM Dev" vs "Open Market") but
-                // that is invisible once you are inside, and the two builds are
-                // otherwise identical on screen. The expensive version of
-                // guessing wrong is reading a laptop's database while believing
-                // it is production.
+                // The home-screen name says it ("Open Market Dev" vs "Open
+                // Market") but that is invisible once you are inside, and the
+                // two builds are otherwise identical on screen. The expensive
+                // version of guessing wrong is reading a laptop's database while
+                // believing it is production.
                 //
                 // DEBUG only because a Release build has exactly one answer,
                 // and printing a server address to users buys nothing.
                 Section("Build") {
                     LabeledContent("Backend", value: API.environmentSummary)
                     LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
+
+                    // Onboarding is four screens that a given install sees
+                    // exactly once, which makes changing one of them tedious to
+                    // check: the alternatives are deleting the account, or
+                    // deleting the app and signing in again from scratch.
+                    //
+                    // Signing out is part of it rather than a separate step,
+                    // because the phone screen *is* the first step — resetting
+                    // the flags alone would reopen the flow on Facebook and skip
+                    // the thing most likely to be under test.
+                    Button("Restart onboarding") {
+                        Task {
+                            prefs.resetOnboarding()
+                            await account.signOut()
+                        }
+                    }
                 }
                 #endif
             }
@@ -115,6 +131,12 @@ struct SettingsView: View {
                     Task {
                         do {
                             try await account.deleteAccount()
+                            // The account that answered onboarding no longer
+                            // exists, so neither should its answers. Deliberately
+                            // not done on plain sign-out: signing back into the
+                            // same account is routine, and throwing away that
+                            // person's city to make them pick it again is not.
+                            prefs.resetOnboarding()
                         } catch {
                             deleteError = (error as? LocalizedError)?.errorDescription
                                 ?? "Couldn't delete your account."
