@@ -71,7 +71,7 @@ func init() {
 	// That is a real code path selected by configuration rather than a mock —
 	// the same arrangement as DEV_BYPASS_PHONE_NUMBERS — and like that list it
 	// is refused under ENV=production.
-	pflag.String("llm_provider", "stub", "model provider: stub, google")
+	pflag.String("llm_provider", "stub", "model provider: stub, google, vercel")
 	pflag.String("llm_api_key", "", "API key for the model provider (not required by stub)")
 	pflag.String("llm_model", "", "model identifier to request (not required by stub)")
 	// Per user, per window, counted in calls rather than money because there is
@@ -127,8 +127,12 @@ func (c ServiceConfig) IsProduction() bool { return c.Env == "production" }
 const (
 	// LLMProviderStub answers without a network. Refused in production.
 	LLMProviderStub = "stub"
-	// LLMProviderGoogle is Gemini, via the Interactions API.
+	// LLMProviderGoogle is Gemini, called directly.
 	LLMProviderGoogle = "google"
+	// LLMProviderVercel is Vercel's AI Gateway, over its OpenAI Chat
+	// Completions surface. One key, any model behind it, and the model id
+	// carries the vendor prefix: "google/gemini-3.6-flash".
+	LLMProviderVercel = "vercel"
 )
 
 // UsesStubLLM reports whether model calls are being answered locally.

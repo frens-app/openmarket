@@ -61,8 +61,25 @@ deployments/      migrations (goose), queries (sqlc), compose, railway
 for Price Check: `.env.development` ships `LLM_PROVIDER=stub`, which answers
 in-process with no key, no network and no bill. The feature runs end to end
 against it — including the recording — so the iOS side can be built and re-run
-without spending anything. Point it at Gemini by setting `LLM_PROVIDER`,
-`LLM_API_KEY` and `LLM_MODEL` in `.env.local`.
+without spending anything.
+
+Two real providers sit behind the same interface, chosen with `LLM_PROVIDER` in
+`.env.local`:
+
+| | `vercel` | `google` |
+|---|---|---|
+| Route | AI Gateway, OpenAI Chat Completions surface | Gemini's Interactions API |
+| Model | `google/gemini-3.6-flash` — vendor-prefixed | `gemini-3.6-flash` |
+| Why | one key for every model, one invoice to reconcile `llm_runs` against | one fewer hop, and a free tier |
+
+The Gateway offers three surfaces — Chat Completions, OpenAI Responses and
+Anthropic Messages. This uses Chat Completions because the point of a gateway is
+changing models without changing code, and that is the shape every model behind
+it maps onto. It carries what this package needs: JSON-Schema structured output,
+and reasoning tokens reported separately. The one gap is that its `reasoning`
+object does not reach Anthropic's `output_config` on Claude Opus 4.7 and later —
+irrelevant here, since nothing configures reasoning, but it is the reason to add
+an Anthropic Messages provider beside this one rather than bend it.
 
 The stub is refused under `ENV=production`, exactly like
 `DEV_BYPASS_PHONE_NUMBERS`, and for the same reason: it is the one configuration

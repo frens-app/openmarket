@@ -211,6 +211,11 @@ func buildModelProvider(cfg config.ServiceConfig) (llm.Provider, error) {
 			APIKey: cfg.LLMAPIKey,
 			Model:  cfg.LLMModel,
 		})
+	case config.LLMProviderVercel:
+		return llm.NewGatewayProvider(llm.GatewayOptions{
+			APIKey: cfg.LLMAPIKey,
+			Model:  cfg.LLMModel,
+		})
 	default:
 		// Never silently the stub. A deployment that believes it is calling a
 		// model and is not would serve invented prices that look exactly like
