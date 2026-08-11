@@ -1,0 +1,11 @@
+# The Dockerfile does `COPY . .` into the build stage. The final image is FROM
+# scratch and takes only the binary and the migrations, so nothing here can reach
+# a shipped image — but it can reach the build cache, and it slows every build.
+.env.local
+.env.*.local
+
+# Rebuilt inside the container.
+/out
+
+.DS_Store
+*.md

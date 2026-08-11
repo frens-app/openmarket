@@ -1,0 +1,42 @@
+# Railway service configuration.
+#
+# Two settings have to be made in the Railway UI, once, and this file cannot
+# make them for you:
+#
+#   Root Directory       apps/backend
+#   Config file path     /apps/backend/railway.toml
+#
+# The second is not optional and not obvious. Railway's config file **does not
+# follow the Root Directory setting** — it is looked up from the repository root
+# unless you give an absolute path — so leaving it unset means this file is
+# ignored silently. Not "fails to deploy": Railway falls back to auto-detection,
+# builds something from the repo root, and brings it up with no healthcheck and
+# no restart policy.
+#
+# Which is also why this lives at apps/backend/railway.toml rather than
+# somewhere tidier: it is the shallowest path that keeps the Docker build
+# context off the iOS app.
+
+[build]
+builder = "DOCKERFILE"
+# Relative to Root Directory.
+dockerfilePath = "cmd/api/Dockerfile"
+# Only rebuild when something the binary is made of changes. The iOS app and the
+# probe harness share this repository and have no business triggering a deploy.
+watchPatterns = [
+  "cmd/**",
+  "pkg/**",
+  "deployments/migrations/**",
+  "go.mod",
+  "go.sum",
+]
+
+[deploy]
+# Pings the connection pool rather than returning a constant, so a container
+# that has lost its database is replaced instead of left serving errors.
+healthcheckPath = "/health"
+# The server applies migrations at boot and panics on missing config, so a
+# failure here is usually a bad env var — worth retrying a few times in case it
+# is the database still coming up, then giving up loudly.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

@@ -1,0 +1,35 @@
+version: v2
+# One schema, two generated types. The Go module root is apps/backend (so the
+# Docker build context stays free of the iOS app), which is why the package
+# prefix reaches through it.
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: frens.lol/openmarket/backend/pkg/protos
+  disable:
+    - file_option: go_package_prefix
+      module: buf.build/bufbuild/protovalidate
+plugins:
+  # Go protobuf
+  - remote: buf.build/protocolbuffers/go
+    out: apps/backend/pkg/protos
+    opt: paths=source_relative
+  # Go ConnectRPC
+  - remote: buf.build/connectrpc/go
+    out: apps/backend/pkg/protos
+    opt: paths=source_relative
+  # Swift protobuf
+  - remote: buf.build/apple/swift
+    out: apps/ios/Packages/OpenMarketProtos/Sources/OpenMarketProtos
+    include_imports: true
+    opt: Visibility=Public
+  # Swift ConnectRPC
+  - remote: buf.build/connectrpc/swift
+    out: apps/ios/Packages/OpenMarketProtos/Sources/OpenMarketProtos
+    opt:
+      - GenerateAsyncMethods=true
+      - GenerateCallbackMethods=false
+      - Visibility=Public
+inputs:
+  - directory: protos
