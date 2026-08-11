@@ -71,7 +71,7 @@ struct SettingsView: View {
                         .disabled(prefs.recentSearches.isEmpty)
                     Button("Clear viewing history") { viewed.clear() }
                         .disabled(viewed.isEmpty)
-                    Text("Search history fills the suggestions under the search field. Turn it off to search without adding to it — what's already saved stays until you clear it. Seller drafts never search into your history.")
+                    Text("Search history fills the suggestions under the search field. Turn it off to search without adding to it — what's already saved stays until you clear it. Searches the Tools tab runs never go into your history.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text("Viewing history is what \"Only new listings\" filters against, and what fills Recently viewed. It stays on this device — Facebook is never told which listings you opened.")

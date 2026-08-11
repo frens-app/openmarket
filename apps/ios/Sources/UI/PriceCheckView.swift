@@ -1,8 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// The Seller tab: describe what you're selling, and get a price backed by what
-/// is actually listed nearby and what has actually sold.
+/// Price Check, the first tool in the Tools tab: describe what you're selling,
+/// and get a price backed by what is actually listed nearby and what has
+/// actually sold.
+///
+/// Pushed from `ToolsView`, so it brings no `NavigationStack` of its own — the
+/// tab owns one, and a second would nest.
 ///
 /// The screen is built as a **transcript** rather than a form that fills in.
 /// Four things happen — a search term is worked out, the market is searched,
@@ -14,7 +18,7 @@ import UIKit
 ///
 /// The comparables are on screen *above* the recommendation for the same
 /// reason. They are the working, not an illustration.
-struct SellerToolsView: View {
+struct PriceCheckView: View {
     @EnvironmentObject private var model: SellerToolsModel
     /// The description being typed, held here rather than on the model — see
     /// `SellerToolsModel.input` for why the field must not be re-rendered from
@@ -25,38 +29,36 @@ struct SellerToolsView: View {
     @Namespace private var heroNamespace
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    prompt
-                    if !model.steps.isEmpty { transcript }
-                    if !model.comps.isEmpty { comparables }
-                    if !model.sold.isEmpty { recentlySold }
-                    if model.hasResult { priceField }
-                    if case .failed(let message) = model.phase { failureCard(message) }
-                    if model.phase == .done { startOver }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 60)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                prompt
+                if !model.steps.isEmpty { transcript }
+                if !model.comps.isEmpty { comparables }
+                if !model.sold.isEmpty { recentlySold }
+                if model.hasResult { priceField }
+                if case .failed(let message) = model.phase { failureCard(message) }
+                if model.phase == .done { startOver }
             }
-            .scrollDismissesKeyboard(.interactively)
-            // Dragging already puts the keyboard away; tapping off the field
-            // should too, and on a phone most of this screen is "off the
-            // field" — the transcript and both comparable strips arrive
-            // underneath the keyboard, so a keyboard that only leaves on a
-            // drag is a keyboard sitting on top of the answer.
-            //
-            // Simultaneous rather than `onTapGesture`, so it never competes
-            // with the button or the cards for the same tap: they run their
-            // own action and the keyboard goes away either way.
-            .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture().onEnded { isTyping = false })
-            .navigationTitle("Seller")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $selected) { listing in
-                DetailView(listing: listing, namespace: heroNamespace)
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 60)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        // Dragging already puts the keyboard away; tapping off the field
+        // should too, and on a phone most of this screen is "off the
+        // field" — the transcript and both comparable strips arrive
+        // underneath the keyboard, so a keyboard that only leaves on a
+        // drag is a keyboard sitting on top of the answer.
+        //
+        // Simultaneous rather than `onTapGesture`, so it never competes
+        // with the button or the cards for the same tap: they run their
+        // own action and the keyboard goes away either way.
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { isTyping = false })
+        .navigationTitle("Price Check")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $selected) { listing in
+            DetailView(listing: listing, namespace: heroNamespace)
         }
     }
 
@@ -77,10 +79,19 @@ struct SellerToolsView: View {
 
     private var prompt: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Label("Seller Tools", systemImage: "tag")
-                    .font(.title3.weight(.semibold))
-                Text("Describe what you're selling. This looks at what similar things are listed for in \(model.marketName), and what's actually sold there lately, then works out what to ask.")
+            // What the tool is, before it is asked to do anything. The row in
+            // the Tools tab is one line and a name; this is the screen that
+            // says what a price check actually is, and it says it in terms of
+            // where the number comes from — that claim is the whole feature.
+            VStack(alignment: .leading, spacing: 6) {
+                // No heading. The navigation bar is already saying "Price
+                // Check" two lines above this, and a title under a title reads
+                // as a rendering mistake.
+                Text("This is a price check. Describe what you're selling and it goes and looks: what similar things are listed for in \(model.marketName) right now, and what's actually sold there lately.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("You get the comparables it found and a price to ask, with the working shown.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -326,7 +326,7 @@ final class Preferences: ObservableObject {
     ///
     /// Two things never reach here, and both are deliberate:
     ///
-    /// * **Anything the Seller tab searches.** Those terms are derived from the
+    /// * **Anything the Tools tab searches.** Those terms are derived from the
     ///   item someone is drafting a listing for — they are the app asking a
     ///   question on the user's behalf, not the user looking for something to
     ///   buy, and offering them back as suggestions would answer a question

@@ -229,14 +229,14 @@ struct SignedInView: View {
     var body: some View {
         ZStack {
             // Two things this app does: find what other people are selling, and
-            // work out how to sell your own. They share a location, a session
-            // and a pacer, and nothing else — which is exactly what a tab
-            // boundary is for.
+            // work out things about a listing of your own. They share a
+            // location, a session and a pacer, and nothing else — which is
+            // exactly what a tab boundary is for.
             TabView {
                 ResultsView()
                     .tabItem { Label("Browse", systemImage: "magnifyingglass") }
-                SellerToolsView()
-                    .tabItem { Label("Seller", systemImage: "tag") }
+                ToolsView()
+                    .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
             }
 
             // §2.1 — the engines' webviews must be in the hierarchy or WebKit
@@ -247,9 +247,9 @@ struct SignedInView: View {
             // visible area, where WebKit still treats them as live.
             //
             // They sit beside the `TabView` rather than inside a tab for the
-            // same reason. A tab that isn't selected is torn down, and the
-            // seller tab's search would then be running in a webview SwiftUI
-            // had just removed from the hierarchy.
+            // same reason. A tab that isn't selected is torn down, and Price
+            // Check's search would then be running in a webview SwiftUI had
+            // just removed from the hierarchy.
             HiddenWebViewHost(webView: store.desktop.webView)
                 .offset(x: 3000)
             HiddenWebViewHost(webView: store.feed.webView)
