@@ -287,10 +287,12 @@ final class DiscoverFeed: ObservableObject {
             of \(self.listings.count, privacy: .public)
             """)
 
-        let harvest = await scrollForMore(wanted: Self.browseTarget)
-        // Appended, never reassigned. New cards land below everything already
-        // on screen, so nothing moves under whoever is reading.
-        listings.append(contentsOf: harvest.cards)
+        // Publish each filtered screen as soon as it is ready. Pagination only
+        // appends below the reader, so unlike the initial fill there is no layout
+        // stability benefit to withholding three usable cards while the hidden
+        // webview hunts for nine more.
+        let harvest = await scrollForMore(wanted: Self.browseTarget,
+                                          publishEachBatch: true)
         reachedEnd = harvest.exhausted
     }
 
@@ -309,7 +311,11 @@ final class DiscoverFeed: ObservableObject {
     /// the end of the part of it that this app is for. Running out of scroll
     /// budget is neither — it is just this call's turn ending, and the next one
     /// picks up where it left off.
-    private func scrollForMore(wanted: Int) async -> (cards: [Listing], exhausted: Bool) {
+    /// - Parameter publishEachBatch: Used only for a top-up with cards already
+    ///   on screen. The initial fill stays atomic; a top-up safely appends below
+    ///   the current viewport after every filtered webview screen.
+    private func scrollForMore(wanted: Int,
+                               publishEachBatch: Bool = false) async -> (cards: [Listing], exhausted: Bool) {
         var found: [Listing] = []
         var dryScreens = 0
         var screens = 0
@@ -322,6 +328,9 @@ final class DiscoverFeed: ObservableObject {
             }
             let batch = await nearby(await engine.renderedCards())
             found += batch.kept
+            if publishEachBatch, !batch.kept.isEmpty {
+                listings.append(contentsOf: batch.kept)
+            }
             // Only a screen that turned up something new and rejected all of it
             // counts against the area. Re-reading cards the fill already took
             // says nothing about how much is out there.

@@ -272,14 +272,26 @@ enum DesktopScripts {
       // property's default value for a missing key — it throws — so the two
       // scripts have to agree on one shape or the reading is discarded.
       function feedState(el){
+        var links = document.querySelectorAll('a[href*="/marketplace/item/"]');
+        var ids = [];
+        for (var i = 0; i < links.length; i++) {
+          var href = links[i].getAttribute('href') || '';
+          var start = href.indexOf('/marketplace/item/');
+          if (start === -1) continue;
+          var tail = href.slice(start + 18);
+          ids.push(tail.split('/')[0]);
+        }
         return {
           top: Math.round(el.scrollTop),
           scrollHeight: el.scrollHeight,
           clientHeight: el.clientHeight,
-          cards: document.querySelectorAll('a[href*="/marketplace/item/"]').length,
+          cards: links.length,
+          signature: ids.join(','),
           isDocument: el === (document.scrollingElement || document.documentElement),
           moved: 0,
-          from: 0
+          from: 0,
+          fromCards: 0,
+          fromSignature: ''
         };
       }
     """
@@ -294,11 +306,13 @@ enum DesktopScripts {
         // this surface — it came back as 2202.5 — and an unrounded difference
         // reaches Swift as `0.5`, which fails to decode into an Int and threw
         // the entire reading away without a word.
-        var before = Math.round(el.scrollTop);
-        el.scrollTop = before + Math.max(200, Math.round(el.clientHeight * 0.85));
+        var before = feedState(el);
+        el.scrollTop = before.top + Math.max(200, Math.round(el.clientHeight * 0.85));
         var out = feedState(el);
-        out.from = before;
-        out.moved = out.top - before;
+        out.from = before.top;
+        out.fromCards = before.cards;
+        out.fromSignature = before.signature;
+        out.moved = out.top - before.top;
         return JSON.stringify(out);
       } catch (e) {
         return JSON.stringify({ error: String(e.message) });
