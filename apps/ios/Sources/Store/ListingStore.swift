@@ -150,6 +150,14 @@ final class ListingStore: ObservableObject {
     /// seen; this buys enough runway for the cards to arrive first.
     static let prefetchMargin = 10
 
+    /// Enough cards for the next visible screen. A top-up used to drive the
+    /// hidden Facebook page exactly three screens every time, even when its
+    /// first scroll had already produced everything the user was approaching.
+    /// Keep three as the recovery ceiling for sparse/duplicate windows, but stop
+    /// as soon as one screen of genuinely new cards is in the grid.
+    private static let paginationTarget = 6
+    private static let maxScrollsPerTopUp = 3
+
     /// Whether the user has moved the grid since the last page landed.
     ///
     /// What keeps the wider margin from reading ahead on its own: the trigger
@@ -183,7 +191,11 @@ final class ListingStore: ObservableObject {
     /// Re-arming while already armed is a no-op, so a drag that fires this sixty
     /// times a second still costs one check.
     func noteScroll() {
-        guard !scrolledSinceLastPage else { return }
+        // ResultsView observes one outer ScrollView for both home and search.
+        // A Discover drag therefore reaches this method too; without the query
+        // gate it used to drive three empty screens through the search webview
+        // alongside every Discover top-up (`prefetch: at -1 of 0`).
+        guard query != nil, !scrolledSinceLastPage else { return }
         scrolledSinceLastPage = true
         Task { await topUpIfAtMargin() }
     }
@@ -200,7 +212,7 @@ final class ListingStore: ObservableObject {
     /// since the last one; never speculatively. One batch at a time (§7.3: one
     /// page ahead, maximum).
     private func topUpIfAtMargin() async {
-        guard !isLoadingMore, canLoadMore, scrolledSinceLastPage,
+        guard query != nil, !isLoadingMore, canLoadMore, scrolledSinceLastPage,
               deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
         scrolledSinceLastPage = false
         Logger.store.info("""
@@ -210,7 +222,9 @@ final class ListingStore: ObservableObject {
         await loadMore()
     }
 
-    /// Scrolls the desktop feed one screen at a time, harvesting after each.
+    /// Scrolls the desktop feed one screen at a time, harvesting after each,
+    /// until the next visible screen is full or three sparse windows have been
+    /// tried.
     ///
     /// Harvesting *between* scrolls rather than once at the end is not
     /// defensive: the desktop feed virtualises, recycling cards out of the DOM
@@ -220,12 +234,15 @@ final class ListingStore: ObservableObject {
     /// Everything gathered here is markup-only — no timestamps, no delivery
     /// types, no sold state. Those exist for the first page and nowhere else.
     func loadMore() async {
-        guard !isLoadingMore, canLoadMore else { return }
+        guard query != nil, !isLoadingMore, canLoadMore else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
 
         let before = listings.count
-        for _ in 0..<3 {
+        var scrolls = 0
+        while listings.count - before < Self.paginationTarget,
+              scrolls < Self.maxScrollsPerTopUp {
+            scrolls += 1
             guard await desktop.scrollOnce() else { break }
             await ingest(cards: await desktop.renderedCards())
         }
@@ -235,6 +252,9 @@ final class ListingStore: ObservableObject {
         if listings.count == before {
             reachedEnd = true
             Logger.store.info("loadMore: no new cards")
+        } else {
+            reachedEnd = false
+            Logger.store.info("loadMore: \(self.listings.count - before, privacy: .public) new cards over \(scrolls, privacy: .public) screens")
         }
     }
 

@@ -342,18 +342,25 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// Advancing is unambiguous: either the scroll position ended higher than it
     /// started, or new cards appeared. A clamp gets one retry, because the
     /// recycler re-expands a moment later and the second attempt goes through.
+    ///
+    /// Settling is adaptive. The old implementation slept 900 ms after every
+    /// screen whether React had recycled the card window in 150 ms or 850 ms.
+    /// Two unchanged readings after the rendered listing ids change are enough
+    /// to know the window is ready to harvest; 900 ms remains the ceiling for a
+    /// network-backed scroll that really does take that long.
     @discardableResult
     func scrollOnce() async -> Bool {
         for attempt in 0..<2 {
             guard let step = await feedScroll(DesktopScripts.scrollFeedStep) else { return false }
-            try? await Task.sleep(for: .milliseconds(900))
-            guard let after = await feedScroll(DesktopScripts.readFeedScroll) else { return false }
+            let settleStarted = ContinuousClock.now
+            guard let after = await waitForScrollToSettle(after: step) else { return false }
+            let settleMS = Int(settleStarted.duration(to: .now) / .milliseconds(1))
 
             let reached = max(step.top, after.top)
             let advanced = reached > step.from
-            let gainedCards = after.cards > step.cards
+            let gainedCards = after.cards > step.fromCards
             if advanced || gainedCards {
-                Logger.desktop.info("scroll: \(step.from, privacy: .public)->\(reached, privacy: .public) of \(after.scrollHeight, privacy: .public), cards \(step.cards, privacy: .public)->\(after.cards, privacy: .public), isDocument \(after.isDocument, privacy: .public)")
+                Logger.desktop.info("scroll: \(step.from, privacy: .public)->\(reached, privacy: .public) of \(after.scrollHeight, privacy: .public), cards \(step.fromCards, privacy: .public)->\(after.cards, privacy: .public), settled \(settleMS, privacy: .public)ms, isDocument \(after.isDocument, privacy: .public)")
                 return true
             }
             if attempt == 0 {
@@ -365,16 +372,53 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         return false
     }
 
+    private static let scrollSettlePoll = Duration.milliseconds(100)
+    private static let scrollSettleCeiling = Duration.milliseconds(900)
+    private static let stableScrollReads = 2
+
+    /// Waits for the virtualised card window, not an arbitrary timer.
+    ///
+    /// A changed signature says React has mounted a different window. Requiring
+    /// that signature, count and scroll position to then agree twice keeps us
+    /// from harvesting halfway through a recycle. At the end of already-rendered
+    /// content there may be no signature change until Facebook answers over the
+    /// network, so the previous 900 ms delay remains the hard fallback.
+    private func waitForScrollToSettle(after step: FeedScroll) async -> FeedScroll? {
+        let deadline = ContinuousClock.now.advanced(by: Self.scrollSettleCeiling)
+        var previous = step
+        var stableReads = 0
+
+        while ContinuousClock.now < deadline {
+            try? await Task.sleep(for: Self.scrollSettlePoll)
+            guard let current = await feedScroll(DesktopScripts.readFeedScroll) else { return nil }
+
+            let windowChanged = current.signature != step.fromSignature
+                || current.cards != step.fromCards
+            let unchanged = current.top == previous.top
+                && current.cards == previous.cards
+                && current.signature == previous.signature
+            stableReads = windowChanged && unchanged ? stableReads + 1 : 0
+            previous = current
+
+            if stableReads >= Self.stableScrollReads { return current }
+        }
+        return previous
+    }
+
     /// One reading of whatever is scrolling the feed.
     private struct FeedScroll: Decodable {
         var top = 0
         var scrollHeight = 0
         var clientHeight = 0
         var cards = 0
+        var signature = ""
         var isDocument = false
         var moved = 0
         /// Where the scroll started, for the step script. Zero on a plain read.
         var from = 0
+        /// The rendered window before the step, for adaptive settling.
+        var fromCards = 0
+        var fromSignature = ""
     }
 
     /// One reading, or nil with a reason in the log.
