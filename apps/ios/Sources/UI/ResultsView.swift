@@ -42,241 +42,285 @@ struct ResultsView: View {
 
     @Namespace private var heroNamespace
 
+    /// The zero-height marker at the very top of the scroll, and the whole
+    /// reason there is a `ScrollViewReader` on this screen. It is the first
+    /// thing in the stack rather than attached to any particular section, so it
+    /// can be scrolled to whatever `content` is currently drawing — results, the
+    /// home screen, a skeleton or a notice.
+    private static let topAnchor = "results-top"
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    content
-                }
+            ScrollViewReader { proxy in
+                results(proxy)
             }
-            // The engagement half of the read-ahead. Both grids start their next
-            // batch about two screens from the end, which is early enough to
-            // land before the user does — but only for a user who has moved the
-            // screen since the last one arrived. This is where that is noticed.
-            //
-            // A simultaneous gesture rather than a scroll-offset observer: it
-            // recognises alongside the scroll instead of competing with it,
-            // taps still reach the cards under it, and the question being asked
-            // is "is someone dragging this?", not "how far down are they?".
-            // `minimumDistance` keeps a tap that drifts a pixel from counting.
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { _ in
-                        store.noteScroll()
-                        discover.noteScroll()
-                    }
-            )
-            .scrollDismissesKeyboard(.immediately)
-            .navigationTitle("Open Market")
-            .navigationBarTitleDisplayMode(.inline)
-            // Pinned under the title rather than left to `.automatic`, which on
-            // iOS 26 floats it at the bottom of the screen. Searching is the
-            // first thing this app does, so the field belongs at the top with
-            // the filters that shape the search, not detached at the other end
-            // of the screen from them.
-            .searchable(text: $searchText,
-                        isPresented: $isSearching,
-                        placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Search local listings")
-            .searchSuggestions { SearchSuggestions() }
-            .keepToolbarDuringSearch()
-            // The search session is deliberately *not* closed here. A field left
-            // open keeps showing what it was searched for, which is the point:
-            // results with an empty-looking search bar over them don't say what
-            // they are. `keepToolbarDuringSearch` is what makes that affordable
-            // — without it, staying open would cost the title and both toolbar
-            // buttons for as long as the results were on screen.
-            //
-            // The only visible difference from the un-searched screen is the
-            // Cancel button beside the field, and dismissing with it keeps both
-            // the results and the term.
-            .onSubmit(of: .search) {
-                let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !term.isEmpty else { return }
-                activeTerm = term
-                Task { await search(term) }
+        }
+    }
+
+    /// The screen, minus its scrolling half: everything presented over the
+    /// results or triggered from them, plus the reloads that follow.
+    ///
+    /// Split from `searchSurface` because the two chains together are past
+    /// what the type checker will accept in one expression.
+    private func results(_ proxy: ScrollViewProxy) -> some View {
+        searchSurface(proxy)
+        // Pinned rather than scrolled with the results: the point of the
+        // bar is that what shaped this result set is readable *while*
+        // reading the result set, and a readout that scrolls away answers
+        // the question only before it gets asked.
+        //
+        // Only over results. On the home screen there is no query for a
+        // sort to order, and a control that does nothing is worse than no
+        // control.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if store.query != nil {
+                ActiveFilterBar(
+                    onLocation: { showLocationPicker = true },
+                    onRerun: { Task { await rerunCurrentQuery() } }
+                )
             }
-            // Pinned rather than scrolled with the results: the point of the
-            // bar is that what shaped this result set is readable *while*
-            // reading the result set, and a readout that scrolls away answers
-            // the question only before it gets asked.
-            //
-            // Only over results. On the home screen there is no query for a
-            // sort to order, and a control that does nothing is worse than no
-            // control.
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if store.query != nil {
-                    ActiveFilterBar(
-                        onLocation: { showLocationPicker = true },
-                        onRerun: { Task { await rerunCurrentQuery() } }
-                    )
-                }
-            }
-            .sheet(isPresented: $showLocationPicker) {
-                LocationPickerSheet()
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) { profileButton }
-                ToolbarItem(placement: .topBarTrailing) { filtersButton }
-            }
-            .sheet(isPresented: $showSettings) { SettingsView() }
-            .sheet(isPresented: $showFilters) {
-                FilterSheet { Task { await rerunCurrentQuery() } }
-            }
-            .sheet(isPresented: $showSignIn) {
-                SignInView {
-                    // A signed-in query returns a different result set, not
-                    // merely a longer one, so this re-runs rather than
-                    // appending to what's already on screen.
-                    //
-                    // Discover is rebuilt for the same reason: an account
-                    // changes what Facebook serves on the browse page, and
-                    // whether it paginates past ~24 cards at all.
-                    // `loadIfNeeded` notices the session changed on its own, so
-                    // this is a plain reload.
-                    Task {
-                        store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
-                        await store.retry()
-                        await loadDiscover()
-                    }
-                }
-            }
-            .navigationDestination(item: $selected) { listing in
-                DetailView(listing: listing, namespace: heroNamespace)
-            }
-            // A confirmed change of place, and the results catch up.
-            //
-            // The slug is watched rather than the switch finishing, because the
-            // slug is the thing a search is actually made of — every route that
-            // can change it ends up here, including onboarding and the filter
-            // sheet. It only ever changes on confirmation
-            // (`Preferences.setResolvedPlace`), so this can't re-run against a
-            // place Facebook hasn't agreed to.
-            //
-            // This is also the gap the optimistic switch would otherwise widen:
-            // picking a city used to change the pill and leave the old city's
-            // results underneath it until the user thought to pull to refresh.
-            //
-            // **Discover goes with it.** It used to be exempt, on the grounds
-            // that a reshuffle under someone halfway down the feed is worse
-            // than a feed that is an hour old. That reasoning holds for a
-            // reshuffle of the same city and not at all for this: a home screen
-            // full of listings in the city the user just left isn't stale, it
-            // is wrong, and it is the screen they land on when they clear the
-            // search. Order matters — the search is what's on screen, so it
-            // goes first and Discover rebuilds behind it.
-            .onChange(of: prefs.locationSlug) {
-                // **The origin moves first, and synchronously.**
+        }
+        .sheet(isPresented: $showLocationPicker) {
+            LocationPickerSheet()
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) { profileButton }
+            ToolbarItem(placement: .topBarTrailing) { filtersButton }
+        }
+        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showFilters) {
+            FilterSheet { Task { await rerunCurrentQuery() } }
+        }
+        .sheet(isPresented: $showSignIn) {
+            SignInView {
+                // A signed-in query returns a different result set, not
+                // merely a longer one, so this re-runs rather than
+                // appending to what's already on screen.
                 //
-                // Every grid on this screen is filtered by distance from
-                // `DistanceResolver.userLocation` (`winnowed`), and that origin
-                // used to be set in only three places: this view appearing, the
-                // device fix landing, and a search being built. None of them is
-                // "the user changed city", so the origin stayed on the *old*
-                // place until something else happened to move it.
-                //
-                // What that looked like: switch San Francisco → Seattle from
-                // the home screen, Discover refetches Seattle correctly, and
-                // every card is then measured from San Francisco, found to be
-                // 1,300 km away, and dropped. Thirty cards in memory, an empty
-                // screen, and nothing anywhere saying why. Running any search
-                // fixed it, because `makeQuery` happened to reset the origin.
-                //
-                // It belongs here rather than inside the `Task` because a grid
-                // can be re-winnowed on the next frame — before any await
-                // resumes — and a frame measured from the wrong city is exactly
-                // the bug.
-                distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace,
-                                                                  deviceFix: location.coordinate))
+                // Discover is rebuilt for the same reason: an account
+                // changes what Facebook serves on the browse page, and
+                // whether it paginates past ~24 cards at all.
+                // `loadIfNeeded` notices the session changed on its own, so
+                // this is a plain reload.
                 Task {
-                    await rerunCurrentQuery()
-                    discover.markStale()
+                    store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
+                    await store.retry()
                     await loadDiscover()
                 }
             }
-            // The fix can land long after a search starts; hand it straight to
-            // the distance resolver whenever it does.
-            .onChange(of: location.coordinate?.latitude) {
-                distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace, deviceFix: location.coordinate))
-            }
-            // Emptying the search bar goes home, to the saved list — but Cancel
-            // empties it too, and cancelling a search field should not throw
-            // away the results behind it.
+        }
+        .navigationDestination(item: $selected) { listing in
+            DetailView(listing: listing, namespace: heroNamespace)
+        }
+        // A confirmed change of place, and the results catch up.
+        //
+        // The slug is watched rather than the switch finishing, because the
+        // slug is the thing a search is actually made of — every route that
+        // can change it ends up here, including onboarding and the filter
+        // sheet. It only ever changes on confirmation
+        // (`Preferences.setResolvedPlace`), so this can't re-run against a
+        // place Facebook hasn't agreed to.
+        //
+        // This is also the gap the optimistic switch would otherwise widen:
+        // picking a city used to change the pill and leave the old city's
+        // results underneath it until the user thought to pull to refresh.
+        //
+        // **Discover goes with it.** It used to be exempt, on the grounds
+        // that a reshuffle under someone halfway down the feed is worse
+        // than a feed that is an hour old. That reasoning holds for a
+        // reshuffle of the same city and not at all for this: a home screen
+        // full of listings in the city the user just left isn't stale, it
+        // is wrong, and it is the screen they land on when they clear the
+        // search. Order matters — the search is what's on screen, so it
+        // goes first and Discover rebuilds behind it.
+        .onChange(of: prefs.locationSlug) {
+            // **The origin moves first, and synchronously.**
             //
-            // The two are told apart on the next tick, once the text and the
-            // dismissal have both landed: an empty field with the search UI
-            // still up is a deliberate clear, and an empty field because the
-            // field went away restores the term instead. That restore is also
-            // what puts the term back on screen — a field that closed without
-            // its binding changing keeps drawing the prompt until something
-            // writes to it.
-            .onChange(of: searchText) { _, text in
-                guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                Task { @MainActor in
-                    await Task.yield()
-                    if isSearching {
-                        activeTerm = ""
-                        store.clearQuery()
-                    } else if !activeTerm.isEmpty {
-                        searchText = activeTerm
-                    }
+            // Every grid on this screen is filtered by distance from
+            // `DistanceResolver.userLocation` (`winnowed`), and that origin
+            // used to be set in only three places: this view appearing, the
+            // device fix landing, and a search being built. None of them is
+            // "the user changed city", so the origin stayed on the *old*
+            // place until something else happened to move it.
+            //
+            // What that looked like: switch San Francisco → Seattle from
+            // the home screen, Discover refetches Seattle correctly, and
+            // every card is then measured from San Francisco, found to be
+            // 1,300 km away, and dropped. Thirty cards in memory, an empty
+            // screen, and nothing anywhere saying why. Running any search
+            // fixed it, because `makeQuery` happened to reset the origin.
+            //
+            // It belongs here rather than inside the `Task` because a grid
+            // can be re-winnowed on the next frame — before any await
+            // resumes — and a frame measured from the wrong city is exactly
+            // the bug.
+            distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace,
+                                                              deviceFix: location.coordinate))
+            Task {
+                await rerunCurrentQuery()
+                discover.markStale()
+                await loadDiscover()
+            }
+        }
+        // The fix can land long after a search starts; hand it straight to
+        // the distance resolver whenever it does.
+        .onChange(of: location.coordinate?.latitude) {
+            distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace, deviceFix: location.coordinate))
+        }
+        // Emptying the search bar goes home, to the saved list — but Cancel
+        // empties it too, and cancelling a search field should not throw
+        // away the results behind it.
+        //
+        // The two are told apart on the next tick, once the text and the
+        // dismissal have both landed: an empty field with the search UI
+        // still up is a deliberate clear, and an empty field because the
+        // field went away restores the term instead. That restore is also
+        // what puts the term back on screen — a field that closed without
+        // its binding changing keeps drawing the prompt until something
+        // writes to it.
+        .onChange(of: searchText) { _, text in
+            guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            Task { @MainActor in
+                await Task.yield()
+                if isSearching {
+                    activeTerm = ""
+                    store.clearQuery()
+                } else if !activeTerm.isEmpty {
+                    searchText = activeTerm
                 }
             }
-            // Switching the filter on takes its snapshot there and then, so it
-            // applies to what's already on screen instead of waiting for the
-            // next search. Switching it off drops the snapshot, and everything
-            // it was holding back comes straight back.
-            .onChange(of: prefs.hideViewed) { _, isOn in
-                withAnimation(.easeOut(duration: 0.2)) {
-                    hiddenAsViewed = isOn ? viewed.allIDs : []
+        }
+        // Switching the filter on takes its snapshot there and then, so it
+        // applies to what's already on screen instead of waiting for the
+        // next search. Switching it off drops the snapshot, and everything
+        // it was holding back comes straight back.
+        .onChange(of: prefs.hideViewed) { _, isOn in
+            withAnimation(.easeOut(duration: 0.2)) {
+                hiddenAsViewed = isOn ? viewed.allIDs : []
+            }
+        }
+        .task {
+            distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace, deviceFix: location.coordinate))
+        }
+        // The home feed, filled on arrival rather than on demand — it is
+        // the thing the user is meant to land in, so waiting for a gesture
+        // to start it would defeat the point. It then stands for the rest
+        // of the launch: `loadIfNeeded` is a no-op after the first fill, so
+        // coming back from a listing or the seller tab costs nothing and
+        // finds the same cards in the same places.
+        //
+        // A new search doesn't invalidate it — nothing on this feed is
+        // built from what the user searched for. A change of city does,
+        // because then it is a feed for somewhere the user no longer is
+        // (see the `locationSlug` handler below). Relaunch and
+        // pull-to-refresh are the other two ways to get a new one.
+        .task { await loadDiscover() }
+        // Onboarding just handed over a place, which is what the feed was
+        // waiting for. `.task` above has already run and returned
+        // empty-handed by then, so this is the fill for every first launch.
+        .onChange(of: prefs.needsOnboarding) { _, needed in
+            if !needed { Task { await loadDiscover() } }
+        }
+        // The radius is the one preference this feed applies *while it
+        // fetches* rather than on the way to the screen, so widening it
+        // can't be honoured by re-filtering what's in hand — the cards it
+        // would now keep were dropped during the fill and never stored.
+        //
+        // Marked rather than refilled on the spot, because the sheet that
+        // changed it is over the top of the feed and there'd be nothing to
+        // watch. Both sheets that can reach the radius rebuild on close —
+        // the reload is a no-op if nothing marked it stale — and they are
+        // watched as one flag because this view is already at the type
+        // checker's limit.
+        .onChange(of: prefs.radiusKM) { discover.markStale() }
+        .onChange(of: isCoveredBySheet) { _, covered in
+            if !covered { Task { await loadDiscover() } }
+        }
+        .refreshable {
+            // The gesture means "get me a fresh version of this screen",
+            // and which screen that is depends on whether a search is up.
+            if store.query == nil {
+                await loadDiscover(force: true)
+            } else {
+                await rerunCurrentQuery()
+            }
+        }
+    }
+
+    /// The results themselves, and the field that asks for them.
+    private func searchSurface(_ proxy: ScrollViewProxy) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                Color.clear.frame(height: 0).id(Self.topAnchor)
+                content
+            }
+        }
+        // The engagement half of the read-ahead. Both grids start their next
+        // batch about two screens from the end, which is early enough to
+        // land before the user does — but only for a user who has moved the
+        // screen since the last one arrived. This is where that is noticed.
+        //
+        // A simultaneous gesture rather than a scroll-offset observer: it
+        // recognises alongside the scroll instead of competing with it,
+        // taps still reach the cards under it, and the question being asked
+        // is "is someone dragging this?", not "how far down are they?".
+        // `minimumDistance` keeps a tap that drifts a pixel from counting.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { _ in
+                    store.noteScroll()
+                    discover.noteScroll()
                 }
-            }
-            .task {
-                distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace, deviceFix: location.coordinate))
-            }
-            // The home feed, filled on arrival rather than on demand — it is
-            // the thing the user is meant to land in, so waiting for a gesture
-            // to start it would defeat the point. It then stands for the rest
-            // of the launch: `loadIfNeeded` is a no-op after the first fill, so
-            // coming back from a listing or the seller tab costs nothing and
-            // finds the same cards in the same places.
-            //
-            // A new search doesn't invalidate it — nothing on this feed is
-            // built from what the user searched for. A change of city does,
-            // because then it is a feed for somewhere the user no longer is
-            // (see the `locationSlug` handler below). Relaunch and
-            // pull-to-refresh are the other two ways to get a new one.
-            .task { await loadDiscover() }
-            // Onboarding just handed over a place, which is what the feed was
-            // waiting for. `.task` above has already run and returned
-            // empty-handed by then, so this is the fill for every first launch.
-            .onChange(of: prefs.needsOnboarding) { _, needed in
-                if !needed { Task { await loadDiscover() } }
-            }
-            // The radius is the one preference this feed applies *while it
-            // fetches* rather than on the way to the screen, so widening it
-            // can't be honoured by re-filtering what's in hand — the cards it
-            // would now keep were dropped during the fill and never stored.
-            //
-            // Marked rather than refilled on the spot, because the sheet that
-            // changed it is over the top of the feed and there'd be nothing to
-            // watch. Both sheets that can reach the radius rebuild on close —
-            // the reload is a no-op if nothing marked it stale — and they are
-            // watched as one flag because `body` is already at the type
-            // checker's limit.
-            .onChange(of: prefs.radiusKM) { discover.markStale() }
-            .onChange(of: isCoveredBySheet) { _, covered in
-                if !covered { Task { await loadDiscover() } }
-            }
-            .refreshable {
-                // The gesture means "get me a fresh version of this screen",
-                // and which screen that is depends on whether a search is up.
-                if store.query == nil {
-                    await loadDiscover(force: true)
-                } else {
-                    await rerunCurrentQuery()
-                }
-            }
+        )
+        .scrollDismissesKeyboard(.immediately)
+        // A new result set starts at the top of it.
+        //
+        // The scroll offset is a property of the scroll view, not of what is
+        // in it, so it outlives the cards it was measured against: search for
+        // something else from five pages down and the offset stays where it
+        // was over a grid that is now twelve cards long. What that looks like
+        // is a blank screen and no results, with the only way back being to
+        // scroll up through the empty space where the old ones used to be —
+        // which nobody should have to guess at, and which reads as the search
+        // having failed.
+        //
+        // Driven off `resultsGeneration` rather than `store.listings` or the
+        // query, because the thing being reacted to is precisely a *wholesale
+        // replacement* of the grid: paging in more cards changes `listings`
+        // constantly and must never move the screen, and a re-run with the
+        // same term (a filter change, a new city, pull-to-refresh) leaves the
+        // query equal to itself while replacing every card behind it.
+        .onChange(of: store.resultsGeneration) {
+            proxy.scrollTo(Self.topAnchor, anchor: .top)
+        }
+        .navigationTitle("Open Market")
+        .navigationBarTitleDisplayMode(.inline)
+        // Pinned under the title rather than left to `.automatic`, which on
+        // iOS 26 floats it at the bottom of the screen. Searching is the
+        // first thing this app does, so the field belongs at the top with
+        // the filters that shape the search, not detached at the other end
+        // of the screen from them.
+        .searchable(text: $searchText,
+                    isPresented: $isSearching,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search local listings")
+        .searchSuggestions { SearchSuggestions() }
+        .keepToolbarDuringSearch()
+        // The search session is deliberately *not* closed here. A field left
+        // open keeps showing what it was searched for, which is the point:
+        // results with an empty-looking search bar over them don't say what
+        // they are. `keepToolbarDuringSearch` is what makes that affordable
+        // — without it, staying open would cost the title and both toolbar
+        // buttons for as long as the results were on screen.
+        //
+        // The only visible difference from the un-searched screen is the
+        // Cancel button beside the field, and dismissing with it keeps both
+        // the results and the term.
+        .onSubmit(of: .search) {
+            let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !term.isEmpty else { return }
+            activeTerm = term
+            Task { await search(term) }
         }
     }
 
