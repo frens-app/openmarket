@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -28,6 +29,17 @@ struct PriceCheckView: View {
     @State private var selected: Listing?
     @Namespace private var heroNamespace
 
+    /// The picker's selection, and what it resolved to.
+    ///
+    /// Single-selection, because the request accepts one photo. Going to
+    /// several means the array-binding `PhotosPicker` and a `maxSelectionCount`
+    /// here, plus raising the cap on the request — the wire field is already a
+    /// list, so nothing about that is a migration.
+    @State private var pickedPhoto: PhotosPickerItem?
+    @State private var photo: ItemPhoto?
+    @State private var photoPreview: Image?
+    @State private var isPreparingPhoto = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -37,6 +49,7 @@ struct PriceCheckView: View {
                 if !model.sold.isEmpty { recentlySold }
                 if model.hasResult { priceField }
                 if case .failed(let message) = model.phase { failureCard(message) }
+                if model.phase == .done { helpfulPrompt }
                 if model.phase == .done { startOver }
             }
             .padding(.horizontal, 16)
@@ -74,7 +87,40 @@ struct PriceCheckView: View {
               draft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
         else { return }
         isTyping = false
-        model.start(draft)
+        model.start(draft, photo: photo)
+    }
+
+    /// Downscales and encodes the picked photo off the main actor.
+    ///
+    /// A full-resolution phone photo is around 4000px on the long edge; scaling
+    /// and JPEG-encoding it is tens of milliseconds of work, which is a visible
+    /// stutter if it happens between a tap and the next frame. The preview is
+    /// built from the prepared bytes rather than the original, so what is on
+    /// screen is what will be sent.
+    private func prepare(_ item: PhotosPickerItem?) async {
+        guard let item else {
+            photo = nil
+            photoPreview = nil
+            return
+        }
+        isPreparingPhoto = true
+        defer { isPreparingPhoto = false }
+
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data),
+              let prepared = await Task.detached(priority: .userInitiated, operation: {
+                  ItemPhotoPreparer.prepare(image)
+              }).value
+        else {
+            // Treated as "no photo" rather than surfaced. The run works on the
+            // description alone, and refusing to price something because its
+            // photo would not encode is the worse outcome.
+            photo = nil
+            photoPreview = nil
+            return
+        }
+        photo = prepared
+        photoPreview = UIImage(data: prepared.jpeg).map(Image.init(uiImage:))
     }
 
     private var prompt: some View {
@@ -87,7 +133,7 @@ struct PriceCheckView: View {
                 // No heading. The navigation bar is already saying "Price
                 // Check" two lines above this, and a title under a title reads
                 // as a rendering mistake.
-                Text("This is a price check. Describe what you're selling and it goes and looks: what similar things are listed for in \(model.marketName) right now, and what's actually sold there lately.")
+                Text("This is a price check. Add a photo, describe what you're selling, and it goes and looks: what similar things are listed for in \(model.marketName) right now, and what's actually sold there lately.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -123,6 +169,8 @@ struct PriceCheckView: View {
                 .padding(12)
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
 
+            photoRow
+
             Button(action: submit) {
                 HStack(spacing: 8) {
                     if model.phase.isRunning {
@@ -137,6 +185,68 @@ struct PriceCheckView: View {
             .buttonStyle(.borderedProminent)
             .disabled(model.phase.isRunning || draft.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
         }
+    }
+
+    /// The picker, and what it produced.
+    ///
+    /// Optional on purpose, and it says so: the run works on the description
+    /// alone, so this is worded as something that improves the answer rather
+    /// than something the screen is waiting for.
+    @ViewBuilder
+    private var photoRow: some View {
+        HStack(spacing: 12) {
+            PhotosPicker(selection: $pickedPhoto, matching: .images) {
+                HStack(spacing: 8) {
+                    if isPreparingPhoto {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: photo == nil ? "camera" : "checkmark.circle.fill")
+                    }
+                    Text(photo == nil ? "Add a photo" : "Change photo")
+                        .font(.subheadline)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .disabled(model.phase.isRunning)
+
+            if let photoPreview {
+                photoPreview
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(alignment: .topTrailing) { removePhotoButton }
+            }
+        }
+        .onChange(of: pickedPhoto) { _, item in
+            Task { await prepare(item) }
+        }
+
+        if photo == nil {
+            Text("Optional, and it helps — a photo is how the model tells your dresser from every other dresser.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var removePhotoButton: some View {
+        Button {
+            pickedPhoto = nil
+            photo = nil
+            photoPreview = nil
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .font(.caption)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .black.opacity(0.5))
+                .padding(3)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Remove photo")
     }
 
     // MARK: - The transcript
@@ -254,7 +364,7 @@ struct PriceCheckView: View {
     /// evidence actually supported — the strips above are its working.
     private var priceField: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("What to ask")
+            Text("Your listing")
                 .font(.headline)
             if let price = model.recommendedPrice {
                 CopyableField(caption: "PRICE",
@@ -264,21 +374,77 @@ struct PriceCheckView: View {
                               // Bare, because it is going into Facebook's price
                               // box, which wants a number.
                               copies: String(price),
-                              footnote: model.priceRationale)
+                              footnote: model.priceRationale,
+                              // The one signal worth collecting without asking.
+                              // Copying the price is the action immediately
+                              // before pasting it into Facebook, so it says
+                              // "this worked" from everybody who gets this far
+                              // — where the buttons below are answered by the
+                              // few who stop to tap one.
+                              onCopy: model.recordPriceCopied)
+            }
+            // Absent when the writing step failed, which leaves the price
+            // standing on its own — it never depended on these.
+            if let title = model.listingTitle {
+                CopyableField(caption: "TITLE", display: title, copies: title)
+            }
+            if let body = model.listingBody {
+                CopyableField(caption: "DESCRIPTION", display: body, copies: body, isProse: true)
             }
         }
+    }
+
+    /// The asked question, once there is something to judge.
+    ///
+    /// Two buttons rather than a checkbox, and that is the same distinction the
+    /// column behind it makes: a checkbox cannot tell "no" from "didn't
+    /// answer", and those are different findings. Answering swaps the prompt
+    /// for an acknowledgement rather than leaving a live control that has
+    /// already been used.
+    @ViewBuilder
+    private var helpfulPrompt: some View {
+        if model.hasResult {
+            VStack(alignment: .leading, spacing: 10) {
+                if let feedback = model.feedback {
+                    Label(feedback ? "Thanks — glad it helped." : "Thanks — noted.",
+                          systemImage: "checkmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Were these results helpful?")
+                        .font(.subheadline)
+                    HStack(spacing: 10) {
+                        helpfulButton(title: "Yes", helpful: true)
+                        helpfulButton(title: "No", helpful: false)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+            .animation(.easeOut(duration: 0.2), value: model.feedback)
+        }
+    }
+
+    private func helpfulButton(title: String, helpful: Bool) -> some View {
+        Button(title) { model.recordFeedback(helpful: helpful) }
+            .font(.subheadline.weight(.medium))
+            .buttonStyle(.bordered)
     }
 
     // MARK: - Endings
 
     private func failureCard(_ message: String) -> some View {
-        InlineNotice(text: message, actionTitle: "Try again") { model.start(draft) }
+        InlineNotice(text: message, actionTitle: "Try again") { model.start(draft, photo: photo) }
     }
 
     private var startOver: some View {
         Button("Start over", role: .destructive) {
             model.reset()
             draft = ""
+            pickedPhoto = nil
+            photo = nil
+            photoPreview = nil
         }
             .font(.subheadline)
             .frame(maxWidth: .infinity)
@@ -293,6 +459,8 @@ private struct CopyableField: View {
     let copies: String
     var footnote: String?
     var isProse = false
+    /// Called on a successful copy. Nil where nobody is counting.
+    var onCopy: (() -> Void)?
 
     @State private var didCopy = false
 
@@ -332,6 +500,7 @@ private struct CopyableField: View {
 
     private func copy() {
         UIPasteboard.general.string = copies
+        onCopy?()
         withAnimation(.easeOut(duration: 0.15)) { didCopy = true }
         Task {
             try? await Task.sleep(for: .seconds(2))

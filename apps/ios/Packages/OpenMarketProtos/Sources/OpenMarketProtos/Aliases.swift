@@ -8,6 +8,7 @@
 
 public typealias AuthServiceClient = Openmarket_Api_V1_AuthServiceClient
 public typealias UserServiceClient = Openmarket_Api_V1_UserServiceClient
+public typealias PricingServiceClient = Openmarket_Api_V1_PricingServiceClient
 
 public typealias Viewer = Openmarket_Api_V1_Viewer
 public typealias Device = Openmarket_Api_V1_Device
@@ -27,3 +28,18 @@ public typealias UpdateViewerRequest = Openmarket_Api_V1_UpdateViewerRequest
 public typealias RegisterDeviceTokenRequest = Openmarket_Api_V1_RegisterDeviceTokenRequest
 public typealias SetFacebookConnectionRequest = Openmarket_Api_V1_SetFacebookConnectionRequest
 public typealias DeleteAccountRequest = Openmarket_Api_V1_DeleteAccountRequest
+
+public typealias IdentifyItemRequest = Openmarket_Api_V1_IdentifyItemRequest
+public typealias IdentifyItemResponse = Openmarket_Api_V1_IdentifyItemResponse
+public typealias PriceItemRequest = Openmarket_Api_V1_PriceItemRequest
+public typealias PriceItemResponse = Openmarket_Api_V1_PriceItemResponse
+public typealias SubmitPriceCheckFeedbackRequest = Openmarket_Api_V1_SubmitPriceCheckFeedbackRequest
+public typealias RecordPriceCopiedRequest = Openmarket_Api_V1_RecordPriceCopiedRequest
+public typealias ItemCondition = Openmarket_Api_V1_ItemCondition
+public typealias MarketStats = Openmarket_Api_V1_MarketStats
+// `Comparable` on its own would shadow the Swift standard library protocol of
+// that name across every file importing this module — including the `<`
+// operators the app's own sorts rely on. The proto message is a wire type with
+// one call site, so it takes the longer name and the language keeps the short
+// one.
+public typealias ProtoComparable = Openmarket_Api_V1_Comparable
