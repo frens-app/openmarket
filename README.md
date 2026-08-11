@@ -19,9 +19,14 @@ Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
 describe something you own and it finds what similar things are listed for near
 you, what has actually sold, and what to ask.
 
+Getting in requires an account: a phone number and a code by text. That is the
+app's own login, and it is unrelated to the Facebook session below — one is who
+you are, the other is how the browsing engines see listings.
+
 ```
+protos/         the API schema; one `make generate` writes both Go and Swift
 apps/ios/       the app (xcodegen: `xcodegen generate`, then build the OpenMarket scheme)
-apps/backend/   placeholder — runtime not chosen yet, see its README
+apps/backend/   Go + Connect + Postgres. Accounts and phone login; `make dev` runs it
 tools/probe/    harness for measuring the live site; every finding below came from it
 docs/           findings and decisions, listed at the bottom
 ```
@@ -866,6 +871,8 @@ item — several of these are harder or easier than they look. Items marked
 |---|---|
 | **`docs/parsing-conventions.md`** | **Rules every extractor follows.** An unknown value is logged, never silently dropped; absent ≠ empty; a value found near the right place is not the right value |
 | `docs/probe-checklist.md` | How to measure this site without recording false negatives |
+| **`docs/backend.md`** | **The server, as built** — accounts and phone login only, why that slice, how sessions and revocation work, and the four limits guarding the one endpoint that costs money per call |
+| `docs/backend-platform.md` | The platform evaluation behind it: why Postgres, why Connect rather than gRPC, and the listing-schema questions still open |
 | `docs/data-model.md` | Proposed schema for storing listings across devices |
 | `docs/status.md` | What's built and verified, and the open gaps |
 | `docs/surface-strategy.md` | Mobile vs. web trade-off, options, and recommendation |

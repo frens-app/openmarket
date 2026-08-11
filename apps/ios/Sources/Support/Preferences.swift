@@ -13,6 +13,7 @@ final class Preferences: ObservableObject {
         static let radiusKM = "radiusKM"
         static let interests = "interests"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        static let lastAccountID = "lastAccountID"
         static let locationName = "locationName"
         static let locationSlug = "locationSlug"
         static let lastQueryKind = "lastQueryKind"
@@ -50,12 +51,22 @@ final class Preferences: ObservableObject {
     /// they were picked in.
     @Published var interests: [String] { didSet { defaults.set(interests, forKey: Key.interests) } }
 
-    /// Set by the last step of onboarding, and never cleared.
+    /// Whether this install considers onboarding done.
     ///
     /// A stored flag rather than a purely derived one because the derived
-    /// condition goes true the instant the third interest is tapped, which
-    /// would tear the screen away before the user could press Continue.
+    /// condition would go true the moment the last answer landed, tearing the
+    /// screen away before the user could press the button under it.
+    ///
+    /// Written from the server's `viewer.onboardingCompleted` on every sign-in —
+    /// the account is the authority — and cleared by `resetOnboarding`.
     @Published var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: Key.hasCompletedOnboarding) } }
+
+    // `hasAskedFacebook`, `hasChosenLocation` and `hasAskedNotifications` used to
+    // live here. They recorded which onboarding steps had been *put to the user*,
+    // and `OnboardingView` derived its position from them — which is exactly the
+    // thing that made the flow jump. It runs a fixed sequence now and nothing
+    // else ever read them, so they are gone rather than left to drift.
+
     /// Human-readable place name for the UI ("San Francisco, CA").
     @Published var locationName: String? { didSet { defaults.set(locationName, forKey: Key.locationName) } }
     /// Facebook's place segment used in the search path — a slug or numeric id.
@@ -132,27 +143,67 @@ final class Preferences: ObservableObject {
 
     /// The chosen interests, as things with labels and search terms.
     ///
-    /// Never empty in a shipped app — onboarding won't let go of the screen
-    /// until three are picked — but it falls back rather than trapping, because
-    /// a search field with nothing to suggest is a worse answer than a generic
-    /// one if this ever does get reached with nothing stored.
+    /// Usually empty now, so the fallback is the normal path rather than the
+    /// safety net it started as.
+    ///
+    /// Two changes landed on the same day and they compound. Discover stopped
+    /// reading interests at all — it loads Facebook's own browse page for
+    /// everyone now (`discover.md` §0) — which left them feeding only the search
+    /// field's "Try" list. Onboarding then stopped asking for them, because a
+    /// required question about taste is a lot to charge for a row of
+    /// suggestions. `Interest.defaults` fills that row for anyone who never
+    /// visits Settings, and the user's own history takes over the moment they
+    /// search for anything.
     var chosenInterests: [Interest] {
         let resolved = Interest.resolve(interests)
         return resolved.isEmpty ? Interest.defaults : resolved
     }
 
-    /// Whether the app's two requirements are met: somewhere to search, and
-    /// enough interests to suggest.
+    /// Whether onboarding still has something to do.
     ///
-    /// Both are re-checked on every launch rather than trusted to the flag
-    /// alone, so an install that somehow ends up without a place — or with its
-    /// interests emptied — is asked again instead of landing on a home screen
-    /// centred on nowhere. `hasCompletedOnboarding` is what keeps the flow on
-    /// screen while it is being filled in.
+    /// One requirement now, where there were two: somewhere to search. The
+    /// interests clause went with the interests step — it was enforcing an
+    /// answer nothing reads on the home screen any more.
+    ///
+    /// The place is re-checked on every launch rather than trusted to the flag
+    /// alone, because it is the one answer the app genuinely cannot work
+    /// without — every search is centred on it, and an install that somehow
+    /// ends up without one would otherwise land on a home screen centred on
+    /// nowhere. `hasCompletedOnboarding` is what keeps the flow on screen while
+    /// the rest is being filled in.
+    ///
+    /// The skippable steps are deliberately not part of this. A "no" to Facebook
+    /// or to notifications must not read as unfinished business, or declining
+    /// would put the whole flow back on screen at every launch.
     var needsOnboarding: Bool {
-        !hasCompletedOnboarding
-            || resolvedPlace == nil
-            || Interest.resolve(interests).count < Interest.minimum
+        !hasCompletedOnboarding || resolvedPlace == nil
+    }
+
+    /// The account id this install last saw a session for.
+    ///
+    /// Kept only to notice that it *changed*. The install-shaped answers below —
+    /// a place, whether Facebook was offered, whether notifications were asked
+    /// for — belong to whoever is holding the phone, not to the device, and
+    /// nothing else in the app can tell "signed back in" apart from "somebody
+    /// else signed in".
+    @Published var lastAccountID: String? { didSet { defaults.set(lastAccountID, forKey: Key.lastAccountID) } }
+
+    /// Puts this install back to never-onboarded.
+    ///
+    /// Everything cleared here is *install*-shaped — asked once per device
+    /// rather than once per account — which is exactly why it has to be cleared
+    /// deliberately. Deleting an account drops the tokens and the server row,
+    /// and would otherwise leave the next person to sign in on this phone
+    /// browsing the last one's city, having never been asked where they are.
+    ///
+    /// The place goes with the rest. It is the one answer `needsOnboarding`
+    /// re-checks, so leaving it behind would mean the flow reopened and then
+    /// dismissed itself the moment a session existed.
+    func resetOnboarding() {
+        hasCompletedOnboarding = false
+        resolvedPlace = nil
+        locationSlug = nil
+        locationName = nil
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -182,6 +233,7 @@ final class Preferences: ObservableObject {
         // the old flag would let those installs through to a Discover with
         // nothing behind it. They get asked once, like everyone else.
         hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
+        lastAccountID = defaults.string(forKey: Key.lastAccountID)
         locationName = defaults.string(forKey: Key.locationName)
         // Kept as-is, with no validation against a curated list any more.
         //

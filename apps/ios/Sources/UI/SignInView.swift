@@ -147,6 +147,11 @@ final class SignInModel: ObservableObject {
     func signOut() async {
         await SessionState.signOut()
         isSignedIn = false
+        // Disconnecting is the transition nothing else observes: the caller's
+        // completion handler only fires on sign-*in*, and the scene phase never
+        // changes, so without this the server would keep believing this install
+        // was connected until the next foreground.
+        await AccountSession.shared.reportFacebookConnection(false)
         webView.load(URLRequest(url: URL(string: "https://www.facebook.com/login/")!))
         beginPolling()
     }

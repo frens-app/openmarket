@@ -1,0 +1,24 @@
+name: openmarket_infra
+
+services:
+  db:
+    # 18, not 17: the schema uses uuidv7() as a column default, which is a
+    # builtin from 18 onward. Downgrading the image means adding an extension
+    # or changing every primary key.
+    image: postgres:18-alpine
+    container_name: openmarket_db
+    ports:
+      - "5432:5432"
+    env_file:
+      - ../.env.development
+    volumes:
+      - openmarket_pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmarket -d openmarket_db"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  openmarket_pg_data:
+    driver: local

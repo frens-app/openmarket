@@ -12,8 +12,13 @@ import Foundation
 /// history, so on a new install this list was literally what the home screen
 /// was made of. Discover is now Facebook's own browse feed for everybody
 /// (`DiscoverFeed`), which leaves the search suggestions as the whole of the
-/// job — and leaves onboarding asking for three of these on the strength of a
-/// requirement that has moved (`docs/discover.md` §6.1).
+/// job (`docs/discover.md` §6.1).
+///
+/// Onboarding stopped asking for these in the same week, and the minimum of
+/// three went with it — it was `DiscoverFeed.searchCount` wearing a different
+/// name, and there is nothing left for it to protect. Settings is where they
+/// are chosen now, and picking none is allowed: `Interest.defaults` fills the
+/// "Try" row for anyone who never goes looking.
 ///
 /// Stored as `id` strings in `Preferences.interests`, never as labels or search
 /// terms. Both of those are presentation decisions that should be changeable —
@@ -44,15 +49,6 @@ struct Interest: Identifiable, Hashable {
     enum Prominence: Int {
         case broad = 2, common = 1, specific = 0
     }
-
-    /// How many have to be chosen before the app lets anyone past onboarding.
-    ///
-    /// Three because it was `DiscoverFeed.searchCount` — the home feed ran one
-    /// search per interest, so three was exactly the number that filled a
-    /// screen without repeating a category. That feed is gone, and the number
-    /// now only decides how many suggestions the search field can offer, which
-    /// is a much weaker case for making anybody stop and choose.
-    static let minimum = 3
 
     /// Ordered broad-first, which is also roughly the order people scan.
     static let catalogue: [Interest] = [

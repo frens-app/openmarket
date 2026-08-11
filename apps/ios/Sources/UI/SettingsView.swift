@@ -6,12 +6,29 @@ struct SettingsView: View {
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var viewed: ViewedListings
+    @EnvironmentObject private var account: AccountSession
     @Environment(\.dismiss) private var dismiss
     @State private var showSignIn = false
+    @State private var confirmingDelete = false
+    @State private var deleteError: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                // This app's own account, and the first section because it is
+                // the one the app is gated on. The Facebook section below it is
+                // a different thing entirely — a browsing session, not an
+                // identity — and they were easy to confuse when there was only
+                // one of them.
+                Section("Your account") {
+                    LabeledContent("Phone", value: accountPhoneNumber)
+                    Button("Sign out") { Task { await account.signOut() } }
+                    Button("Delete account", role: .destructive) { confirmingDelete = true }
+                    Text("Deleting removes your account and releases your phone number, so you can sign up again with it later. It can't be undone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Facebook account") {
                     LabeledContent("Status",
                                    value: store.session == .authed ? "Signed in" : "Not signed in")
@@ -36,11 +53,10 @@ struct SettingsView: View {
                 // results screen couldn't be represented, and opening Settings
                 // would show some other value as selected.
 
-                // Picked once during onboarding, and editable ever after:
-                // freezing a standing statement about what someone shops for at
-                // whatever they tapped in their first thirty seconds would be a
-                // strange thing to do with it, even now that all it drives is
-                // the search field's suggestions.
+                // The only place these are set — onboarding no longer asks.
+                // All they drive is the search field's suggestions, and they
+                // are optional: with none picked it falls back to a broad
+                // default set (`Preferences.chosenInterests`).
                 Section("Interests") {
                     NavigationLink {
                         InterestSettingsView()
@@ -68,6 +84,39 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                #if DEBUG
+                // Which backend this build is talking to, in the app.
+                //
+                // The home-screen name says it ("Open Market Dev" vs "Open
+                // Market") but that is invisible once you are inside, and the
+                // two builds are otherwise identical on screen. The expensive
+                // version of guessing wrong is reading a laptop's database while
+                // believing it is production.
+                //
+                // DEBUG only because a Release build has exactly one answer,
+                // and printing a server address to users buys nothing.
+                Section("Build") {
+                    LabeledContent("Backend", value: API.environmentSummary)
+                    LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
+
+                    // Onboarding is four screens that a given install sees
+                    // exactly once, which makes changing one of them tedious to
+                    // check: the alternatives are deleting the account, or
+                    // deleting the app and signing in again from scratch.
+                    //
+                    // Signing out is part of it rather than a separate step,
+                    // because the phone screen *is* the first step — resetting
+                    // the flags alone would reopen the flow on Facebook and skip
+                    // the thing most likely to be under test.
+                    Button("Restart onboarding") {
+                        Task {
+                            prefs.resetOnboarding()
+                            await account.signOut()
+                        }
+                    }
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -76,17 +125,58 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .alert("Delete your account?", isPresented: $confirmingDelete) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        do {
+                            try await account.deleteAccount()
+                            // The account that answered onboarding no longer
+                            // exists, so neither should its answers. Deliberately
+                            // not done on plain sign-out: signing back into the
+                            // same account is routine, and throwing away that
+                            // person's city to make them pick it again is not.
+                            prefs.resetOnboarding()
+                        } catch {
+                            deleteError = (error as? LocalizedError)?.errorDescription
+                                ?? "Couldn't delete your account."
+                        }
+                    }
+                }
+            } message: {
+                Text("Your account and saved details are removed. This can't be undone.")
+            }
+            .alert("Couldn't delete account",
+                   isPresented: .init(get: { deleteError != nil },
+                                      set: { if !$0 { deleteError = nil } })) {
+                Button("OK") { deleteError = nil }
+            } message: {
+                Text(deleteError ?? "")
+            }
             .sheet(isPresented: $showSignIn) {
                 SignInView {
                     // The result set itself changes with the session, so drop
                     // anything cached under the old one and re-run.
                     Task {
-                        store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
+                        let connected = await SessionState.isSignedIn()
+                        store.setSession(connected ? .authed : .unauthed)
+                        // Recorded against this install, not the account: the
+                        // cookies just written live in this app container and
+                        // will not be there on the user's next phone.
+                        await account.reportFacebookConnection(connected)
                         await store.retry()
                     }
                 }
             }
         }
+    }
+
+    /// The signed-in number, formatted for reading. Falls back rather than
+    /// showing an empty row: `state` can only be `.signedIn` here, but a
+    /// crash-on-assumption in Settings would be a poor trade for one string.
+    private var accountPhoneNumber: String {
+        guard case .signedIn(let viewer) = account.state else { return "—" }
+        return viewer.phoneNumber
     }
 
     /// The first couple by name, then a count. Naming all eighteen would wrap

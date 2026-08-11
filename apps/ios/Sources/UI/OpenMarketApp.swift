@@ -1,8 +1,40 @@
 import SwiftUI
 import WebKit
 
+/// Exists for one callback: APNs hands the device token to the app delegate and
+/// nowhere else, so a SwiftUI-only app has no way to receive it.
+///
+/// Everything it does is forwarded to `PushRegistrar`, which owns the permission
+/// and the reporting. Nothing else should accumulate here — an app delegate is a
+/// grab bag by nature, and this one has a single reason to exist.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// Says which backend this build is talking to, once, at launch.
+    ///
+    /// Two builds now install side by side with near-identical UI, so "which
+    /// one am I looking at" is a real question — and the expensive version of
+    /// getting it wrong is debugging a laptop's database while looking at
+    /// production. One line in the console answers it before anything else
+    /// happens.
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        print("[openmarket] \(Bundle.main.bundleIdentifier ?? "?") → \(API.baseURL)")
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in PushRegistrar.shared.didRegister(deviceToken: deviceToken) }
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        Task { @MainActor in PushRegistrar.shared.didFailToRegister(error: error) }
+    }
+}
+
 @main
 struct OpenMarketApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = ListingStore()
     @StateObject private var prefs = Preferences.shared
     @StateObject private var location = LocationProvider()
@@ -15,11 +47,15 @@ struct OpenMarketApp: App {
     /// the sheet dismisses on the tap and the results screen behind it shows
     /// the change landing (`PlaceChooser`).
     @StateObject private var chooser = PlaceChooser.shared
+    /// The app's own account, distinct from the Facebook browsing session the
+    /// engines use. Owned at app level because the whole UI is gated on it.
+    @StateObject private var account = AccountSession.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environmentObject(account)
                 .environmentObject(store)
                 .environmentObject(prefs)
                 .environmentObject(location)
@@ -40,7 +76,17 @@ struct OpenMarketApp: App {
         // store keying its cache under the wrong context.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed) }
+                Task {
+                    let connected = await SessionState.isSignedIn()
+                    store.setSession(connected ? .authed : .unauthed)
+                    // The same check, reported upward. This is the one place
+                    // that notices a session ending on its own — an expiry or a
+                    // password change elsewhere — so it is also the one place
+                    // that can tell the server the connection has lapsed.
+                    // `reportFacebookConnection` dedupes, so the usual
+                    // foreground costs nothing.
+                    await account.reportFacebookConnection(connected)
+                }
             } else {
                 Task { await ListingCache.shared.writeToDisk() }
             }
@@ -48,11 +94,137 @@ struct OpenMarketApp: App {
     }
 }
 
+/// Decides which of the three things the app can be showing: nothing yet,
+/// onboarding, or the app.
+///
+/// Signing in is the *first step of onboarding* rather than a gate in front of
+/// it. It used to be a gate, which made a first run a login screen followed by a
+/// flow that started over with a welcome carousel — two beginnings for one
+/// arrival. `OnboardingView` owns all four questions now and works out which one
+/// is outstanding, so this view only has to decide whether any of them are.
 struct RootView: View {
+    @EnvironmentObject private var account: AccountSession
+    @EnvironmentObject private var prefs: Preferences
+
+    /// Whether the flow is on screen. `nil` until the session check comes back.
+    ///
+    /// **A latch, not a derivation, and that is the whole point.** It used to be
+    /// `!account.isSignedIn || prefs.needsOnboarding` recomputed on every change,
+    /// which meant any answer landing early could dismiss the flow out from under
+    /// the person still using it — the location step resolves a place in the
+    /// background, and the moment it landed `needsOnboarding` went false and the
+    /// notifications step was never shown. `openIfNeeded` can only *open* this;
+    /// only `finish` closes it.
+    @State private var isOnboarding: Bool?
+
+    var body: some View {
+        Group {
+            // `restore()` asks the server whether the stored session is still
+            // live, so there is a round trip between launch and knowing. Showing
+            // the login screen during it would flash it at every user who is
+            // already signed in.
+            if account.state == .unknown || isOnboarding == nil {
+                LaunchView()
+            } else if isOnboarding == true {
+                OnboardingView { finish() }
+            } else {
+                SignedInView()
+            }
+        }
+        .task {
+            if account.state == .unknown { await account.restore() }
+        }
+        .onAppear { openIfNeeded() }
+        .onChange(of: prefs.needsOnboarding) { _, _ in openIfNeeded() }
+        // The server is the authority on whether this account has ever been
+        // onboarded, so a reinstall or a second device doesn't repeat the parts
+        // that are account-shaped. The parts that are *install*-shaped — a
+        // place, a Facebook cookie jar, a notification permission — are still
+        // asked, because a new install genuinely has none of them.
+        //
+        // **Both directions, and that is a bug fix.** This used to only ever
+        // set the flag true, which meant the answer belonged to whichever
+        // account had last set it rather than to the account signing in. Sign a
+        // brand-new user in on an install that had already onboarded — delete
+        // your account and sign up again, or hand someone your phone — and the
+        // server's `false` was ignored: `needsOnboarding` went false the instant
+        // the session landed and tore the flow away mid-flight, straight past
+        // the Facebook, location and notification steps to the home screen.
+        .onChange(of: account.state) { _, state in
+            if case .signedIn(let viewer) = state {
+                // A different account than the one this install last saw means
+                // a different person is holding the phone, and the answers that
+                // are install-shaped were the last person's. Signing back into
+                // the *same* account deliberately keeps them: that is routine,
+                // and making somebody pick their city again for it is a
+                // punishment for signing out.
+                if let last = prefs.lastAccountID, last != viewer.id {
+                    prefs.resetOnboarding()
+                }
+                prefs.lastAccountID = viewer.id
+                // After the reset, so the server's answer for the account that
+                // is actually signing in wins.
+                prefs.hasCompletedOnboarding = viewer.onboardingCompleted
+            }
+            openIfNeeded()
+        }
+    }
+
+    /// Opens the flow when something is outstanding, and never closes it.
+    ///
+    /// The one-way door is what keeps `RootView` and `OnboardingView` from
+    /// disagreeing. They test different things — this one asks whether anything
+    /// is missing, the flow asks which step is next — so letting both decide when
+    /// to dismiss means the stricter answer wins at whatever moment it happens to
+    /// change, mid-step.
+    private func openIfNeeded() {
+        switch account.state {
+        case .unknown:
+            // Nothing is known yet, and guessing here is how you flash a login
+            // screen at somebody who is already signed in.
+            return
+        case .signedOut:
+            // The phone screen is the first step, so signing out — or being
+            // signed out by an expired session — starts the flow rather than
+            // dropping the user somewhere with no account.
+            isOnboarding = true
+        case .signedIn:
+            // First decision after launch settles it either way; after that this
+            // can only open.
+            if isOnboarding == nil {
+                isOnboarding = prefs.needsOnboarding
+            } else if prefs.needsOnboarding {
+                isOnboarding = true
+            }
+        }
+    }
+
+    private func finish() {
+        prefs.hasCompletedOnboarding = true
+        isOnboarding = false
+        // Recorded on the account too, so the answer survives a reinstall rather
+        // than living only in this install's defaults.
+        Task { await account.markOnboardingComplete() }
+    }
+}
+
+/// The launch state, before the session check has come back.
+private struct LaunchView: View {
+    var body: some View {
+        // Deliberately bare. Anything more would read as a real screen and then
+        // be replaced a few hundred milliseconds later.
+        Color(.systemBackground)
+            .ignoresSafeArea()
+            .overlay(ProgressView())
+    }
+}
+
+struct SignedInView: View {
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var seller: SellerToolsModel
     @EnvironmentObject private var discover: DiscoverFeed
+    @EnvironmentObject private var account: AccountSession
 
     var body: some View {
         ZStack {
@@ -92,17 +264,6 @@ struct RootView: View {
                 HiddenWebViewHost(webView: webView)
                     .offset(x: 3000)
             }
-        }
-        // Onboarding asks for two things the app cannot work without — a place
-        // to search, and enough interests to build a first home screen from —
-        // so it is a gate rather than a greeting. The binding is read-only for
-        // that reason: nothing dismisses this except `done`, which stores the
-        // answers and takes `needsOnboarding` false.
-        .fullScreenCover(isPresented: .init(
-            get: { prefs.needsOnboarding },
-            set: { _ in }
-        )) {
-            OnboardingView { prefs.hasCompletedOnboarding = true }
         }
     }
 }

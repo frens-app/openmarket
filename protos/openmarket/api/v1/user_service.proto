@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+// Every nullable column is marked `optional` so the generated Swift is `String?`
+// and the generated Go is `*string`. proto3 scalars are non-optional with a zero
+// default, which makes "absent" and "zero" the same wire value — the exact bug
+// `docs/data-model.md` warns about for `price_minor = 0`. Holding the rule here,
+// on the small messages, keeps it a habit before it matters on listings.
+
+// Viewer is the authenticated user as they see themselves.
+message Viewer {
+  string id = 1;
+  // E.164, e.g. "+14155550123". Login identity; never shown to other users
+  // (see docs/backend.md §6).
+  string phone_number = 2;
+  optional string display_name = 3;
+  // Set once the client has finished onboarding.
+  //
+  // Named without a `has_` prefix on purpose: protoc-gen-swift derives its own
+  // presence accessors as `hasFoo`, so a field called `has_completed_onboarding`
+  // collides and comes out the other side as `hasCompletedOnboarding_p`.
+  bool onboarding_completed = 4;
+  // RFC 3339.
+  string created_at = 5;
+}
+
+// Device is this install, as the server sees it.
+//
+// Separate from Viewer rather than folded into it, because the two have
+// different lifetimes and the difference is the whole point: a Viewer follows
+// the person to a new phone, a Device does not. Anything that lives in the app
+// container — the Facebook cookie jar, the APNs token — belongs here.
+message Device {
+  string id = 1;
+  // Whether Facebook has been connected *on this install*.
+  //
+  // "Connect with Facebook" is a WKWebView session, not an OAuth grant, so it
+  // cannot be true of an account. Signing in to the same account on a second
+  // phone starts with this false, and correctly so — the cookies are not there.
+  bool facebook_connected = 2;
+  // RFC 3339. When it most recently became connected.
+  optional string facebook_connected_at = 3;
+}
+
+message GetViewerRequest {}
+
+message GetViewerResponse {
+  Viewer viewer = 1;
+  // The device this session belongs to. Derived from the session, so a client
+  // cannot ask about an install that isn't its own.
+  Device device = 2;
+}
+
+message SetFacebookConnectionRequest {
+  bool connected = 1;
+}
+
+message SetFacebookConnectionResponse {
+  Device device = 1;
+}
+
+message UpdateViewerRequest {
+  // Absent leaves the current value; present-and-empty clears it.
+  optional string display_name = 1;
+  // Idempotent latch — false never un-completes onboarding.
+  optional bool onboarding_completed = 2;
+}
+
+message UpdateViewerResponse {
+  Viewer viewer = 1;
+}
+
+enum NotificationPermissionStatus {
+  NOTIFICATION_PERMISSION_STATUS_UNSPECIFIED = 0;
+  NOTIFICATION_PERMISSION_STATUS_ENABLED = 1;
+  NOTIFICATION_PERMISSION_STATUS_DISABLED = 2;
+}
+
+message RegisterDeviceTokenRequest {
+  // The APNs token. Which install it belongs to is already known from the
+  // session.
+  //
+  // Empty when the user declined, or when the permission was granted but APNs
+  // has not answered yet. That is a real report rather than a no-op call: the
+  // server needs to tell an install that said no from one that was never asked,
+  // because that is what decides whether a price alert has any way to reach the
+  // person. An empty token is stored as NULL — the unique index on the column
+  // would otherwise collide the moment a second device declined.
+  //
+  // Not the APNs topic or environment: both are constants of a deployment
+  // rather than facts the client is authoritative about, so they belong in the
+  // sender's config. Asking for them here would mean storing the same two
+  // values on every row.
+  string push_token = 1;
+  NotificationPermissionStatus permission_status = 2;
+}
+
+message RegisterDeviceTokenResponse {}
+
+message DeleteAccountRequest {}
+
+message DeleteAccountResponse {}
+
+service UserService {
+  rpc GetViewer(GetViewerRequest) returns (GetViewerResponse);
+  rpc UpdateViewer(UpdateViewerRequest) returns (UpdateViewerResponse);
+  rpc RegisterDeviceToken(RegisterDeviceTokenRequest) returns (RegisterDeviceTokenResponse);
+  // Reports whether the Facebook webview session exists on this install. The
+  // client is the only thing that can know — the state is a cookie jar it owns —
+  // so this is a report, not a request to change anything.
+  rpc SetFacebookConnection(SetFacebookConnectionRequest) returns (SetFacebookConnectionResponse);
+  // Required by App Store Guideline 5.1.1(v): an app that creates an account
+  // must let the user delete it in-app.
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
+}

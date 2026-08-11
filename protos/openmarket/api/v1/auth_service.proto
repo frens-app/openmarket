@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+import "openmarket/api/v1/user_service.proto";
+
+enum DevicePlatform {
+  DEVICE_PLATFORM_UNSPECIFIED = 0;
+  DEVICE_PLATFORM_IOS = 1;
+  DEVICE_PLATFORM_ANDROID = 2;
+  DEVICE_PLATFORM_WEB = 3;
+}
+
+// StartPhoneVerification asks the SMS provider to deliver a code. It is
+// unauthenticated and it costs money on every call — see docs/backend.md §5 for
+// what guards it, and for why almost all of that is the provider's job rather
+// than ours.
+message StartPhoneVerificationRequest {
+  // E.164, including the leading "+". The client is expected to have composed
+  // this from a country picker rather than free text.
+  string phone_number = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "start_phone_verification.phone_number.e164"
+      message: "phone_number must be E.164, e.g. +14155550123"
+      expression: "this.matches('^\\\\+[1-9][0-9]{6,14}$')"
+    }
+  ];
+  DevicePlatform device_platform = 2;
+  // The same install_id VerifyPhoneRequest carries, sent one call earlier.
+  //
+  // Forwarded to the verification provider as an anti-fraud signal and nothing
+  // else: no account exists yet, so there is nothing to store it against. A
+  // provider that scores requests can tell a real install asking about one
+  // number from a script walking a range; the phone number alone cannot.
+  //
+  // Optional, unlike on VerifyPhoneRequest — a missing signal costs some
+  // scoring accuracy, and refusing to send a code over it would be worse.
+  string install_id = 3 [
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string = {
+      min_len: 8
+      max_len: 128
+    }
+  ];
+}
+
+message StartPhoneVerificationResponse {
+  // How long to count down before offering "Resend".
+  //
+  // A server-owned hint rather than an enforced limit: the provider's own
+  // per-number limit is what actually stops a runaway client, and keeping the
+  // number here means tuning the pacing doesn't need an app release.
+  int32 resend_available_in_seconds = 1;
+  // Digits expected in the code, so the entry field can size itself rather than
+  // hardcoding a number the provider owns.
+  int32 code_length = 2;
+}
+
+// VerifyPhone exchanges a delivered code for a session. This is the only way an
+// account comes into existence: a first successful verification creates the
+// user, so there is no separate signup call.
+message VerifyPhoneRequest {
+  string phone_number = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "verify_phone.phone_number.e164"
+      message: "phone_number must be E.164, e.g. +14155550123"
+      expression: "this.matches('^\\\\+[1-9][0-9]{6,14}$')"
+    }
+  ];
+  string code = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "verify_phone.code.digits"
+      message: "code must be 4-10 digits"
+      expression: "this.matches('^[0-9]{4,10}$')"
+    }
+  ];
+  DevicePlatform device_platform = 3;
+  // Device-reported IANA/TZDB zone, e.g. "America/Los_Angeles".
+  optional string time_zone = 4;
+  // Client-generated, stable for the life of this install, and the only call
+  // that needs it — the session records which device it belongs to, and every
+  // later RPC derives the device from the session.
+  //
+  // Opaque to the server: it is a correlation key for install-scoped state, not
+  // an identifier that has to mean anything. See the `user_devices` migration.
+  string install_id = 5 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 8
+      max_len: 128
+    }
+  ];
+}
+
+message VerifyPhoneResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  // Lifetime of access_token. Reported rather than left for the client to read
+  // out of the JWT: the token's internals are the server's business, and a
+  // client that parses them is a client that breaks when the claims change.
+  int32 access_token_expires_in_seconds = 5;
+  Viewer viewer = 3;
+  // True only on the call that created the account. The client uses it to
+  // decide whether to run onboarding, rather than inferring it from an empty
+  // profile.
+  bool is_new_user = 4;
+  // This install. Returned at login so the app knows immediately whether
+  // Facebook is connected *here* — which, on a phone the user has just switched
+  // to, is false however long they have had the account.
+  Device device = 6;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1 [(buf.validate.field).required = true];
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  // Refresh tokens rotate on every use; the old one is dead the moment this
+  // returns.
+  string refresh_token = 2;
+  int32 access_token_expires_in_seconds = 3;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {}
+
+service AuthService {
+  rpc StartPhoneVerification(StartPhoneVerificationRequest) returns (StartPhoneVerificationResponse);
+  rpc VerifyPhone(VerifyPhoneRequest) returns (VerifyPhoneResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+}

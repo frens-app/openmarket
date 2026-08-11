@@ -1,0 +1,27 @@
+// cp Debug.example.xcconfig Debug.local.xcconfig
+//
+// Gitignored, and included by Debug.xcconfig if it exists. This is where a
+// machine-specific endpoint goes, so nobody has to edit a committed file to
+// point at their own laptop — and so nobody accidentally commits it when they
+// do.
+//
+// Only override what you need; anything left out keeps the Debug default.
+
+// --- Physical device -----------------------------------------------------
+// The Simulator's localhost is the Mac running it, so the default just works
+// there. A real iPhone needs a host it can reach, and it has to be **https**:
+// the app carries no ATS exception, so plain HTTP to a LAN address is blocked
+// (project.yml says why that is deliberate).
+//
+// Easiest is a tunnel in front of `make dev` — Tailscale serves a valid cert
+// for a machine name, and `ngrok http 8080` prints one per run.
+//
+// API_SCHEME = https
+// API_HOSTNAME = your-mac.tailnet-name.ts.net
+
+// --- A deployed backend ---------------------------------------------------
+// Running the Debug app against Railway — useful for reproducing something that
+// only happens against real data, without archiving a Release build.
+//
+// API_SCHEME = https
+// API_HOSTNAME = openmarket-api.up.railway.app

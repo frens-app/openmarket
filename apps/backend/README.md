@@ -1,44 +1,82 @@
 # Backend
 
-Nothing here yet. This directory is a placeholder so the decision has somewhere
-to land.
+Go + Connect RPC + Postgres. Accounts and phone login; nothing else yet.
 
-## What it will do
+**Full write-up: [`docs/backend.md`](../../docs/backend.md).** The platform
+evaluation that led here is [`docs/backend-platform.md`](../../docs/backend-platform.md).
 
-Accumulate listings across devices so a feed card that arrives knowing almost
-nothing can be enriched from what somebody else's phone already learned. The
-schema, the two write paths, and the rules that stop a search sighting from
-overwriting item-page data are specified in `docs/data-model.md`.
+## Run it
 
-## What's decided
+Once, to create your local config, then put a real Prelude API key in it:
 
-- **Not tRPC.** Its whole value is TypeScript-to-TypeScript type inference and
-  the client is Swift, so it would contribute nothing but a URL convention.
-- **Not gRPC.** Roughly three endpoints doesn't earn HTTP/2 plumbing or a
-  `protoc` step in the build.
-- **Not direct database access from the app.** The app has no user identity by
-  design, so there is no principal to write row-level policies against, and any
-  key shipped in the binary is extractable.
+```bash
+cp apps/backend/.env.local.example apps/backend/.env.local
+```
 
-## What isn't
+Then, from the repo root:
 
-The runtime. Two candidates, both viable:
+```bash
+make dev
+```
 
-- **Convex** — leading option. The access pattern is document-shaped (photo
-  FBID → record, batch lookup, no joins worth the name), mutations are
-  transactional so the never-regress rule is plain code, and live queries mean
-  feed cards fill in as other devices contribute rather than on next refresh.
-  Costs: Swift client is thinner than the TS one, geospatial is beta, and
-  leaving is a rewrite rather than a `pg_dump`.
-- **Managed Postgres + a thin API** — Neon or Supabase as the database only.
-  More moving parts, no reactivity for free, but no lock-in and PostGIS is
-  mature.
+Starts Postgres in Docker and runs the API on `:8080`. The server applies
+migrations at boot, so that is the whole setup.
 
-The deciding experiment is a half-day: stand up a dev deployment, define the
-two-table schema, drive a mutation and a live subscription from a throwaway
-Swift target, restart the app mid-subscription. If subscriptions reconnect
-cleanly and 16-digit ids survive the round trip as strings, take Convex.
+The server **refuses to boot without a Prelude key, in development too.** Nothing
+is defaulted in quietly: that is what keeps dev running the same code production
+does. The panic names the `cp` above.
 
-Whichever wins, store every Facebook id as a **string**. They are 16 digits,
-which is close enough to the 2^53 exact-integer ceiling that betting on a
-double is unnecessary risk.
+**There is no local substitute for Prelude and no base-URL override.** Dev talks
+to the real API, and what keeps that free is `DEV_BYPASS_PHONE_NUMBERS`:
+
+- **`*`**, which development ships with. Every number is intercepted in-process
+  by `verify.BypassSender`: type any number, then the dev code (`123456`, or the
+  **Skip verification (dev)** button on each step). Nothing is sent, nothing is
+  billed, and Prelude's per-number rate limit never applies.
+- **explicit E.164 numbers**, which bypasses only those and sends a real,
+  **billed** text to anything else. Use it to confirm the provider path works.
+
+The code is checked either way, so a wrong one is still rejected.
+
+```bash
+make generate     # protobuf (Go + Swift) and sqlc, from /protos
+make ci           # buf lint, go vet, go test, gofmt
+```
+
+## What's here
+
+```
+cmd/api/          main, RPC handlers, interceptors, Dockerfile
+pkg/auth/         JWT signing, refresh-token hashing, request context
+pkg/phone/        E.164 normalisation and the country allowlist
+pkg/verify/       Prelude Verify client, and a bypass that wraps rather than
+                  replaces it
+pkg/config/       flags → environment → .env files
+pkg/db/           sqlc output — generated, do not edit
+deployments/      migrations (goose), queries (sqlc), compose, railway
+```
+
+Three tables, three lifetimes: `users` (the account), `user_devices` (one app
+install — where the Facebook connection and the APNs token live), `user_sessions`
+(one sign-in). `docs/backend.md` §4 explains why the middle one has to exist.
+
+Two files are worth reading before changing anything in here:
+
+- `cmd/api/ratelimit.go` — why `StartPhoneVerification` has exactly one local
+  limit and not four. Per-number limiting and pumping detection are the
+  provider's, and better than ours; what it can't do is cap total spend, because
+  every limit it enforces is per entity.
+- `cmd/api/auth_interceptor.go` — `skipAuth` is an allowlist, so a new RPC is
+  authenticated by default and opening one up is a visible edit.
+
+## Configuration
+
+`.env.development` is committed and holds dev-only values. Real credentials go in
+`.env.local` — see `.env.local.example`, which documents every variable and is
+also the list the Railway service needs.
+
+The server refuses to boot rather than come up misconfigured: a missing signing
+key or Prelude key, an empty country allowlist, `JWT_SECRET` equal to
+`REFRESH_TOKEN_HMAC_KEY`, or `DEV_BYPASS_PHONE_NUMBERS` left set with
+`ENV=production` are all panics. That last one is the only way a code is accepted
+without Prelude having sent it, which is why it is the only override guarded.

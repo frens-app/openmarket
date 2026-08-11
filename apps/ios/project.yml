@@ -3,6 +3,26 @@ options:
   bundleIdPrefix: lol.frens
   deploymentTarget:
     iOS: "17.0"
+
+# Everything that differs between environments — bundle identifier, display
+# name, API endpoint, APNs environment, version numbers — lives in these files
+# and nowhere else. See Configurations/Debug.xcconfig for why they are xcconfigs
+# rather than `#if DEBUG` branches.
+#
+# Debug and Release install side by side: different bundle identifiers mean
+# different apps, so a dev build cannot overwrite the App Store one, and the two
+# do not share a keychain, a container, or UserDefaults.
+configFiles:
+  Debug: Configurations/Debug.xcconfig
+  Release: Configurations/Release.xcconfig
+# Local, not remote: the contents are generated from /protos by `buf generate`,
+# so the package is only ever as current as the last regenerate — pinning it to
+# a version would let the Swift types drift from the Go ones, which is the exact
+# failure the shared schema exists to prevent.
+packages:
+  OpenMarketProtos:
+    path: Packages/OpenMarketProtos
+
 targets:
   OpenMarket:
     type: application
@@ -11,38 +31,67 @@ targets:
     # separately rather than folded into `Sources`, so it stays obvious that one
     # of these is compiled and the other is copied.
     sources: [Sources, Resources]
+    dependencies:
+      - package: OpenMarketProtos
+    # Push, declared here for the same reason signing is: this file is the
+    # source of truth and `xcodegen generate` rewrites the .xcodeproj wholesale,
+    # so a capability added through Xcode's Signing & Capabilities pane survives
+    # exactly until the next regenerate.
+    #
+    # The value is a build setting, so Debug signs `development` and Release
+    # signs `production` from one file. **Both** App IDs need the Push
+    # Notifications capability enabled in the developer portal — without it the
+    # entitlement is present, the build succeeds, and APNs simply refuses to
+    # issue a token at runtime (`PushRegistrar.didFailToRegister`).
+    entitlements:
+      path: OpenMarket.entitlements
+      properties:
+        aps-environment: $(APNS_ENVIRONMENT)
+
+    # A real Info.plist, because the endpoint has to be readable at *runtime*.
+    #
+    # `GENERATE_INFOPLIST_FILE` can only inject keys Apple already knows about,
+    # via INFOPLIST_KEY_*, so there is no way to get a custom API_HOSTNAME in
+    # that way. Generating the file here keeps every key in one visible list and
+    # lets the build substitute the $(…) values per configuration.
+    info:
+      path: OpenMarket.Info.plist
+      properties:
+        CFBundleDisplayName: $(DISPLAY_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Read by `API.baseURL`. Two keys rather than one URL because xcconfig
+        # treats `//` as a comment — see Configurations/Debug.xcconfig.
+        API_SCHEME: $(API_SCHEME)
+        API_HOSTNAME: $(API_HOSTNAME)
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSLocationWhenInUseUsageDescription: "Used to centre your search on your area, and to estimate how long it takes to reach a listing."
+        # No NSAppTransportSecurity block, deliberately. A per-configuration
+        # ATS exception cannot be expressed here: plist variable substitution
+        # produces strings, and `NSAllowsLocalNetworking` is specified as a
+        # Boolean — so `$(…)` yields the string "YES", which may simply be
+        # ignored. A security exception that might not work is worse than none,
+        # and hardcoding `true` would ship it in Release.
+        #
+        # It costs nothing today: ATS exempts loopback, so the Simulator talks
+        # to `make dev` over plain HTTP either way. A physical device needs an
+        # https host — see Configurations/Debug.example.xcconfig.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: lol.frens.openmarket
+        # PRODUCT_BUNDLE_IDENTIFIER, DISPLAY_NAME, MARKETING_VERSION,
+        # CURRENT_PROJECT_VERSION, API_SCHEME, API_HOSTNAME and
+        # APNS_ENVIRONMENT all come from the xcconfigs above. Setting any of
+        # them here would silently win over the file, since a target-level
+        # setting beats a configuration file.
         PRODUCT_NAME: OpenMarket
-        # The two version strings, and they belong here for the same reason the
-        # team below does: this file is the source of truth, and anything typed
-        # into Xcode's General pane lives only in the generated .xcodeproj —
-        # which is gitignored and rewritten wholesale by `xcodegen generate`.
-        # Set there, these survive until the next regenerate and are never
-        # committed, which is the worst of both: it works locally right up until
-        # it silently doesn't.
-        #
-        # `GENERATE_INFOPLIST_FILE` turns them into the two keys Apple actually
-        # reads — MARKETING_VERSION is CFBundleShortVersionString, the version a
-        # user sees, and CURRENT_PROJECT_VERSION is CFBundleVersion, the build
-        # number that has to increase with every upload of a given version.
-        MARKETING_VERSION: "0.0.1"
-        CURRENT_PROJECT_VERSION: "1"
-        # The name under the icon, which is the only one a user reads. Kept
-        # separate from PRODUCT_NAME so the bundle and scheme can stay a single
-        # token while the app presents as two words.
-        INFOPLIST_KEY_CFBundleDisplayName: "Open Market"
         # Named explicitly because nothing infers it: without this the build
         # succeeds, ships the default blank icon, and says nothing about it.
         # A single 1024×1024 in the catalog is the whole set — iOS downsamples
         # the rest, and the artwork must have no alpha channel or App Store
         # validation rejects the build (`Resources/Assets.xcassets`).
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Used to centre your search on your area, and to estimate how long it takes to reach a listing."
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         TARGETED_DEVICE_FAMILY: "1"
         # Signing lives here, not in Xcode.
         #

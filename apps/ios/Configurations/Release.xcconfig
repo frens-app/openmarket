@@ -1,0 +1,34 @@
+// Release — what ships, pointed at Railway.
+
+APP_BUNDLE_IDENTIFIER = lol.frens.openmarket
+PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
+DISPLAY_NAME = Open Market
+
+// The build number for the NEXT archive, and the only one that ships — Debug
+// pins a throwaway 1. App Store Connect scopes build-number uniqueness to
+// MARKETING_VERSION, so this has to exceed the highest build already uploaded
+// under that version.
+//
+// To keep a TestFlight build traceable: bump this, commit it, then archive that
+// exact commit from a clean tree. An archive built from anything else is not
+// the build this number describes.
+MARKETING_VERSION = 0.0.1
+CURRENT_PROJECT_VERSION = 1
+
+// See Debug.xcconfig for why this is two settings and not a URL.
+//
+// TODO: this is still the placeholder the app shipped with, not a host that
+// exists. Replace with the Railway service domain before the first archive —
+// a Release build launches straight into an unreachable server otherwise.
+API_SCHEME = https
+API_HOSTNAME = api.openmarket.app
+
+// Deliberately absent rather than NO: this is the setting that would let a
+// shipped build talk cleartext to a local network, and the honest way to say
+// "never here" is to not define it. `API.swift` fails loudly on a Release build
+// configured with an http scheme, which is the same guarantee from the other
+// side.
+
+APNS_ENVIRONMENT = production
+
+#include? "Release.local.xcconfig"
