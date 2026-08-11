@@ -1,6 +1,6 @@
 .PHONY: help generate buf-generate sqlc-generate dev dev-infra dev-infra-stop dev-infra-reset api \
 	migration-create migration-up migration-down migration-status \
-	go-build go-test go-fmt ci ci-buf ci-go ios-generate \
+	go-build go-test go-fmt ci ci-buf ci-go ios-generate ios-build ios-build-release ios-settings \
 	railway-secrets railway-deploy railway-logs railway-check
 
 BLUE := \033[34m
@@ -20,6 +20,8 @@ help:
 	@printf '$(BLUE)make generate$(RESET)         regenerate protobuf (Go + Swift) and sqlc\n'
 	@printf '$(BLUE)make migration-create$(RESET) name=add_widgets\n'
 	@printf '$(BLUE)make ci$(RESET)               lint and test everything\n'
+	@printf '$(BLUE)make ios-build$(RESET)        build the app (Debug); -release for the other one\n'
+	@printf '$(BLUE)make ios-settings$(RESET)     show what each iOS configuration resolves to\n'
 
 # ---------------------------------------------------------------------------
 # Codegen
@@ -127,8 +129,36 @@ ci-go:
 	@printf '$(BLUE)[go]$(RESET) gofmt\n'
 	@cd $(BACKEND) && test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
 
+# The .xcodeproj, OpenMarket.Info.plist and OpenMarket.entitlements are all
+# generated from project.yml plus Configurations/*.xcconfig, and all three are
+# gitignored — this is what produces them on a fresh clone.
 ios-generate:
 	@cd apps/ios && xcodegen generate
+
+IOS_SIM := platform=iOS Simulator,name=iPhone 17 Pro
+
+ios-build: ios-generate
+	@cd apps/ios && xcodebuild -project OpenMarket.xcodeproj -scheme OpenMarket \
+		-configuration Debug -destination '$(IOS_SIM)' build
+
+# Builds what ships, against the production endpoint. Worth running before a
+# release even though the archive is made in Xcode: it is the only thing that
+# exercises Release.xcconfig, and a Release build refuses to launch if that file
+# is misconfigured (see API.resolveBaseURL).
+ios-build-release: ios-generate
+	@cd apps/ios && xcodebuild -project OpenMarket.xcodeproj -scheme OpenMarket \
+		-configuration Release -destination '$(IOS_SIM)' build
+
+# What each configuration actually resolves to — the fastest way to confirm a
+# change to an xcconfig landed where you meant it to.
+ios-settings: ios-generate
+	@for cfg in Debug Release; do \
+		printf '$(BLUE)%s$(RESET)\n' "$$cfg"; \
+		cd apps/ios && xcodebuild -project OpenMarket.xcodeproj -scheme OpenMarket \
+			-configuration $$cfg -showBuildSettings 2>/dev/null | \
+			grep -E '^\s+(PRODUCT_BUNDLE_IDENTIFIER|DISPLAY_NAME|API_SCHEME|API_HOSTNAME|APNS_ENVIRONMENT|MARKETING_VERSION|CURRENT_PROJECT_VERSION) ' | \
+			sed 's/^ */  /'; cd ../..; \
+	done
 
 # ---------------------------------------------------------------------------
 # Railway

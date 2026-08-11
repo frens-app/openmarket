@@ -4,19 +4,63 @@ import OpenMarketProtos
 
 /// The Connect clients, and the one place the server's address is decided.
 enum API {
-    /// Where the app talks to.
+    /// Where the app talks to, fixed at build time by the configuration.
     ///
-    /// Debug builds point at a laptop; release builds at Railway. Left as a
-    /// compile-time switch rather than a setting because a shipped build must
-    /// not be pointable at an arbitrary host, and because `localhost` from the
-    /// Simulator is the Mac running it — which is what makes `make dev` enough
-    /// to develop against.
-    static var baseURL: String {
-        #if DEBUG
-        return ProcessInfo.processInfo.environment["OPENMARKET_API_URL"] ?? "http://localhost:8080"
-        #else
-        return "https://api.openmarket.app"
+    /// Read from the Info.plist, which `apps/ios/Configurations/*.xcconfig`
+    /// fills in — Debug points at a laptop, Release at Railway. Two keys rather
+    /// than one URL because xcconfig treats `//` as a comment; the reasoning is
+    /// in `Debug.xcconfig`.
+    ///
+    /// This replaced a `#if DEBUG` branch with an environment-variable override.
+    /// Both halves of that were wrong: `#if DEBUG` is a compiler flag rather
+    /// than a build configuration, so it cannot describe a third environment and
+    /// says nothing to anything that isn't compiling; and the override only
+    /// existed when Xcode launched the process, so it silently did nothing on a
+    /// TestFlight build or a device run from the home screen.
+    ///
+    /// Still not a user-facing setting, for the original reason: a shipped build
+    /// must not be pointable at an arbitrary host. A developer changes it by
+    /// editing a gitignored `Debug.local.xcconfig` and rebuilding.
+    static let baseURL: String = resolveBaseURL()
+
+    /// Human-readable, for the launch log and for a Settings row in Debug. Just
+    /// the host — the scheme is noise once you know which of the two it is.
+    static var environmentSummary: String {
+        "\(bundleString("API_HOSTNAME") ?? "unconfigured")"
+    }
+
+    private static func bundleString(_ key: String) -> String? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Fails the launch rather than starting up pointed at nothing.
+    ///
+    /// A missing or malformed endpoint is a build misconfiguration, not a
+    /// runtime condition: it is identical on every launch of that build, so it
+    /// surfaces the first time anybody runs it — including in TestFlight, before
+    /// it can reach the App Store. The alternative is an app that opens onto a
+    /// login screen where every attempt fails with "couldn't reach the server",
+    /// which looks like an outage and gets debugged as one.
+    private static func resolveBaseURL() -> String {
+        guard let scheme = bundleString("API_SCHEME"), let host = bundleString("API_HOSTNAME") else {
+            preconditionFailure(
+                "API_SCHEME and API_HOSTNAME must be set. They come from "
+                + "apps/ios/Configurations/<config>.xcconfig — check that project.yml still "
+                + "lists them under the target's `info.properties`, and re-run `make ios-generate`."
+            )
+        }
+        precondition(scheme == "http" || scheme == "https", "API_SCHEME must be http or https, got \(scheme)")
+
+        // Cleartext to a real server is a mistake worth catching at the door,
+        // and it can only happen by editing Release.xcconfig — which is exactly
+        // the edit nobody would notice in review.
+        #if !DEBUG
+        precondition(scheme == "https", "a release build must talk https, got \(scheme)://\(host)")
         #endif
+
+        return "\(scheme)://\(host)"
     }
 
     static func makeProtocolClient() -> ProtocolClient {

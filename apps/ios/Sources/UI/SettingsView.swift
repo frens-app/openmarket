@@ -84,6 +84,23 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                #if DEBUG
+                // Which backend this build is talking to, in the app.
+                //
+                // The home-screen name says it ("OM Dev" vs "Open Market") but
+                // that is invisible once you are inside, and the two builds are
+                // otherwise identical on screen. The expensive version of
+                // guessing wrong is reading a laptop's database while believing
+                // it is production.
+                //
+                // DEBUG only because a Release build has exactly one answer,
+                // and printing a server address to users buys nothing.
+                Section("Build") {
+                    LabeledContent("Backend", value: API.environmentSummary)
+                    LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

@@ -14,7 +14,17 @@ import Security
 /// backup onto a second device — restoring a backup should not clone a
 /// logged-in session.
 enum Keychain {
-    private static let service = "lol.frens.openmarket.session"
+    /// Derived from the bundle identifier rather than written out, so the Debug
+    /// and Release apps name their stores after themselves.
+    ///
+    /// It changes nothing about isolation — keychain items are already scoped to
+    /// the app's access group, which defaults to the bundle identifier, so the
+    /// two builds could never have read each other's tokens. It stops the
+    /// constant from *claiming* otherwise: hardcoded, it read
+    /// `lol.frens.openmarket.session` inside an app whose identifier is
+    /// `lol.frens.openmarket.dev`, which is the kind of detail somebody
+    /// eventually trusts.
+    private static let service = (Bundle.main.bundleIdentifier ?? "lol.frens.openmarket") + ".session"
 
     static func set(_ value: String, for key: String) {
         guard let data = value.data(using: .utf8) else { return }

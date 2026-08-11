@@ -8,6 +8,19 @@ import WebKit
 /// and the reporting. Nothing else should accumulate here — an app delegate is a
 /// grab bag by nature, and this one has a single reason to exist.
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// Says which backend this build is talking to, once, at launch.
+    ///
+    /// Two builds now install side by side with near-identical UI, so "which
+    /// one am I looking at" is a real question — and the expensive version of
+    /// getting it wrong is debugging a laptop's database while looking at
+    /// production. One line in the console answers it before anything else
+    /// happens.
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        print("[openmarket] \(Bundle.main.bundleIdentifier ?? "?") → \(API.baseURL)")
+        return true
+    }
+
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in PushRegistrar.shared.didRegister(deviceToken: deviceToken) }
