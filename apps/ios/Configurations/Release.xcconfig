@@ -17,11 +17,9 @@ CURRENT_PROJECT_VERSION = 1
 
 // See Debug.xcconfig for why this is two settings and not a URL.
 //
-// TODO: this is still the placeholder the app shipped with, not a host that
-// exists. Replace with the Railway service domain before the first archive —
-// a Release build launches straight into an unreachable server otherwise.
+// The Railway service domain for the deployed API.
 API_SCHEME = https
-API_HOSTNAME = api.openmarket.app
+API_HOSTNAME = api-production-22b5.up.railway.app
 
 // Deliberately absent rather than NO: this is the setting that would let a
 // shipped build talk cleartext to a local network, and the honest way to say

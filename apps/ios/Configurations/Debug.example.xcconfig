@@ -24,4 +24,4 @@
 // only happens against real data, without archiving a Release build.
 //
 // API_SCHEME = https
-// API_HOSTNAME = openmarket-api.up.railway.app
+// API_HOSTNAME = api-production-22b5.up.railway.app
