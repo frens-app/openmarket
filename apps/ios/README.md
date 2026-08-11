@@ -9,7 +9,7 @@ typed into Xcode's own panes survives exactly until the next regenerate.
 | | Debug | Release |
 |---|---|---|
 | Bundle id | `lol.frens.openmarket.dev` | `lol.frens.openmarket` |
-| Home screen | **OM Dev** | **Open Market** |
+| Home screen | **Open Market Dev** | **Open Market** |
 | Backend | `http://localhost:8080` | `https://api.openmarket.app` |
 | APNs | `development` | `production` |
 
@@ -18,9 +18,9 @@ cannot overwrite the App Store one, and the two share no keychain, no container
 and no UserDefaults — signing in to one leaves the other signed out, which is
 the point.
 
-The display names are short and unalike on purpose: iOS truncates the
-home-screen label at around a dozen characters, so "Open Market Dev" and
-"Open Market" would both render as "Open Market…".
+Both names fit on the home screen untruncated. A freshly installed app shows a
+"new" dot that steals label width and clips the longer one to "OpenMarket…" —
+that is transient, and it clears the first time the app is launched.
 
 Inside the app, Debug builds show the backend and bundle id under
 **Settings → Build**, and every launch logs one line:

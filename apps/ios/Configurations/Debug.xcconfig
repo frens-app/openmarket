@@ -15,11 +15,9 @@
 APP_BUNDLE_IDENTIFIER = lol.frens.openmarket.dev
 PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
 
-// Short on purpose. iOS truncates the home-screen label at around a dozen
-// characters, so "Open Market Dev" and "Open Market" would both render as
-// "Open Market…" — which is the one place the two builds must never look alike,
-// since they now install side by side.
-DISPLAY_NAME = OM Dev
+// The two builds install side by side, so this is the label that tells them
+// apart on the home screen, in the app switcher, and in Settings.
+DISPLAY_NAME = Open Market Dev
 
 // Throwaway. Only Release tracks a build number that means anything.
 MARKETING_VERSION = 0.0.1
