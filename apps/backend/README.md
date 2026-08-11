@@ -22,6 +22,12 @@ make dev
 Starts Postgres in Docker and runs the API on `:8080`. The server applies
 migrations at boot, so that is the whole setup.
 
+It also asserts a Tailscale Serve mapping on the way past, which is what lets a
+physical iPhone reach this API over https — see
+[apps/ios/README.md](../ios/README.md). It's a no-op once registered, and it
+never fails the target: with Tailscale absent or signed out you get a note and
+the API starts anyway, since Simulator work doesn't need it.
+
 The server **refuses to boot without a Prelude key, in development too.** Nothing
 is defaulted in quietly: that is what keeps dev running the same code production
 does. The panic names the `cp` above.

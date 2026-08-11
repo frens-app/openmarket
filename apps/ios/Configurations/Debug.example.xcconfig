@@ -13,11 +13,18 @@
 // the app carries no ATS exception, so plain HTTP to a LAN address is blocked
 // (project.yml says why that is deliberate).
 //
-// Easiest is a tunnel in front of `make dev` — Tailscale serves a valid cert
-// for a machine name, and `ngrok http 8080` prints one per run.
+// `make tunnel` puts Tailscale Serve in front of `make dev`, which is the whole
+// setup: a valid cert for a stable machine name, no account with a tunnel
+// vendor, and nothing to re-copy when the tunnel restarts. `make tunnel` prints
+// the exact two lines to paste here. ngrok also works (`ngrok http 8080`) but
+// hands you a new hostname every run, so this file has to be re-edited and the
+// app rebuilt each time.
+//
+// The port is not optional — Serve terminates TLS on 8443 and forwards to the
+// API on 127.0.0.1:8080, and 443 is left free for anything else on this Mac.
 //
 // API_SCHEME = https
-// API_HOSTNAME = your-mac.tailnet-name.ts.net
+// API_HOSTNAME = your-mac.your-tailnet.ts.net:8443
 
 // --- A deployed backend ---------------------------------------------------
 // Running the Debug app against Railway — useful for reproducing something that

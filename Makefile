@@ -1,6 +1,7 @@
 .PHONY: help generate buf-generate sqlc-generate dev dev-infra dev-infra-stop dev-infra-reset api \
 	migration-create migration-up migration-down migration-status \
-	ci ci-buf ci-go ios-generate ios-build ios-build-release ios-settings \
+	ci ci-buf ci-go ios-generate ios-build ios-build-release ios-build-device ios-settings \
+	tunnel tunnel-ensure tunnel-status tunnel-stop \
 	railway-deploy railway-logs railway-check
 
 BLUE := \033[34m
@@ -16,12 +17,13 @@ COMPOSE := docker compose -f $(BACKEND)/deployments/compose.yml
 DEV_DATABASE_URL := $(shell grep -E '^DATABASE_URL=' $(BACKEND)/.env.development | cut -d= -f2-)
 
 help:
-	@printf '$(BLUE)make dev$(RESET)              start Postgres, run the API\n'
+	@printf '$(BLUE)make dev$(RESET)              start Postgres and the tailnet tunnel, run the API\n'
 	@printf '$(BLUE)make generate$(RESET)         regenerate protobuf (Go + Swift) and sqlc\n'
 	@printf '$(BLUE)make migration-create$(RESET) name=add_widgets\n'
 	@printf '$(BLUE)make ci$(RESET)               lint and test everything\n'
 	@printf '$(BLUE)make ios-build$(RESET)        build the app (Debug); -release for the other one\n'
 	@printf '$(BLUE)make ios-settings$(RESET)     show what each iOS configuration resolves to\n'
+	@printf '$(BLUE)make tunnel$(RESET)           expose the API on the tailnet, for a physical device\n'
 
 # ---------------------------------------------------------------------------
 # Codegen
@@ -45,7 +47,10 @@ sqlc-generate:
 # Local development
 # ---------------------------------------------------------------------------
 
-dev: dev-infra api
+# Postgres, the tunnel, the API — in that order, and the whole of local setup.
+# The tunnel step is a no-op after the first run and never fails the target; see
+# the section below.
+dev: dev-infra tunnel-ensure api
 
 # Just Postgres. Verification goes to the real Prelude API in every
 # environment; the dev skip button works in-process off DEV_BYPASS_PHONE_NUMBERS,
@@ -66,6 +71,56 @@ dev-infra-reset:
 api:
 	@printf '$(BLUE)[api]$(RESET) starting\n'
 	@cd $(BACKEND) && go run ./cmd/api
+
+# ---------------------------------------------------------------------------
+# The tunnel, for running on a physical device
+# ---------------------------------------------------------------------------
+#
+# The Simulator shares the Mac's loopback, so `make dev` is the whole story
+# there. A real iPhone is a different machine on a different network, and it
+# needs **https**: the app ships no ATS exception on purpose (project.yml), so
+# http://192.168.x.x is blocked before a packet leaves the phone.
+#
+# Tailscale Serve is the answer rather than ngrok because the hostname is stable.
+# ngrok mints a new one per run, and every one of those costs an xcconfig edit, a
+# regenerate and a rebuild — the endpoint is compiled into the Info.plist by
+# design, not read from a setting. With Serve the address is a property of this
+# Mac, so it is written down once.
+#
+# `--bg` registers it with tailscaled, which means it survives a reboot and does
+# not hold a terminal. TUNNEL_PORT is the tailnet-side https port, and 8443 not
+# 443 because the Serve config belongs to the Mac rather than to this checkout:
+# 443 is what another project on the same machine would want for a web surface,
+# and taking it here would silently repoint theirs.
+#
+# The logic lives in scripts/tunnel.sh because one case needs real control flow:
+# Serve is off on a new tailnet until an owner enables it in the admin console,
+# and the CLI's answer to that is to print the link and block until somebody
+# clicks it. `make tunnel` should wait — you asked for it. `make dev` must not,
+# so `tunnel-ensure` runs it on a timeout and treats every failure as a note.
+#
+# BACKEND_PORT comes out of the committed env file for the same reason
+# DEV_DATABASE_URL does: the tunnel and the server cannot be left disagreeing
+# about which port they mean.
+
+TUNNEL_PORT := 8443
+BACKEND_PORT := $(shell grep -E '^PORT=' $(BACKEND)/.env.development | cut -d= -f2-)
+TUNNEL := TUNNEL_PORT=$(TUNNEL_PORT) BACKEND_PORT=$(BACKEND_PORT) ./scripts/tunnel.sh
+
+# Quiet, idempotent, and never fatal — `make dev` has a database and an API to
+# get on with, and Simulator work needs no tunnel at all. Not in `help`: it runs
+# on its own as part of `make dev`.
+tunnel-ensure:
+	@$(TUNNEL) ensure
+
+tunnel:
+	@$(TUNNEL) up
+
+tunnel-status:
+	@$(TUNNEL) status
+
+tunnel-stop:
+	@$(TUNNEL) stop
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -131,6 +186,18 @@ IOS_SIM := platform=iOS Simulator,name=iPhone 17 Pro
 ios-build: ios-generate
 	@cd apps/ios && xcodebuild -project OpenMarket.xcodeproj -scheme OpenMarket \
 		-configuration Debug -destination '$(IOS_SIM)' build
+
+# A Debug build for a real iPhone, which is a different build from the one
+# above: the simulator signs ad-hoc, so a simulator build proves nothing about
+# whether this Mac can sign for a device. `generic/platform=iOS` needs no phone
+# plugged in — it is the fast way to find out that a provisioning profile is
+# missing, before Xcode says so halfway through an install.
+#
+# Running it is still Xcode's job (⌘R with the device selected). Point it
+# somewhere the phone can reach first — see `make tunnel`.
+ios-build-device: ios-generate
+	@cd apps/ios && xcodebuild -project OpenMarket.xcodeproj -scheme OpenMarket \
+		-configuration Debug -destination 'generic/platform=iOS' build
 
 # Builds what ships, against the production endpoint. Worth running before a
 # release even though the archive is made in Xcode: it is the only thing that
