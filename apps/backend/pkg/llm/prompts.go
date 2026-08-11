@@ -36,9 +36,14 @@ var identifySchema = map[string]any{
 			"maxItems":    2,
 			"description": "Marketplace search queries for this item, best first.",
 		},
+		// No empty member. "Unknown" is expressed by leaving the field out —
+		// condition is not in `required` — because an empty string is not a legal
+		// enum value: Vertex rejects the whole request with
+		// `response_schema.properties[condition].enum[0]: cannot be empty`, and a
+		// 400 on the schema fails every call, not just the uncertain ones.
 		"condition": map[string]any{
 			"type": "string",
-			"enum": []string{"", "new", "used_like_new", "used_good", "used_fair"},
+			"enum": []string{"new", "used_like_new", "used_good", "used_fair"},
 		},
 		"key_attributes": map[string]any{
 			"type":     "array",
@@ -74,7 +79,7 @@ Rules:
 - Search queries are for finding SIMILAR items, so leave condition words out of them. "scratched", "like new" and "barely used" narrow the search without narrowing the market, and a query that returns nothing prices nothing.
 - Give one query. Give a second only if the item is genuinely known by another name, and make it a different phrasing of the SAME item, never a second item or a broader category.
 - key_attributes are facts you can see in the photo or that the seller stated: "six drawers", "original box", "left armrest torn". Do not add condition you cannot see. If the seller mentions one scratch, that is one scratch, and the rest of the item is not "in good condition" as far as you know.
-- condition is a guess from the photo. Leave it empty rather than guess blindly.
+- condition is a guess from the photo. Omit the field entirely rather than guess blindly; it is optional, and "no answer" is a better answer than a wrong one.
 
 The seller's description:
 ` + description

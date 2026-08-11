@@ -171,7 +171,19 @@ const (
 	// refused "WhiteIKEAMalm dressed", which is just a keyboard swallowing
 	// spaces.
 	ErrorCodeRefused ErrorCode = "refused"
-	ErrorCodeUnknown ErrorCode = "unknown"
+	// We sent something the provider would not accept — a schema it rejects, a
+	// key it does not recognise, a model id it cannot route. Separate from
+	// `refused` because the two are indistinguishable in the column and opposite
+	// in meaning: `refused` is a judgement about the user's item and the honest
+	// advice is to reword it, while this is a bug in our request that no wording
+	// will fix and every user hits at once.
+	//
+	// Earned: an empty string in the `condition` enum is legal JSON Schema and
+	// illegal to Vertex, which 400s. Filed as `refused`, that read as "the model
+	// declined this photo" — advice that would have sent every user rewording a
+	// description while the real fault sat in a Go map.
+	ErrorCodeBadRequest ErrorCode = "bad_request"
+	ErrorCodeUnknown    ErrorCode = "unknown"
 )
 
 // Error carries a classified failure up from a provider.
@@ -203,12 +215,13 @@ func CodeOf(err error) ErrorCode {
 //
 // invalid_output is on the list because a schema violation is usually a reroll
 // away from being fine. refused is not, because it is a decision about the
-// input. Everything unknown is retried once — the cost of one wasted call is
-// lower than the cost of a transient fault the classifier didn't recognise
-// ending the run.
+// input, and neither is bad_request, which retries into the identical 400.
+// Everything unknown is retried once — the cost of one wasted call is lower
+// than the cost of a transient fault the classifier didn't recognise ending the
+// run.
 func retryable(code ErrorCode) bool {
 	switch code {
-	case ErrorCodeRefused:
+	case ErrorCodeRefused, ErrorCodeBadRequest:
 		return false
 	default:
 		return true

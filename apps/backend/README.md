@@ -91,7 +91,23 @@ retry — carrying the provider, the model that actually served it, and the toke
 counts. **There is no cost column.** Cost is a function of those counts and the
 model id, so it can be computed retroactively once a rate table exists; a token
 count that was never written down is gone. See migration `00004`, and `00005`
-for why reasoning tokens get their own column.
+for why reasoning tokens get their own column — and for the measured answer to
+the question that column was opened for.
+
+Two things worth knowing before anyone writes that rate table. The Gateway
+*does* return a cost, in `usage.cost` and `usage.cost_details` — recomputing
+from tokens is a fallback, not the only route. And with a BYOK provider key attached
+to the Gateway, `cost` is `0` and the real number is `market_cost`: the spend is
+on Google's invoice, not Vercel's, so a dashboard reading `cost` reads zero
+while the money is being spent somewhere else.
+
+A failed call leaves two records, and they say different things. `error_code`
+in the row is the category, which is what you query; the provider's own words go
+to the log beside it at `warn`, because "the schema was rejected" and *which
+field* it rejected are not the same fact, and only the column-sized one fits in
+a column. `bad_request` and `refused` look adjacent and are opposites: the first
+is our request being wrong and every user hits it at once, the second is the
+model declining this item and rewording it may help.
 
 Three tables, three lifetimes: `users` (the account), `user_devices` (one app
 install — where the Facebook connection and the APNs token live), `user_sessions`

@@ -165,6 +165,29 @@ func TestRefusalIsNotRetried(t *testing.T) {
 	}
 }
 
+// A 400 is our request being wrong, so every retry buys the identical 400 —
+// twice the latency and twice the rows for the same answer. Alongside
+// TestRefusalIsNotRetried because they are the two non-retryable codes and they
+// stop for opposite reasons: that one is a decision, this one is a bug.
+func TestBadRequestIsNotRetried(t *testing.T) {
+	store := &fakeStore{}
+	provider := &scriptedProvider{results: []scriptedResult{{err: Errorf(ErrorCodeBadRequest, "schema rejected")}}}
+	runner := newTestRunner(t, provider, store, Config{MaxCallsPerUser: 10, MaxAttempts: 3})
+
+	if _, err := runner.Identify(context.Background(), Subject{UserID: uuid.New()}, IdentifyInput{}); err == nil {
+		t.Fatal("Identify: want error")
+	}
+	if provider.calls != 1 {
+		t.Errorf("provider called %d times, want 1", provider.calls)
+	}
+	if len(store.runs) != 1 {
+		t.Fatalf("recorded %d runs, want 1", len(store.runs))
+	}
+	if got := store.runs[0].ErrorCode; got == nil || *got != string(ErrorCodeBadRequest) {
+		t.Errorf("error_code = %v, want bad_request", got)
+	}
+}
+
 func TestCeilingRefusesBeforeCallingProvider(t *testing.T) {
 	store := &fakeStore{count: 60}
 	provider := &scriptedProvider{results: []scriptedResult{{}}}

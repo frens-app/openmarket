@@ -171,8 +171,9 @@ func TestHTTPStatusesMapToCodes(t *testing.T) {
 		want   ErrorCode
 	}{
 		{http.StatusTooManyRequests, ErrorCodeRateLimited},
-		{http.StatusBadRequest, ErrorCodeRefused},
-		{http.StatusForbidden, ErrorCodeRefused},
+		// See the note in gateway_test.go: a 400 is ours, not the model's.
+		{http.StatusBadRequest, ErrorCodeBadRequest},
+		{http.StatusForbidden, ErrorCodeBadRequest},
 		{http.StatusInternalServerError, ErrorCodeUnavailable},
 		{http.StatusServiceUnavailable, ErrorCodeUnavailable},
 	}

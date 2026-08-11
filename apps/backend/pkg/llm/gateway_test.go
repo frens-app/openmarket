@@ -168,8 +168,11 @@ func TestGatewayHTTPStatusesMapToCodes(t *testing.T) {
 		want   ErrorCode
 	}{
 		{http.StatusTooManyRequests, ErrorCodeRateLimited},
-		{http.StatusBadRequest, ErrorCodeRefused},
-		{http.StatusUnauthorized, ErrorCodeRefused},
+		// bad_request, not refused: a 400 is our request being wrong, and the
+		// two must stay distinguishable because only one of them is worth
+		// telling the user to reword their item over.
+		{http.StatusBadRequest, ErrorCodeBadRequest},
+		{http.StatusUnauthorized, ErrorCodeBadRequest},
 		{http.StatusInternalServerError, ErrorCodeUnavailable},
 	}
 	for _, tc := range cases {

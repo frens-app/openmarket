@@ -273,6 +273,10 @@ func modelError(err error, what string) error {
 	case llm.ErrorCodeRateLimited, llm.ErrorCodeUnavailable:
 		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s: %w", what, err))
 	case llm.ErrorCodeRefused:
+		// Only a genuine refusal earns this sentence, because it is the only
+		// failure rewording can fix. A malformed request of ours is
+		// bad_request and falls through to the internal error below, where it
+		// belongs: it is not the user's item, and there is nothing they can do.
 		return connect.NewError(connect.CodeInvalidArgument,
 			errors.New("the model declined to answer for this item; try rewording the description"))
 	default:

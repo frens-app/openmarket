@@ -11,8 +11,17 @@
 -- computable. Storing only output risks undercounting by whatever fraction of a
 -- thinking model's work is thinking, which can be most of it.
 --
--- Whoever writes the rate table resolves this against a real invoice — one
--- month of rows and one statement settles it — and until then nothing is lost.
+-- **Measured, 2026-08-11, gemini-3.6-flash via the Gateway: output is
+-- inclusive.** Two real calls returned completion 628 / reasoning 576 and
+-- completion 815 / reasoning 772 — differences of 52 and 43 tokens, which is
+-- the size of the JSON that came back. So cost is `output × rate`, and adding
+-- thought to it double-counts. Note what that ratio says on its own: over 90%
+-- of the output tokens on both calls were thinking nobody ever reads. That is
+-- the number this column exists to make visible, and it is the first thing to
+-- look at if the bill is ever surprising.
+--
+-- Measured on one model through one route, so it is not a law. Whoever writes
+-- the rate table re-checks it per provider against a real invoice.
 --
 -- Not Gemini-specific: separately-reported reasoning tokens are the norm across
 -- providers now, so this stays meaningful when the provider changes.

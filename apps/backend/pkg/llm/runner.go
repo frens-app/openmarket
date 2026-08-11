@@ -219,6 +219,24 @@ func (r *Runner) record(
 	// configured name would look authoritative and be wrong.
 	model := usage.Model
 
+	// The provider's own words, which the column cannot hold and the client
+	// must not be shown. `error_code` says which kind of failure; only this
+	// says which schema field, which model id, which key. Without it a failing
+	// call leaves a row that names the category and nothing that names the
+	// cause, and diagnosis means reconstructing the request by hand against the
+	// live provider.
+	if callErr != nil {
+		r.logger.Warn("model call failed",
+			zap.Error(callErr),
+			zap.String("stage", string(stage)),
+			zap.Int("attempt", attempt),
+			zap.String("provider", r.provider.Name()),
+			zap.String("model", model),
+			zap.String("error_code", string(code)),
+			zap.Int64("latency_ms", latency.Milliseconds()),
+		)
+	}
+
 	if _, err := r.store.RecordLLMRun(ctx, db.RecordLLMRunParams{
 		PriceCheckID:      sub.PriceCheckID,
 		UserID:            sub.UserID,

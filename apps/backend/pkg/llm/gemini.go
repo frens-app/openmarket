@@ -306,11 +306,14 @@ func statusErrorCode(status int) ErrorCode {
 	case status == http.StatusTooManyRequests:
 		return ErrorCodeRateLimited
 	case status == http.StatusBadRequest:
-		// Ours, not theirs — a malformed request retries into the same 400, so
-		// it must not be on the retry path.
-		return ErrorCodeRefused
+		// Ours, not theirs. Not `refused`: the model never saw this, so telling
+		// the user to reword their item would be advice about somebody else's
+		// bug. See ErrorCodeBadRequest for the one that made the difference
+		// concrete.
+		return ErrorCodeBadRequest
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return ErrorCodeRefused
+		// A key problem, and equally not the user's item.
+		return ErrorCodeBadRequest
 	case status >= 500:
 		return ErrorCodeUnavailable
 	default:
