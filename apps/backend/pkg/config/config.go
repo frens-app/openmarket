@@ -63,6 +63,26 @@ func init() {
 	// user_devices — see the comment in migration 00003. Nothing reads them yet;
 	// they are what the APNs sender will need when it exists.
 	pflag.String("apns_bundle_id", "", "APNs topic (apns-topic header) used when sending pushes")
+
+	// The model calls behind Price Check.
+	//
+	// Unlike Prelude, this one has a local stand-in: `stub` answers without a
+	// network or a key, so the iOS side can be built and re-run without a bill.
+	// That is a real code path selected by configuration rather than a mock —
+	// the same arrangement as DEV_BYPASS_PHONE_NUMBERS — and like that list it
+	// is refused under ENV=production.
+	pflag.String("llm_provider", "stub", "model provider: stub, google")
+	pflag.String("llm_api_key", "", "API key for the model provider (not required by stub)")
+	pflag.String("llm_model", "", "model identifier to request (not required by stub)")
+	// Per user, per window, counted in calls rather than money because there is
+	// no rate table yet. The failure this guards against early is a client stuck
+	// in a retry loop, not a large bill, and calls are the right unit for that.
+	pflag.Int("llm_max_calls_per_user", 60, "model calls allowed per user per window")
+	pflag.Duration("llm_call_window", time.Hour, "window the per-user call ceiling is counted over")
+	// Attempts for one logical call, not retries on top of it: 2 means one
+	// retry. Every attempt is charged and every attempt is a row.
+	pflag.Int("llm_max_attempts", 2, "attempts per model call, including the first")
+	pflag.Duration("llm_timeout", 30*time.Second, "deadline for a single model call")
 }
 
 var parseFlagsOnce sync.Once
@@ -90,10 +110,24 @@ type ServiceConfig struct {
 	VerificationResendCooldown time.Duration `mapstructure:"verification_resend_cooldown"`
 
 	APNSBundleID string `mapstructure:"apns_bundle_id"`
+
+	LLMProvider        string        `mapstructure:"llm_provider"`
+	LLMAPIKey          string        `mapstructure:"llm_api_key"`
+	LLMModel           string        `mapstructure:"llm_model"`
+	LLMMaxCallsPerUser int           `mapstructure:"llm_max_calls_per_user"`
+	LLMCallWindow      time.Duration `mapstructure:"llm_call_window"`
+	LLMMaxAttempts     int           `mapstructure:"llm_max_attempts"`
+	LLMTimeout         time.Duration `mapstructure:"llm_timeout"`
 }
 
 // IsProduction reports whether this is the production environment.
 func (c ServiceConfig) IsProduction() bool { return c.Env == "production" }
+
+// LLMProviderStub is the provider name that answers without a network.
+const LLMProviderStub = "stub"
+
+// UsesStubLLM reports whether model calls are being answered locally.
+func (c ServiceConfig) UsesStubLLM() bool { return c.LLMProvider == LLMProviderStub }
 
 // BypassPhoneNumbers returns the parsed dev bypass list.
 func (c ServiceConfig) BypassPhoneNumbers() []string {
@@ -169,6 +203,36 @@ func requireAPIValues(cfg ServiceConfig) {
 	// sent it, so it is the only thing that has to be impossible in production.
 	if cfg.IsProduction() && len(cfg.BypassPhoneNumbers()) > 0 {
 		panic("dev_bypass_phone_numbers must be empty in production")
+	}
+
+	// The model provider is required to be real in production for the same
+	// reason: the stub is the one configuration that returns an answer nothing
+	// generated, and a price built on it would look exactly like a price.
+	if cfg.IsProduction() && cfg.UsesStubLLM() {
+		panic("llm_provider must not be " + LLMProviderStub + " in production")
+	}
+	// Credentials are required only when there is something to authenticate to,
+	// which is the difference from Prelude: this feature does have a local
+	// stand-in, so a fresh clone runs without a key and only a deployment that
+	// means to call a provider has to have one.
+	if !cfg.UsesStubLLM() {
+		var missingLLM []string
+		if strings.TrimSpace(cfg.LLMAPIKey) == "" {
+			missingLLM = append(missingLLM, "llm_api_key")
+		}
+		if strings.TrimSpace(cfg.LLMModel) == "" {
+			missingLLM = append(missingLLM, "llm_model")
+		}
+		if len(missingLLM) > 0 {
+			panic(fmt.Sprintf("llm_provider=%s requires %v (or set llm_provider=%s)",
+				cfg.LLMProvider, missingLLM, LLMProviderStub))
+		}
+	}
+	if cfg.LLMMaxAttempts < 1 {
+		panic("llm_max_attempts must be at least 1")
+	}
+	if cfg.LLMCallWindow <= 0 {
+		panic("llm_call_window must be positive")
 	}
 	if cfg.JWTSecret == cfg.RefreshTokenHMACKey {
 		panic("jwt_secret and refresh_token_hmac_key must differ; rotating one should not invalidate the other")

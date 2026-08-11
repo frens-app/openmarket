@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/validate"
 	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
+	"frens.lol/openmarket/backend/pkg/llm"
 	"frens.lol/openmarket/backend/pkg/phone"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
 	"frens.lol/openmarket/backend/pkg/verify"
@@ -104,10 +105,21 @@ func main() {
 		pool:    pool,
 		logger:  logger.Named("user"),
 	}
+	pricingSvc := &pricingServer{
+		queries: queries,
+		runner: llm.NewRunner(buildModelProvider(cfg), queries, logger.Named("llm"), llm.Config{
+			MaxCallsPerUser: cfg.LLMMaxCallsPerUser,
+			Window:          cfg.LLMCallWindow,
+			MaxAttempts:     cfg.LLMMaxAttempts,
+			Timeout:         cfg.LLMTimeout,
+		}),
+		logger: logger.Named("pricing"),
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, interceptors))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, interceptors))
+	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, interceptors))
 	mux.HandleFunc("/health", healthHandler(pool))
 
 	// Reflection is for grpcurl against a local server. Off in production:
@@ -117,6 +129,7 @@ func main() {
 		reflector := grpcreflect.NewStaticReflector(
 			apiv1connect.AuthServiceName,
 			apiv1connect.UserServiceName,
+			apiv1connect.PricingServiceName,
 		)
 		mux.Handle(grpcreflect.NewHandlerV1(reflector))
 		mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
@@ -177,6 +190,23 @@ func buildSender(cfg config.ServiceConfig, logger *zap.Logger) (verify.Sender, e
 		provider,
 		logger.Named("verify"),
 	)
+}
+
+// buildModelProvider selects the vendor behind Price Check.
+//
+// The stub is a real code path chosen by configuration, the same way the
+// verification bypass is — not a test double injected here. config.LoadAPI has
+// already refused it under ENV=production and refused a real provider with no
+// key, so by this point the choice is known-good and this only has to make it.
+func buildModelProvider(cfg config.ServiceConfig) llm.Provider {
+	if cfg.UsesStubLLM() {
+		return llm.StubProvider{}
+	}
+	// Only the stub exists so far. config.LoadAPI accepts "google" as a name,
+	// so reaching here means the client for it has not been written yet — and
+	// silently falling back to the stub would serve invented prices from a
+	// deployment that believes it is calling a model.
+	panic(fmt.Sprintf("llm_provider=%q is configured but has no client yet", cfg.LLMProvider))
 }
 
 func runMigrations(pool *pgxpool.Pool, logger *zap.Logger) error {
