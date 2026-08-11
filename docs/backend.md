@@ -497,7 +497,7 @@ Environment variables on the service — the full list is in
 |---|---|
 | `ENV` | `production`. Also what makes the dev bypass a boot-time panic |
 | `DATABASE_URL` | Injected by the Postgres plugin. Use the private-network host |
-| `JWT_SECRET` | `openssl rand -hex 32` |
+| `JWT_SECRET` | `openssl rand -hex 32`. Set both keys by hand rather than scripting them into place: they are the keys to every session, and rotating one signs everybody out, so that should be a thing you did rather than a thing that happened |
 | `REFRESH_TOKEN_HMAC_KEY` | `openssl rand -hex 32`, **different from the above** — the server refuses to boot if they match, because rotating one should not invalidate every stored refresh token |
 | `PRELUDE_API_KEY` | From the Prelude dashboard → API Keys |
 | `ALLOWED_COUNTRY_CODES` | `1` |
@@ -506,11 +506,6 @@ Environment variables on the service — the full list is in
 
 Then point `API.baseURL` in `apps/ios/Sources/Account/APIClient.swift` at the
 service's public domain.
-
-`make railway-secrets` prints the two signing keys to paste in. It deliberately
-doesn't set them for you: they are the keys to every session, rotating them signs
-everyone out, so that should be something you did rather than something that
-happened.
 
 `make railway-deploy` pushes the working tree — for a first deploy or a hotfix.
 Let the GitHub integration handle the rest.

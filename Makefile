@@ -1,7 +1,7 @@
 .PHONY: help generate buf-generate sqlc-generate dev dev-infra dev-infra-stop dev-infra-reset api \
 	migration-create migration-up migration-down migration-status \
-	go-build go-test go-fmt ci ci-buf ci-go ios-generate ios-build ios-build-release ios-settings \
-	railway-secrets railway-deploy railway-logs railway-check
+	ci ci-buf ci-go ios-generate ios-build ios-build-release ios-settings \
+	railway-deploy railway-logs railway-check
 
 BLUE := \033[34m
 GREEN := \033[32m
@@ -98,15 +98,6 @@ migration-status:
 # Checks
 # ---------------------------------------------------------------------------
 
-go-build:
-	@cd $(BACKEND) && go build ./...
-
-go-test:
-	@cd $(BACKEND) && go test ./...
-
-go-fmt:
-	@cd $(BACKEND) && gofmt -w .
-
 ci: ci-buf ci-go
 
 # The breaking check is non-fatal for now. The client is a shipped app, so a
@@ -176,20 +167,6 @@ railway-check:
 	}
 	@printf '$(BLUE)[railway]$(RESET) '
 	@railway whoami
-
-# Prints the two secrets to paste into the service variables.
-#
-# Not piped straight into `railway variables` on purpose: these are the keys to
-# every session, and rotating them signs everybody out, so setting them should be
-# a thing you did rather than a thing that happened. They differ because the
-# server refuses to boot if they match.
-railway-secrets:
-	@printf '$(BLUE)[railway]$(RESET) paste these into the service variables\n\n'
-	@printf 'JWT_SECRET=%s\n' "$$(openssl rand -hex 32)"
-	@printf 'REFRESH_TOKEN_HMAC_KEY=%s\n' "$$(openssl rand -hex 32)"
-	@printf '\nDATABASE_URL comes from the Postgres plugin. Also set:\n'
-	@printf '  ENV=production\n'
-	@printf '  PRELUDE_API_KEY\n'
 
 # Deploys the working tree, which is the point — use it for a first deploy or a
 # hotfix, and let the GitHub integration handle everything else.
