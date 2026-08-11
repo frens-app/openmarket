@@ -154,15 +154,17 @@ struct OnboardingView: View {
 /// Everything measured about a signed-in session says this is the version of the
 /// app worth having (`docs/logged-in-findings.md`): a stable seller id, so a
 /// listing can be attributed rather than shrugged at; results that keep loading
-/// instead of stopping at the first batch; and a Discover made of Facebook's own
-/// picks. Handing off to message a seller lands in an app that already knows who
-/// you are.
+/// instead of stopping at the first batch; and ranking done against a real
+/// account rather than against nobody. Handing off to message a seller lands in
+/// an app that already knows who you are.
 ///
 /// So the primary action is signing in and "not now" is a text button underneath
-/// — with the reduced version described honestly beside it, because someone
-/// declining should know what they're getting. The reduced version is genuinely
-/// usable, which is why this isn't a gate: nothing is broken without it, it is
-/// just thinner.
+/// it. The three lines above the buttons are the whole argument — a caption
+/// under the decline used to list what still works without an account, and it
+/// was answering a question nobody had yet while making the cheaper option look
+/// like the considered one. The reduced app is genuinely usable, which is why
+/// this isn't a gate; Settings is where somebody who declines can change their
+/// mind.
 private struct FacebookPage: View {
     let done: () -> Void
 
@@ -189,8 +191,8 @@ private struct FacebookPage: View {
              title: "Results that keep going",
              body: "Signed out, a search stops after the first couple of dozen listings. Signed in, it keeps loading as you scroll."),
         Perk(symbol: "sparkles",
-             title: "A home screen from Facebook",
-             body: "Discover shows Marketplace's own picks for your area instead of standing in with generic categories.")
+             title: "Personalized results",
+             body: "Marketplace ranks what it shows you against your own account, so the listings that come back are picked for you rather than for nobody in particular.")
     ]
 
     var body: some View {
@@ -243,13 +245,6 @@ private struct FacebookPage: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-
-                // The honest shape of the unconnected app, said once and here
-                // rather than left to be inferred from what doesn't appear.
-                Text("Searching, distances, filters and saved listings all work without it. You can connect later from Settings.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom, 8)
             }
         }
         .padding(.horizontal, 24)
