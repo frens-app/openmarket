@@ -285,6 +285,7 @@ INSERT INTO llm_runs (
     model,
     input_tokens,
     output_tokens,
+    thought_tokens,
     cached_input_tokens,
     latency_ms,
     status,
@@ -302,9 +303,10 @@ VALUES (
     $9,
     $10,
     $11,
-    $12
+    $12,
+    $13
 )
-RETURNING id, price_check_id, user_id, stage, attempt, provider, model, input_tokens, output_tokens, cached_input_tokens, latency_ms, status, error_code, created_at
+RETURNING id, price_check_id, user_id, stage, attempt, provider, model, input_tokens, output_tokens, cached_input_tokens, latency_ms, status, error_code, created_at, thought_tokens
 `
 
 type RecordLLMRunParams struct {
@@ -316,6 +318,7 @@ type RecordLLMRunParams struct {
 	Model             string
 	InputTokens       *int32
 	OutputTokens      *int32
+	ThoughtTokens     *int32
 	CachedInputTokens *int32
 	LatencyMs         int32
 	Status            LlmRunStatus
@@ -335,6 +338,7 @@ func (q *Queries) RecordLLMRun(ctx context.Context, arg RecordLLMRunParams) (Llm
 		arg.Model,
 		arg.InputTokens,
 		arg.OutputTokens,
+		arg.ThoughtTokens,
 		arg.CachedInputTokens,
 		arg.LatencyMs,
 		arg.Status,
@@ -356,6 +360,7 @@ func (q *Queries) RecordLLMRun(ctx context.Context, arg RecordLLMRunParams) (Llm
 		&i.Status,
 		&i.ErrorCode,
 		&i.CreatedAt,
+		&i.ThoughtTokens,
 	)
 	return i, err
 }
@@ -471,6 +476,7 @@ const sumLLMTokensForUser = `-- name: SumLLMTokensForUser :one
 SELECT
     coalesce(sum(input_tokens), 0)::bigint AS input_tokens,
     coalesce(sum(output_tokens), 0)::bigint AS output_tokens,
+    coalesce(sum(thought_tokens), 0)::bigint AS thought_tokens,
     coalesce(sum(cached_input_tokens), 0)::bigint AS cached_input_tokens
 FROM llm_runs
 WHERE user_id = $1
@@ -485,6 +491,7 @@ type SumLLMTokensForUserParams struct {
 type SumLLMTokensForUserRow struct {
 	InputTokens       int64
 	OutputTokens      int64
+	ThoughtTokens     int64
 	CachedInputTokens int64
 }
 
@@ -494,6 +501,11 @@ type SumLLMTokensForUserRow struct {
 func (q *Queries) SumLLMTokensForUser(ctx context.Context, arg SumLLMTokensForUserParams) (SumLLMTokensForUserRow, error) {
 	row := q.db.QueryRow(ctx, sumLLMTokensForUser, arg.UserID, arg.Window)
 	var i SumLLMTokensForUserRow
-	err := row.Scan(&i.InputTokens, &i.OutputTokens, &i.CachedInputTokens)
+	err := row.Scan(
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ThoughtTokens,
+		&i.CachedInputTokens,
+	)
 	return i, err
 }

@@ -102,6 +102,7 @@ INSERT INTO llm_runs (
     model,
     input_tokens,
     output_tokens,
+    thought_tokens,
     cached_input_tokens,
     latency_ms,
     status,
@@ -116,6 +117,7 @@ VALUES (
     sqlc.arg('model'),
     sqlc.narg('input_tokens'),
     sqlc.narg('output_tokens'),
+    sqlc.narg('thought_tokens'),
     sqlc.narg('cached_input_tokens'),
     sqlc.arg('latency_ms'),
     sqlc.arg('status'),
@@ -144,6 +146,7 @@ WHERE user_id = sqlc.arg('user_id')
 SELECT
     coalesce(sum(input_tokens), 0)::bigint AS input_tokens,
     coalesce(sum(output_tokens), 0)::bigint AS output_tokens,
+    coalesce(sum(thought_tokens), 0)::bigint AS thought_tokens,
     coalesce(sum(cached_input_tokens), 0)::bigint AS cached_input_tokens
 FROM llm_runs
 WHERE user_id = sqlc.arg('user_id')

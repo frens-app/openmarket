@@ -51,10 +51,30 @@ pkg/auth/         JWT signing, refresh-token hashing, request context
 pkg/phone/        E.164 normalisation and the country allowlist
 pkg/verify/       Prelude Verify client, and a bypass that wraps rather than
                   replaces it
+pkg/llm/          Price Check's model calls, and the record of what they cost
 pkg/config/       flags → environment → .env files
 pkg/db/           sqlc output — generated, do not edit
 deployments/      migrations (goose), queries (sqlc), compose, railway
 ```
+
+`pkg/llm` has a **stub provider**, and it is the whole local-development story
+for Price Check: `.env.development` ships `LLM_PROVIDER=stub`, which answers
+in-process with no key, no network and no bill. The feature runs end to end
+against it — including the recording — so the iOS side can be built and re-run
+without spending anything. Point it at Gemini by setting `LLM_PROVIDER`,
+`LLM_API_KEY` and `LLM_MODEL` in `.env.local`.
+
+The stub is refused under `ENV=production`, exactly like
+`DEV_BYPASS_PHONE_NUMBERS`, and for the same reason: it is the one configuration
+that returns an answer nothing generated, and a price built on it would look
+exactly like a price.
+
+Every model call writes an `llm_runs` row — including the failures and each
+retry — carrying the provider, the model that actually served it, and the token
+counts. **There is no cost column.** Cost is a function of those counts and the
+model id, so it can be computed retroactively once a rate table exists; a token
+count that was never written down is gone. See migration `00004`, and `00005`
+for why reasoning tokens get their own column.
 
 Three tables, three lifetimes: `users` (the account), `user_devices` (one app
 install — where the Facebook connection and the APNs token live), `user_sessions`

@@ -238,6 +238,7 @@ type LlmRun struct {
 	Status            LlmRunStatus
 	ErrorCode         *string
 	CreatedAt         pgtype.Timestamptz
+	ThoughtTokens     *int32
 }
 
 type PriceCheck struct {

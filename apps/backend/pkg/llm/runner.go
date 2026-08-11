@@ -228,6 +228,7 @@ func (r *Runner) record(
 		Model:             model,
 		InputTokens:       usage.InputTokens,
 		OutputTokens:      usage.OutputTokens,
+		ThoughtTokens:     usage.ThoughtTokens,
 		CachedInputTokens: usage.CachedInputTokens,
 		LatencyMs:         int32(latency.Milliseconds()),
 		Status:            status,

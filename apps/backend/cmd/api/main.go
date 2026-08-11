@@ -105,9 +105,13 @@ func main() {
 		pool:    pool,
 		logger:  logger.Named("user"),
 	}
+	modelProvider, err := buildModelProvider(cfg)
+	if err != nil {
+		logger.Fatal("configure model provider", zap.Error(err))
+	}
 	pricingSvc := &pricingServer{
 		queries: queries,
-		runner: llm.NewRunner(buildModelProvider(cfg), queries, logger.Named("llm"), llm.Config{
+		runner: llm.NewRunner(modelProvider, queries, logger.Named("llm"), llm.Config{
 			MaxCallsPerUser: cfg.LLMMaxCallsPerUser,
 			Window:          cfg.LLMCallWindow,
 			MaxAttempts:     cfg.LLMMaxAttempts,
@@ -198,15 +202,21 @@ func buildSender(cfg config.ServiceConfig, logger *zap.Logger) (verify.Sender, e
 // verification bypass is — not a test double injected here. config.LoadAPI has
 // already refused it under ENV=production and refused a real provider with no
 // key, so by this point the choice is known-good and this only has to make it.
-func buildModelProvider(cfg config.ServiceConfig) llm.Provider {
-	if cfg.UsesStubLLM() {
-		return llm.StubProvider{}
+func buildModelProvider(cfg config.ServiceConfig) (llm.Provider, error) {
+	switch cfg.LLMProvider {
+	case config.LLMProviderStub:
+		return llm.StubProvider{}, nil
+	case config.LLMProviderGoogle:
+		return llm.NewGeminiProvider(llm.GeminiOptions{
+			APIKey: cfg.LLMAPIKey,
+			Model:  cfg.LLMModel,
+		})
+	default:
+		// Never silently the stub. A deployment that believes it is calling a
+		// model and is not would serve invented prices that look exactly like
+		// real ones.
+		return nil, fmt.Errorf("unknown llm_provider %q", cfg.LLMProvider)
 	}
-	// Only the stub exists so far. config.LoadAPI accepts "google" as a name,
-	// so reaching here means the client for it has not been written yet — and
-	// silently falling back to the stub would serve invented prices from a
-	// deployment that believes it is calling a model.
-	panic(fmt.Sprintf("llm_provider=%q is configured but has no client yet", cfg.LLMProvider))
 }
 
 func runMigrations(pool *pgxpool.Pool, logger *zap.Logger) error {

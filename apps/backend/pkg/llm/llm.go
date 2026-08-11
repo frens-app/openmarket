@@ -126,8 +126,14 @@ type PricedItem struct {
 // Model, so it can be computed retroactively over rows written long before a
 // rate table exists — whereas a token count that was never written down is gone.
 type Usage struct {
-	InputTokens       *int32
-	OutputTokens      *int32
+	InputTokens  *int32
+	OutputTokens *int32
+	// Reasoning tokens, where the provider reports them separately. Billed at
+	// the output rate, and it is **not documented** whether OutputTokens
+	// already includes them — see migration 00005. Recorded rather than folded
+	// into OutputTokens so that whichever way it turns out, the number is still
+	// there.
+	ThoughtTokens     *int32
 	CachedInputTokens *int32
 	// The model string the provider actually served, which is not always the
 	// one that was asked for — aliases resolve, and a version can move under a

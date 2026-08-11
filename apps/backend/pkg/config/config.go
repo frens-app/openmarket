@@ -123,8 +123,13 @@ type ServiceConfig struct {
 // IsProduction reports whether this is the production environment.
 func (c ServiceConfig) IsProduction() bool { return c.Env == "production" }
 
-// LLMProviderStub is the provider name that answers without a network.
-const LLMProviderStub = "stub"
+// Provider names accepted by llm_provider.
+const (
+	// LLMProviderStub answers without a network. Refused in production.
+	LLMProviderStub = "stub"
+	// LLMProviderGoogle is Gemini, via the Interactions API.
+	LLMProviderGoogle = "google"
+)
 
 // UsesStubLLM reports whether model calls are being answered locally.
 func (c ServiceConfig) UsesStubLLM() bool { return c.LLMProvider == LLMProviderStub }
