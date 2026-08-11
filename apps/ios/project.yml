@@ -3,6 +3,14 @@ options:
   bundleIdPrefix: lol.frens
   deploymentTarget:
     iOS: "17.0"
+# Local, not remote: the contents are generated from /protos by `buf generate`,
+# so the package is only ever as current as the last regenerate — pinning it to
+# a version would let the Swift types drift from the Go ones, which is the exact
+# failure the shared schema exists to prevent.
+packages:
+  OpenMarketProtos:
+    path: Packages/OpenMarketProtos
+
 targets:
   OpenMarket:
     type: application
@@ -11,6 +19,22 @@ targets:
     # separately rather than folded into `Sources`, so it stays obvious that one
     # of these is compiled and the other is copied.
     sources: [Sources, Resources]
+    dependencies:
+      - package: OpenMarketProtos
+    # Push, declared here for the same reason signing is: this file is the
+    # source of truth and `xcodegen generate` rewrites the .xcodeproj wholesale,
+    # so a capability added through Xcode's Signing & Capabilities pane survives
+    # exactly until the next regenerate.
+    #
+    # `development` is correct for both Debug and TestFlight; the App Store
+    # build is re-signed to production automatically. The App ID also needs the
+    # Push Notifications capability enabled in the developer portal — without it
+    # the entitlement is present, the build succeeds, and APNs simply refuses to
+    # issue a token at runtime (`PushRegistrar.didFailToRegister`).
+    entitlements:
+      path: OpenMarket.entitlements
+      properties:
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: lol.frens.openmarket

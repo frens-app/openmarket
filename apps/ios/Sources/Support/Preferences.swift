@@ -13,6 +13,9 @@ final class Preferences: ObservableObject {
         static let radiusKM = "radiusKM"
         static let interests = "interests"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        static let hasAskedFacebook = "hasAskedFacebook"
+        static let hasChosenLocation = "hasChosenLocation"
+        static let hasAskedNotifications = "hasAskedNotifications"
         static let locationName = "locationName"
         static let locationSlug = "locationSlug"
         static let lastQueryKind = "lastQueryKind"
@@ -55,9 +58,40 @@ final class Preferences: ObservableObject {
     /// Set by the last step of onboarding, and never cleared.
     ///
     /// A stored flag rather than a purely derived one because the derived
-    /// condition goes true the instant the third interest is tapped, which
-    /// would tear the screen away before the user could press Continue.
+    /// condition would go true the moment the last answer landed, tearing the
+    /// screen away before the user could press the button under it.
     @Published var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: Key.hasCompletedOnboarding) } }
+
+    /// Whether the Facebook and notification steps have been *put to the user*,
+    /// which is not the same as whether they said yes.
+    ///
+    /// Both steps are skippable, so their outcome cannot drive the flow: a
+    /// declined Facebook connection and an unasked one look identical from the
+    /// outside, and re-asking on every launch is how an optional step becomes a
+    /// nag. Asked-once is the fact worth storing; the answer lives where it
+    /// belongs — the cookie jar for Facebook, the system for notifications.
+    ///
+    /// They also make the flow resumable. Quit between two steps and the next
+    /// launch reopens on the one still outstanding rather than at the start.
+    @Published var hasAskedFacebook: Bool { didSet { defaults.set(hasAskedFacebook, forKey: Key.hasAskedFacebook) } }
+
+    /// Whether Continue has been pressed on the location step.
+    ///
+    /// Location is required, so it would be natural to derive this from
+    /// `resolvedPlace != nil` — and that is wrong twice over. The step is
+    /// deliberately optimistic: Continue opens on the *choice*, and Facebook's
+    /// ten-second round trip to name the place runs while the user reads the
+    /// next screen, so there is a window where the answer is given but not yet
+    /// stored. And deriving it means the flow advances itself the moment the
+    /// place lands — sliding the screen out from under someone who was still
+    /// looking at the map, and making the Continue button they can see
+    /// unreachable in the common case.
+    ///
+    /// Cleared again by `OnboardingView.finish` if the place never resolves, so
+    /// a failure returns to the step that asks rather than through to a home
+    /// screen with nowhere to search.
+    @Published var hasChosenLocation: Bool { didSet { defaults.set(hasChosenLocation, forKey: Key.hasChosenLocation) } }
+    @Published var hasAskedNotifications: Bool { didSet { defaults.set(hasAskedNotifications, forKey: Key.hasAskedNotifications) } }
     /// Human-readable place name for the UI ("San Francisco, CA").
     @Published var locationName: String? { didSet { defaults.set(locationName, forKey: Key.locationName) } }
     /// Facebook's place segment used in the search path — a slug or numeric id.
@@ -134,27 +168,32 @@ final class Preferences: ObservableObject {
 
     /// The chosen interests, as things with labels and search terms.
     ///
-    /// Never empty in a shipped app — onboarding won't let go of the screen
-    /// until three are picked — but it falls back rather than trapping, because
-    /// an empty home screen is a worse answer than a generic one if this ever
-    /// does get reached with nothing stored.
+    /// Usually empty now: onboarding stopped asking for these, so the fallback
+    /// is the normal path rather than the safety net it started as. A generic
+    /// first Discover is a better trade than a fourth required question, and it
+    /// stops being generic as soon as the user searches for anything
+    /// (`DiscoverFeed` prefers real history over these). Settings is where
+    /// somebody who wants to aim it can.
     var chosenInterests: [Interest] {
         let resolved = Interest.resolve(interests)
         return resolved.isEmpty ? Interest.defaults : resolved
     }
 
-    /// Whether the app's two requirements are met: somewhere to search, and
-    /// enough interests to build a first screen out of.
+    /// Whether onboarding still has something to do.
     ///
-    /// Both are re-checked on every launch rather than trusted to the flag
-    /// alone, so an install that somehow ends up without a place — or with its
-    /// interests emptied — is asked again instead of landing on a home screen
-    /// that has nothing to show. `hasCompletedOnboarding` is what keeps the
-    /// flow on screen while it is being filled in.
+    /// The place is re-checked on every launch rather than trusted to the flag
+    /// alone, because it is the one answer the app genuinely cannot work
+    /// without — every search is centred on it, and an install that somehow
+    /// ends up without one would otherwise land on a home screen measuring from
+    /// a hardcoded city. `hasCompletedOnboarding` is what keeps the flow on
+    /// screen while the rest is being filled in.
+    ///
+    /// The skippable steps are deliberately not part of this. Onboarding asks
+    /// them once — see `hasAskedFacebook` — and a "no" must not read as
+    /// unfinished business, or declining would put the flow back on screen at
+    /// every launch.
     var needsOnboarding: Bool {
-        !hasCompletedOnboarding
-            || resolvedPlace == nil
-            || Interest.resolve(interests).count < Interest.minimum
+        !hasCompletedOnboarding || resolvedPlace == nil
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -184,6 +223,9 @@ final class Preferences: ObservableObject {
         // the old flag would let those installs through to a Discover with
         // nothing behind it. They get asked once, like everyone else.
         hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
+        hasAskedFacebook = defaults.bool(forKey: Key.hasAskedFacebook)
+        hasChosenLocation = defaults.bool(forKey: Key.hasChosenLocation)
+        hasAskedNotifications = defaults.bool(forKey: Key.hasAskedNotifications)
         locationName = defaults.string(forKey: Key.locationName)
         // Kept as-is, with no validation against a curated list any more.
         //

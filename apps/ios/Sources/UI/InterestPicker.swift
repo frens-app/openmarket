@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The chip cloud, shared by onboarding and Settings so there is one place
-/// where interests get picked and one set of rules about it.
+/// The chip cloud. Settings-only now — onboarding stopped asking for these.
 ///
 /// Chips are sized by `Interest.prominence` rather than drawn identically. That
 /// is the only reason eighteen categories fit on one screen without turning
@@ -9,16 +8,6 @@ import SwiftUI
 /// the gaps between them, reachable but not competing.
 struct InterestPicker: View {
     @Binding var selected: [String]
-
-    /// Whether the last few can be taken off.
-    ///
-    /// Off during onboarding, where the Continue button is the thing that says
-    /// "not yet" and deselecting freely is how anyone corrects a mis-tap. On in
-    /// Settings, where dropping below the minimum would satisfy
-    /// `Preferences.needsOnboarding` and throw the whole onboarding flow back
-    /// over the app — technically correct enforcement, and a baffling thing to
-    /// have happen while editing a list.
-    var enforcesMinimum = false
 
     var body: some View {
         WrapLayout(spacing: 10) {
@@ -30,7 +19,6 @@ struct InterestPicker: View {
 
     private func chip(_ interest: Interest) -> some View {
         let isOn = selected.contains(interest.id)
-        let locked = enforcesMinimum && isOn && selected.count <= Interest.minimum
         return Button {
             withAnimation(.easeOut(duration: 0.15)) { toggle(interest) }
         } label: {
@@ -48,14 +36,13 @@ struct InterestPicker: View {
                 .foregroundStyle(isOn ? Color.accentColor : Color.primary)
         }
         .buttonStyle(.plain)
-        .disabled(locked)
-        .opacity(locked ? 0.75 : 1)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 
     private func toggle(_ interest: Interest) {
         if let index = selected.firstIndex(of: interest.id) {
-            guard !(enforcesMinimum && selected.count <= Interest.minimum) else { return }
+            // No minimum to defend any more. Emptying the list is allowed and
+            // falls back to `Interest.defaults` — see `Preferences`.
             selected.remove(at: index)
         } else {
             // Appended, so the array stays in the order things were picked —
@@ -81,13 +68,14 @@ struct InterestPicker: View {
     }
 }
 
-/// The Settings route back to the same choice.
+/// The only place interests are chosen.
 ///
-/// Onboarding asks once and never again, which would leave a standing statement
-/// about what someone shops for frozen at whatever they tapped in their first
-/// thirty seconds with the app. Interests decide what the home screen shows
-/// before there's search history, so they have to be editable for as long as
-/// that's true.
+/// Onboarding used to require three of these before it would let go of the
+/// screen. It was the weakest of the four questions — a required answer about
+/// taste, asked before the person had seen a single listing — and Discover falls
+/// back to a sensible generic set without it, then stops needing it at all once
+/// there is real search history. So it moved here, where somebody who wants to
+/// aim the home screen can, and nobody else has to.
 struct InterestSettingsView: View {
     @EnvironmentObject private var prefs: Preferences
 
@@ -98,9 +86,9 @@ struct InterestSettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                InterestPicker(selected: $prefs.interests, enforcesMinimum: true)
+                InterestPicker(selected: $prefs.interests)
 
-                Text("At least \(Interest.minimum) — the home feed runs one search per interest, so below that it would be built from a single topic.")
+                Text("Pick as many as you like, or none — with nothing chosen, Discover uses a broad default set until your searches take over.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
