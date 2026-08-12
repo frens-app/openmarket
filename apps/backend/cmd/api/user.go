@@ -235,12 +235,21 @@ func (s *userServer) RegisterDeviceToken(
 	return connect.NewResponse(&v1.RegisterDeviceTokenResponse{}), nil
 }
 
-// DeleteAccount soft-deletes the user, releases the phone number, and revokes
-// every session.
+// DeleteAccount soft-deletes the user, releases the phone number, revokes every
+// session, and deletes their price checks.
 //
 // Releasing the auth method is the part that is easy to skip and expensive to
 // get wrong: the row's primary key is the phone number, so leaving it behind
 // would mean the person can never sign up again with the number they own.
+//
+// **The price checks are deleted for real, and that is not a redundancy with
+// the soft delete above.** `price_checks.user_id` cascades, but a cascade only
+// fires on a row actually leaving `users`, and this handler has never removed
+// one. Every price check ever run would have outlived the account that ran it,
+// holding the description its owner typed, the listing written about their
+// belongings, and the hashes of their photos. "Deleted" has to mean the content
+// is gone; what stays is `llm_runs`, which is token counts with the item
+// detached — see the query for why that one is deliberate rather than missed.
 func (s *userServer) DeleteAccount(
 	ctx context.Context,
 	_ *connect.Request[v1.DeleteAccountRequest],
@@ -265,6 +274,12 @@ func (s *userServer) DeleteAccount(
 	}
 	if err := qtx.RevokeAllSessionsForUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoke sessions: %w", err))
+	}
+	// In the same transaction as the rest, so there is no window in which the
+	// account is gone and the content is not — and no way to end up with a user
+	// who cannot sign in and a history nobody can reach to delete.
+	if err := qtx.DeletePriceChecksForUser(ctx, userID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete price checks: %w", err))
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))

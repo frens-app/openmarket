@@ -155,6 +155,31 @@ WHERE user_id = sqlc.arg('user_id')
 ORDER BY created_at DESC
 LIMIT sqlc.arg('limit');
 
+-- name: DeletePriceChecksForUser :exec
+-- Everything this user ever asked us to price, gone.
+--
+-- Called from DeleteAccount, and it has to be a DELETE rather than something
+-- that rides `users`: the account is **soft**-deleted, so the CASCADE on
+-- `price_checks.user_id` never fires. Migration 00004 said as much — the
+-- cascade only runs on a hard purge, and there isn't one — which was fine while
+-- the table held numbers and is not fine now that it holds descriptions the
+-- seller typed, listings a model wrote about their belongings, and hashes of
+-- their photos.
+--
+-- Two follow-on effects, both wanted:
+--
+-- `price_check_photos` goes with it, ON DELETE CASCADE (migration 00007). It is
+-- the shape of the photo and nothing else, but it is the shape of *their*
+-- photo.
+--
+-- `llm_runs` does not. Its `price_check_id` is ON DELETE SET NULL by design, so
+-- the spend record survives the thing it was spent on — migration 00004 argued
+-- for that before this query existed, and it still holds: those rows are token
+-- counts and latencies, carrying nothing about the item, and a bill that
+-- rewrites itself when somebody leaves is not a bill.
+DELETE FROM price_checks
+WHERE user_id = sqlc.arg('user_id');
+
 -- name: GetPriceCheck :one
 SELECT *
 FROM price_checks
