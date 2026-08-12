@@ -23,12 +23,22 @@ builder = "DOCKERFILE"
 dockerfilePath = "cmd/api/Dockerfile"
 # Only rebuild when something the binary is made of changes. The iOS app and the
 # probe harness share this repository and have no business triggering a deploy.
+#
+# Unlike dockerfilePath above, these are **not** relative to Root Directory —
+# watch patterns are matched from the repository root even when a root directory
+# is set, so they have to carry the apps/backend prefix. Get this wrong and the
+# failure is silent in the worst direction: nothing matches, so no push ever
+# deploys and the service just keeps serving the last image.
 watchPatterns = [
-  "cmd/**",
-  "pkg/**",
-  "deployments/migrations/**",
-  "go.mod",
-  "go.sum",
+  "/apps/backend/cmd/**",
+  "/apps/backend/pkg/**",
+  "/apps/backend/deployments/migrations/**",
+  "/apps/backend/go.mod",
+  "/apps/backend/go.sum",
+  "/apps/backend/.dockerignore",
+  # This file too, or a change to the healthcheck or restart policy sits unused
+  # until some other change happens to ship it.
+  "/apps/backend/railway.toml",
 ]
 
 [deploy]
