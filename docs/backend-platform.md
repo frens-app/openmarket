@@ -265,36 +265,50 @@ CI: no bare scalar fields on the listing messages.
 
 ---
 
-## 5. Native listings break the natural key
+## 5. Native listings require origin-scoped identity
+
+> **Resolved in `data-model.md` v0.3 (2026-08-12).** This section originally
+> identified the break without folding the answer into the canonical proposal.
+> The proposal now uses an internal UUID, `origin`, partial unique indexes for
+> both Facebook aliases, and an owner key for native rows.
 
 Listings posted here are ours, not cross-posted to Facebook. That settles the
 open question this doc previously carried, and the answer is the expensive one.
 
-`data-model.md` rests on one assumption, stated as such:
+The old `data-model.md` rested on one assumption, stated as such:
 
 > A listing is identified by the Facebook photo ID of its cover image.
 > `cover_photo_fbid text NOT NULL UNIQUE`
 
-**A native listing has no Facebook photo.** The primary natural key of the entire
-schema is undefined for the highest-value rows in the new product, and there is
-no later moment where Facebook assigns one. This needs deciding before any DDL
-runs, and it is independent of every other choice in this document.
+**A native listing has no Facebook photo.** The former natural key was therefore
+undefined for the highest-value rows in the new product. It is no longer the
+primary key: `facebook_listing_id` and `cover_photo_fbid` are nullable, unique
+aliases on observed rows.
 
 The shape that survives:
 
 ```sql
 ALTER TABLE listings
-  ADD COLUMN source   text NOT NULL DEFAULT 'observed',  -- 'observed' | 'native'
+  ADD COLUMN origin   text NOT NULL,                     -- 'facebook' | 'native'
   ADD COLUMN owner_id uuid REFERENCES users(id),
+  ADD COLUMN facebook_listing_id text,
   ALTER COLUMN cover_photo_fbid DROP NOT NULL;
+
+CREATE UNIQUE INDEX listings_facebook_id_key
+  ON listings (facebook_listing_id)
+  WHERE origin = 'facebook' AND facebook_listing_id IS NOT NULL;
 
 -- uniqueness applies only where the key exists
 CREATE UNIQUE INDEX listings_cover_photo_fbid_key
-  ON listings (cover_photo_fbid) WHERE cover_photo_fbid IS NOT NULL;
+  ON listings (cover_photo_fbid)
+  WHERE origin = 'facebook' AND cover_photo_fbid IS NOT NULL;
 
 ALTER TABLE listings ADD CONSTRAINT listings_identity CHECK (
-  (source = 'observed' AND cover_photo_fbid IS NOT NULL AND owner_id IS NULL)
-  OR (source = 'native' AND owner_id IS NOT NULL)
+  (origin = 'facebook' AND owner_id IS NULL AND
+    (facebook_listing_id IS NOT NULL OR cover_photo_fbid IS NOT NULL))
+  OR
+  (origin = 'native' AND owner_id IS NOT NULL AND
+    facebook_listing_id IS NULL AND cover_photo_fbid IS NULL)
 );
 ```
 
@@ -303,10 +317,10 @@ ALTER TABLE listings ADD CONSTRAINT listings_identity CHECK (
 meaning for a photo we host. That table needs the same nullable-key treatment
 plus a storage key column.
 
-The consequence worth thinking about beyond the DDL: the sighting write path's
+The consequence worth thinking about beyond the DDL: the observation write path's
 never-regress rules exist because observed data is untrusted and partial. Native
 listings are the opposite — the owner is authoritative, and a sighting must never
-touch them at all. `source = 'native'` should be a **hard exclusion** on the
+touch them at all. `origin = 'native'` should be a **hard exclusion** on the
 sighting upsert, not another `COALESCE`. Getting that wrong means a scraped card
 that happens to collide can overwrite a real user's own listing.
 

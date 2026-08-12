@@ -299,7 +299,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         photos=\(String(format: "%.2f", Date().timeIntervalSince(loadedAt)))s
         """)
         Logger.detail.info("detail ok: desc=\(raw.description != nil) photos=\(raw.photoURLs.count) cond=\(raw.conditionText != nil) sold=\(raw.isSold.map(String.init) ?? "nil", privacy: .public) pending=\(raw.isPending.map(String.init) ?? "nil", privacy: .public) coord=\(raw.latitude ?? "none", privacy: .public),\(raw.longitude ?? "none", privacy: .public) delivery=\(raw.deliveryTypes?.joined(separator: "+") ?? "nil", privacy: .public)")
-        Logger.detail.info("seller: name=\(raw.sellerName ?? "nil", privacy: .public) rating=\(raw.sellerRatingText ?? "nil", privacy: .public) section=[\(raw.sellerSection ?? "nil", privacy: .public)]")
+        Logger.detail.info("seller: id=\(raw.sellerProfileID ?? "nil", privacy: .public) name=\(raw.sellerName ?? "nil", privacy: .public) rating=\(raw.sellerRatingText ?? "nil", privacy: .public) section=[\(raw.sellerSection ?? "nil", privacy: .public)]")
 
         // **The seller block lands after the readiness test is satisfied.**
         //
@@ -324,7 +324,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         // page that already produced a seller, or a login wall, has nothing to
         // gain.
         var best = raw
-        if best.sellerName == nil, !best.loginWall {
+        if best.sellerName == nil, best.sellerProfileID == nil, !best.loginWall {
             // **Merged, never swapped.** Taking the later snapshot wholesale
             // regressed the description: this read happens seconds later and
             // after a scroll, so any field that has degraded in the meantime —
@@ -333,9 +333,10 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
             // exists to answer one question, so it may only contribute the
             // answer to that question.
             if let revealed = await poll(script, as: RawDetail.self,
-                                         until: { $0.sellerName != nil },
+                                         until: { $0.sellerName != nil || $0.sellerProfileID != nil },
                                          timeout: .seconds(3)),
-               revealed.sellerName != nil {
+               revealed.sellerName != nil || revealed.sellerProfileID != nil {
+                best.sellerProfileID = revealed.sellerProfileID
                 best.sellerName = revealed.sellerName
                 best.sellerJoined = revealed.sellerJoined
                 best.sellerRatingText = revealed.sellerRatingText
@@ -343,7 +344,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
                 best.sellerIsHighlyRated = revealed.sellerIsHighlyRated
                 best.sellerSection = revealed.sellerSection
             }
-            Logger.detail.info("seller on re-poll: name=\(best.sellerName ?? "still nil", privacy: .public) desc=\(best.description != nil) section=[\(best.sellerSection ?? "nil", privacy: .public)]")
+            Logger.detail.info("seller on re-poll: id=\(best.sellerProfileID ?? "still nil", privacy: .public) name=\(best.sellerName ?? "still nil", privacy: .public) desc=\(best.description != nil) section=[\(best.sellerSection ?? "nil", privacy: .public)]")
         }
         if !raw.matches(expectedID) {
             Logger.detail.warning("wrong page: wanted \(expectedID ?? "none", privacy: .public), got \(raw.itemId ?? "none", privacy: .public)")

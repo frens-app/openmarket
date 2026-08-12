@@ -1,0 +1,188 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// These messages describe facts observed from Facebook, not the canonical
+// database row. A search card and an item page have different capabilities,
+// and the capture context is what makes an absent field mean "not observed"
+// rather than "Facebook said no".
+
+enum FacebookMarketplaceBrowserVariant {
+  FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED = 0;
+  FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP = 1;
+  FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE = 2;
+}
+
+enum FacebookMarketplacePageRoute {
+  FACEBOOK_MARKETPLACE_PAGE_ROUTE_UNSPECIFIED = 0;
+  FACEBOOK_MARKETPLACE_PAGE_ROUTE_SEARCH = 1;
+  FACEBOOK_MARKETPLACE_PAGE_ROUTE_DISCOVER = 2;
+  FACEBOOK_MARKETPLACE_PAGE_ROUTE_ITEM = 3;
+  FACEBOOK_MARKETPLACE_PAGE_ROUTE_SELLER_PROFILE = 4;
+}
+
+enum FacebookMarketplaceExtractionMethod {
+  FACEBOOK_MARKETPLACE_EXTRACTION_METHOD_UNSPECIFIED = 0;
+  // Structured MarketplaceSearch data embedded in the first desktop page.
+  FACEBOOK_MARKETPLACE_EXTRACTION_METHOD_EMBEDDED_GRAPHQL = 1;
+  // Rendered text, attributes, links, and images in the page DOM.
+  FACEBOOK_MARKETPLACE_EXTRACTION_METHOD_RENDERED_DOM = 2;
+  // One observation combined fields from both structured data and the DOM.
+  // Current item-detail extraction does this.
+  FACEBOOK_MARKETPLACE_EXTRACTION_METHOD_HYBRID = 3;
+}
+
+enum FacebookAuthenticationState {
+  FACEBOOK_AUTHENTICATION_STATE_UNSPECIFIED = 0;
+  FACEBOOK_AUTHENTICATION_STATE_SIGNED_OUT = 1;
+  FACEBOOK_AUTHENTICATION_STATE_SIGNED_IN = 2;
+}
+
+message FacebookMarketplaceObservationContext {
+  // The Facebook browser variant that was parsed, not the observer's hardware.
+  // A phone requesting the desktop site records DESKTOP here.
+  FacebookMarketplaceBrowserVariant browser_variant = 1 [(buf.validate.field).enum.defined_only = true];
+  FacebookMarketplacePageRoute page_route = 2 [(buf.validate.field).enum.defined_only = true];
+  FacebookMarketplaceExtractionMethod extraction_method = 3 [(buf.validate.field).enum.defined_only = true];
+  FacebookAuthenticationState facebook_authentication_state = 4 [(buf.validate.field).enum.defined_only = true];
+  google.protobuf.Timestamp observed_at = 5 [(buf.validate.field).required = true];
+}
+
+// At least one Facebook key must be present. Desktop cards expose listing_id;
+// mobile cards may only expose the cover-photo filename FBID until opened.
+message FacebookListingKey {
+  option (buf.validate.message).cel = {
+    id: "facebook_listing_key.needs_identity"
+    message: "facebook_listing_id or cover_photo_fbid is required"
+    expression: "has(this.facebook_listing_id) || has(this.cover_photo_fbid)"
+  };
+
+  optional string facebook_listing_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
+  // The durable numeric segment parsed from the fbcdn filename. This is not
+  // primary_listing_photo.id; measured values differ.
+  optional string cover_photo_fbid = 2 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
+}
+
+message FacebookMarketplacePriceObservation {
+  // Facebook's decimal string, in major units (for example "40.00"). Keep the
+  // source value: converting to minor units requires knowing the currency's
+  // exponent, which a rendered card does not always reveal.
+  optional string amount_decimal = 1;
+  optional string formatted_amount = 2;
+  optional string previous_amount_decimal = 3;
+  optional string previous_formatted_amount = 4;
+  optional string currency_code = 5 [(buf.validate.field).string.len = 3];
+}
+
+message FacebookMarketplacePlaceObservation {
+  optional string display_text = 1;
+  optional string city = 2;
+  optional string region = 3;
+  optional string country = 4;
+  optional string facebook_place_id = 5 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
+  // Facebook's published, approximate listing point. Never reinterpret this as
+  // the seller's home or business location.
+  optional double latitude = 6;
+  optional double longitude = 7;
+}
+
+message FacebookMarketplaceMediaObservation {
+  optional string facebook_photo_id = 1;
+  optional string url = 2;
+  optional int32 position = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+enum FacebookMarketplaceSellerSectionStatus {
+  FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_UNSPECIFIED = 0;
+  // The capture context cannot expose seller identity (currently signed-out
+  // desktop item pages). This is unknown, not evidence that no seller exists.
+  FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_UNAVAILABLE = 1;
+  // The page was capable of exposing the section but extraction did not
+  // observe it. Keep this distinct from an observed section with empty fields.
+  FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_NOT_OBSERVED = 2;
+  FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_OBSERVED = 3;
+}
+
+message FacebookMarketplaceSellerObservation {
+  FacebookMarketplaceSellerSectionStatus section_status = 1 [(buf.validate.field).enum.defined_only = true];
+  // Numeric id from /marketplace/profile/<id>. Stable on signed-in desktop item
+  // pages and preferable to clustering on name plus listing coordinates.
+  optional string facebook_profile_id = 2 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
+  optional string display_name = 3;
+  optional string joined_text = 4;
+  optional int32 joined_year = 5 [(buf.validate.field).int32 = {
+    gte: 2004
+    lte: 2200
+  }];
+  optional double rating = 6 [(buf.validate.field).double = {
+    gte: 0
+    lte: 5
+  }];
+  optional int32 rating_count = 7 [(buf.validate.field).int32.gte = 0];
+  // Facebook's rendered "Highly rated on Marketplace" designation. This is
+  // observed from Facebook, not derived from rating and rating_count. The
+  // threshold behind Facebook's designation is not published.
+  optional bool highly_rated = 8;
+  // Populate only from text explicitly associated with the seller or from the
+  // seller profile page. The item's listing_location is not seller_location.
+  FacebookMarketplacePlaceObservation seller_location = 9;
+}
+
+// Facebook publishes these as three independent booleans. Keep the source
+// facts together and derive one canonical availability value on the server;
+// is_live is not that value because it has been observed true on sold cards.
+message FacebookMarketplaceAvailabilityObservation {
+  optional bool sold = 1;
+  optional bool live = 2;
+  optional bool pending = 3;
+}
+
+// One listing as a search/discover surface observed it. The first desktop
+// search page normally uses EMBEDDED_GRAPHQL and can carry listed_at; cards
+// inserted by infinite scroll use RENDERED_DOM and cannot.
+message FacebookMarketplaceSearchListingObservation {
+  FacebookMarketplaceObservationContext context = 1 [(buf.validate.field).required = true];
+  FacebookListingKey key = 2 [(buf.validate.field).required = true];
+  optional string title = 3;
+  FacebookMarketplacePriceObservation price = 4;
+  FacebookMarketplacePlaceObservation listing_location = 5;
+  optional string condition = 6;
+  FacebookMarketplaceMediaObservation primary_photo = 7;
+  // Exact Facebook creation_time, named for its domain meaning rather than the
+  // source JSON spelling. Database row creation remains created_at.
+  google.protobuf.Timestamp listed_at = 8;
+  repeated string delivery_types = 9;
+  FacebookMarketplaceAvailabilityObservation availability = 10;
+  optional string facebook_category_id = 11;
+  optional bool created_with_seller_app = 12;
+}
+
+// One listing as its item page observed it. Seller presence is interpreted
+// together with context.facebook_authentication_state and
+// seller.section_status.
+message FacebookMarketplaceListingDetailObservation {
+  FacebookMarketplaceObservationContext context = 1 [(buf.validate.field).required = true];
+  FacebookListingKey key = 2 [(buf.validate.field).required = true];
+  optional string title = 3;
+  optional string description = 4;
+  FacebookMarketplacePriceObservation price = 5;
+  FacebookMarketplacePlaceObservation listing_location = 6;
+  optional string condition = 7;
+  repeated FacebookMarketplaceMediaObservation media = 8;
+  // Coarse rendered value such as "Listed 3 weeks ago". Do not convert this to
+  // an exact instant without also storing the derivation precision.
+  optional string listed_at_text = 9;
+  repeated string delivery_types = 10;
+  FacebookMarketplaceAvailabilityObservation availability = 11;
+  FacebookMarketplaceSellerObservation seller = 12;
+}
+
+message FacebookMarketplaceListingObservation {
+  oneof observation {
+    FacebookMarketplaceSearchListingObservation search = 1;
+    FacebookMarketplaceListingDetailObservation detail = 2;
+  }
+}

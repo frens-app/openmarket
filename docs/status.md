@@ -1,5 +1,9 @@
 # Build status — 2026-07-31
 
+> Historical snapshot, not current architecture. See `data-model.md`,
+> `decision-desktop-primary.md`, `logged-in-findings.md`, and `docs/backend.md`
+> before using any surface or persistence claim here.
+
 App lives in `apps/ios/` (xcodegen; `xcodegen generate` then build the
 `OpenMarket` scheme). Probe harness in `tools/probe/`, with its own README. Feasibility record in
 `feasibility-2026-07-31.md`. Which Facebook surface to route through, and why —

@@ -42,6 +42,10 @@ struct ListingDetail: Codable, Equatable, Hashable {
     var postedText: String?
     var conditionText: String?
     var locationText: String?
+    /// Numeric id from `/marketplace/profile/<id>` on a signed-in desktop item
+    /// page. This is Facebook's stable seller key; never synthesize it by
+    /// clustering names or listing coordinates.
+    var sellerProfileID: String?
     var sellerName: String?
     var sellerJoined: String?      // "Joined Facebook in 2011"
     var sellerRating: Double?      // 4.8

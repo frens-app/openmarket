@@ -1,6 +1,11 @@
 # Surface strategy: mobile vs. desktop
 
-**Status:** analysis + recommendation, not yet implemented
+**Status:** historical analysis. The recommendation below was implemented and
+then superseded by signed-in desktop findings. Use `data-model.md` for the
+current source matrix, `decision-desktop-primary.md` for routing, and
+`logged-in-findings.md` for authentication-dependent behavior. Statements in
+this file that desktop cannot paginate or cannot expose seller identity are
+retained as experiment history, not current truth.
 **Date:** 2026-07-31
 **Related:** `feasibility-2026-07-31.md` (how we got here), `status.md` (what's built),
 `mobile-location-radius-notes.md` (why mobile's location and radius don't behave as the URL suggests)

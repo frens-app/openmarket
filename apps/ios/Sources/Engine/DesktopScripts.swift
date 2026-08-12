@@ -551,7 +551,19 @@ enum DesktopScripts {
             // renders as "(N)" beside star glyphs rather than "N ratings" --
             // matching the latter is how an earlier survey concluded, wrongly,
             // that ratings were unavailable everywhere.
-            var sellerName = null, ratingCount = null, ratingScore = null, joined = null;
+            var sellerProfileID = null, sellerName = null, ratingCount = null, ratingScore = null, joined = null;
+            // The same seller link appears several times inside one block, so
+            // dedupe before deciding. A full item page can also carry unrelated
+            // Marketplace links; accepting exactly one unique profile id keeps
+            // a neighbour from becoming this listing's seller.
+            var profileIDs = {}, profileLinks = document.querySelectorAll('a[href*="/marketplace/profile/"]');
+            for (var sp = 0; sp < profileLinks.length; sp++) {
+              var ph = profileLinks[sp].getAttribute('href') || '';
+              var pm = ph.match(/[/]marketplace[/]profile[/]([0-9]{8,})/);
+              if (pm) profileIDs[pm[1]] = 1;
+            }
+            var uniqueProfileIDs = Object.keys(profileIDs);
+            if (uniqueProfileIDs.length === 1) sellerProfileID = uniqueProfileIDs[0];
             var section = null;
             var candidates = document.querySelectorAll('div, span');
             for (var s = 0; s < candidates.length; s++) {
@@ -745,6 +757,7 @@ enum DesktopScripts {
             return JSON.stringify({
               itemId: pathID,
               expected: '\(expectedID)',
+              sellerProfileID: sellerProfileID,
               sellerName: sellerName,
               sellerJoined: joined,
               sellerRatingText: ratingScore,
@@ -761,7 +774,7 @@ enum DesktopScripts {
               isSold: isSold,
               isPending: isPending,
               deliveryTypes: deliveryTypes,
-              profileLinks: document.querySelectorAll('a[href*="/marketplace/profile/"]').length,
+              profileLinks: profileLinks.length,
               loginWall: body.indexOf('You must log in') !== -1
             });
           } catch (e) {

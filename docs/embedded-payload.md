@@ -323,11 +323,13 @@ using a transport neither instrument observes.
 The surface trade-off in `filter-parameters.md` §5 stands, but the desktop side
 is worth much more than it looked:
 
-- Desktop: 15–24 results, no pagination — but every one **fully structured**,
-  with an exact timestamp, a numeric price, delivery types, sold state, a place
-  id, and the photo id.
-- Mobile: paginates indefinitely and carries seller identity — but everything
-  must be scraped from rendered text, and there is no date at any depth.
+- Desktop search: the first ~15 results are **fully structured**, with an exact
+  timestamp, a decimal price, delivery types, sold state, a place id, and the
+  photo id. Desktop can paginate, especially signed in, but every later card is
+  rendered-DOM data and the feed virtualises. Harvest it incrementally.
+- Mobile: a distinct WebLite surface with different pagination and field
+  behavior. Its historical matrix is not a substitute for re-running the
+  current signed-in/signed-out product flow (`data-model.md` §7).
 
 For the plan of filtering by location and then sorting ourselves, the desktop
 payload is the enrichment source, and it removes the blocker recorded in the
@@ -338,16 +340,16 @@ listing, because the search response already dates every card.
 
 - Does the payload survive on the desktop *category browse* path, or only on
   search?
-- `marketplace_listing_seller` is present as a key on every card but was `null`
-  throughout. When is it populated? If it ever carries a seller id, the
-  duplicate-coordinates business heuristic in `data-model.md` gets much cheaper.
-- Is there a `cursor` that would paginate the desktop payload? The edges carry
-  `"cursor": null` logged out, which is consistent with the observed hard cap.
+- `marketplace_listing_seller` is present as a key on every search card but has
+  remained `null`. Seller identity is nevertheless solved on signed-in desktop
+  **item pages**: `/marketplace/profile/<id>` supplies a stable seller id. The
+  canonical model no longer clusters sellers on listing coordinates.
+- Is there a usable cursor for a direct GraphQL request? The embedded payload
+  itself does not grow: signed-in scrolling kept `creation_time` at 16 while
+  rendered cards moved far past the first page (`logged-in-findings.md` §2).
 - Does `created_with_seller_app` ever come back `true`, and does it correlate
   with the drop-shipper listings we want to filter?
-- What transport does mobile pagination actually use (§5b)? Answering it would
-  need a proxy or `WKURLSchemeHandler`-level interception rather than anything
-  reachable from inside the page.
+- ~~What transport does mobile pagination use?~~ WebSocket, answered in §5b.
 
 ## 8. The browse path has no usable payload — measured 2026-08-07
 
