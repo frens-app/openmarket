@@ -43,9 +43,10 @@ import os
 /// turns navigating one webview. No extra request budget — `RequestPacer` is a
 /// shared actor and still spaces the starts.
 ///
-/// **A fill publishes once, when all of it is in.** Cards moving out from under
-/// a thumb is the one thing a feed must not do. Pagination is exempt — it
-/// appends below what is already on screen, which moves nothing.
+/// **A fresh fill publishes its first usable batch immediately.** Any extra
+/// screens needed to reach `browseTarget` append below it, so the first screen
+/// is not held hostage by the slow tail of Facebook's feed. A refresh remains
+/// atomic: old cards stay exactly where they are until the replacement is ready.
 ///
 /// **Session-scoped, and nothing is written to disk.** The feed survives moving
 /// between tabs and opening listings, and is rebuilt when the app is launched
@@ -72,7 +73,7 @@ final class DiscoverFeed: ObservableObject {
     @Published private(set) var isAnonymous = true
 
     /// How many in-radius cards a signed-in fill tries to have in hand before
-    /// it publishes, and how many each top-up aims to add. An anonymous fill
+    /// it finishes, and how many each top-up aims to add. An anonymous fill
     /// publishes whatever its one page carried.
     ///
     /// It has to be a target rather than a page count because the two numbers
@@ -84,11 +85,11 @@ final class DiscoverFeed: ObservableObject {
     /// How many screens one harvest may scroll in total, and how many of those
     /// may turn up new listings that are *all* too far before it gives up.
     ///
-    /// The first is a time bound — a screen costs ~0.9s of settling. The second
-    /// is the end-of-area test, and it counts a very specific thing: screens
-    /// that produced new listings, none of which were close enough. A screen
-    /// that produced no new listings at all is **not** counted, because it is
-    /// not evidence of anything.
+    /// The first is a time bound — an already-rendered screen settles quickly,
+    /// but a network boundary can still cost ~0.9s. The second is the end-of-area
+    /// test, and it counts a very specific thing: screens that produced new
+    /// listings, none of which were close enough. A screen that produced no new
+    /// listings at all is **not** counted, because it is not evidence of anything.
     ///
     /// That distinction is the whole of it. The feed virtualises, and a fill has
     /// already taken every card in the DOM, so the first several screens of a
@@ -195,6 +196,15 @@ final class DiscoverFeed: ObservableObject {
         isAnonymous = walled || session == .unauthed
 
         var collected = await nearby(cards).kept
+        // Nothing is on screen during the first fill, so publish the first
+        // usable page now and let any radius top-up append below it. Pull to
+        // refresh deliberately keeps the old feed stable until the replacement
+        // is complete.
+        let publishesProgressively = listings.isEmpty
+        if publishesProgressively, !collected.isEmpty {
+            listings = collected
+            Logger.discover.info("initial batch published: \(self.listings.count, privacy: .public) cards")
+        }
         // **Anonymous is one page, and that is the whole feed.** Facebook hands
         // a signed-out session about twenty cards and then stops — measured
         // here as five screens that advanced 0→2410px of a 3188px container
@@ -211,13 +221,18 @@ final class DiscoverFeed: ObservableObject {
             // Only if the first screen didn't already carry enough. A fill that
             // can publish immediately should, since this is the screen the app
             // opens on.
-            let harvest = await scrollForMore(wanted: Self.browseTarget - collected.count)
+            let harvest = await scrollForMore(
+                wanted: Self.browseTarget - collected.count,
+                publishEachBatch: publishesProgressively
+            )
             collected += harvest.cards
             reachedEnd = harvest.exhausted
         }
-        // One assignment: a pull-to-refresh keeps the old cards exactly where
-        // they are until the new feed is ready.
-        listings = collected
+        if !publishesProgressively {
+            // One replacement: a pull-to-refresh keeps the old cards exactly
+            // where they are until the new feed is ready.
+            listings = collected
+        }
         Logger.discover.info("\(self.listings.count, privacy: .public) cards from Marketplace, anon=\(self.isAnonymous, privacy: .public), end=\(self.reachedEnd, privacy: .public)")
     }
 
@@ -288,9 +303,9 @@ final class DiscoverFeed: ObservableObject {
             """)
 
         // Publish each filtered screen as soon as it is ready. Pagination only
-        // appends below the reader, so unlike the initial fill there is no layout
-        // stability benefit to withholding three usable cards while the hidden
-        // webview hunts for nine more.
+        // appends below the reader, so there is no layout stability benefit to
+        // withholding three usable cards while the hidden webview hunts for nine
+        // more. A refresh is the path that still replaces atomically.
         let harvest = await scrollForMore(wanted: Self.browseTarget,
                                           publishEachBatch: true)
         reachedEnd = harvest.exhausted
@@ -311,9 +326,9 @@ final class DiscoverFeed: ObservableObject {
     /// the end of the part of it that this app is for. Running out of scroll
     /// budget is neither — it is just this call's turn ending, and the next one
     /// picks up where it left off.
-    /// - Parameter publishEachBatch: Used only for a top-up with cards already
-    ///   on screen. The initial fill stays atomic; a top-up safely appends below
-    ///   the current viewport after every filtered webview screen.
+    /// - Parameter publishEachBatch: Appends each filtered webview screen below
+    ///   cards already published. Used by pagination and by the slow tail of a
+    ///   fresh fill; refreshes keep it false and replace the feed atomically.
     private func scrollForMore(wanted: Int,
                                publishEachBatch: Bool = false) async -> (cards: [Listing], exhausted: Bool) {
         var found: [Listing] = []

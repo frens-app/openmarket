@@ -61,7 +61,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// that never updates is just a wrong one.
     var session: BrowserSession
     private let pacer: RequestPacer
-    private var navContinuation: CheckedContinuation<Void, Never>?
+    /// Resumed when WebKit commits the new document, not when every image and
+    /// third-party resource has finished. The data we need is in the document
+    /// well before `didFinish` on both browse and search pages.
+    private var commitContinuation: CheckedContinuation<Void, Never>?
 
     /// Defaults to `.unauthed`, deliberately.
     ///
@@ -93,11 +96,15 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         state = .loading
         Logger.desktop.info("loading \(query.url.absoluteString, privacy: .public)")
         await navigate(to: query.url)
-        let payload = await harvest()
+        // Both values hydrate independently after the document commits. Reading
+        // them together avoids adding the location pill's wait to the payload's
+        // wait on every search.
+        async let payloadRead = harvest()
+        async let locationRead = readLocation()
+        let (payload, located) = await (payloadRead, locationRead)
         // Logged on every search, because a refused place is otherwise
         // invisible: the grid fills with a healthy-looking set of listings for
         // a city nobody asked for.
-        let located = await readLocation()
         Logger.desktop.info("location: \(located.summary, privacy: .public)")
         return payload
     }
@@ -153,7 +160,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         return []
     }
 
-    /// Polls for the payload rather than waiting on `didFinish`.
+    /// Polls for the payload as soon as the new document commits rather than
+    /// waiting on `didFinish`.
     ///
     /// On item pages the payload is readable ~0.9s into a ~1.85s load, so
     /// waiting for the document to finish spends roughly half the time on
@@ -345,9 +353,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     ///
     /// Settling is adaptive. The old implementation slept 900 ms after every
     /// screen whether React had recycled the card window in 150 ms or 850 ms.
-    /// Two unchanged readings after the rendered listing ids change are enough
-    /// to know the window is ready to harvest; 900 ms remains the ceiling for a
-    /// network-backed scroll that really does take that long.
+    /// Two unchanged readings are enough once the rendered listing ids change,
+    /// or while the new viewport is still inside content already rendered by
+    /// the page. 900 ms remains the ceiling at the end of that runway, where a
+    /// network-backed scroll really can take that long.
     @discardableResult
     func scrollOnce() async -> Bool {
         for attempt in 0..<2 {
@@ -372,17 +381,18 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         return false
     }
 
-    private static let scrollSettlePoll = Duration.milliseconds(100)
+    private static let scrollSettlePoll = Duration.milliseconds(50)
     private static let scrollSettleCeiling = Duration.milliseconds(900)
     private static let stableScrollReads = 2
 
     /// Waits for the virtualised card window, not an arbitrary timer.
     ///
-    /// A changed signature says React has mounted a different window. Requiring
-    /// that signature, count and scroll position to then agree twice keeps us
-    /// from harvesting halfway through a recycle. At the end of already-rendered
-    /// content there may be no signature change until Facebook answers over the
-    /// network, so the previous 900 ms delay remains the hard fallback.
+    /// A changed signature says React has mounted a different window. While the
+    /// viewport is still within the document's rendered runway, stable geometry
+    /// is also enough: waiting for ids to change there made every ordinary
+    /// Search scroll pay the full network ceiling. At the end of that runway
+    /// there may be no signature change until Facebook answers, so 900 ms stays
+    /// the hard fallback.
     private func waitForScrollToSettle(after step: FeedScroll) async -> FeedScroll? {
         let deadline = ContinuousClock.now.advanced(by: Self.scrollSettleCeiling)
         var previous = step
@@ -394,10 +404,14 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
             let windowChanged = current.signature != step.fromSignature
                 || current.cards != step.fromCards
+            let hasRenderedRunway = current.top + current.clientHeight
+                < current.scrollHeight - 1
             let unchanged = current.top == previous.top
                 && current.cards == previous.cards
                 && current.signature == previous.signature
-            stableReads = windowChanged && unchanged ? stableReads + 1 : 0
+            stableReads = (windowChanged || hasRenderedRunway) && unchanged
+                ? stableReads + 1
+                : 0
             previous = current
 
             if stableReads >= Self.stableScrollReads { return current }
@@ -480,9 +494,14 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     private func navigate(to url: URL) async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            navContinuation = cont
+            commitContinuation = cont
             webView.load(URLRequest(url: url))
         }
+    }
+
+    private func resumeCommittedNavigation() {
+        commitContinuation?.resume()
+        commitContinuation = nil
     }
 
     func evaluate(_ script: String) async -> String? {
@@ -494,10 +513,17 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         }
     }
 
+    nonisolated func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        Task { @MainActor in
+            self.resumeCommittedNavigation()
+        }
+    }
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
-            navContinuation?.resume()
-            navContinuation = nil
+            // Fallback for unusual navigation paths where WebKit does not send
+            // the expected commit callback.
+            self.resumeCommittedNavigation()
         }
     }
 
@@ -505,8 +531,7 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
                              withError error: Error) {
         Task { @MainActor in
             self.state = .failed(error.localizedDescription)
-            navContinuation?.resume()
-            navContinuation = nil
+            self.resumeCommittedNavigation()
         }
     }
 
@@ -514,8 +539,7 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
                              withError error: Error) {
         Task { @MainActor in
             self.state = .failed(error.localizedDescription)
-            navContinuation?.resume()
-            navContinuation = nil
+            self.resumeCommittedNavigation()
         }
     }
 }
