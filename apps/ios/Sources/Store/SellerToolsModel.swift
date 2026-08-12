@@ -249,12 +249,12 @@ final class SellerToolsModel: ObservableObject {
         if phase.isRunning { phase = .idle }
     }
 
-    func reset() {
-        cancel()
-        input = ""
-        clearResults()
-        phase = .idle
-    }
+    // `reset()` stood here, and nothing calls it any more. It existed for the
+    // "start over" button, which existed because the results replaced the input
+    // screen — the run is a pushed screen now, so going back *is* the reset and
+    // `start` already clears the previous results. Deleted rather than kept
+    // "in case": an uncalled method that wipes the model is a thing somebody
+    // wires to a button later without checking what it does to a running task.
 
     private func clearResults() {
         steps = []

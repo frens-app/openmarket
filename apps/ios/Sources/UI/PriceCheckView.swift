@@ -2,33 +2,20 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Price Check, the first tool in the Tools tab: describe what you're selling,
-/// and get a price backed by what is actually listed nearby and what has
-/// actually sold.
+/// Price Check, the first tool in the Tools tab: **the question half**.
+///
+/// Photos, a description, and a button. Running the check pushes
+/// `PriceCheckRunView`, which is where the working and the answer live.
+///
+/// **A push rather than a swap**, and the back button is the whole reason. This
+/// screen used to replace itself with its own results, which left "start over"
+/// as the only way back to the inputs — a button that had to exist because the
+/// navigation stack no longer described where the user was. Pushing means Back
+/// already means "change what I asked", the inputs are still standing behind
+/// it, and a second run is an edit rather than a re-entry.
 ///
 /// Pushed from `ToolsView`, so it brings no `NavigationStack` of its own — the
 /// tab owns one, and a second would nest.
-///
-/// The screen is built as a **transcript** rather than a form that fills in.
-/// Four things happen — a search term is worked out, the market is searched,
-/// the sold listings are checked, the prices are read — and they take a few
-/// seconds between them. Naming each one as it happens is not decoration: the
-/// claim this feature makes is "this price comes from real listings near you",
-/// and a spinner followed by a number asks the user to take that on faith.
-/// Watching it go and look is the evidence.
-///
-/// **The comparables used to sit above the recommendation**, on the argument
-/// that they are the working rather than an illustration. They are below it
-/// now, and the argument survives the move: the transcript already states the
-/// working in the line above the price — how many listings were found, how many
-/// sold, what band they were asking in. The claim "we went and looked" is made
-/// by the checkmarks, before the number appears, which is what putting the
-/// strips first was for.
-///
-/// What putting them first also did was bury the answer under two horizontal
-/// scrollers on a phone. Somebody who wants to check the evidence scrolls; the
-/// order now matches what they came for, and the strips are what backs it up
-/// rather than what stands in front of it.
 struct PriceCheckView: View {
     @EnvironmentObject private var model: SellerToolsModel
     /// The description being typed, held here rather than on the model — see
@@ -36,8 +23,6 @@ struct PriceCheckView: View {
     /// a `@Published` value while a run is publishing.
     @State private var draft = ""
     @FocusState private var isTyping: Bool
-    @State private var selected: Listing?
-    @Namespace private var heroNamespace
 
     /// Up to `maxPhotos`, in the order they were added.
     ///
@@ -51,18 +36,7 @@ struct PriceCheckView: View {
     @State private var isChoosingSource = false
     @State private var isChoosingFromLibrary = false
     @State private var isTakingPhoto = false
-    @State private var isShowingEvidence = false
-
-    /// The listing, as the user may have rewritten it.
-    ///
-    /// Held here rather than on the model for the reason `SellerToolsModel.input`
-    /// documents: a `TextField` re-rendered from a `@Published` value mid-edit
-    /// loses an uncommitted autocorrect composition, and hands back the marked
-    /// substring doubled. Seeded once when the run produces copy; theirs after
-    /// that.
-    @State private var editedTitle = ""
-    @State private var editedBody = ""
-    @State private var didCopyPrice = false
+    @State private var isRunning = false
 
     /// Three, matching `max_items` on the request. Both numbers exist because
     /// the client should not be able to build a request the server refuses, and
@@ -80,32 +54,13 @@ struct PriceCheckView: View {
         static func == (a: PreparedPhoto, b: PreparedPhoto) -> Bool { a.id == b.id }
     }
 
-    /// **Two screens, not one scroll.**
-    ///
-    /// The old version stacked the question, the working and the answer in one
-    /// column, which meant the inputs stayed on screen forever — a form asking
-    /// "what are you selling?" above a price it had already worked out. Asking
-    /// and answering are different moments, so they are different screens now,
-    /// with the run itself as the third thing in between.
     var body: some View {
-        Group {
-            if model.hasResult {
-                answer
-            } else {
-                question
+        question
+            .navigationTitle("Price check")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $isRunning) {
+                PriceCheckRunView(thumbnail: photos.first?.preview)
             }
-        }
-        .navigationTitle("Price check")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $selected) { listing in
-            DetailView(listing: listing, namespace: heroNamespace)
-        }
-        .navigationDestination(isPresented: $isShowingEvidence) { evidence }
-        // Seeds the editable copy the moment a run produces it, and only then:
-        // the fields own their text afterwards, so that a keystroke does not
-        // fight a republish. Same reasoning as `SellerToolsModel.input`.
-        .onChange(of: model.listingTitle) { _, title in editedTitle = title ?? "" }
-        .onChange(of: model.listingBody) { _, body in editedBody = body ?? "" }
     }
 
     // MARK: - Asking
@@ -147,8 +102,6 @@ struct PriceCheckView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if !model.steps.isEmpty { transcript }
-                    if case .failed(let message) = model.phase { failureCard(message) }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
@@ -197,19 +150,18 @@ struct PriceCheckView: View {
     /// wait for something.
     private var runBar: some View {
         VStack(spacing: 8) {
+            // No spinner and no "checking…" state. The run is a screen now, and
+            // this button's whole job is to get there — a button that sat here
+            // spinning would be reporting on work happening somewhere the user
+            // can already see.
             Button(action: submit) {
-                HStack(spacing: 8) {
-                    if model.phase.isRunning {
-                        ProgressView().controlSize(.small).tint(.white)
-                    }
-                    Text(model.phase.isRunning ? "Checking the price…" : "Check the price")
-                        .font(.headline)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                Text("Check the price")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.phase.isRunning || !canRun)
+            .disabled(!canRun)
 
             Text("We read recent Marketplace sales near you. About ten seconds.")
                 .font(.caption)
@@ -225,12 +177,7 @@ struct PriceCheckView: View {
         .background(.bar)
     }
 
-    private func sectionLabel(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(.caption2.weight(.semibold))
-            .tracking(0.8)
-            .foregroundStyle(.secondary)
-    }
+    private func sectionLabel(_ text: String) -> some View { SectionLabel(text) }
 
     // MARK: - Asking
 
@@ -252,10 +199,14 @@ struct PriceCheckView: View {
     /// Guarded rather than trusting the caller: the button is disabled without
     /// enough to go on, and Done has no such thing — it is on the keyboard
     /// whatever the field holds.
+    ///
+    /// Starts the run and pushes in the same breath, so the next screen is
+    /// already showing the first step by the time the transition lands.
     private func submit() {
-        guard !model.phase.isRunning, canRun else { return }
+        guard canRun else { return }
         isTyping = false
         model.start(draft, photos: photos.map(\.photo))
+        isRunning = true
     }
 
     /// Downscales and encodes off the main actor, then appends.
@@ -467,343 +418,11 @@ struct PriceCheckView: View {
         .accessibilityLabel("Remove photo")
     }
 
-    // MARK: - The transcript
-
-    private var transcript: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(model.steps) { step in
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    marker(for: step.state)
-                        .frame(width: 16)
-                    Text(step.text)
-                        .font(.subheadline)
-                        .foregroundStyle(step.state == .running ? .secondary : .primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                }
-                .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    @ViewBuilder
-    private func marker(for state: SellerToolsModel.Step.State) -> some View {
-        switch state {
-        case .running:
-            ProgressView().controlSize(.mini)
-        case .done:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.tint)
-        case .failed:
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.orange)
-        }
-    }
-
-    // MARK: - The answer
-
-    /// The decision, then the paste.
-    ///
-    /// Everything above the "ready to paste" label is one question — what do I
-    /// ask for this — and it is answerable without scrolling: the number, what
-    /// the number means, and where it sits against everyone else. Everything
-    /// below it is clerical.
-    private var answer: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                identifiedHeader
-                priceBlock
-                evidenceRow
-                listingBlock
-                helpfulPrompt
-                startOver
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            // Clears the floating tab bar, which is an overlay rather than a
-            // safe-area inset — so nothing reserves this space and the last
-            // control on any screen sits underneath it. Measured against the
-            // capsule, not guessed.
-            .padding(.bottom, 96)
-        }
-        .scrollDismissesKeyboard(.interactively)
-    }
-
-    /// What it decided this is, and where it got that.
-    ///
-    /// Small and at the top, because it is the one thing on the screen the
-    /// person holding the object can check better than the app can — and a
-    /// price for the wrong item is worse than no price. It replaces the
-    /// transcript, which said the same thing at four times the height and only
-    /// mattered while the run was going.
-    @ViewBuilder
-    private var identifiedHeader: some View {
-        HStack(spacing: 12) {
-            if let preview = photos.first?.preview {
-                preview
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 44, height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.identifiedName ?? model.input)
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(photos.isEmpty ? "Read from what you wrote" : "Read from your photo and notes")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// The number, the stepper, the sentence, and the bar.
-    ///
-    /// **The stepper is the point.** The recommendation is a median, which is a
-    /// statement about other people's listings rather than about this object,
-    /// and the person holding it knows things the median cannot — that it is
-    /// boxed, or that the drawer sticks. Letting them move it and rewriting the
-    /// sentence as they do turns a number handed down into a number chosen,
-    /// with the consequences visible while they choose.
-    @ViewBuilder
-    private var priceBlock: some View {
-        if let price = model.askingPrice, let guide = model.guide {
-            VStack(alignment: .leading, spacing: 14) {
-                sectionLabel("List it at")
-
-                HStack(alignment: .center, spacing: 12) {
-                    // The number is the copy button.
-                    //
-                    // The design sketch had no control here, and a seller can
-                    // certainly type "150" — but copying the price is the one
-                    // signal this feature gets from everybody rather than from
-                    // the few who answer a question, and it is what tells us
-                    // whether the recommendation is any good. So the affordance
-                    // stays; it is the number itself plus a small glyph rather
-                    // than a third button crowding the stepper.
-                    Button(action: copyPrice) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(guide.money(price))
-                                .font(.system(size: 52, weight: .bold, design: .rounded))
-                                .minimumScaleFactor(0.5)
-                                .lineLimit(1)
-                                .contentTransition(.numericText())
-                                .animation(.easeOut(duration: 0.15), value: price)
-                            Image(systemName: didCopyPrice ? "checkmark" : "doc.on.doc")
-                                .font(.footnote)
-                                .foregroundStyle(didCopyPrice ? Color.accentColor : .secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(didCopyPrice ? "Price copied" : "Copy price")
-                    Spacer(minLength: 8)
-                    stepButton(systemName: "minus", direction: -1)
-                    stepButton(systemName: "plus", direction: 1)
-                }
-
-                if let sentence = priceSentence(for: price, guide: guide) {
-                    Text(sentence)
-                        .font(.subheadline)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                PriceRangeBar(price: price, guide: guide)
-            }
-        }
-    }
-
-    /// Two short sentences: where it sits, and how fast things like it go.
-    ///
-    /// Both are arithmetic written in Swift — see `PriceGuide.position` for why
-    /// the long form moved to the evidence screen, and `SoldSignal.speed` for
-    /// why "about two weeks" beats "13 days".
-    private func priceSentence(for price: Int, guide: PriceGuide) -> String? {
-        let parts = [guide.position(for: price), model.sold.speed].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
-    }
-
-    /// Copies the bare number — Facebook's price box wants digits, not "$150".
-    private func copyPrice() {
-        guard let price = model.askingPrice else { return }
-        UIPasteboard.general.string = String(price)
-        model.recordPriceCopied()
-        withAnimation(.easeOut(duration: 0.15)) { didCopyPrice = true }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            withAnimation(.easeOut(duration: 0.2)) { didCopyPrice = false }
-        }
-    }
-
-    private func stepButton(systemName: String, direction: Int) -> some View {
-        Button {
-            model.nudgePrice(by: direction)
-        } label: {
-            Image(systemName: systemName)
-                .font(.headline)
-                .frame(width: 44, height: 44)
-                .background(Color(.secondarySystemBackground), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!model.canNudge(direction))
-        .accessibilityLabel(direction > 0 ? "Increase price" : "Decrease price")
-    }
-
-    /// The comparables, one tap away.
-    ///
-    /// It states the counts on its face rather than only behind the chevron,
-    /// because the counts are the claim — "10 nearby listings · 15 sold last
-    /// month" is what makes the number above it something other than a guess,
-    /// and a row that made you tap to find that out would be hiding the part
-    /// that matters to keep the part that is merely interesting.
-    @ViewBuilder
-    private var evidenceRow: some View {
-        if !model.comps.isEmpty {
-            Button {
-                isShowingEvidence = true
-            } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("What this is based on")
-                            .font(.subheadline.weight(.semibold))
-                        Text(evidenceSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(14)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-        }
-    }
-
-    private var evidenceSummary: String {
-        var parts = ["\(model.comps.count) nearby listing\(model.comps.count == 1 ? "" : "s")"]
-        if model.sold.count > 0 {
-            parts.append("\(model.sold.count) sold last month")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// The listing, editable before it is copied.
-    ///
-    /// Editable because the model wrote it from a photograph and two lines of
-    /// notes, and the seller knows the rest. Making them paste it into Facebook
-    /// and fix it there means fixing it in the one place where a mistake is
-    /// already public.
-    @ViewBuilder
-    private var listingBlock: some View {
-        if model.listingTitle != nil || model.listingBody != nil {
-            VStack(alignment: .leading, spacing: 10) {
-                sectionLabel("Ready to paste")
-
-                VStack(spacing: 0) {
-                    if model.listingTitle != nil {
-                        EditableCopyField(caption: "Title", text: $editedTitle, isProse: false) {
-                            model.recordListingCopied(title: editedTitle)
-                        }
-                        Divider().padding(.leading, 14)
-                    }
-                    if model.listingBody != nil {
-                        EditableCopyField(caption: "Description", text: $editedBody, isProse: true) {
-                            model.recordListingCopied(description: editedBody)
-                        }
-                    }
-                }
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-
-                Text("Tap a field to rewrite it before you copy.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var evidence: some View {
-        PriceEvidenceView(comps: model.comps,
-                          sold: model.sold,
-                          guide: model.guide ?? PriceGuide(comps: []),
-                          price: model.askingPrice ?? model.recommendedPrice ?? 0,
-                          marketName: model.marketName,
-                          searchTerm: model.searchTerm)
-    }
-
-    /// The asked question, once there is something to judge.
-    ///
-    /// Two buttons rather than a checkbox, and that is the same distinction the
-    /// column behind it makes: a checkbox cannot tell "no" from "didn't
-    /// answer", and those are different findings. Answering swaps the prompt
-    /// for an acknowledgement rather than leaving a live control that has
-    /// already been used.
-    @ViewBuilder
-    private var helpfulPrompt: some View {
-        if model.hasResult {
-            // One row rather than a stacked question: it is the last thing on
-            // the screen and the least important, and a two-line block there
-            // reads as another section to deal with.
-            HStack(spacing: 10) {
-                if let feedback = model.feedback {
-                    Label(feedback ? "Thanks — glad it helped." : "Thanks — noted.",
-                          systemImage: "checkmark.circle.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                } else {
-                    Text("Was this price helpful?")
-                        .font(.subheadline)
-                    Spacer(minLength: 8)
-                    helpfulButton(title: "Yes", helpful: true)
-                    helpfulButton(title: "No", helpful: false)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-            .animation(.easeOut(duration: 0.2), value: model.feedback)
-        }
-    }
-
-    private func helpfulButton(title: String, helpful: Bool) -> some View {
-        Button(title) { model.recordFeedback(helpful: helpful) }
-            .font(.subheadline.weight(.medium))
-            .buttonStyle(.bordered)
-    }
-
-    // MARK: - Endings
-
-    private func failureCard(_ message: String) -> some View {
-        // Retries with the same inputs, photos included — a failed run is
-        // usually a network or a provider having a moment, and making somebody
-        // re-attach three photographs to find that out would be its own defeat.
-        InlineNotice(text: message, actionTitle: "Try again") { submit() }
-    }
-
-    private var startOver: some View {
-        Button("Start over", role: .destructive) {
-            model.reset()
-            draft = ""
-            photos = []
-            pickerSelection = []
-        }
-            .font(.subheadline)
-            .frame(maxWidth: .infinity)
-    }
 }
 
 /// A field the user is going to paste somewhere else, so copying is the
 /// primary action rather than a long-press away.
-private struct EditableCopyField: View {
+struct EditableCopyField: View {
     let caption: String
     @Binding var text: String
     /// Prose wraps and gets the smaller face; a title is one line at headline
@@ -914,5 +533,23 @@ struct CompCard: View {
             .padding(.vertical, 3)
             .background(.thinMaterial, in: Capsule())
             .padding(6)
+    }
+}
+
+/// The small letterspaced caps above each block.
+///
+/// A type rather than a helper on one view, because both halves of Price Check
+/// use it and a second copy of "caption2, semibold, 0.8 tracking, secondary" is
+/// how the two screens start disagreeing about what a section label looks like.
+struct SectionLabel: View {
+    private let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.semibold))
+            .tracking(0.8)
+            .foregroundStyle(.secondary)
     }
 }
