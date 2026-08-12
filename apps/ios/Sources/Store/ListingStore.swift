@@ -14,17 +14,10 @@ final class ListingStore: ObservableObject {
     @Published private(set) var isLoadingFirstPage = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var health = ParseHealth()
-    /// Whether scrolling this result set has stopped producing anything.
-    ///
-    /// Reported so the grid can say so rather than ending in silence. Only ever
-    /// true for a signed-in session: without one the feed stops at the login
-    /// wall after ~15 cards, which is a different fact and gets a different
-    /// footer.
-    @Published private(set) var reachedEnd = false
     @Published var query: SearchQuery?
 
-    /// Bumped every time the grid's contents are *replaced* rather than
-    /// extended — a new search, a re-run, or going back to the home screen.
+    /// Bumped every time the search grid's contents are *replaced* rather than
+    /// extended — a new search or a re-run.
     ///
     /// Exists for one reason: the scroll offset survives the swap. Someone five
     /// pages into "desk" who searches for "lamp" keeps their offset over a grid
@@ -133,7 +126,6 @@ final class ListingStore: ObservableObject {
         seenIDs = []
         deepestIndexSeen = -1
         health = ParseHealth()
-        reachedEnd = false
 
         // Last session's cards for this exact query, on the first frame. The
         // live load underneath takes 5.13s to produce anything; there is no
@@ -159,15 +151,16 @@ final class ListingStore: ObservableObject {
 
     /// How many cards from the end a page starts loading — about two screens of
     /// the two-column grid. A page is three webview scrolls with a settle after
-    /// each, so a trigger three cards from the bottom guarantees the spinner is
-    /// seen; this buys enough runway for the cards to arrive first.
+    /// each, so starting near the final card would expose the loading skeletons
+    /// for too long. This buys enough runway for the cards to arrive first.
     static let prefetchMargin = 10
 
     /// Enough cards for the next visible screen. A top-up used to drive the
     /// hidden Facebook page exactly three screens every time, even when its
     /// first scroll had already produced everything the user was approaching.
     /// Keep three as the recovery ceiling for sparse/duplicate windows, but stop
-    /// as soon as one screen of genuinely new cards is in the grid.
+    /// as soon as one screen of genuinely new cards is in the grid. Reaching
+    /// the ceiling pauses this attempt; it does not prove the result set ended.
     private static let paginationTarget = 6
     private static let maxScrollsPerTopUp = 3
 
@@ -249,8 +242,6 @@ final class ListingStore: ObservableObject {
     func loadMore() async {
         guard query != nil, !isLoadingMore, canLoadMore else { return }
         isLoadingMore = true
-        defer { isLoadingMore = false }
-
         let before = listings.count
         var scrolls = 0
         while listings.count - before < Self.paginationTarget,
@@ -259,29 +250,29 @@ final class ListingStore: ObservableObject {
             guard await desktop.scrollOnce() else { break }
             await ingest(cards: await desktop.renderedCards())
         }
-        // Three screens that produced nothing is the end of this result set as
-        // far as anyone can tell from here. Recorded rather than only logged, so
-        // the grid can say the results ran out instead of just stopping.
         if listings.count == before {
-            reachedEnd = true
-            Logger.store.info("loadMore: no new cards")
+            // A virtualised Facebook window full of duplicates, a transient
+            // network boundary, and a genuinely exhausted result set all look
+            // identical here. End this attempt without turning that ambiguity
+            // into a permanent claim about the user's area.
+            Logger.store.info("loadMore: no new cards over \(scrolls, privacy: .public) screens, retryable")
         } else {
-            reachedEnd = false
             Logger.store.info("loadMore: \(self.listings.count - before, privacy: .public) new cards over \(scrolls, privacy: .public) screens")
+        }
+        isLoadingMore = false
+
+        // Preserve one drag made while the current page was loading. Without
+        // this re-check the gesture arms `scrolledSinceLastPage`, fails the
+        // `isLoadingMore` guard, and can never trigger again when a dry attempt
+        // appends no new cell tasks.
+        if scrolledSinceLastPage {
+            await topUpIfAtMargin()
         }
     }
 
     func retry() async {
         guard let query else { return }
         await run(query)
-    }
-
-    /// Back to the home screen. Counts as a replacement for scrolling purposes:
-    /// the home screen is usually shorter than the results it replaces, so an
-    /// offset carried over from deep in a result set lands past the end of it.
-    func clearQuery() {
-        query = nil
-        resultsGeneration += 1
     }
 
     // MARK: - Ingestion

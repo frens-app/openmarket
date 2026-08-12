@@ -21,19 +21,17 @@ struct ListingCard: View {
                         .strikethrough()
                 }
             }
-            if let title = listing.title {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
+            Text(listing.title ?? " ")
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
             // §3.1 — location and distance are the point of a *local* browser,
             // so they get their own line whenever the surface provides them.
-            if let location = listing.locationText {
-                HStack(spacing: 4) {
-                    Text(location)
-                        .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(listing.locationText ?? " ")
+                    .lineLimit(1)
+                if listing.locationText != nil {
                     // Measured from the listing's own point once it's a known
                     // listing, and from its city's centroid until then — see
                     // "Enriched known listings" in `DistanceResolver`. A card
@@ -47,9 +45,9 @@ struct ListingCard: View {
                             .layoutPriority(1)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
         .task { distances.resolve(place: listing.locationText) }
