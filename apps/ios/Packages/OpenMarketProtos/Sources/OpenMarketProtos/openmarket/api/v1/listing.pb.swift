@@ -1308,7 +1308,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceAvailabilityObservati
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceSearchListingObservation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}key\0\u{1}title\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{3}primary_photo\0\u{3}listed_at\0\u{3}delivery_types\0\u{1}availability\0\u{4}\u{3}facebook_category_id\0\u{3}created_with_seller_app\0\u{b}live\0\u{b}pending\0\u{c}\u{b}\u{1}\u{c}\u{c}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}key\0\u{1}title\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{3}primary_photo\0\u{3}listed_at\0\u{3}delivery_types\0\u{1}availability\0\u{3}facebook_category_id\0\u{3}created_with_seller_app\0")
 
   fileprivate class _StorageClass {
     var _context: Openmarket_Api_V1_FacebookMarketplaceObservationContext? = nil
@@ -1373,8 +1373,8 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
         case 8: try { try decoder.decodeSingularMessageField(value: &_storage._listedAt) }()
         case 9: try { try decoder.decodeRepeatedStringField(value: &_storage._deliveryTypes) }()
         case 10: try { try decoder.decodeSingularMessageField(value: &_storage._availability) }()
-        case 13: try { try decoder.decodeSingularStringField(value: &_storage._facebookCategoryID) }()
-        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._createdWithSellerApp) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._facebookCategoryID) }()
+        case 12: try { try decoder.decodeSingularBoolField(value: &_storage._createdWithSellerApp) }()
         default: break
         }
       }
@@ -1418,10 +1418,10 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
         try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
       } }()
       try { if let v = _storage._facebookCategoryID {
-        try visitor.visitSingularStringField(value: v, fieldNumber: 13)
+        try visitor.visitSingularStringField(value: v, fieldNumber: 11)
       } }()
       try { if let v = _storage._createdWithSellerApp {
-        try visitor.visitSingularBoolField(value: v, fieldNumber: 14)
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 12)
       } }()
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1455,7 +1455,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceListingDetailObservation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}key\0\u{1}title\0\u{1}description\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{1}media\0\u{3}listed_at_text\0\u{3}delivery_types\0\u{1}availability\0\u{2}\u{3}seller\0\u{b}live\0\u{b}pending\0\u{c}\u{c}\u{1}\u{c}\u{d}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}key\0\u{1}title\0\u{1}description\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{1}media\0\u{3}listed_at_text\0\u{3}delivery_types\0\u{1}availability\0\u{1}seller\0")
 
   fileprivate class _StorageClass {
     var _context: Openmarket_Api_V1_FacebookMarketplaceObservationContext? = nil
@@ -1521,7 +1521,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
         case 9: try { try decoder.decodeSingularStringField(value: &_storage._listedAtText) }()
         case 10: try { try decoder.decodeRepeatedStringField(value: &_storage._deliveryTypes) }()
         case 11: try { try decoder.decodeSingularMessageField(value: &_storage._availability) }()
-        case 14: try { try decoder.decodeSingularMessageField(value: &_storage._seller) }()
+        case 12: try { try decoder.decodeSingularMessageField(value: &_storage._seller) }()
         default: break
         }
       }
@@ -1568,7 +1568,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
         try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
       } }()
       try { if let v = _storage._seller {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
       } }()
     }
     try unknownFields.traverse(visitor: &visitor)

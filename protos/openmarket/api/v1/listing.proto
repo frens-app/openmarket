@@ -156,10 +156,8 @@ message FacebookMarketplaceSearchListingObservation {
   google.protobuf.Timestamp listed_at = 8;
   repeated string delivery_types = 9;
   FacebookMarketplaceAvailabilityObservation availability = 10;
-  reserved 11, 12;
-  reserved "live", "pending";
-  optional string facebook_category_id = 13;
-  optional bool created_with_seller_app = 14;
+  optional string facebook_category_id = 11;
+  optional bool created_with_seller_app = 12;
 }
 
 // One listing as its item page observed it. Seller presence is interpreted
@@ -179,9 +177,7 @@ message FacebookMarketplaceListingDetailObservation {
   optional string listed_at_text = 9;
   repeated string delivery_types = 10;
   FacebookMarketplaceAvailabilityObservation availability = 11;
-  reserved 12, 13;
-  reserved "live", "pending";
-  FacebookMarketplaceSellerObservation seller = 14;
+  FacebookMarketplaceSellerObservation seller = 12;
 }
 
 message FacebookMarketplaceListingObservation {

@@ -850,8 +850,8 @@ type FacebookMarketplaceSearchListingObservation struct {
 	ListedAt             *timestamppb.Timestamp                      `protobuf:"bytes,8,opt,name=listed_at,json=listedAt,proto3" json:"listed_at,omitempty"`
 	DeliveryTypes        []string                                    `protobuf:"bytes,9,rep,name=delivery_types,json=deliveryTypes,proto3" json:"delivery_types,omitempty"`
 	Availability         *FacebookMarketplaceAvailabilityObservation `protobuf:"bytes,10,opt,name=availability,proto3" json:"availability,omitempty"`
-	FacebookCategoryId   *string                                     `protobuf:"bytes,13,opt,name=facebook_category_id,json=facebookCategoryId,proto3,oneof" json:"facebook_category_id,omitempty"`
-	CreatedWithSellerApp *bool                                       `protobuf:"varint,14,opt,name=created_with_seller_app,json=createdWithSellerApp,proto3,oneof" json:"created_with_seller_app,omitempty"`
+	FacebookCategoryId   *string                                     `protobuf:"bytes,11,opt,name=facebook_category_id,json=facebookCategoryId,proto3,oneof" json:"facebook_category_id,omitempty"`
+	CreatedWithSellerApp *bool                                       `protobuf:"varint,12,opt,name=created_with_seller_app,json=createdWithSellerApp,proto3,oneof" json:"created_with_seller_app,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -988,7 +988,7 @@ type FacebookMarketplaceListingDetailObservation struct {
 	ListedAtText  *string                                     `protobuf:"bytes,9,opt,name=listed_at_text,json=listedAtText,proto3,oneof" json:"listed_at_text,omitempty"`
 	DeliveryTypes []string                                    `protobuf:"bytes,10,rep,name=delivery_types,json=deliveryTypes,proto3" json:"delivery_types,omitempty"`
 	Availability  *FacebookMarketplaceAvailabilityObservation `protobuf:"bytes,11,opt,name=availability,proto3" json:"availability,omitempty"`
-	Seller        *FacebookMarketplaceSellerObservation       `protobuf:"bytes,14,opt,name=seller,proto3" json:"seller,omitempty"`
+	Seller        *FacebookMarketplaceSellerObservation       `protobuf:"bytes,12,opt,name=seller,proto3" json:"seller,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1271,7 +1271,7 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x05_soldB\a\n" +
 	"\x05_liveB\n" +
 	"\n" +
-	"\b_pending\"\xb4\a\n" +
+	"\b_pending\"\x99\a\n" +
 	"+FacebookMarketplaceSearchListingObservation\x12Z\n" +
 	"\acontext\x18\x01 \x01(\v28.openmarket.api.v1.FacebookMarketplaceObservationContextB\x06\xbaH\x03\xc8\x01\x01R\acontext\x12?\n" +
 	"\x03key\x18\x02 \x01(\v2%.openmarket.api.v1.FacebookListingKeyB\x06\xbaH\x03\xc8\x01\x01R\x03key\x12\x19\n" +
@@ -1284,13 +1284,13 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x0edelivery_types\x18\t \x03(\tR\rdeliveryTypes\x12a\n" +
 	"\favailability\x18\n" +
 	" \x01(\v2=.openmarket.api.v1.FacebookMarketplaceAvailabilityObservationR\favailability\x125\n" +
-	"\x14facebook_category_id\x18\r \x01(\tH\x02R\x12facebookCategoryId\x88\x01\x01\x12:\n" +
-	"\x17created_with_seller_app\x18\x0e \x01(\bH\x03R\x14createdWithSellerApp\x88\x01\x01B\b\n" +
+	"\x14facebook_category_id\x18\v \x01(\tH\x02R\x12facebookCategoryId\x88\x01\x01\x12:\n" +
+	"\x17created_with_seller_app\x18\f \x01(\bH\x03R\x14createdWithSellerApp\x88\x01\x01B\b\n" +
 	"\x06_titleB\f\n" +
 	"\n" +
 	"_conditionB\x17\n" +
 	"\x15_facebook_category_idB\x1a\n" +
-	"\x18_created_with_seller_appJ\x04\b\v\x10\fJ\x04\b\f\x10\rR\x04liveR\apending\"\x8a\a\n" +
+	"\x18_created_with_seller_app\"\xef\x06\n" +
 	"+FacebookMarketplaceListingDetailObservation\x12Z\n" +
 	"\acontext\x18\x01 \x01(\v28.openmarket.api.v1.FacebookMarketplaceObservationContextB\x06\xbaH\x03\xc8\x01\x01R\acontext\x12?\n" +
 	"\x03key\x18\x02 \x01(\v2%.openmarket.api.v1.FacebookListingKeyB\x06\xbaH\x03\xc8\x01\x01R\x03key\x12\x19\n" +
@@ -1304,12 +1304,12 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x0edelivery_types\x18\n" +
 	" \x03(\tR\rdeliveryTypes\x12a\n" +
 	"\favailability\x18\v \x01(\v2=.openmarket.api.v1.FacebookMarketplaceAvailabilityObservationR\favailability\x12O\n" +
-	"\x06seller\x18\x0e \x01(\v27.openmarket.api.v1.FacebookMarketplaceSellerObservationR\x06sellerB\b\n" +
+	"\x06seller\x18\f \x01(\v27.openmarket.api.v1.FacebookMarketplaceSellerObservationR\x06sellerB\b\n" +
 	"\x06_titleB\x0e\n" +
 	"\f_descriptionB\f\n" +
 	"\n" +
 	"_conditionB\x11\n" +
-	"\x0f_listed_at_textJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eR\x04liveR\apending\"\xea\x01\n" +
+	"\x0f_listed_at_text\"\xea\x01\n" +
 	"%FacebookMarketplaceListingObservation\x12X\n" +
 	"\x06search\x18\x01 \x01(\v2>.openmarket.api.v1.FacebookMarketplaceSearchListingObservationH\x00R\x06search\x12X\n" +
 	"\x06detail\x18\x02 \x01(\v2>.openmarket.api.v1.FacebookMarketplaceListingDetailObservationH\x00R\x06detailB\r\n" +
