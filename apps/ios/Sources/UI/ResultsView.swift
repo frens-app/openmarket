@@ -269,8 +269,15 @@ struct ResultsView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 12)
                 .onChanged { _ in
-                    store.noteScroll()
-                    discover.noteScroll()
+                    // Only arm the feed the user can see. Forwarding every drag
+                    // to both stores made a Search swipe start a hidden
+                    // Discover top-up, competing for WebKit and request-pacer
+                    // time while the visible page was trying to paginate.
+                    if store.query == nil {
+                        discover.noteScroll()
+                    } else {
+                        store.noteScroll()
+                    }
                 }
         )
         .scrollDismissesKeyboard(.immediately)
