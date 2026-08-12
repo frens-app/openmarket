@@ -54,7 +54,7 @@ var identifySchema = map[string]any{
 		"listing_description": map[string]any{
 			"type":        "string",
 			"maxLength":   1200,
-			"description": "The listing body. Only facts from the photo and the seller's words.",
+			"description": "The listing body, in the seller's own voice. Only facts from the photo and the seller's words.",
 		},
 	},
 	"required": []string{"name", "search_queries", "listing_title", "listing_description"},
@@ -108,7 +108,10 @@ Identifying it:
 
 Writing the listing:
 - The title is what someone scanning a grid of photos reads. Say what the thing is, with the brand and model if you have them. It is not a sentence and it is not an advertisement.
+- Write the description AS THE SELLER, not about them. It goes out under their name, so it is their voice: "In good condition", "Comes with the cover", "Selling my Kallax shelf". Never "the seller states", "stated to be in good condition", "reportedly", "described as" — repeating their own words back to them as testimony reads like a listing written by a third party, because it is one.
+- What the seller told you is simply true. Assert it plainly: "In good condition", not "stated to be in good condition". The hedge adds no information and buys no honesty.
 - The description contains ONLY facts from the photo and the seller's words. Do not invent condition, history, completeness, smells, pets, or reasons for selling.
+- The way to stay honest is to leave things out, not to attribute them. Say nothing about what you were not told.
 - Specifically: if the only stated fault is a scratched top, do not write that the rest is in good condition — you do not know that. If nobody said whether it works, do not say it works.
 - Do not mention prices, what similar items cost, or how much of a bargain it is. You have not been told any of that, and the seller's own screen already shows them the market.
 - Short and true beats long and padded. Two honest sentences is a good listing.`)

@@ -115,6 +115,20 @@ func TestPromptNeverCarriesMarketNumbers(t *testing.T) {
 	}
 }
 
+// The listing is pasted under the seller's name, so it has to sound like they
+// wrote it. Measured: given "good condition" the model returned "Stated to be in
+// good condition" — a correct fact in a reporter's voice, which is what happens
+// when every other rule in the prompt is about not overclaiming and none of them
+// says whose words these are.
+func TestPromptAsksForTheSellersVoice(t *testing.T) {
+	prompt := identifyPrompt("IKEA Kallax, white, good condition")
+	for _, rule := range []string{"AS THE SELLER", "stated to be in good condition"} {
+		if !strings.Contains(prompt, rule) {
+			t.Errorf("prompt is missing the rule %q", rule)
+		}
+	}
+}
+
 // The listing rules are the ones with a measured failure behind them: a small
 // model asked for richer prose wrote "a few minor scratches on the frame" about
 // a bike whose seller mentioned none.
