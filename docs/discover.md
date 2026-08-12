@@ -229,7 +229,7 @@ What replaces it:
 | | Bottom of Discover |
 |---|---|
 | Anonymous (always at `reachedEnd`, §0.0) | The offer to log in — nothing else |
-| Signed in, fresh-fill tail or top-up running | Two rows of card skeletons |
+| Signed in, fresh-fill tail or top-up running | One skeleton row reserves the first two arrivals; later cards append in row-sized pairs |
 | Signed in, top-up paused | Nothing; the next drag can retry |
 
 The anonymous row is not a nudge dressed as information. Its feed genuinely
@@ -241,11 +241,18 @@ The radius moved into the caption beside the heading — "Facebook Marketplace,
 within 10 mi of Seattle, WA" — which is where §4.3 said to put it and is read
 before the scrolling rather than after it stops.
 
-Search pagination follows the same retryable rule. Three windows that add no
-cards pause that attempt without claiming the area or result set is exhausted;
-the next drag may try again, and two skeleton rows stand in for the incoming
-page while it does. The "already viewed" notice keeps its own line and its own
-undo, because that filter is the app's own and has something to undo.
+Search pagination distinguishes a paused attempt from a confirmed bottom. Three
+windows that add no cards still pause without making a terminal claim, as do
+script failures and recycler geometry changes. An end footer appears only after
+a decoded scroll stalls at the geometric bottom and the position, dimensions,
+and rendered card window remain unchanged for an additional two seconds. One
+skeleton row reserves the first two visible arrivals, later sparse arrivals
+publish as complete rows, and a final odd card is flushed when the attempt ends.
+"Visible" is the important word: the six-card pagination target and the prefetch
+margin are measured after the app's distance and "Only new" filters, so hidden
+cards cannot satisfy the target or prevent the last visible card from asking for
+more. The "already viewed" notice keeps its own line and its own undo, because
+that filter is the app's own and has something to undo.
 
 Search and Discover share the navigation shell and `PaginatedListingGrid`, but
 not a webview, store, or scroll view. Both scroll surfaces remain mounted while
@@ -521,11 +528,14 @@ ended an otherwise live feed. Neither condition had anything to do with the
 area actually running out.
 
 A stationary scroll position is not conclusive either. It may be the end of the
-feed, a transient network boundary, or a WebKit/script failure; whether the
-signed-in feed caps has still never been observed. Four dry screens is likewise
-a useful time budget for one attempt, not evidence about a ranking nobody has
-documented. Both now pause the current harvest and leave the next drag free to
-retry. Signed-in Discover therefore makes no terminal claim.
+feed, a transient network boundary, or a WebKit/script failure. Four dry screens
+is likewise a useful time budget for one attempt, not evidence about a ranking
+nobody has documented. Both pause a Discover harvest and leave the next drag
+free to retry, so signed-in Discover makes no terminal claim. Search now has a
+stricter terminal check: after the normal retry it requires a decoded reading at
+the geometric bottom, then two more seconds with unchanged position, dimensions,
+and card identities. Script failures and recycler changes remain indeterminate;
+only the stable-bottom path says the search results have ended.
 
 **The anonymous case is no longer one of these**, which is the one improvement
 here since it was written: that feed reaches its end by construction (§0.0) and
@@ -562,9 +572,18 @@ than trusting the chip.
 ### 4.11 A top-up can cost several seconds
 
 A `loadMoreIfNeeded` may scroll up to 14 screens before
-returning anything. Two rows of skeleton cards now reserve the incoming space
-under the existing grid for the duration; they replace the detached circular
-spinner that gave no sense of what was loading.
+returning everything. One row of skeleton cards reserves the first two incoming
+positions under the existing grid; it replaces the detached circular spinner
+that gave no sense of what was loading. Reserving all twelve positions would be
+misleading: `browseTarget` is how many nearby cards the engine tries to find,
+while a heavily filtered attempt commonly returns only one or two.
+
+The WebView still has to be harvested after every scroll because it virtualises
+old cards out of the DOM. The first two nearby cards replace the reserved slots
+immediately. Later one-card windows are coalesced into two-card row updates, and
+a final odd card is flushed when the attempt ends. Results therefore feel
+progressive without either a long empty skeleton runway or repeated half-row
+layout changes.
 
 Validated against a live signed-in feed with an intentionally sparse radius.
 The levers remain `scrollBudget`, `dryScreenBudget`, and triggering the top-up

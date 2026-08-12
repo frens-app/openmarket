@@ -293,7 +293,9 @@ struct ResultsView: View {
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 12)
-                    .onChanged { _ in store.noteScroll() }
+                    .onChanged { _ in
+                        store.noteScroll(hiddenAsViewed: hiddenAsViewed)
+                    }
             )
             .refreshable { await rerunCurrentQuery() }
             // A new result set starts at the top; pagination does not.
@@ -465,7 +467,7 @@ struct ResultsView: View {
     /// the only thing this app did to a feed it didn't build — and it is the
     /// only place the distance filter is disclosed at all.
     @ViewBuilder
-    private func discoverSection(_ w: Winnowed) -> some View {
+    private func discoverSection(_ w: WinnowedListings) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 sectionTitle("Discover")
@@ -483,7 +485,7 @@ struct ResultsView: View {
                 PaginatedListingGrid(
                     items: w.items,
                     namespace: discoverNamespace,
-                    isLoadingMore: discover.isLoadingTail,
+                    loadingPlaceholderCount: discover.loadingPlaceholderCount,
                     onSelect: { selected = $0 },
                     onItemAppear: { await discover.loadMoreIfNeeded(currentItem: $0) }
                 ) {
@@ -538,17 +540,6 @@ struct ResultsView: View {
     /// `nearestHiddenKM` is the diagnostic. The difference between "your radius
     /// is a bit tight" and "these results are for the wrong city entirely" is
     /// one number, and without it both look identical: a blank grid.
-    private struct Winnowed {
-        var items: [Listing] = []
-        var hiddenAsViewed = 0
-        var hiddenByDistance = 0
-        var nearestHiddenKM: Double?
-
-        /// Distance removed everything there was. The state that spent an
-        /// afternoon looking like a broken fetch.
-        var isEmptiedByDistance: Bool { items.isEmpty && hiddenByDistance > 0 }
-    }
-
     /// Distance is enforced here because no surface honours `radius` — the chip
     /// changes and the results don't (`docs/filter-parameters.md` §3). Listings
     /// whose distance isn't known yet are **kept**, not hidden: geocoding is
@@ -566,29 +557,17 @@ struct ResultsView: View {
     /// search — silently emptying it because the user has been using the app
     /// would be a strange reward for it. The seen marker on each card already
     /// says which ones have been opened.
-    private func winnowed(_ listings: [Listing], hidingViewed: Bool = true) -> Winnowed {
-        var result = Winnowed()
-        for listing in listings {
-            if hidingViewed, hiddenAsViewed.contains(listing.id) {
-                result.hiddenAsViewed += 1
-                continue
-            }
-            guard prefs.radiusKM > 0 else {
-                result.items.append(listing)
-                continue
-            }
-            // Same precedence as the card's label: a known listing is filtered
-            // on its own point, everything else on its city's centroid.
-            let coordinate = distances.enrichedCoordinate(for: listing)
-            if let km = distances.distanceKM(for: listing.locationText, coordinate: coordinate),
-               km > Double(prefs.radiusKM) {
-                result.hiddenByDistance += 1
-                result.nearestHiddenKM = min(km, result.nearestHiddenKM ?? .greatestFiniteMagnitude)
-                continue
-            }
-            result.items.append(listing)
-        }
-        return result
+    private func winnowed(
+        _ listings: [Listing],
+        hidingViewed: Bool = true
+    ) -> WinnowedListings {
+        ListingWinnower.apply(
+            to: listings,
+            hiddenAsViewed: hiddenAsViewed,
+            hidingViewed: hidingViewed,
+            radiusKM: prefs.radiusKM,
+            distances: distances
+        )
     }
 
     private var searchGrid: some View {
@@ -596,9 +575,14 @@ struct ResultsView: View {
         return PaginatedListingGrid(
             items: winnowed.items,
             namespace: searchNamespace,
-            isLoadingMore: store.isLoadingMore,
+            loadingPlaceholderCount: store.loadingPlaceholderCount,
             onSelect: { selected = $0 },
-            onItemAppear: { await store.loadMoreIfNeeded(currentItem: $0) }
+            onItemAppear: {
+                await store.loadMoreIfNeeded(
+                    currentItem: $0,
+                    hiddenAsViewed: hiddenAsViewed
+                )
+            }
         ) {
             // "Only new listings" runs here rather than at Facebook, so the
             // cards it removes disappear with no explanation unless one is
@@ -620,6 +604,8 @@ struct ResultsView: View {
                 distanceNotice(winnowed)
             } else if store.session == .unauthed {
                 if !winnowed.items.isEmpty { endOfResultsSignIn }
+            } else if store.reachedEnd, !winnowed.items.isEmpty {
+                endOfSearchResults
             }
         }
     }
@@ -643,7 +629,7 @@ struct ResultsView: View {
     /// is a radius that needs widening. "The nearest is 2,050 mi" is not a
     /// distance problem at all, and the number says so without the app having to
     /// guess which it is.
-    private func distanceNotice(_ w: Winnowed) -> some View {
+    private func distanceNotice(_ w: WinnowedListings) -> some View {
         VStack(spacing: 8) {
             Text(placeScopedHeadline)
                 .font(.subheadline.weight(.semibold))
@@ -675,7 +661,7 @@ struct ResultsView: View {
 
     /// States what *did* come back, so an empty screen reads as a filter working
     /// rather than a search failing.
-    private func distanceDetail(_ w: Winnowed) -> String? {
+    private func distanceDetail(_ w: WinnowedListings) -> String? {
         guard let km = w.nearestHiddenKM else { return nil }
         // Grouped, because the number is the point of the sentence and this one
         // gets large: "2051 mi" reads as a typo where "2,051 mi" reads as a
@@ -686,7 +672,7 @@ struct ResultsView: View {
     }
 
     /// What "only new listings" is holding back, and the way out of it.
-    private func viewedNotice(_ w: Winnowed) -> some View {
+    private func viewedNotice(_ w: WinnowedListings) -> some View {
         let showingNothing = w.items.isEmpty
         return VStack(spacing: 8) {
             Text(showingNothing
@@ -733,6 +719,20 @@ struct ResultsView: View {
         .padding(.horizontal, 32)
         .padding(.top, 24)
         .padding(.bottom, 20)
+    }
+
+    /// Shown only after the hidden Marketplace feed has stayed at a valid,
+    /// unchanged bottom through its confirmation window. Dry pagination batches
+    /// and WebKit failures remain retryable and never reach this footer.
+    private var endOfSearchResults: some View {
+        Text("You've reached the end of these results.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
     }
 
     // MARK: - Actions
@@ -855,20 +855,20 @@ struct ResultsView: View {
 private struct PaginatedListingGrid<Footer: View>: View {
     let items: [Listing]
     let namespace: Namespace.ID
-    let isLoadingMore: Bool
+    let loadingPlaceholderCount: Int
     let onSelect: (Listing) -> Void
     let onItemAppear: (Listing) async -> Void
     let footer: Footer
 
     init(items: [Listing],
          namespace: Namespace.ID,
-         isLoadingMore: Bool,
+         loadingPlaceholderCount: Int,
          onSelect: @escaping (Listing) -> Void,
          onItemAppear: @escaping (Listing) async -> Void,
          @ViewBuilder footer: () -> Footer) {
         self.items = items
         self.namespace = namespace
-        self.isLoadingMore = isLoadingMore
+        self.loadingPlaceholderCount = loadingPlaceholderCount
         self.onSelect = onSelect
         self.onItemAppear = onItemAppear
         self.footer = footer()
@@ -880,7 +880,7 @@ private struct PaginatedListingGrid<Footer: View>: View {
                 items: items,
                 columns: 2,
                 spacing: 12,
-                loadingPlaceholderCount: isLoadingMore ? 4 : 0
+                loadingPlaceholderCount: loadingPlaceholderCount
             ) { listing in
                 ListingCard(listing: listing, namespace: namespace)
                     .onTapGesture { onSelect(listing) }
