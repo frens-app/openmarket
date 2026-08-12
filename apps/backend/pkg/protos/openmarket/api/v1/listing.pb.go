@@ -297,15 +297,8 @@ type FacebookMarketplaceObservationContext struct {
 	ExtractionMethod            FacebookMarketplaceExtractionMethod `protobuf:"varint,3,opt,name=extraction_method,json=extractionMethod,proto3,enum=openmarket.api.v1.FacebookMarketplaceExtractionMethod" json:"extraction_method,omitempty"`
 	FacebookAuthenticationState FacebookAuthenticationState         `protobuf:"varint,4,opt,name=facebook_authentication_state,json=facebookAuthenticationState,proto3,enum=openmarket.api.v1.FacebookAuthenticationState" json:"facebook_authentication_state,omitempty"`
 	ObservedAt                  *timestamppb.Timestamp              `protobuf:"bytes,5,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
-	// Open Market's user_devices.id. The ingest handler must populate or verify
-	// this from the authenticated session; it is not a client-selected owner id.
-	ObserverDeviceId string `protobuf:"bytes,6,opt,name=observer_device_id,json=observerDeviceId,proto3" json:"observer_device_id,omitempty"`
-	// CFBundleShortVersionString and CFBundleVersion respectively. Both are
-	// strings because Apple's build identifier is not necessarily an integer.
-	ObserverAppVersion *string `protobuf:"bytes,7,opt,name=observer_app_version,json=observerAppVersion,proto3,oneof" json:"observer_app_version,omitempty"`
-	ObserverAppBuild   *string `protobuf:"bytes,8,opt,name=observer_app_build,json=observerAppBuild,proto3,oneof" json:"observer_app_build,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *FacebookMarketplaceObservationContext) Reset() {
@@ -371,27 +364,6 @@ func (x *FacebookMarketplaceObservationContext) GetObservedAt() *timestamppb.Tim
 		return x.ObservedAt
 	}
 	return nil
-}
-
-func (x *FacebookMarketplaceObservationContext) GetObserverDeviceId() string {
-	if x != nil {
-		return x.ObserverDeviceId
-	}
-	return ""
-}
-
-func (x *FacebookMarketplaceObservationContext) GetObserverAppVersion() string {
-	if x != nil && x.ObserverAppVersion != nil {
-		return *x.ObserverAppVersion
-	}
-	return ""
-}
-
-func (x *FacebookMarketplaceObservationContext) GetObserverAppBuild() string {
-	if x != nil && x.ObserverAppBuild != nil {
-		return *x.ObserverAppBuild
-	}
-	return ""
 }
 
 // At least one Facebook key must be present. Desktop cards expose listing_id;
@@ -1223,7 +1195,7 @@ var File_openmarket_api_v1_listing_proto protoreflect.FileDescriptor
 
 const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\n" +
-	"\x1fopenmarket/api/v1/listing.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x06\n" +
+	"\x1fopenmarket/api/v1/listing.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9c\x04\n" +
 	"%FacebookMarketplaceObservationContext\x12g\n" +
 	"\x0fbrowser_variant\x18\x01 \x01(\x0e24.openmarket.api.v1.FacebookMarketplaceBrowserVariantB\b\xbaH\x05\x82\x01\x02\x10\x01R\x0ebrowserVariant\x12X\n" +
 	"\n" +
@@ -1231,12 +1203,7 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x11extraction_method\x18\x03 \x01(\x0e26.openmarket.api.v1.FacebookMarketplaceExtractionMethodB\b\xbaH\x05\x82\x01\x02\x10\x01R\x10extractionMethod\x12|\n" +
 	"\x1dfacebook_authentication_state\x18\x04 \x01(\x0e2..openmarket.api.v1.FacebookAuthenticationStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x1bfacebookAuthenticationState\x12C\n" +
 	"\vobserved_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"observedAt\x129\n" +
-	"\x12observer_device_id\x18\x06 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\x10observerDeviceId\x12>\n" +
-	"\x14observer_app_version\x18\a \x01(\tB\a\xbaH\x04r\x02\x18@H\x00R\x12observerAppVersion\x88\x01\x01\x12:\n" +
-	"\x12observer_app_build\x18\b \x01(\tB\a\xbaH\x04r\x02\x18@H\x01R\x10observerAppBuild\x88\x01\x01B\x17\n" +
-	"\x15_observer_app_versionB\x15\n" +
-	"\x13_observer_app_build\"\xee\x02\n" +
+	"observedAt\"\xee\x02\n" +
 	"\x12FacebookListingKey\x12G\n" +
 	"\x13facebook_listing_id\x18\x01 \x01(\tB\x12\xbaH\x0fr\r2\v^[0-9]{8,}$H\x00R\x11facebookListingId\x88\x01\x01\x12A\n" +
 	"\x10cover_photo_fbid\x18\x02 \x01(\tB\x12\xbaH\x0fr\r2\v^[0-9]{8,}$H\x01R\x0ecoverPhotoFbid\x88\x01\x01:\x9e\x01\xbaH\x9a\x01\x1a\x97\x01\n" +
@@ -1441,7 +1408,6 @@ func file_openmarket_api_v1_listing_proto_init() {
 	if File_openmarket_api_v1_listing_proto != nil {
 		return
 	}
-	file_openmarket_api_v1_listing_proto_msgTypes[0].OneofWrappers = []any{}
 	file_openmarket_api_v1_listing_proto_msgTypes[1].OneofWrappers = []any{}
 	file_openmarket_api_v1_listing_proto_msgTypes[2].OneofWrappers = []any{}
 	file_openmarket_api_v1_listing_proto_msgTypes[3].OneofWrappers = []any{}

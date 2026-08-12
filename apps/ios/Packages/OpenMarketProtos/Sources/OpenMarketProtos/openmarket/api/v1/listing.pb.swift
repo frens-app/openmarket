@@ -263,37 +263,11 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceObservationContex
   /// Clears the value of `observedAt`. Subsequent reads from it will return its default value.
   public mutating func clearObservedAt() {self._observedAt = nil}
 
-  /// Open Market's user_devices.id. The ingest handler must populate or verify
-  /// this from the authenticated session; it is not a client-selected owner id.
-  public var observerDeviceID: String = String()
-
-  /// CFBundleShortVersionString and CFBundleVersion respectively. Both are
-  /// strings because Apple's build identifier is not necessarily an integer.
-  public var observerAppVersion: String {
-    get {_observerAppVersion ?? String()}
-    set {_observerAppVersion = newValue}
-  }
-  /// Returns true if `observerAppVersion` has been explicitly set.
-  public var hasObserverAppVersion: Bool {self._observerAppVersion != nil}
-  /// Clears the value of `observerAppVersion`. Subsequent reads from it will return its default value.
-  public mutating func clearObserverAppVersion() {self._observerAppVersion = nil}
-
-  public var observerAppBuild: String {
-    get {_observerAppBuild ?? String()}
-    set {_observerAppBuild = newValue}
-  }
-  /// Returns true if `observerAppBuild` has been explicitly set.
-  public var hasObserverAppBuild: Bool {self._observerAppBuild != nil}
-  /// Clears the value of `observerAppBuild`. Subsequent reads from it will return its default value.
-  public mutating func clearObserverAppBuild() {self._observerAppBuild = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _observedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _observerAppVersion: String? = nil
-  fileprivate var _observerAppBuild: String? = nil
 }
 
 /// At least one Facebook key must be present. Desktop cards expose listing_id;
@@ -961,7 +935,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSellerSectionStatus: 
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceObservationContext"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}browser_variant\0\u{3}page_route\0\u{3}extraction_method\0\u{3}facebook_authentication_state\0\u{3}observed_at\0\u{3}observer_device_id\0\u{3}observer_app_version\0\u{3}observer_app_build\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}browser_variant\0\u{3}page_route\0\u{3}extraction_method\0\u{3}facebook_authentication_state\0\u{3}observed_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -974,9 +948,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: S
       case 3: try { try decoder.decodeSingularEnumField(value: &self.extractionMethod) }()
       case 4: try { try decoder.decodeSingularEnumField(value: &self.facebookAuthenticationState) }()
       case 5: try { try decoder.decodeSingularMessageField(value: &self._observedAt) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.observerDeviceID) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self._observerAppVersion) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self._observerAppBuild) }()
       default: break
       }
     }
@@ -1002,15 +973,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: S
     try { if let v = self._observedAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
     } }()
-    if !self.observerDeviceID.isEmpty {
-      try visitor.visitSingularStringField(value: self.observerDeviceID, fieldNumber: 6)
-    }
-    try { if let v = self._observerAppVersion {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
-    } }()
-    try { if let v = self._observerAppBuild {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1020,9 +982,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: S
     if lhs.extractionMethod != rhs.extractionMethod {return false}
     if lhs.facebookAuthenticationState != rhs.facebookAuthenticationState {return false}
     if lhs._observedAt != rhs._observedAt {return false}
-    if lhs.observerDeviceID != rhs.observerDeviceID {return false}
-    if lhs._observerAppVersion != rhs._observerAppVersion {return false}
-    if lhs._observerAppBuild != rhs._observerAppBuild {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

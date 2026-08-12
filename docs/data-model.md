@@ -65,8 +65,8 @@ The wire types describe observations:
 - `FacebookMarketplaceListingDetailObservation`
 - `FacebookMarketplaceListingObservation` as their `oneof` envelope
 - `FacebookMarketplaceObservationContext` carrying the Facebook browser variant,
-  page route, extraction method, Facebook authentication state, `observed_at`,
-  observer device id, and observer app version/build
+  page route, extraction method, Facebook authentication state, and
+  `observed_at`
 
 Do not create four nearly duplicate listing messages for the four rows in the
 matrix. The combinations will grow when mobile is re-surveyed, and optional
@@ -83,12 +83,14 @@ history**, not omniscient Facebook history: seeing `sold = true` at 14:00 proves
 the listing was sold by 14:00, but does not establish the exact sale time when
 Facebook publishes no sale timestamp.
 
-`observer_device_id` refers to Open Market's `user_devices.id` and is
-server-authoritative from the authenticated session. `observer_app_version`
-and `observer_app_build` record `CFBundleShortVersionString` and
-`CFBundleVersion`; they make parser regressions attributable to a shipped
-build. Debug currently pins build `1`, so a later implementation may also want
-an explicit parser revision or source revision for local-development captures.
+Observer device and application build provenance do not belong inside each
+client-supplied listing observation. A future authenticated ingest boundary
+should attach the device from the session and capture client version/build once
+per request (for example from standard client metadata). Persistence may retain
+those server-attributed values so parser regressions remain traceable without
+duplicating or trusting them in every observation message. Debug currently pins
+build `1`, so local-development captures may also need an explicit parser or
+source revision at that boundary.
 
 Two timestamps must never share a name:
 

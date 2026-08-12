@@ -49,17 +49,6 @@ message FacebookMarketplaceObservationContext {
   FacebookMarketplaceExtractionMethod extraction_method = 3 [(buf.validate.field).enum.defined_only = true];
   FacebookAuthenticationState facebook_authentication_state = 4 [(buf.validate.field).enum.defined_only = true];
   google.protobuf.Timestamp observed_at = 5 [(buf.validate.field).required = true];
-
-  // Open Market's user_devices.id. The ingest handler must populate or verify
-  // this from the authenticated session; it is not a client-selected owner id.
-  string observer_device_id = 6 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.uuid = true
-  ];
-  // CFBundleShortVersionString and CFBundleVersion respectively. Both are
-  // strings because Apple's build identifier is not necessarily an integer.
-  optional string observer_app_version = 7 [(buf.validate.field).string.max_len = 64];
-  optional string observer_app_build = 8 [(buf.validate.field).string.max_len = 64];
 }
 
 // At least one Facebook key must be present. Desktop cards expose listing_id;
