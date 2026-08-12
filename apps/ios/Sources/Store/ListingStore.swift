@@ -13,6 +13,11 @@ final class ListingStore: ObservableObject {
     @Published private(set) var listings: [Listing] = []
     @Published private(set) var isLoadingFirstPage = false
     @Published private(set) var isLoadingMore = false
+    /// The first visible row expected from the active Search top-up.
+    @Published private(set) var loadingPlaceholderCount = 0
+    /// True only after the hidden Facebook feed has remained at a valid,
+    /// unchanged bottom through an explicit confirmation window.
+    @Published private(set) var reachedEnd = false
     @Published private(set) var health = ParseHealth()
     @Published var query: SearchQuery?
 
@@ -49,6 +54,9 @@ final class ListingStore: ObservableObject {
     /// first frame, but their `cardIndex` refers to a DOM that no longer
     /// exists, so nothing may tap through them until live cards replace them.
     private(set) var isShowingCachedResults = false
+    /// Cached cards remain visible while their live page is loading. They must
+    /// not paginate the previous DOM during that interval.
+    private var isRefreshingSearch = false
 
     /// Which context the current results were fetched under.
     ///
@@ -107,7 +115,7 @@ final class ListingStore: ObservableObject {
         }
     }
 
-    var canLoadMore: Bool { desktop.canLoadMore }
+    var canLoadMore: Bool { desktop.canLoadMore && !reachedEnd }
 
     /// How much of the current grid has structured data behind it.
     ///
@@ -124,7 +132,12 @@ final class ListingStore: ObservableObject {
         resultsGeneration += 1
         listings = []
         seenIDs = []
-        deepestIndexSeen = -1
+        deepestVisibleIndexSeen = -1
+        scrolledSinceLastPage = false
+        paginationBuffer = []
+        loadingPlaceholderCount = 0
+        reachedEnd = false
+        isRefreshingSearch = true
         health = ParseHealth()
 
         // Last session's cards for this exact query, on the first frame. The
@@ -146,6 +159,7 @@ final class ListingStore: ObservableObject {
         // rendered has to be read from the DOM.
         await ingest(cards: await desktop.renderedCards())
         isLoadingFirstPage = false
+        isRefreshingSearch = false
         cache.saveResults(listings, for: query, session: session)
     }
 
@@ -163,6 +177,8 @@ final class ListingStore: ObservableObject {
     /// the ceiling pauses this attempt; it does not prove the result set ended.
     private static let paginationTarget = 6
     private static let maxScrollsPerTopUp = 3
+    private static let loadingReservation = 2
+    private static let progressivePublishSize = 2
 
     /// Whether the user has moved the grid since the last page landed.
     ///
@@ -172,7 +188,7 @@ final class ListingStore: ObservableObject {
     /// `DiscoverFeed.scrolledSinceLastTopUp` — same gate, same reasoning.
     private var scrolledSinceLastPage = false
 
-    /// How far down the grid the user has been, as an index into `listings`.
+    /// How far down the visible grid the user has been.
     ///
     /// Tracked because a card announces itself exactly once. `.task` fires when
     /// the lazy stack *creates* a cell and never again, so "are we near the end"
@@ -180,27 +196,32 @@ final class ListingStore: ObservableObject {
     /// cell happens to be built. Remembering the depth makes the question
     /// answerable at any time, which is what lets a drag re-check it.
     ///
-    /// Reset with the list, never on append: appending doesn't move anything the
-    /// user has already scrolled past, so the index stays true.
-    private var deepestIndexSeen = -1
+    /// Reset with the list, never on append: appending visible cards doesn't
+    /// move anything the user has already scrolled past, so the index stays true.
+    private var deepestVisibleIndexSeen = -1
+    /// The view's stable "Only new" snapshot for the current result set.
+    private var paginationHiddenAsViewed = Set<String>()
+    /// Parsed and geocoded pagination cards waiting for a visible row boundary.
+    private var paginationBuffer: [Listing] = []
 
     /// Called when the user drags the grid. See `scrolledSinceLastPage`.
     ///
     /// Arming has to re-check the margin itself, and this is the whole of the
     /// bug that made the gate look broken. The trigger card for page N+1 is
-    /// created *the instant page N lands* — it is three cards into a batch of
-    /// twelve, well inside the lazy stack's build-ahead — and at that instant
+    /// created *the instant page N lands* — it is inside the lazy stack's
+    /// build-ahead — and at that instant
     /// the gate has just closed. So it announced itself to a closed gate, and
     /// since a cell is only ever built once, it never announced itself again:
     /// the grid stopped paging for good, no matter how far it was scrolled.
     ///
     /// Re-arming while already armed is a no-op, so a drag that fires this sixty
     /// times a second still costs one check.
-    func noteScroll() {
+    func noteScroll(hiddenAsViewed: Set<String>) {
         // ResultsView observes one outer ScrollView for both home and search.
         // A Discover drag therefore reaches this method too; without the query
         // gate it used to drive three empty screens through the search webview
         // alongside every Discover top-up (`prefetch: at -1 of 0`).
+        paginationHiddenAsViewed = hiddenAsViewed
         guard query != nil, !scrolledSinceLastPage else { return }
         scrolledSinceLastPage = true
         Task { await topUpIfAtMargin() }
@@ -208,9 +229,14 @@ final class ListingStore: ObservableObject {
 
     /// §3.1 — records how far the user has reached, then asks whether that is
     /// far enough. Called from each cell as it is built.
-    func loadMoreIfNeeded(currentItem: Listing) async {
-        guard let index = listings.firstIndex(of: currentItem) else { return }
-        deepestIndexSeen = max(deepestIndexSeen, index)
+    func loadMoreIfNeeded(
+        currentItem: Listing,
+        hiddenAsViewed: Set<String>
+    ) async {
+        paginationHiddenAsViewed = hiddenAsViewed
+        let visible = visibleListings(in: listings)
+        guard let index = visible.firstIndex(of: currentItem) else { return }
+        deepestVisibleIndexSeen = max(deepestVisibleIndexSeen, index)
         await topUpIfAtMargin()
     }
 
@@ -218,12 +244,16 @@ final class ListingStore: ObservableObject {
     /// since the last one; never speculatively. One batch at a time (§7.3: one
     /// page ahead, maximum).
     private func topUpIfAtMargin() async {
-        guard query != nil, !isLoadingMore, canLoadMore, scrolledSinceLastPage,
-              deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
+        let visibleCount = visibleListings(in: listings).count
+        guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore,
+              scrolledSinceLastPage,
+              deepestVisibleIndexSeen >= 0,
+              deepestVisibleIndexSeen >= visibleCount - Self.prefetchMargin else { return }
         scrolledSinceLastPage = false
         Logger.store.info("""
-            prefetch: at \(self.deepestIndexSeen, privacy: .public) \
-            of \(self.listings.count, privacy: .public)
+            prefetch: at visible \(self.deepestVisibleIndexSeen, privacy: .public) \
+            of \(visibleCount, privacy: .public) \
+            (\(self.listings.count, privacy: .public) stored)
             """)
         await loadMore()
     }
@@ -240,24 +270,46 @@ final class ListingStore: ObservableObject {
     /// Everything gathered here is markup-only — no timestamps, no delivery
     /// types, no sold state. Those exist for the first page and nowhere else.
     func loadMore() async {
-        guard query != nil, !isLoadingMore, canLoadMore else { return }
+        guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
         isLoadingMore = true
-        let before = listings.count
+        loadingPlaceholderCount = Self.loadingReservation
+        paginationBuffer = []
+        let beforeStored = listings.count
+        let beforeVisible = visibleListings(in: listings).count
         var scrolls = 0
-        while listings.count - before < Self.paginationTarget,
-              scrolls < Self.maxScrollsPerTopUp {
+        var confirmedEnd = false
+        pagination: while visiblePaginationCount - beforeVisible < Self.paginationTarget,
+                          scrolls < Self.maxScrollsPerTopUp {
             scrolls += 1
-            guard await desktop.scrollOnce() else { break }
-            await ingest(cards: await desktop.renderedCards())
+            switch await desktop.scrollOnce() {
+            case .advanced:
+                break
+            case .exhausted:
+                confirmedEnd = true
+                break pagination
+            case .indeterminate:
+                break pagination
+            }
+            await ingest(cards: await desktop.renderedCards(), stageForPagination: true)
+            publishReadyPaginationRows()
         }
-        if listings.count == before {
+        publishReadyPaginationRows(flush: true)
+        loadingPlaceholderCount = 0
+
+        let addedStored = listings.count - beforeStored
+        let addedVisible = visibleListings(in: listings).count - beforeVisible
+        if addedStored == 0 {
             // A virtualised Facebook window full of duplicates, a transient
             // network boundary, and a genuinely exhausted result set all look
             // identical here. End this attempt without turning that ambiguity
             // into a permanent claim about the user's area.
             Logger.store.info("loadMore: no new cards over \(scrolls, privacy: .public) screens, retryable")
         } else {
-            Logger.store.info("loadMore: \(self.listings.count - before, privacy: .public) new cards over \(scrolls, privacy: .public) screens")
+            Logger.store.info("loadMore: \(addedVisible, privacy: .public) visible, \(addedStored, privacy: .public) stored over \(scrolls, privacy: .public) screens")
+        }
+        if confirmedEnd {
+            reachedEnd = true
+            Logger.store.info("loadMore: confirmed end of search results")
         }
         isLoadingMore = false
 
@@ -293,14 +345,21 @@ final class ListingStore: ObservableObject {
 
     /// The markup tail — everything past the first page, plus anything rendered
     /// that the payload didn't describe.
-    private func ingest(cards: [DesktopRawCard]) async {
+    private func ingest(
+        cards: [DesktopRawCard],
+        stageForPagination: Bool = false
+    ) async {
         guard !cards.isEmpty else { return }
         var parsed: [Listing] = []
         for (index, card) in cards.enumerated() {
             guard let listing = DesktopCardParser.parse(card, cardIndex: index) else { continue }
             parsed.append(listing)
         }
-        await absorb(parsed, replacingCache: isShowingCachedResults && !parsed.isEmpty)
+        await absorb(
+            parsed,
+            replacingCache: isShowingCachedResults && !parsed.isEmpty,
+            stageForPagination: stageForPagination
+        )
     }
 
     /// Merges a batch into the grid: new listings append, known ones fill gaps.
@@ -311,7 +370,11 @@ final class ListingStore: ObservableObject {
     /// (`DistanceResolver.resolveAll`). This is the right place for it because
     /// it is the *only* place listings become visible — the payload pass, the
     /// markup pass, pagination and the WebLite path all funnel through here.
-    private func absorb(_ incoming: [Listing], replacingCache: Bool) async {
+    private func absorb(
+        _ incoming: [Listing],
+        replacingCache: Bool,
+        stageForPagination: Bool = false
+    ) async {
         // The first live cards replace the restored ones outright rather than
         // merging into them, and the replacement is one assignment at the end —
         // never a clear followed by a refill. `listings` is `@Published` and the
@@ -361,8 +424,16 @@ final class ListingStore: ObservableObject {
 
         if replacingCache {
             isShowingCachedResults = false
+            // Cached cells may have appeared while the live page was loading.
+            // Their indices describe the replaced array and must not arm the
+            // new result set's pagination.
+            deepestVisibleIndexSeen = -1
+            scrolledSinceLastPage = false
             counts.rendered = fresh.count
             listings = fresh                       // one assignment, never empty
+        } else if stageForPagination {
+            paginationBuffer.append(contentsOf: fresh)
+            counts.rendered = listings.count + paginationBuffer.count
         } else {
             counts.rendered = listings.count + fresh.count
             listings.append(contentsOf: fresh)
@@ -370,6 +441,64 @@ final class ListingStore: ObservableObject {
         seenIDs = seen
         health = counts
         metrics.parseHealth(counts)
+    }
+
+    /// Visible pagination cards include staged rows so the six-card target is
+    /// about what the user will receive, not merely what parsing found.
+    private var visiblePaginationCount: Int {
+        visibleListings(in: listings + paginationBuffer).count
+    }
+
+    private func visibleListings(in candidates: [Listing]) -> [Listing] {
+        ListingWinnower.apply(
+            to: candidates,
+            hiddenAsViewed: paginationHiddenAsViewed,
+            hidingViewed: true,
+            radiusKM: prefs.radiusKM,
+            distances: distances
+        ).items
+    }
+
+    /// Publishes the first visible cards immediately into the reserved row,
+    /// then grows the grid by complete two-column rows. Hidden cards before a
+    /// visible boundary travel with that boundary so stored order is preserved.
+    private func publishReadyPaginationRows(flush: Bool = false) {
+        guard !paginationBuffer.isEmpty else { return }
+        if flush {
+            listings.append(contentsOf: paginationBuffer)
+            paginationBuffer = []
+            return
+        }
+
+        let visibleBufferedCount = visibleListings(in: paginationBuffer).count
+        let reservedCount = min(loadingPlaceholderCount, visibleBufferedCount)
+        if reservedCount > 0 {
+            publishPaginationPrefix(containingVisibleCount: reservedCount)
+            loadingPlaceholderCount -= reservedCount
+        }
+
+        let remainingVisibleCount = visibleListings(in: paginationBuffer).count
+        let rowCount = remainingVisibleCount
+            - remainingVisibleCount % Self.progressivePublishSize
+        if rowCount > 0 {
+            publishPaginationPrefix(containingVisibleCount: rowCount)
+        }
+    }
+
+    private func publishPaginationPrefix(containingVisibleCount target: Int) {
+        guard target > 0 else { return }
+        var visibleCount = 0
+        var prefixCount = 0
+        for listing in paginationBuffer {
+            prefixCount += 1
+            if !visibleListings(in: [listing]).isEmpty {
+                visibleCount += 1
+                if visibleCount == target { break }
+            }
+        }
+        guard visibleCount == target else { return }
+        listings.append(contentsOf: paginationBuffer.prefix(prefixCount))
+        paginationBuffer.removeFirst(prefixCount)
     }
 
     /// WebLite ingestion, retained for the demoted mobile path.

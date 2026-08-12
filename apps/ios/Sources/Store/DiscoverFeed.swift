@@ -43,10 +43,12 @@ import os
 /// turns navigating one webview. No extra request budget — `RequestPacer` is a
 /// shared actor and still spaces the starts.
 ///
-/// **A fresh fill publishes its first usable batch immediately.** Any extra
-/// screens needed to reach `browseTarget` append below it, so the first screen
-/// is not held hostage by the slow tail of Facebook's feed. A refresh remains
-/// atomic: old cards stay exactly where they are until the replacement is ready.
+/// **A fresh fill publishes its first usable batch immediately.** The next two
+/// cards replace one reserved skeleton row as soon as they are harvested; later
+/// cards publish in row-sized pairs. That keeps the fast first response without
+/// reserving space for the full `browseTarget`, which distance filtering often
+/// cannot fill. A refresh remains atomic: old cards stay exactly where they are
+/// until the replacement is ready.
 ///
 /// **Session-scoped, and nothing is written to disk.** The feed survives moving
 /// between tabs and opening listings, and is rebuilt when the app is launched
@@ -59,14 +61,13 @@ final class DiscoverFeed: ObservableObject {
     @Published private(set) var isLoading = false
     /// Scrolling for more, with cards already on screen.
     @Published private(set) var isLoadingMore = false
-    /// Whether placeholders should extend the published grid.
+    /// Slots reserved for the first row of the top-up currently being harvested.
     ///
-    /// This covers ordinary pagination and the tail of a brand-new progressive
-    /// fill after its first usable batch appears. It deliberately excludes
-    /// refreshes: those already have a complete grid worth keeping on screen.
-    var isLoadingTail: Bool {
-        isLoadingMore || (isLoading && !hasLoaded && !listings.isEmpty)
-    }
+    /// Each filtered WebView window can contain only one nearby card. Reducing
+    /// this count as the first cards arrive lets them replace skeletons at the
+    /// same grid positions. Refreshes do not reserve slots because their old
+    /// grid stays up.
+    @Published private(set) var loadingPlaceholderCount = 0
     /// Whether this session cannot scroll further.
     ///
     /// Only anonymous and login-walled sessions are terminal. A signed-in
@@ -95,6 +96,16 @@ final class DiscoverFeed: ObservableObject {
     /// 6 mi radius kept 9. Paging once and showing what survived would make a
     /// half-empty screen look like the whole of what's nearby.
     static let browseTarget = 12
+    /// The UI reserves one two-column row, not the whole harvest target.
+    ///
+    /// `browseTarget` is an effort goal: the feed may scroll many sparse
+    /// WebView windows trying to find twelve nearby cards. It is not a promise
+    /// that twelve will survive, and using it as a placeholder count leaves a
+    /// long empty runway when an attempt finds only one or two.
+    private static let loadingReservation = 2
+    /// Once the reserved row is full, publish whole grid rows rather than each
+    /// sparse one-card WebView window independently.
+    private static let progressivePublishSize = 2
     /// How many screens one harvest may scroll in total, and how many of those
     /// may turn up new listings that are *all* too far before this attempt ends.
     ///
@@ -234,11 +245,16 @@ final class DiscoverFeed: ObservableObject {
             // Only if the first screen didn't already carry enough. A fill that
             // can publish immediately should, since this is the screen the app
             // opens on.
+            let wanted = Self.browseTarget - collected.count
+            if publishesProgressively {
+                loadingPlaceholderCount = min(Self.loadingReservation, wanted)
+            }
             let harvest = await scrollForMore(
-                wanted: Self.browseTarget - collected.count,
-                publishEachBatch: publishesProgressively
+                wanted: wanted,
+                publishAsHarvested: publishesProgressively
             )
             collected += harvest
+            loadingPlaceholderCount = 0
         }
         if !publishesProgressively {
             // One replacement: a pull-to-refresh keeps the old cards exactly
@@ -304,6 +320,7 @@ final class DiscoverFeed: ObservableObject {
               deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
 
         isLoadingMore = true
+        loadingPlaceholderCount = Self.loadingReservation
         // Spent here rather than on completion: the next batch has to be earned
         // by scrolling through this one, and the scrolling done to reach the
         // trigger has already been spent reaching it.
@@ -313,12 +330,11 @@ final class DiscoverFeed: ObservableObject {
             of \(self.listings.count, privacy: .public)
             """)
 
-        // Publish each filtered screen as soon as it is ready. Pagination only
-        // appends below the reader, so there is no layout stability benefit to
-        // withholding three usable cards while the hidden webview hunts for nine
-        // more. A refresh is the path that still replaces atomically.
-        await scrollForMore(wanted: Self.browseTarget,
-                            publishEachBatch: true)
+        // The first nearby cards replace the reserved row immediately. Sparse
+        // cards after that publish in row-sized pairs, which avoids repeatedly
+        // changing a two-column grid by half a row.
+        await scrollForMore(wanted: Self.browseTarget, publishAsHarvested: true)
+        loadingPlaceholderCount = 0
         isLoadingMore = false
 
         // A drag that happened during the harvest is one queued request, not a
@@ -343,26 +359,54 @@ final class DiscoverFeed: ObservableObject {
     /// a temporarily stationary scroller nor several distant windows proves
     /// there is nothing farther down. The next user drag may try again from the
     /// current position. Anonymous feeds never enter this method.
-    /// - Parameter publishEachBatch: Appends each filtered webview screen below
-    ///   cards already published. Used by pagination and by the slow tail of a
-    ///   fresh fill; refreshes keep it false and replace the feed atomically.
+    /// - Parameter publishAsHarvested: Publishes enough cards to replace the
+    ///   reserved skeletons immediately, then coalesces later sparse windows
+    ///   into complete grid rows. Used for progressive fills and pagination;
+    ///   refreshes collect in memory and replace their existing grid once.
     @discardableResult
     private func scrollForMore(wanted: Int,
-                               publishEachBatch: Bool = false) async -> [Listing] {
+                               publishAsHarvested: Bool = false) async -> [Listing] {
         var found: [Listing] = []
+        var staged: [Listing] = []
         var dryScreens = 0
         var screens = 0
 
-        while found.count < wanted, dryScreens < Self.dryScreenBudget, screens < Self.scrollBudget {
+        harvest: while found.count < wanted,
+                       dryScreens < Self.dryScreenBudget,
+                       screens < Self.scrollBudget {
             screens += 1
-            guard await engine.scrollOnce() else {
-                Logger.discover.info("harvest paused after scroll did not advance on screen \(screens, privacy: .public)")
+            switch await engine.scrollOnce() {
+            case .advanced:
                 break
+            case .exhausted:
+                Logger.discover.info("harvest reached the confirmed end on screen \(screens, privacy: .public)")
+                break harvest
+            case .indeterminate:
+                Logger.discover.info("harvest paused after an inconclusive scroll on screen \(screens, privacy: .public)")
+                break harvest
             }
             let batch = await nearby(await engine.renderedCards())
             found += batch.kept
-            if publishEachBatch, !batch.kept.isEmpty {
-                listings.append(contentsOf: batch.kept)
+            if publishAsHarvested, !batch.kept.isEmpty {
+                staged.append(contentsOf: batch.kept)
+
+                // First response: replace whatever remains of the reserved row
+                // without waiting for another WebView scroll.
+                let reservedCount = min(loadingPlaceholderCount, staged.count)
+                if reservedCount > 0 {
+                    listings.append(contentsOf: staged.prefix(reservedCount))
+                    staged.removeFirst(reservedCount)
+                    loadingPlaceholderCount -= reservedCount
+                }
+
+                // Past the reserved row, grow the grid by whole rows. A single
+                // sparse result waits only for its partner (or the attempt's
+                // final flush below), never for the twelve-card harvest target.
+                let rowCount = staged.count - staged.count % Self.progressivePublishSize
+                if rowCount > 0 {
+                    listings.append(contentsOf: staged.prefix(rowCount))
+                    staged.removeFirst(rowCount)
+                }
             }
             // Only a screen that turned up something new and rejected all of it
             // counts against the area. Re-reading cards the fill already took
@@ -370,6 +414,11 @@ final class DiscoverFeed: ObservableObject {
             if batch.newCards > 0 {
                 dryScreens = batch.kept.isEmpty ? dryScreens + 1 : 0
             }
+        }
+
+        // Do not strand a final odd card merely for layout symmetry.
+        if publishAsHarvested, !staged.isEmpty {
+            listings.append(contentsOf: staged)
         }
 
         let reason: String

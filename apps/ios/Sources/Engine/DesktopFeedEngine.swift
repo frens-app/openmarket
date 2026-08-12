@@ -31,6 +31,18 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         case idle, loading, ready, loginWall, failed(String)
     }
 
+    /// What one pagination step proved.
+    ///
+    /// Keeping `exhausted` separate from `indeterminate` is important. A script
+    /// failure, a recycler clamp, and a feed that is genuinely at its bottom all
+    /// used to return the same `false`, which let callers put a confident end
+    /// message under a feed they had not actually exhausted.
+    enum ScrollOutcome: Equatable {
+        case advanced
+        case exhausted
+        case indeterminate
+    }
+
     /// How much of the result set arrived with structured data behind it.
     ///
     /// Reported rather than inferred because "this card has no payload" and
@@ -358,32 +370,89 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// the page. 900 ms remains the ceiling at the end of that runway, where a
     /// network-backed scroll really can take that long.
     @discardableResult
-    func scrollOnce() async -> Bool {
+    func scrollOnce() async -> ScrollOutcome {
+        var stalledReading: FeedScroll?
         for attempt in 0..<2 {
-            guard let step = await feedScroll(DesktopScripts.scrollFeedStep) else { return false }
+            guard let step = await feedScroll(DesktopScripts.scrollFeedStep) else {
+                return .indeterminate
+            }
             let settleStarted = ContinuousClock.now
-            guard let after = await waitForScrollToSettle(after: step) else { return false }
+            guard let after = await waitForScrollToSettle(after: step) else {
+                return .indeterminate
+            }
             let settleMS = Int(settleStarted.duration(to: .now) / .milliseconds(1))
 
             let reached = max(step.top, after.top)
             let advanced = reached > step.from
             let gainedCards = after.cards > step.fromCards
-            if advanced || gainedCards {
+            // A virtualised window commonly replaces N cards with N different
+            // cards. Count that as progress even though the cardinality did not
+            // change and a recycler clamp may have left `scrollTop` stationary.
+            let changedWindow = !after.signature.isEmpty
+                && after.signature != step.fromSignature
+            if advanced || gainedCards || changedWindow {
                 Logger.desktop.info("scroll: \(step.from, privacy: .public)->\(reached, privacy: .public) of \(after.scrollHeight, privacy: .public), cards \(step.fromCards, privacy: .public)->\(after.cards, privacy: .public), settled \(settleMS, privacy: .public)ms, isDocument \(after.isDocument, privacy: .public)")
-                return true
+                return .advanced
             }
+            stalledReading = after
             if attempt == 0 {
                 Logger.desktop.debug("scroll: clamped at \(step.from, privacy: .public), retrying")
                 try? await Task.sleep(for: .milliseconds(700))
             }
         }
-        Logger.desktop.info("scroll: no further movement")
-        return false
+        guard let stalledReading else { return .indeterminate }
+        return await confirmEndOfFeed(from: stalledReading)
     }
 
     private static let scrollSettlePoll = Duration.milliseconds(50)
     private static let scrollSettleCeiling = Duration.milliseconds(900)
     private static let stableScrollReads = 2
+    private static let endConfirmationPoll = Duration.milliseconds(200)
+    private static let endConfirmationWindow = Duration.seconds(2)
+
+    /// Turns a stalled scroll into an end state only when the feed remains at a
+    /// valid bottom with unchanged geometry and cards for an additional window.
+    ///
+    /// The extra wait is paid only once, at the apparent end. If React mounts a
+    /// new card window during it, that is progress and the caller harvests it.
+    /// If the recycler changes geometry or the script stops decoding, the answer
+    /// remains unknown and a later user drag is free to retry.
+    private func confirmEndOfFeed(from candidate: FeedScroll) async -> ScrollOutcome {
+        guard candidate.isAtBottom else {
+            Logger.desktop.info("scroll: stalled away from bottom, retryable")
+            return .indeterminate
+        }
+
+        let deadline = ContinuousClock.now.advanced(by: Self.endConfirmationWindow)
+        var previous = candidate
+        while ContinuousClock.now < deadline {
+            try? await Task.sleep(for: Self.endConfirmationPoll)
+            guard let current = await feedScroll(DesktopScripts.readFeedScroll) else {
+                return .indeterminate
+            }
+
+            let gainedCards = current.cards > candidate.cards
+            let changedWindow = !current.signature.isEmpty
+                && current.signature != candidate.signature
+            if gainedCards || changedWindow {
+                Logger.desktop.info("scroll: feed advanced during end confirmation")
+                return .advanced
+            }
+
+            let geometryChanged = current.top != previous.top
+                || current.scrollHeight != previous.scrollHeight
+                || current.clientHeight != previous.clientHeight
+                || current.cards != previous.cards
+            guard !geometryChanged, current.isAtBottom else {
+                Logger.desktop.info("scroll: end geometry changed, retryable")
+                return .indeterminate
+            }
+            previous = current
+        }
+
+        Logger.desktop.info("scroll: confirmed end at \(previous.top, privacy: .public) of \(previous.scrollHeight, privacy: .public), \(previous.cards, privacy: .public) cards")
+        return .exhausted
+    }
 
     /// Waits for the virtualised card window, not an arbitrary timer.
     ///
@@ -433,6 +502,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         /// The rendered window before the step, for adaptive settling.
         var fromCards = 0
         var fromSignature = ""
+
+        var isAtBottom: Bool {
+            top + clientHeight >= scrollHeight - 1
+        }
     }
 
     /// One reading, or nil with a reason in the log.
