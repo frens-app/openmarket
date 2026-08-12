@@ -264,6 +264,8 @@ type PriceCheck struct {
 	PriceCopiedAt         pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz
 	CompletedAt           pgtype.Timestamptz
+	ListingTitle          *string
+	ListingDescription    *string
 }
 
 type User struct {

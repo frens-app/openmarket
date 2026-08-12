@@ -125,23 +125,20 @@ struct PriceCheckView: View {
 
     private var prompt: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // What the tool is, before it is asked to do anything. The row in
-            // the Tools tab is one line and a name; this is the screen that
-            // says what a price check actually is, and it says it in terms of
-            // where the number comes from — that claim is the whole feature.
-            VStack(alignment: .leading, spacing: 6) {
-                // No heading. The navigation bar is already saying "Price
-                // Check" two lines above this, and a title under a title reads
-                // as a rendering mistake.
-                Text("This is a price check. Add a photo, describe what you're selling, and it goes and looks: what similar things are listed for in \(model.marketName) right now, and what's actually sold there lately.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("You get the comparables it found and a price to ask, with the working shown.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            // One line, and the only part of the old three that was not
+            // already on screen: the market it will search. The Tools row said
+            // what a price check is to get the user here, the button says what
+            // it does, and the transcript shows the working as it happens —
+            // explaining all of that again above the field is a paragraph the
+            // user reads once and scrolls past forever after.
+            //
+            // No heading either. The navigation bar is already saying "Price
+            // Check" two lines above this, and a title under a title reads as a
+            // rendering mistake.
+            Text("Checks what's listed and what's sold in \(model.marketName).")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             TextField("A white IKEA Malm dresser, six drawers, a few scratches on top",
                       text: $draft,
@@ -225,8 +222,11 @@ struct PriceCheckView: View {
             Task { await prepare(item) }
         }
 
+        // Kept, shortened. The nudge earns its line: a photo is what separates
+        // "dresser" from "IKEA Malm 6-drawer", and the run is measurably worse
+        // without one. What it does not need is the joke it used to carry.
         if photo == nil {
-            Text("Optional, and it helps — a photo is how the model tells your dresser from every other dresser.")
+            Text("Optional, but it identifies the item far better.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -289,6 +289,22 @@ struct PriceCheckView: View {
 
     // MARK: - The evidence
 
+    /// Both strips used to carry a caption, and most of what they said is still
+    /// on screen: `PriceGuide.explanation` under the price says "N nearby
+    /// asking prices…" and "N that sold were listed at…", which makes the
+    /// asking-not-paid and listed-not-sold-for claims in the place the number
+    /// is, where they bear on a decision. Saying them again in grey text under
+    /// each strip was the screen repeating itself, and repetition is what gets
+    /// skipped — eventually including the copy that matters.
+    ///
+    /// **One claim did not survive the cut**: that a list filtered on having
+    /// sold cannot contain the things that didn't, so nothing here can show a
+    /// price is too high. The prompt still tells the model (see
+    /// `pricePrompt`), and `SoldSignal`'s own documentation still explains it,
+    /// but no user-visible text makes that point now. If a seller ever reads
+    /// "$100–$400 sold" as "$400 is achievable", this is the sentence that
+    /// used to stand in the way, and the honest place to put it back is the
+    /// explanation under the price rather than a caption on the strip.
     private var comparables: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("What's listed nearby")
@@ -302,14 +318,6 @@ struct PriceCheckView: View {
                 }
                 .padding(.horizontal, 2)
             }
-            // The single most important sentence on this screen. Everything
-            // here is what sellers *want*, and Facebook never publishes what
-            // buyers paid — so a "market price" built from it is a price the
-            // market is being asked for, which is a weaker and different claim.
-            Text("Asking prices in \(model.marketName) right now — what sellers want, not what anything sold for.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -335,14 +343,6 @@ struct PriceCheckView: View {
                 }
                 .padding(.horizontal, 2)
             }
-            // The two caveats that keep this honest, and neither is optional.
-            // Facebook publishes what a sold item was *listed* at, never what
-            // it went for; and a list filtered on having sold cannot contain
-            // the things that didn't.
-            Text("Listed prices, not what they went for — Facebook doesn't publish that. Things that didn't sell aren't here.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

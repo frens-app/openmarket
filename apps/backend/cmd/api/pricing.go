@@ -158,6 +158,8 @@ func (s *pricingServer) PriceItem(
 		RecommendedPriceMinor: &price,
 		MedianPriceMinor:      &stats.MedianMinor,
 		CurrencySymbol:        &stats.CurrencySymbol,
+		ListingTitle:          priced.Title,
+		ListingDescription:    priced.Body,
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("complete price check: %w", err))
 	}
