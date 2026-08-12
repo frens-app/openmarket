@@ -43,7 +43,7 @@ func serveGemini(t *testing.T, status int, body string) (*GeminiProvider, *gemin
 const identifyOK = `{
   "model": "gemini-3.6-flash",
   "status": "completed",
-  "output_text": "{\"name\":\"IKEA Malm 6-drawer dresser\",\"search_queries\":[\"ikea malm dresser\",\"malm 6 drawer\"],\"condition\":\"used_good\",\"key_attributes\":[\"six drawers\",\"white\"]}",
+  "output_text": "{\"name\":\"IKEA Malm 6-drawer dresser\",\"search_queries\":[\"ikea malm dresser\",\"malm 6 drawer\"],\"key_attributes\":[\"six drawers\",\"white\"],\"listing_title\":\"IKEA Malm 6-Drawer Dresser, White\",\"listing_description\":\"White IKEA Malm dresser with six drawers.\"}",
   "usage": {"total_input_tokens": 1840, "total_output_tokens": 96, "total_thought_tokens": 240, "total_cached_tokens": 12}
 }`
 
@@ -114,38 +114,20 @@ func TestIdentifyCapsSearchQueriesAtTwo(t *testing.T) {
 	}
 }
 
-// Whole units in, minor units out. Getting this backwards is the hundredfold
-// price error, which is the worst bug this feature can have.
-func TestPriceConvertsWholeUnitsToMinor(t *testing.T) {
-	body := `{"status":"completed","output_text":"{\"price\":120,\"title\":\"White IKEA Malm dresser\",\"description\":\"Six drawers.\"}"}`
-	provider, request, _ := serveGemini(t, http.StatusOK, body)
+// No price is ever asked for or parsed here, and this is the test that says so.
+// The prompt used to carry a page of figures; if one ever comes back, somebody
+// has reintroduced the call whose arithmetic this feature does not trust.
+func TestIdentifyPromptCarriesNoMarketNumbers(t *testing.T) {
+	provider, request, _ := serveGemini(t, http.StatusOK, identifyOK)
 
-	priced, _, err := provider.Price(context.Background(), PriceInput{
-		Item:  IdentifiedItem{Name: "dresser"},
-		Stats: MarketStats{PricedCount: 14, MedianMinor: 7700, LowestMinor: 4000, HighestMinor: 18000, CurrencySymbol: "$"},
-	})
-	if err != nil {
-		t.Fatalf("Price: %v", err)
+	if _, _, err := provider.Identify(context.Background(), IdentifyInput{Description: "a dresser"}); err != nil {
+		t.Fatalf("Identify: %v", err)
 	}
-	if priced.PriceMinor != 12000 {
-		t.Errorf("PriceMinor = %d, want 12000 (120 whole units)", priced.PriceMinor)
-	}
-
-	// And the prompt must show whole units too, or the model is answering in
-	// units it was never shown.
 	prompt := request.Input[0].Text
-	if !strings.Contains(prompt, "median $77") || !strings.Contains(prompt, "lowest $40") {
-		t.Errorf("prompt did not carry whole-unit figures:\n%s", prompt)
-	}
-}
-
-func TestPriceRejectsMissingPrice(t *testing.T) {
-	body := `{"status":"completed","output_text":"{\"price\":0,\"title\":\"t\",\"description\":\"d\"}"}`
-	provider, _, _ := serveGemini(t, http.StatusOK, body)
-
-	_, _, err := provider.Price(context.Background(), PriceInput{Stats: MarketStats{CurrencySymbol: "$"}})
-	if CodeOf(err) != ErrorCodeInvalidOutput {
-		t.Errorf("code = %v, want invalid_output", CodeOf(err))
+	for _, forbidden := range []string{"median", "lowest", "highest", "asking"} {
+		if strings.Contains(strings.ToLower(prompt), forbidden) {
+			t.Errorf("prompt mentions %q — the model must not see the market", forbidden)
+		}
 	}
 }
 
@@ -215,17 +197,7 @@ func TestNewGeminiProviderRequiresKeyAndModel(t *testing.T) {
 	}
 }
 
-// The comparables carry the rule that separates them from the item being
-// priced, so their rendering is worth pinning down.
-func TestComparableLineMarksSoldAndFree(t *testing.T) {
-	zero := int64(0)
-	if got := comparableLine(Comparable{Title: "Malm", PriceMinor: &zero}, "$"); !strings.Contains(got, "free") {
-		t.Errorf("free comparable rendered as %q", got)
-	}
-
-	price, days := int64(9000), int32(4)
-	got := comparableLine(Comparable{Title: "Malm", PriceMinor: &price, IsSold: true, DaysListed: &days}, "CA$")
-	if !strings.Contains(got, "CA$90") || !strings.Contains(got, "sold") || !strings.Contains(got, "4 days") {
-		t.Errorf("sold comparable rendered as %q", got)
-	}
-}
+// TestComparableLineMarksSoldAndFree stood here. It pinned down how a listing
+// was rendered into the pricing prompt — free items as "free", sold ones with
+// the days they sat — and it went with the prompt. No comparable is rendered
+// for a model any more; they are counted, and the counting is Swift's.

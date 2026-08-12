@@ -29,21 +29,36 @@ VALUES (
 RETURNING *;
 
 -- name: SetPriceCheckIdentification :one
--- What the model made of the photo, and what it wants searched. Stored even
--- though the queries are about to be handed straight back to the client: this is
--- the column that answers "we searched for the wrong thing" months later, and
--- the client's own copy is gone the moment the app is backgrounded.
+-- Everything the model produced, written where it is produced.
+--
+-- Stored even though all of it is about to be handed straight back to the
+-- client: these are the columns that answer "we searched for the wrong thing"
+-- and "what did it actually write" months later, and the client's own copy is
+-- gone the moment the app is backgrounded.
+--
+-- The listing lands here rather than at completion because this is the call
+-- that made it. A run that identifies an item and then finds no market still
+-- wrote a title and a description, and losing them because the search came back
+-- empty would be discarding the half that worked.
 UPDATE price_checks
 SET identified_name = sqlc.arg('identified_name')::text,
-    search_queries = sqlc.arg('search_queries')::text[]
+    search_queries = sqlc.arg('search_queries')::text[],
+    listing_title = sqlc.arg('listing_title')::text,
+    listing_description = sqlc.arg('listing_description')::text
 WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
 -- name: CompletePriceCheck :one
--- The end of a successful run. `completed_at` is set here and nowhere else, so
+-- The end of a successful run: what the market held, and what the device
+-- therefore recommended. `completed_at` is set here and nowhere else, so
 -- "finished" is a single fact rather than something inferred from whichever
 -- column happens to be non-null.
+--
+-- Every number here is the client's word. The search runs in a WKWebView
+-- against the user's own Facebook session, so the server cannot check a single
+-- one of them — which was already true of the counts and is now true of the
+-- price as well, since the device computes it.
 UPDATE price_checks
 SET search_query_used = sqlc.arg('search_query_used')::text,
     comps_found = sqlc.arg('comps_found')::int,
@@ -51,8 +66,6 @@ SET search_query_used = sqlc.arg('search_query_used')::text,
     recommended_price_minor = sqlc.narg('recommended_price_minor'),
     median_price_minor = sqlc.narg('median_price_minor'),
     currency_symbol = sqlc.narg('currency_symbol'),
-    listing_title = sqlc.arg('listing_title')::text,
-    listing_description = sqlc.arg('listing_description')::text,
     completed_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')

@@ -60,21 +60,15 @@ func (StubProvider) Identify(_ context.Context, in IdentifyInput) (IdentifiedIte
 		item.KeyAttributes = append(item.KeyAttributes,
 			"stub: no description, and the stub cannot see — "+stubPhotoOnlyTerm+" is a placeholder")
 	}
+	// The listing, said plainly to be a stub. No attempt at plausible prose:
+	// copy that reads like a real listing is copy somebody screenshots into a
+	// bug report, and this provider's whole job is to be obviously itself.
+	item.ListingTitle = item.Name
+	item.ListingBody = fmt.Sprintf(
+		"Stub listing text for %s. No model was called; this is what the local stub provider returns.",
+		item.Name,
+	)
 	return item, Usage{Model: "stub"}, nil
-}
-
-func (StubProvider) Price(_ context.Context, in PriceInput) (PricedItem, Usage, error) {
-	// The median, which is where the real call is steered anyway and what the
-	// screen falls back to when there is no model at all. A stub that returned
-	// a number from nowhere would make a broken clamp look like it worked.
-	return PricedItem{
-		PriceMinor: in.Stats.MedianMinor,
-		Title:      in.Item.Name,
-		Body: fmt.Sprintf(
-			"Stub listing text for %s. Priced at the median of %d comparable listings in %s.",
-			in.Item.Name, in.Stats.PricedCount, in.MarketName,
-		),
-	}, Usage{Model: "stub"}, nil
 }
 
 // stubCapitalise upper-cases the first rune, and survives an empty string —

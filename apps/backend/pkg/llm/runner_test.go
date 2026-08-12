@@ -59,10 +59,6 @@ func (p *scriptedProvider) Identify(ctx context.Context, _ IdentifyInput) (Ident
 	return IdentifiedItem{Name: "thing"}, r.usage, r.err
 }
 
-func (p *scriptedProvider) Price(context.Context, PriceInput) (PricedItem, Usage, error) {
-	return PricedItem{}, Usage{}, nil
-}
-
 func newTestRunner(t *testing.T, p Provider, s Store, cfg Config) *Runner {
 	t.Helper()
 	if cfg.Window == 0 {
@@ -307,15 +303,22 @@ func TestStubPhotoOnlyRunReturnsAQueryAndAdmitsItGuessed(t *testing.T) {
 	}
 }
 
-func TestStubPricesAtTheMedian(t *testing.T) {
-	item, _, err := StubProvider{}.Price(context.Background(), PriceInput{
-		Item:  IdentifiedItem{Name: "Dresser"},
-		Stats: MarketStats{MedianMinor: 7700, PricedCount: 14},
-	})
+// TestStubPricesAtTheMedian stood here, asserting that the stub answered with
+// the median rather than a number from nowhere. `PriceGuide` does that now, for
+// every provider and for none — which is what removing the pricing call means.
+//
+// What is still worth asserting is that the stub's listing is visibly a stub.
+// Plausible copy is copy somebody screenshots into a bug report.
+func TestStubListingSaysItIsAStub(t *testing.T) {
+	item, _, err := StubProvider{}.Identify(context.Background(),
+		IdentifyInput{Description: "a white IKEA Malm dresser"})
 	if err != nil {
-		t.Fatalf("Price: %v", err)
+		t.Fatalf("Identify: %v", err)
 	}
-	if item.PriceMinor != 7700 {
-		t.Errorf("PriceMinor = %d, want the median 7700", item.PriceMinor)
+	if item.ListingTitle == "" {
+		t.Error("the stub should still produce a title; the screen has a field for it")
+	}
+	if !strings.Contains(item.ListingBody, "Stub") {
+		t.Errorf("ListingBody = %q, want it to name itself as a stub", item.ListingBody)
 	}
 }

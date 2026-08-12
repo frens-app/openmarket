@@ -20,11 +20,9 @@ SET search_query_used = $1::text,
     recommended_price_minor = $4,
     median_price_minor = $5,
     currency_symbol = $6,
-    listing_title = $7::text,
-    listing_description = $8::text,
     completed_at = CURRENT_TIMESTAMP
-WHERE id = $9
-  AND user_id = $10
+WHERE id = $7
+  AND user_id = $8
 RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
@@ -35,15 +33,19 @@ type CompletePriceCheckParams struct {
 	RecommendedPriceMinor *int64
 	MedianPriceMinor      *int64
 	CurrencySymbol        *string
-	ListingTitle          string
-	ListingDescription    string
 	ID                    uuid.UUID
 	UserID                uuid.UUID
 }
 
-// The end of a successful run. `completed_at` is set here and nowhere else, so
+// The end of a successful run: what the market held, and what the device
+// therefore recommended. `completed_at` is set here and nowhere else, so
 // "finished" is a single fact rather than something inferred from whichever
 // column happens to be non-null.
+//
+// Every number here is the client's word. The search runs in a WKWebView
+// against the user's own Facebook session, so the server cannot check a single
+// one of them — which was already true of the counts and is now true of the
+// price as well, since the device computes it.
 func (q *Queries) CompletePriceCheck(ctx context.Context, arg CompletePriceCheckParams) (PriceCheck, error) {
 	row := q.db.QueryRow(ctx, completePriceCheck,
 		arg.SearchQueryUsed,
@@ -52,8 +54,6 @@ func (q *Queries) CompletePriceCheck(ctx context.Context, arg CompletePriceCheck
 		arg.RecommendedPriceMinor,
 		arg.MedianPriceMinor,
 		arg.CurrencySymbol,
-		arg.ListingTitle,
-		arg.ListingDescription,
 		arg.ID,
 		arg.UserID,
 	)
@@ -436,27 +436,40 @@ func (q *Queries) SetPriceCheckHelpful(ctx context.Context, arg SetPriceCheckHel
 const setPriceCheckIdentification = `-- name: SetPriceCheckIdentification :one
 UPDATE price_checks
 SET identified_name = $1::text,
-    search_queries = $2::text[]
-WHERE id = $3
-  AND user_id = $4
+    search_queries = $2::text[],
+    listing_title = $3::text,
+    listing_description = $4::text
+WHERE id = $5
+  AND user_id = $6
 RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
 type SetPriceCheckIdentificationParams struct {
-	IdentifiedName string
-	SearchQueries  []string
-	ID             uuid.UUID
-	UserID         uuid.UUID
+	IdentifiedName     string
+	SearchQueries      []string
+	ListingTitle       string
+	ListingDescription string
+	ID                 uuid.UUID
+	UserID             uuid.UUID
 }
 
-// What the model made of the photo, and what it wants searched. Stored even
-// though the queries are about to be handed straight back to the client: this is
-// the column that answers "we searched for the wrong thing" months later, and
-// the client's own copy is gone the moment the app is backgrounded.
+// Everything the model produced, written where it is produced.
+//
+// Stored even though all of it is about to be handed straight back to the
+// client: these are the columns that answer "we searched for the wrong thing"
+// and "what did it actually write" months later, and the client's own copy is
+// gone the moment the app is backgrounded.
+//
+// The listing lands here rather than at completion because this is the call
+// that made it. A run that identifies an item and then finds no market still
+// wrote a title and a description, and losing them because the search came back
+// empty would be discarding the half that worked.
 func (q *Queries) SetPriceCheckIdentification(ctx context.Context, arg SetPriceCheckIdentificationParams) (PriceCheck, error) {
 	row := q.db.QueryRow(ctx, setPriceCheckIdentification,
 		arg.IdentifiedName,
 		arg.SearchQueries,
+		arg.ListingTitle,
+		arg.ListingDescription,
 		arg.ID,
 		arg.UserID,
 	)

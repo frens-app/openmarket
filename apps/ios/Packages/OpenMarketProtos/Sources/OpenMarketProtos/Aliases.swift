@@ -31,15 +31,14 @@ public typealias DeleteAccountRequest = Openmarket_Api_V1_DeleteAccountRequest
 
 public typealias IdentifyItemRequest = Openmarket_Api_V1_IdentifyItemRequest
 public typealias IdentifyItemResponse = Openmarket_Api_V1_IdentifyItemResponse
-public typealias PriceItemRequest = Openmarket_Api_V1_PriceItemRequest
-public typealias PriceItemResponse = Openmarket_Api_V1_PriceItemResponse
+public typealias CompletePriceCheckRequest = Openmarket_Api_V1_CompletePriceCheckRequest
 public typealias SubmitPriceCheckFeedbackRequest = Openmarket_Api_V1_SubmitPriceCheckFeedbackRequest
 public typealias RecordPriceCopiedRequest = Openmarket_Api_V1_RecordPriceCopiedRequest
-public typealias ItemCondition = Openmarket_Api_V1_ItemCondition
 public typealias MarketStats = Openmarket_Api_V1_MarketStats
-// `Comparable` on its own would shadow the Swift standard library protocol of
-// that name across every file importing this module — including the `<`
-// operators the app's own sorts rely on. The proto message is a wire type with
-// one call site, so it takes the longer name and the language keeps the short
-// one.
-public typealias ProtoComparable = Openmarket_Api_V1_Comparable
+
+// `ProtoComparable` was aliased here, for a `Comparable` message that carried
+// each listing to the pricing model. Both are gone: no model sees a listing
+// now, so the wire carries a count instead. The reason for the awkward name is
+// worth keeping in case anything like it comes back — a plain `Comparable`
+// alias shadows the Swift standard library protocol across every file importing
+// this module, including the `<` operators the app's own sorts rely on.

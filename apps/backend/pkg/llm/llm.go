@@ -19,13 +19,20 @@ import (
 	"fmt"
 )
 
-// Stage is which of the two calls a run belongs to. The values match the
-// `llm_run_stage` enum in migration 00004.
+// Stage is which call a run belongs to. The values match the `llm_run_stage`
+// enum in migration 00004.
+//
+// There is only one stage now. `StagePrice` stays defined because rows carrying
+// it are already in the table and a reader that does not know the value cannot
+// interpret them — the constant is how those rows stay legible, not a hint that
+// something still writes them. Dropping the value from the Postgres enum would
+// be worse still: it would fail against the existing data.
 type Stage string
 
 const (
 	StageIdentify Stage = "IDENTIFY"
-	StagePrice    Stage = "PRICE"
+	// Written by the pricing call, which was removed. Historical only.
+	StagePrice Stage = "PRICE"
 )
 
 // Photo is one image on its way to the model.
@@ -44,78 +51,28 @@ type IdentifyInput struct {
 	Photos      []Photo
 }
 
-// IdentifiedItem is the model's read of the item, before it has seen a single
-// comparable. That ordering is the point: the on-device model this replaces
-// took the item's identity from the comparables when it had them, titling a
-// stroller "IKEA Malm 4 Drawer Dresser White" on three runs out of three.
+// IdentifiedItem is everything the model produces: what the thing is, what to
+// search for, and the listing to paste.
+//
+// All of it from the photo and the seller's words, and none of it from the
+// market — because the model never sees the market. The on-device version this
+// replaces did, and took the item's identity from it, titling a stroller "IKEA
+// Malm 4 Drawer Dresser White" on three runs out of three. Writing the copy
+// here rather than after the search is what makes that unreachable instead of
+// prompted against.
 type IdentifiedItem struct {
 	Name string
 	// One or two. The second is a fallback phrasing of the same item, never a
 	// second item.
 	SearchQueries []string
-	// A guess, and never used to narrow the search: condition words narrow the
-	// query without narrowing the market. Empty when the model won't commit.
-	Condition string
-	// Distinguishing facts it could see or was told. The listing description is
-	// built from these so that it describes the item rather than inventing it.
+	// Distinguishing facts it could see or was told. Kept beside the listing
+	// rather than folded into it, so the observations can be checked against the
+	// prose built from them.
 	KeyAttributes []string
-}
-
-// Comparable is one listing the phone read off a search card.
-type Comparable struct {
-	Title string
-	// Minor units. Nil when the card carried no price we could read — which is
-	// different from zero, and zero means Free.
-	PriceMinor *int64
-	// Seller-marked: "no longer for sale", never "sold for this".
-	IsSold bool
-	// Nil unless the card was dated. On a sold card this bounds how long the
-	// item took to sell, because Facebook publishes no sale date.
-	DaysListed *int32
-	City       string
-}
-
-// MarketStats is the market reduced to numbers by PriceGuide, on the device.
-//
-// Passed in rather than derived, because the model must not do arithmetic about
-// evidence it was just shown. Asked to justify its own figure against fourteen
-// prices, the previous model wrote "you are asking CA$20 more than the median
-// price of CA$80" — the median was CA$77 and the gap was CA$33.
-type MarketStats struct {
-	PricedCount   int32
-	MedianMinor   int64
-	LowestMinor   int64
-	HighestMinor  int64
-	LowerQuartile *int64
-	UpperQuartile *int64
-	// The symbol the cards used — "$", "CA$", "£". Not an ISO code.
-	CurrencySymbol string
-
-	// The sold half. It can support "this price worked" and can never support
-	// "this price is too high": it is filtered on having sold, so the listings
-	// that failed to sell at a price are exactly the ones missing.
-	SoldCount        int32
-	MedianDaysToSell *int32
-}
-
-// PriceInput is everything the pricing call sees.
-type PriceInput struct {
-	Item        IdentifiedItem
-	Description string
-	MarketName  string
-	Comparables []Comparable
-	Stats       MarketStats
-}
-
-// PricedItem is the answer. No rationale field: the sentence under the price is
-// written in Swift from the numbers Swift computed, and is true by
-// construction.
-type PricedItem struct {
-	// Minor units. A judgement, not a calculation — and clamped to the observed
-	// range by the client before anybody sees it.
-	PriceMinor int64
-	Title      string
-	Body       string
+	// The listing. Empty is survivable — the price is arithmetic and never
+	// depended on these.
+	ListingTitle string
+	ListingBody  string
 }
 
 // Usage is what the provider said the call cost. Every field is a pointer
@@ -141,16 +98,16 @@ type Usage struct {
 	Model string
 }
 
-// Provider is one vendor's implementation of the two calls.
+// Provider is one vendor's implementation of the one call.
 //
-// Narrow on purpose. Everything a caller needs to swap Gemini for GPT or for a
-// gateway is behind these three methods, and nothing above this line knows
-// which one is configured.
+// Narrow on purpose, and narrower than it was: everything a caller needs to
+// swap Gemini for GPT or for a gateway is behind these two methods, and nothing
+// above this line knows which one is configured. `Price` used to sit here. The
+// price is a median now, so it is Swift's, not a vendor's.
 type Provider interface {
 	// Name is the vendor, recorded on every run: "google", "openai", "stub".
 	Name() string
 	Identify(ctx context.Context, in IdentifyInput) (IdentifiedItem, Usage, error)
-	Price(ctx context.Context, in PriceInput) (PricedItem, Usage, error)
 }
 
 // ErrorCode is our classification of a failed call, stored on the run.

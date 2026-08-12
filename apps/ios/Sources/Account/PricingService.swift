@@ -4,11 +4,13 @@ import OpenMarketProtos
 
 /// The server half of Price Check.
 ///
-/// Two calls with the phone's own work between them, because the comparable
-/// search cannot move off the device: it runs in a `WKWebView` against the
-/// user's own Facebook session, and the server has no way to reach that. So
-/// this identifies the item, hands back what to search for, and is called again
-/// once `ComparableSearch` has a market.
+/// **One call that thinks, and one that writes things down.** `identify` sends
+/// the photo and the description to a model and gets back what the item is,
+/// what to search for, and the listing to paste. Everything after that happens
+/// on this device: `ComparableSearch` finds the market — it has to, because it
+/// runs in a `WKWebView` against the user's own Facebook session and the server
+/// cannot reach that — and `PriceGuide` turns it into a price. `complete` then
+/// reports what happened, and calls nothing.
 ///
 /// Separate from `AccountSession` deliberately. That object is the account —
 /// tokens, device, sign-in state — and every screen holds it. Price Check is
@@ -16,30 +18,21 @@ import OpenMarketProtos
 /// its failures inside the object that decides whether the user is signed in.
 @MainActor
 final class PricingService {
-    /// What the identify call came back with, plus the id that ties the rest of
-    /// the run to it.
+    /// Everything the model produced, plus the id that ties the rest of the run
+    /// to it.
     struct Identification {
         let priceCheckID: String
         let name: String
         let searchQueries: [String]
-        let condition: ItemCondition
         let keyAttributes: [String]
+        /// The listing, ready to paste. Either may be empty — the price is
+        /// arithmetic and never depended on them.
+        let listingTitle: String
+        let listingBody: String
 
         /// What to actually search. The second query is a fallback phrasing of
         /// the same item, so the first is the one to try.
         var primaryQuery: String? { searchQueries.first }
-    }
-
-    /// The listing, as written.
-    ///
-    /// Named `Draft` rather than `Listing`: the app already has a `Listing`,
-    /// and it means something quite different — a card read off Facebook. This
-    /// is text on its way *to* Facebook, and nothing has been posted.
-    struct Draft {
-        /// Whole units, converted back from the minor units the wire carries.
-        let price: Int
-        let title: String
-        let body: String
     }
 
     private let session: AccountSession
@@ -67,34 +60,36 @@ final class PricingService {
             priceCheckID: message.priceCheckID,
             name: message.identifiedName,
             searchQueries: message.searchQueries,
-            condition: message.condition,
-            keyAttributes: message.keyAttributes
+            keyAttributes: message.keyAttributes,
+            listingTitle: message.listingTitle,
+            listingBody: message.listingDescription
         )
     }
 
-    func price(
+    /// Reports what the market held and what this device recommended.
+    ///
+    /// **Nothing comes back.** The price was computed here, from comparables
+    /// scraped here; the server's only job is the row. Failure is therefore not
+    /// worth surfacing — the user has their answer either way — so this throws
+    /// only so the caller can decide, and the caller ignores it.
+    func complete(
         priceCheckID: String,
         searchQuery: String,
-        marketName: String,
-        comparables: [MarketComp],
+        compsFound: Int,
+        recommendedPrice: Int,
         guide: PriceGuide,
         sold: SoldSignal
-    ) async throws -> Draft {
-        var request = PriceItemRequest()
+    ) async throws {
+        var request = CompletePriceCheckRequest()
         request.priceCheckID = priceCheckID
         request.searchQueryUsed = searchQuery
-        request.marketName = marketName
-        request.comparables = comparables.map(Self.proto(from:))
+        request.compsFound = Int32(compsFound)
+        request.recommendedPriceMinor = Int64(recommendedPrice) * 100
         request.stats = Self.stats(guide: guide, sold: sold)
 
-        let response = await client.priceItem(request: request, headers: try await session.authorizedHeaders())
-        let message = try unwrap(response)
-
-        return Draft(
-            price: Int(message.recommendedPriceMinor / 100),
-            title: message.title,
-            body: message.description_p
-        )
+        let response = await client.completePriceCheck(request: request,
+                                                       headers: try await session.authorizedHeaders())
+        _ = try unwrap(response)
     }
 
     // MARK: - Signals
@@ -134,27 +129,14 @@ final class PricingService {
         throw response.error.map { ($0 as? ConnectError)?.asAPIError ?? APIError.network } ?? APIError.network
     }
 
-    private static func proto(from comp: MarketComp) -> ProtoComparable {
-        var out = ProtoComparable()
-        out.title = comp.listing.title ?? ""
-        // Minor units on the wire. Absent stays absent: a card with no readable
-        // price is a different fact from a card priced at nothing, and Free is
-        // what zero means.
-        if let price = comp.price { out.priceMinor = Int64(price) * 100 }
-        out.isSold = comp.isSold
-        if let days = comp.daysListed { out.daysListed = Int32(days) }
-        if let city = comp.listing.locationText { out.city = city }
-        return out
-    }
-
-    /// The numbers, computed here and sent rather than left to be worked out.
+    /// The market, as this device measured it.
     ///
-    /// This is the load-bearing half of the request. A model cannot do
-    /// arithmetic about evidence it was just shown — asked to justify its own
-    /// figure against fourteen prices, the previous one wrote "you are asking
-    /// CA$20 more than the median price of CA$80" when the median was CA$77 and
-    /// the gap was CA$33. So `PriceGuide` decides what the market looks like,
-    /// and the model only decides where inside it to sit.
+    /// These used to be sent so a model could pick a point inside them without
+    /// having to derive them — it cannot: asked to justify its own figure
+    /// against fourteen prices, the previous one wrote "you are asking CA$20
+    /// more than the median price of CA$80" when the median was CA$77 and the
+    /// gap was CA$33. Now `PriceGuide` picks the point too, and these travel
+    /// only so the row can say what the market looked like on the day.
     private static func stats(guide: PriceGuide, sold: SoldSignal) -> MarketStats {
         var stats = MarketStats()
         stats.pricedCount = Int32(guide.count)

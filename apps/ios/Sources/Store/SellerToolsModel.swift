@@ -17,24 +17,24 @@ import WebKit
 /// it gets developed on. A server has no such ambiguity: it is reachable or it
 /// is not, and the difference is a network error rather than a guess.
 ///
-/// Everything learned from that version still holds, and most of it is now
-/// structural rather than prompted (README, "The on-device writer"):
+/// Everything learned from that version still holds (README, "The on-device
+/// writer"), and none of it is prompted for any more — each one was designed
+/// out instead:
 ///
-/// * **The model cannot do arithmetic about its own evidence.** `PriceGuide`
-///   still computes every number, and `PriceGuide.explanation` still writes the
-///   sentence underneath. The model is sent the numbers and picks a point.
+/// * **The model cannot do arithmetic about its own evidence.** It is never
+///   shown any. `PriceGuide` computes the numbers, picks the median, and
+///   `PriceGuide.explanation` writes the sentence underneath.
 /// * **It takes the item's identity from the comparables if it can see them.**
-///   It cannot: the item is identified from the photo in a first call, before a
-///   single comparable exists. That failure is now unreachable rather than
-///   argued with.
-/// * **Its answer is clamped to the observed range**, here and again on the
-///   server, because a price outside the evidence is not a bolder opinion about
-///   the market.
+///   It cannot see one. The item is named and the listing is written from the
+///   photo, in the only call there is, before any comparable exists.
+/// * **Its answer needs clamping to the observed range.** Nothing needs
+///   clamping: the recommendation is the median of the observed prices, so it
+///   is inside the range by construction.
 ///
-/// The run is therefore three phases: identify, search the market on this
-/// device, then price. The middle one cannot move — it is a `WKWebView` against
-/// the user's own Facebook session — which is what makes this two round trips
-/// rather than one.
+/// The run is four steps — identify, search, check what sold, read the prices —
+/// and exactly one of them leaves this device to reach a model. The search
+/// cannot move off the phone at all: it is a `WKWebView` against the user's own
+/// Facebook session.
 @MainActor
 final class SellerToolsModel: ObservableObject {
     /// One line of the transcript.
@@ -44,7 +44,10 @@ final class SellerToolsModel: ObservableObject {
     /// for the whole run would hide that the app went and looked at the actual
     /// market, which is the part worth trusting.
     struct Step: Identifiable, Equatable {
-        enum Kind: Hashable { case identify, search, sold, price, write }
+        // `write` was a fifth kind, for the model call that priced the item and
+        // wrote the listing. The listing is written during `identify` now and
+        // the price is arithmetic, so there is no step left to name.
+        enum Kind: Hashable { case identify, search, sold, price }
         enum State: Equatable { case running, done, failed }
 
         let kind: Kind
@@ -239,6 +242,12 @@ final class SellerToolsModel: ObservableObject {
                 return
             }
             term = query
+            // The listing arrives here now, with the identification, because
+            // both are read off the same photograph. Nothing later can improve
+            // them and one thing later could poison them — see the note on
+            // `IdentifiedItem` in the llm package.
+            listingTitle = identified.listingTitle.isEmpty ? nil : identified.listingTitle
+            listingBody = identified.listingBody.isEmpty ? nil : identified.listingBody
         } catch {
             guard !Task.isCancelled else { return }
             let message = Self.message(for: error)
@@ -281,9 +290,15 @@ final class SellerToolsModel: ObservableObject {
         if case .success(let found) = soldResult { sold = SoldSignal(comps: found) }
         finish(.sold, sold.summary)
 
-        // 4 — arithmetic, in Swift, instantly. Its own step anyway: it is a
-        // separate claim from "we found some listings", and it is the one that
-        // can come back empty when everything found was free or sold.
+        // 4 — arithmetic, in Swift, instantly, and this is the answer.
+        //
+        // There used to be a fifth step here that sent all of this to a model
+        // and asked it for a number. It is gone, and the reason is in the
+        // table: on runs where the seller wrote nothing about condition it
+        // returned this median, four seconds and thirteen hundred tokens later.
+        // Where they did write something it moved ±10–20%, which is a judgement
+        // this screen is not in a position to check and the user is — they can
+        // see the whole range and the middle half a few points up.
         begin(.price, "Reading the prices")
         let computed = PriceGuide(comps: comps)
         guide = computed
@@ -292,46 +307,32 @@ final class SellerToolsModel: ObservableObject {
             phase = .done
             return
         }
-        // The median stands in until the model answers, so the screen is never
-        // without a defensible number — this is exactly what it showed before
-        // there was a writing step at all.
         recommendedPrice = median
         priceRationale = sold.rationale(for: median, against: computed)
-        finish(.price, Self.summary(of: computed))
+        finish(.price, "\(Self.summary(of: computed)) — suggesting \(computed.money(median))")
 
-        // 5 — the price and the words for it.
-        //
-        // Explicitly *not* load-bearing. If this fails the median above is
-        // already on screen with its working shown, so the step is marked
-        // failed and the run still finishes: losing a title and a description
-        // is not a reason to withhold a price that was never derived from
-        // them.
-        begin(.write, "Pricing it against the market")
-        do {
-            let draft = try await pricing.price(
-                priceCheckID: priceCheckID ?? "",
-                searchQuery: searchTerm ?? "",
-                marketName: marketName,
-                comparables: comps,
-                guide: computed,
-                sold: sold
-            )
-            guard !Task.isCancelled else { return }
-            // Clamped again here. The server clamps before it records, and this
-            // holds the same line against a response that arrived from anywhere
-            // else — a recommendation outside the observed prices is a number
-            // with nothing behind it.
-            let price = computed.clamped(draft.price)
-            recommendedPrice = price
-            priceRationale = sold.rationale(for: price, against: computed)
-            listingTitle = draft.title.isEmpty ? nil : draft.title
-            listingBody = draft.body.isEmpty ? nil : draft.body
-            finish(.write, "Suggested \(computed.money(price))")
-        } catch {
-            guard !Task.isCancelled else { return }
-            fail(.write, "Couldn't write the listing — the price below is the median of what's listed")
-        }
         phase = .done
+
+        // 5 — the row, after the screen is already finished.
+        //
+        // Deliberately last and deliberately unawaited-for: this call returns
+        // nothing the user is waiting on, so making them watch it would be
+        // making them wait on bookkeeping. A failure loses one row of telemetry
+        // and nothing else, which is why it is swallowed rather than shown.
+        await record(compsFound: comps.count, price: median, guide: computed)
+    }
+
+    /// Reports the finished run. Silent on failure, by the reasoning above.
+    private func record(compsFound: Int, price: Int, guide: PriceGuide) async {
+        guard let priceCheckID else { return }
+        try? await pricing.complete(
+            priceCheckID: priceCheckID,
+            searchQuery: searchTerm ?? "",
+            compsFound: compsFound,
+            recommendedPrice: price,
+            guide: guide,
+            sold: sold
+        )
     }
 
     // MARK: - Transcript

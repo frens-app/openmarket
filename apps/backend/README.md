@@ -57,6 +57,13 @@ pkg/db/           sqlc output — generated, do not edit
 deployments/      migrations (goose), queries (sqlc), compose, railway
 ```
 
+`pkg/llm` makes **one call**: photo and description in, item name, search queries
+and the listing out. Everything numeric — the median, the quartiles, the price
+itself — is computed on the device by `PriceGuide` and only reported here. The
+model never sees a comparable, which is what makes the failure this feature is
+built around (taking the item's identity from the market) unreachable rather
+than prompted against.
+
 `pkg/llm` has a **stub provider**, and it is the whole local-development story
 for Price Check: `.env.development` ships `LLM_PROVIDER=stub`, which answers
 in-process with no key, no network and no bill. The feature runs end to end

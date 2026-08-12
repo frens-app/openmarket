@@ -86,17 +86,10 @@ func NewRunner(provider Provider, store Store, logger *zap.Logger, cfg Config) *
 // Provider names the configured vendor, for the handler's logs.
 func (r *Runner) Provider() string { return r.provider.Name() }
 
-// Identify runs the vision call.
+// Identify runs the vision call — the only model call this feature makes.
 func (r *Runner) Identify(ctx context.Context, sub Subject, in IdentifyInput) (IdentifiedItem, error) {
 	return call(ctx, r, StageIdentify, sub, func(ctx context.Context) (IdentifiedItem, Usage, error) {
 		return r.provider.Identify(ctx, in)
-	})
-}
-
-// Price runs the pricing call.
-func (r *Runner) Price(ctx context.Context, sub Subject, in PriceInput) (PricedItem, error) {
-	return call(ctx, r, StagePrice, sub, func(ctx context.Context) (PricedItem, Usage, error) {
-		return r.provider.Price(ctx, in)
 	})
 }
 

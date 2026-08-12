@@ -79,27 +79,41 @@ func (s *pricingServer) IdentifyItem(
 	}
 
 	if _, err := s.queries.SetPriceCheckIdentification(ctx, db.SetPriceCheckIdentificationParams{
-		ID:             check.ID,
-		UserID:         userID,
-		IdentifiedName: item.Name,
-		SearchQueries:  item.SearchQueries,
+		ID:                 check.ID,
+		UserID:             userID,
+		IdentifiedName:     item.Name,
+		SearchQueries:      item.SearchQueries,
+		ListingTitle:       item.ListingTitle,
+		ListingDescription: item.ListingBody,
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("record identification: %w", err))
 	}
 
 	return connect.NewResponse(&v1.IdentifyItemResponse{
-		PriceCheckId:   check.ID.String(),
-		IdentifiedName: item.Name,
-		SearchQueries:  item.SearchQueries,
-		Condition:      conditionProto(item.Condition),
-		KeyAttributes:  item.KeyAttributes,
+		PriceCheckId:       check.ID.String(),
+		IdentifiedName:     item.Name,
+		SearchQueries:      item.SearchQueries,
+		KeyAttributes:      item.KeyAttributes,
+		ListingTitle:       item.ListingTitle,
+		ListingDescription: item.ListingBody,
 	}), nil
 }
 
-func (s *pricingServer) PriceItem(
+// CompletePriceCheck writes down what the device found. It calls no model.
+//
+// The clamp that used to live here is gone with the call it guarded: it existed
+// because a model picked the price and a model can pick a number outside its own
+// evidence. `PriceGuide` picks the median of the prices it was given, which is
+// inside the range by construction. Clamping a median to the range it came from
+// would be theatre.
+//
+// What is checked instead is that there was a market at all. A zero `stats`
+// message deserializes into a market of nothing, and a "median of no prices"
+// is the shape of a number with nothing behind it.
+func (s *pricingServer) CompletePriceCheck(
 	ctx context.Context,
-	req *connect.Request[v1.PriceItemRequest],
-) (*connect.Response[v1.PriceItemResponse], error) {
+	req *connect.Request[v1.CompletePriceCheckRequest],
+) (*connect.Response[v1.CompletePriceCheckResponse], error) {
 	userID, err := auth.UserID(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -119,56 +133,30 @@ func (s *pricingServer) PriceItem(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load price check: %w", err))
 	}
 
-	stats := statsFromProto(req.Msg.GetStats())
-	// The band has to be real before anything is priced against it. A zero
-	// `stats` message deserializes into a market of nothing, and pricing an
-	// item at the median of an empty set is how a number with nothing behind it
-	// reaches a screen.
-	if stats.PricedCount <= 0 {
+	stats := req.Msg.GetStats()
+	if stats.GetPricedCount() <= 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("stats.priced_count must be positive; there is no market to price against"))
+			errors.New("stats.priced_count must be positive; there is no market to record"))
 	}
 
-	priced, err := s.runner.Price(ctx, llm.Subject{UserID: userID, PriceCheckID: &check.ID}, llm.PriceInput{
-		Item: llm.IdentifiedItem{
-			Name:          derefString(check.IdentifiedName),
-			SearchQueries: check.SearchQueries,
-		},
-		Description: check.Description,
-		MarketName:  req.Msg.GetMarketName(),
-		Comparables: comparablesFromProto(req.Msg.GetComparables()),
-		Stats:       stats,
-	})
-	if err != nil {
-		return nil, modelError(err, "price item")
-	}
-
-	// Clamped here as well as on the device, and the reason is not belt and
-	// braces: this is where the number is written down. Recording what the
-	// model said while the screen shows something else would leave the table
-	// disagreeing with the app about the one figure anybody acts on.
-	price := clamp(priced.PriceMinor, stats.LowestMinor, stats.HighestMinor)
+	price := req.Msg.GetRecommendedPriceMinor()
+	median := stats.GetMedianMinor()
+	currency := stats.GetCurrencySymbol()
 
 	if _, err := s.queries.CompletePriceCheck(ctx, db.CompletePriceCheckParams{
 		ID:                    check.ID,
 		UserID:                userID,
 		SearchQueryUsed:       req.Msg.GetSearchQueryUsed(),
-		CompsFound:            int32(len(req.Msg.GetComparables())),
-		SoldFound:             stats.SoldCount,
+		CompsFound:            req.Msg.GetCompsFound(),
+		SoldFound:             stats.GetSoldCount(),
 		RecommendedPriceMinor: &price,
-		MedianPriceMinor:      &stats.MedianMinor,
-		CurrencySymbol:        &stats.CurrencySymbol,
-		ListingTitle:          priced.Title,
-		ListingDescription:    priced.Body,
+		MedianPriceMinor:      &median,
+		CurrencySymbol:        &currency,
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("complete price check: %w", err))
 	}
 
-	return connect.NewResponse(&v1.PriceItemResponse{
-		RecommendedPriceMinor: price,
-		Title:                 priced.Title,
-		Description:           priced.Body,
-	}), nil
+	return connect.NewResponse(&v1.CompletePriceCheckResponse{}), nil
 }
 
 func (s *pricingServer) SubmitPriceCheckFeedback(
@@ -330,68 +318,14 @@ func decodePhotos(raw [][]byte) ([]llm.Photo, photoMeta, error) {
 	return photos, meta, nil
 }
 
-func statsFromProto(s *v1.MarketStats) llm.MarketStats {
-	if s == nil {
-		return llm.MarketStats{}
-	}
-	return llm.MarketStats{
-		PricedCount:      s.GetPricedCount(),
-		MedianMinor:      s.GetMedianMinor(),
-		LowestMinor:      s.GetLowestMinor(),
-		HighestMinor:     s.GetHighestMinor(),
-		LowerQuartile:    s.LowerQuartileMinor,
-		UpperQuartile:    s.UpperQuartileMinor,
-		CurrencySymbol:   s.GetCurrencySymbol(),
-		SoldCount:        s.GetSoldCount(),
-		MedianDaysToSell: s.MedianDaysToSell,
-	}
-}
-
-func comparablesFromProto(in []*v1.Comparable) []llm.Comparable {
-	out := make([]llm.Comparable, 0, len(in))
-	for _, c := range in {
-		out = append(out, llm.Comparable{
-			Title:      c.GetTitle(),
-			PriceMinor: c.PriceMinor,
-			IsSold:     c.GetIsSold(),
-			DaysListed: c.DaysListed,
-			City:       c.GetCity(),
-		})
-	}
-	return out
-}
-
-// conditionProto maps the model's word onto Facebook's own values. Anything
-// unrecognised is UNSPECIFIED rather than a guess — the field is a hint, and a
-// wrong hint is worse than none.
-func conditionProto(condition string) v1.ItemCondition {
-	switch condition {
-	case "new":
-		return v1.ItemCondition_ITEM_CONDITION_NEW
-	case "used_like_new":
-		return v1.ItemCondition_ITEM_CONDITION_USED_LIKE_NEW
-	case "used_good":
-		return v1.ItemCondition_ITEM_CONDITION_USED_GOOD
-	case "used_fair":
-		return v1.ItemCondition_ITEM_CONDITION_USED_FAIR
-	default:
-		return v1.ItemCondition_ITEM_CONDITION_UNSPECIFIED
-	}
-}
-
-// clamp holds a recommendation inside the evidence that produced it. A price
-// outside the observed range is not a bolder opinion about the market, it is a
-// number with nothing behind it.
-func clamp(price, low, high int64) int64 {
-	if low > high {
-		return price
-	}
-	return min(max(price, low), high)
-}
-
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
+// Four helpers stood here, and all four went with the pricing call:
+//
+//   statsFromProto        translated the market for a prompt to read
+//   comparablesFromProto  translated the listings for the same prompt
+//   conditionProto        mapped a guess nothing consumed
+//   clamp                 held a model's number inside its own evidence
+//
+// None of them were wrong. They were the cost of having a model produce a
+// figure, and that cost is only visible once the figure comes from somewhere
+// else. `CompletePriceCheck` reads the four values it records straight off the
+// request.

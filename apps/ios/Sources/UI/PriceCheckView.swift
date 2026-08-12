@@ -132,20 +132,25 @@ struct PriceCheckView: View {
 
     private var prompt: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // One line, and the only part of the old three that was not
-            // already on screen: the market it will search. The Tools row said
-            // what a price check is to get the user here, the button says what
-            // it does, and the transcript shows the working as it happens —
-            // explaining all of that again above the field is a paragraph the
-            // user reads once and scrolls past forever after.
+            // Two lines: where it looks, and what to type. The second is the
+            // one that earns its place — the description is the only input the
+            // user controls, and nothing else on screen says that condition and
+            // brand are what make the listing good. A photo shows the model a
+            // dresser; only the seller knows the drawer sticks.
             //
-            // No heading either. The navigation bar is already saying "Price
-            // Check" two lines above this, and a title under a title reads as a
+            // No heading. The navigation bar is already saying "Price Check"
+            // two lines above this, and a title under a title reads as a
             // rendering mistake.
-            Text("Checks what's listed and what's sold in \(model.marketName).")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Checks what's listed and what's sold in \(model.marketName).")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Add anything that would help someone buying it — condition, brand and model, what's included, anything wrong with it. It writes the listing from what you say.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // The placeholder carries the rule, so nothing else has to. With no
             // photo it is an example of a good description; with one attached
@@ -154,8 +159,8 @@ struct PriceCheckView: View {
             // of copy on a screen that just lost three of them, and it would be
             // on screen in both states to explain one of them.
             TextField(photo == nil
-                        ? "A white IKEA Malm dresser, six drawers, a few scratches on top"
-                        : "Optional — anything the photo doesn't show",
+                        ? "A white IKEA Malm dresser, six drawers, one scratch on top, from a smoke-free home"
+                        : "Optional — condition, brand, what's included, anything wrong with it",
                       text: $draft,
                       axis: .vertical)
                 .lineLimit(3...6)

@@ -4,24 +4,33 @@ package openmarket.api.v1;
 
 import "buf/validate/validate.proto";
 
-// Pricing is two calls with the phone's own work in between, and that shape is
-// forced rather than chosen.
+// **One model call, and then arithmetic.**
 //
-// The market search runs in a WKWebView against the user's own Facebook session
-// (docs/decision-desktop-primary.md). The server has no cookie jar and cannot
-// get one, so it cannot fetch a single comparable. What it can do is the two
-// things the phone can't: reach a vision model, and remember what happened.
+//   IdentifyItem        photo + description -> what this is, what to search,
+//                                              and the listing to paste
+//   (device)            ComparableSearch    -> the market, in a WKWebView
+//   (device)            PriceGuide          -> the price, from those numbers
+//   CompletePriceCheck  what it found       -> the row
 //
-//   IdentifyItem  photo + description        -> what this is, what to search
-//   (device)      ComparableSearch           -> the market, on the phone
-//   PriceItem     comparables + the numbers  -> a price, a title, a description
+// Two things force this shape. The market search cannot leave the phone: it
+// runs against the user's own Facebook session (docs/decision-desktop-primary.md)
+// and the server has no cookie jar to borrow. And the price is a median, which
+// is arithmetic — the one thing a language model is measurably bad at and Swift
+// is exact at.
 //
-// The order is also the fix for the worst failure the on-device writer had: it
-// took the item's identity from the comparables, titling a stroller "IKEA Malm
-// 4 Drawer Dresser White" on three runs out of three (README, "The on-device
-// writer"). Here the item is named from the photo, before any comparable
-// exists — so that particular poisoning is unreachable rather than prompted
-// against.
+// So the model does the part it is good at, once: look at a photograph, say
+// what the object is, and write two paragraphs about it. Everything numeric
+// belongs to `PriceGuide`.
+//
+// There used to be a second call that picked the price and wrote the copy with
+// the comparables in front of it. It was removed for two reasons, in this
+// order of importance. **It could see the comparables**, which is the setup for
+// the worst failure this feature has on record — a model taking the item's
+// identity from the market, titling a stroller "IKEA Malm 4 Drawer Dresser
+// White" on three runs of three (README, "The on-device writer"). And on runs
+// where the seller wrote nothing about condition it returned the median, which
+// Swift already had: 1,350 tokens and four seconds to reproduce a number that
+// was sitting in a variable.
 
 // What the seller is holding, as the model reads it.
 message IdentifyItemRequest {
@@ -76,20 +85,11 @@ message IdentifyItemRequest {
   ];
 }
 
-// Facebook's own condition values, so a guess here can be handed straight to
-// the search filter later (`SearchQuery.Condition`).
-enum ItemCondition {
-  ITEM_CONDITION_UNSPECIFIED = 0;
-  ITEM_CONDITION_NEW = 1;
-  ITEM_CONDITION_USED_LIKE_NEW = 2;
-  ITEM_CONDITION_USED_GOOD = 3;
-  ITEM_CONDITION_USED_FAIR = 4;
-}
-
 message IdentifyItemResponse {
-  // Threads the whole run together: the client carries it into PriceItem, into
-  // feedback, and into the copy report. Issued here because the row is written
-  // here — a run that dies before it finds a market is still a row worth having.
+  // Threads the whole run together: the client carries it into
+  // CompletePriceCheck, into feedback, and into the copy report. Issued here
+  // because the row is written here — a run that dies before it finds a market
+  // is still a row worth having.
   string price_check_id = 1;
 
   // What the thing is, in as few words as identify it. Shown in the transcript,
@@ -105,49 +105,48 @@ message IdentifyItemResponse {
   // browse tab's request budget to hedge a query that was probably fine.
   repeated string search_queries = 3;
 
-  // A guess from the photo, and only ever a guess. Never used to narrow the
-  // comparable search — condition words narrow the search without narrowing the
-  // market, which is why `SearchTerm` strips them.
-  ItemCondition condition = 4;
+  // Field 4 was `ItemCondition condition`. Removed with the second model call:
+  // nothing consumed it. It was never allowed to narrow the search (condition
+  // words narrow the search without narrowing the market), and the only other
+  // reader was the pricing prompt that no longer exists. A guess nobody acts on
+  // is a guess worth not making.
+  reserved 4;
+  reserved "condition";
 
   // Distinguishing facts the model could see or was told: "six drawers",
-  // "original box", "left armrest torn". Feeds the listing description, and
-  // exists so that description is built from observations rather than invented
-  // — a small model asked for richer prose wrote "a few minor scratches on the
-  // frame" about a bike whose seller mentioned none.
+  // "original box", "left armrest torn". These are the working behind the
+  // description below — kept separate from it so the observations can be
+  // checked against the prose that was built from them.
   repeated string key_attributes = 5;
-}
 
-// One comparable, as the phone read it off a card.
-message Comparable {
-  string title = 1;
-
-  // Minor units. Absent when the card had no price we could read, which is
-  // ordinary — and different from zero, which means Free. Free items are
-  // excluded from the arithmetic upstream (seven of twelve sold couches in San
-  // Francisco were free), but they are still sent, because "most of these went
-  // for nothing" is a fact about the market.
-  optional int64 price_minor = 2;
-
-  // Seller-marked. Means "no longer for sale", never "sold for this".
-  bool is_sold = 3;
-
-  // How long it had been listed. On a sold card this is the useful one: it is
-  // an upper bound on how long it took to sell, because Facebook publishes no
-  // sale date — `creation_time` is the only time field on a listing.
-  optional int32 days_listed = 4;
-
-  optional string city = 5;
+  // **The listing, written here.** This is the whole of the model's output
+  // besides the identification, and it is produced before a single comparable
+  // exists.
+  //
+  // That ordering is not a saving, it is the fix. The failure this feature is
+  // built around is a model taking the item's identity from the comparables —
+  // a stroller titled "IKEA Malm 4 Drawer Dresser White", three runs of three.
+  // Writing the copy in the call that cannot see the market makes that
+  // unreachable, where the previous shape spent a prompt rule arguing with it.
+  //
+  // Empty is possible and survivable: the price does not depend on these, and a
+  // run that produced numbers but no prose is still a useful run.
+  string listing_title = 6;
+  string listing_description = 7;
 }
 
 // The market reduced to numbers, computed by `PriceGuide` on the device.
 //
-// **Sent because the model must not derive them.** Asked to justify its own
+// **No model has ever seen these and none ever will.** They used to be sent to
+// one, because it could not be trusted to derive them: asked to justify its own
 // figure against fourteen prices it had just been shown, the on-device model
 // wrote "you are asking CA$20 more than the median price of CA$80" — the median
 // was CA$77 and the gap was CA$33, two wrong numbers in one confident sentence,
-// printed under the one figure a person acts on. Arithmetic about a sample
-// belongs to whoever computed the sample.
+// printed under the one figure a person acts on.
+//
+// The price is now these numbers directly, so that whole class of failure is
+// gone rather than guarded. What arrives here is a record of what the device
+// found and what it therefore recommended.
 message MarketStats {
   // How many comparables carried a usable price. Not the number sent: a guide
   // built from four of fifteen cards is a different claim from one built from
@@ -178,7 +177,17 @@ message MarketStats {
   optional int32 median_days_to_sell = 9;
 }
 
-message PriceItemRequest {
+// What the device found, and what it therefore recommended.
+//
+// **This call reaches no model.** It closes the row, and that is all — the
+// price it carries was computed by `PriceGuide` on the phone, from the
+// comparables the phone scraped, and the server's job is to write it down.
+//
+// It stays a round trip anyway, because the row is the point: without it a
+// check that found a market is indistinguishable from one that died at the
+// identify call, and "how often does the search come back empty" is the first
+// question anyone will ask of this feature.
+message CompletePriceCheckRequest {
   string price_check_id = 1 [
     (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
@@ -188,36 +197,30 @@ message PriceItemRequest {
   // bad identification and a bad market are distinguishable afterwards.
   string search_query_used = 2;
 
-  // Capped well above the ~15 a search page returns, so the ceiling is a bound
-  // on abuse rather than a limit the feature can reach.
-  repeated Comparable comparables = 3 [(buf.validate.field).repeated.max_items = 100];
+  // How many comparables the search returned. A count, not the listings:
+  // nothing here stores them and nothing reads them any more, so sending a
+  // hundred cards for the server to drop on the floor would be Facebook's data
+  // leaving the phone for no reason at all. `MarketStats.priced_count` is the
+  // subset that carried a usable price, and the pair is the interesting part.
+  int32 comps_found = 3;
 
   MarketStats stats = 4 [(buf.validate.field).required = true];
 
-  // Where, in the words the user sees — "San Francisco Bay Area". Context for
-  // the listing copy, not a filter.
-  string market_name = 5;
+  // Field 5 was `market_name`, which existed to give the pricing prompt some
+  // context for the copy. There is no pricing prompt. Reserved rather than
+  // reused, even though nothing has shipped: the next field number is free and
+  // a recycled one is a trap for whoever is holding a stale client.
+  reserved 5;
+  reserved "market_name";
+
+  // Minor units. Derived, not decided: the median of the asking prices, which
+  // is what the screen falls back to and what the model was being steered
+  // towards anyway. It arrives already inside the observed range by
+  // construction, which is why nothing clamps it now.
+  int64 recommended_price_minor = 6;
 }
 
-message PriceItemResponse {
-  // Minor units, and a judgement rather than a calculation: the model picks a
-  // point given the band, the item, and what sold. The client clamps it to the
-  // observed range before showing it, because a recommendation outside the
-  // evidence is not a bolder opinion about the market, it is a number with
-  // nothing behind it.
-  int64 recommended_price_minor = 1;
-
-  // A listing title and body, ready to paste into Facebook.
-  string title = 2;
-  string description = 3;
-
-  // Deliberately no rationale field.
-  //
-  // The sentence under the price is `PriceGuide.explanation` plus
-  // `SoldSignal.priceNote`, written in Swift from the numbers it just computed
-  // and true by construction. A second, model-written "why this price" would be
-  // two voices explaining one figure, and only one of them can be checked.
-}
+message CompletePriceCheckResponse {}
 
 message SubmitPriceCheckFeedbackRequest {
   string price_check_id = 1 [
@@ -244,8 +247,11 @@ message RecordPriceCopiedRequest {
 message RecordPriceCopiedResponse {}
 
 service PricingService {
+  // The only call that reaches a model.
   rpc IdentifyItem(IdentifyItemRequest) returns (IdentifyItemResponse);
-  rpc PriceItem(PriceItemRequest) returns (PriceItemResponse);
+
+  // Recording, not pricing — see the request.
+  rpc CompletePriceCheck(CompletePriceCheckRequest) returns (CompletePriceCheckResponse);
 
   // The asked question.
   rpc SubmitPriceCheckFeedback(SubmitPriceCheckFeedbackRequest) returns (SubmitPriceCheckFeedbackResponse);

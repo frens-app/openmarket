@@ -2,11 +2,17 @@
 
 -- One row per price check, and one row per model call underneath it.
 --
--- The split is not tidiness. A single check makes **at least** two model calls —
--- identify the item from the photo, then price it against the comparables — and
--- under retry it makes more. Folding them into columns on `price_checks` would
--- mean either losing the retries or inventing `input_tokens_2`, and the retries
--- are exactly the rows worth seeing when a bill or a latency graph moves.
+-- The split is not tidiness. A check makes one model call and, under retry,
+-- more — and every attempt is charged. Folding them into columns on
+-- `price_checks` would mean either losing the retries or inventing
+-- `input_tokens_2`, and the retries are exactly the rows worth seeing when a
+-- bill or a latency graph moves.
+--
+-- It was two calls when this table was written, which is where the `stage`
+-- column comes from. The pricing call has since been removed — the price is a
+-- median, computed on the device — so `stage` is IDENTIFY on everything new and
+-- PRICE only on history. The table did not need changing for that, which is the
+-- argument for having built it this way.
 
 CREATE TABLE price_checks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),

@@ -36,9 +36,9 @@ const (
 	// PricingServiceIdentifyItemProcedure is the fully-qualified name of the PricingService's
 	// IdentifyItem RPC.
 	PricingServiceIdentifyItemProcedure = "/openmarket.api.v1.PricingService/IdentifyItem"
-	// PricingServicePriceItemProcedure is the fully-qualified name of the PricingService's PriceItem
-	// RPC.
-	PricingServicePriceItemProcedure = "/openmarket.api.v1.PricingService/PriceItem"
+	// PricingServiceCompletePriceCheckProcedure is the fully-qualified name of the PricingService's
+	// CompletePriceCheck RPC.
+	PricingServiceCompletePriceCheckProcedure = "/openmarket.api.v1.PricingService/CompletePriceCheck"
 	// PricingServiceSubmitPriceCheckFeedbackProcedure is the fully-qualified name of the
 	// PricingService's SubmitPriceCheckFeedback RPC.
 	PricingServiceSubmitPriceCheckFeedbackProcedure = "/openmarket.api.v1.PricingService/SubmitPriceCheckFeedback"
@@ -49,8 +49,10 @@ const (
 
 // PricingServiceClient is a client for the openmarket.api.v1.PricingService service.
 type PricingServiceClient interface {
+	// The only call that reaches a model.
 	IdentifyItem(context.Context, *connect.Request[v1.IdentifyItemRequest]) (*connect.Response[v1.IdentifyItemResponse], error)
-	PriceItem(context.Context, *connect.Request[v1.PriceItemRequest]) (*connect.Response[v1.PriceItemResponse], error)
+	// Recording, not pricing — see the request.
+	CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error)
 	// The asked question.
 	SubmitPriceCheckFeedback(context.Context, *connect.Request[v1.SubmitPriceCheckFeedbackRequest]) (*connect.Response[v1.SubmitPriceCheckFeedbackResponse], error)
 	// The unasked one, and the better of the two. Copying the price is what
@@ -78,10 +80,10 @@ func NewPricingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(pricingServiceMethods.ByName("IdentifyItem")),
 			connect.WithClientOptions(opts...),
 		),
-		priceItem: connect.NewClient[v1.PriceItemRequest, v1.PriceItemResponse](
+		completePriceCheck: connect.NewClient[v1.CompletePriceCheckRequest, v1.CompletePriceCheckResponse](
 			httpClient,
-			baseURL+PricingServicePriceItemProcedure,
-			connect.WithSchema(pricingServiceMethods.ByName("PriceItem")),
+			baseURL+PricingServiceCompletePriceCheckProcedure,
+			connect.WithSchema(pricingServiceMethods.ByName("CompletePriceCheck")),
 			connect.WithClientOptions(opts...),
 		),
 		submitPriceCheckFeedback: connect.NewClient[v1.SubmitPriceCheckFeedbackRequest, v1.SubmitPriceCheckFeedbackResponse](
@@ -102,7 +104,7 @@ func NewPricingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 // pricingServiceClient implements PricingServiceClient.
 type pricingServiceClient struct {
 	identifyItem             *connect.Client[v1.IdentifyItemRequest, v1.IdentifyItemResponse]
-	priceItem                *connect.Client[v1.PriceItemRequest, v1.PriceItemResponse]
+	completePriceCheck       *connect.Client[v1.CompletePriceCheckRequest, v1.CompletePriceCheckResponse]
 	submitPriceCheckFeedback *connect.Client[v1.SubmitPriceCheckFeedbackRequest, v1.SubmitPriceCheckFeedbackResponse]
 	recordPriceCopied        *connect.Client[v1.RecordPriceCopiedRequest, v1.RecordPriceCopiedResponse]
 }
@@ -112,9 +114,9 @@ func (c *pricingServiceClient) IdentifyItem(ctx context.Context, req *connect.Re
 	return c.identifyItem.CallUnary(ctx, req)
 }
 
-// PriceItem calls openmarket.api.v1.PricingService.PriceItem.
-func (c *pricingServiceClient) PriceItem(ctx context.Context, req *connect.Request[v1.PriceItemRequest]) (*connect.Response[v1.PriceItemResponse], error) {
-	return c.priceItem.CallUnary(ctx, req)
+// CompletePriceCheck calls openmarket.api.v1.PricingService.CompletePriceCheck.
+func (c *pricingServiceClient) CompletePriceCheck(ctx context.Context, req *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error) {
+	return c.completePriceCheck.CallUnary(ctx, req)
 }
 
 // SubmitPriceCheckFeedback calls openmarket.api.v1.PricingService.SubmitPriceCheckFeedback.
@@ -129,8 +131,10 @@ func (c *pricingServiceClient) RecordPriceCopied(ctx context.Context, req *conne
 
 // PricingServiceHandler is an implementation of the openmarket.api.v1.PricingService service.
 type PricingServiceHandler interface {
+	// The only call that reaches a model.
 	IdentifyItem(context.Context, *connect.Request[v1.IdentifyItemRequest]) (*connect.Response[v1.IdentifyItemResponse], error)
-	PriceItem(context.Context, *connect.Request[v1.PriceItemRequest]) (*connect.Response[v1.PriceItemResponse], error)
+	// Recording, not pricing — see the request.
+	CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error)
 	// The asked question.
 	SubmitPriceCheckFeedback(context.Context, *connect.Request[v1.SubmitPriceCheckFeedbackRequest]) (*connect.Response[v1.SubmitPriceCheckFeedbackResponse], error)
 	// The unasked one, and the better of the two. Copying the price is what
@@ -154,10 +158,10 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(pricingServiceMethods.ByName("IdentifyItem")),
 		connect.WithHandlerOptions(opts...),
 	)
-	pricingServicePriceItemHandler := connect.NewUnaryHandler(
-		PricingServicePriceItemProcedure,
-		svc.PriceItem,
-		connect.WithSchema(pricingServiceMethods.ByName("PriceItem")),
+	pricingServiceCompletePriceCheckHandler := connect.NewUnaryHandler(
+		PricingServiceCompletePriceCheckProcedure,
+		svc.CompletePriceCheck,
+		connect.WithSchema(pricingServiceMethods.ByName("CompletePriceCheck")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pricingServiceSubmitPriceCheckFeedbackHandler := connect.NewUnaryHandler(
@@ -176,8 +180,8 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 		switch r.URL.Path {
 		case PricingServiceIdentifyItemProcedure:
 			pricingServiceIdentifyItemHandler.ServeHTTP(w, r)
-		case PricingServicePriceItemProcedure:
-			pricingServicePriceItemHandler.ServeHTTP(w, r)
+		case PricingServiceCompletePriceCheckProcedure:
+			pricingServiceCompletePriceCheckHandler.ServeHTTP(w, r)
 		case PricingServiceSubmitPriceCheckFeedbackProcedure:
 			pricingServiceSubmitPriceCheckFeedbackHandler.ServeHTTP(w, r)
 		case PricingServiceRecordPriceCopiedProcedure:
@@ -195,8 +199,8 @@ func (UnimplementedPricingServiceHandler) IdentifyItem(context.Context, *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.IdentifyItem is not implemented"))
 }
 
-func (UnimplementedPricingServiceHandler) PriceItem(context.Context, *connect.Request[v1.PriceItemRequest]) (*connect.Response[v1.PriceItemResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.PriceItem is not implemented"))
+func (UnimplementedPricingServiceHandler) CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.CompletePriceCheck is not implemented"))
 }
 
 func (UnimplementedPricingServiceHandler) SubmitPriceCheckFeedback(context.Context, *connect.Request[v1.SubmitPriceCheckFeedbackRequest]) (*connect.Response[v1.SubmitPriceCheckFeedbackResponse], error) {

@@ -25,54 +25,6 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
-/// Facebook's own condition values, so a guess here can be handed straight to
-/// the search filter later (`SearchQuery.Condition`).
-public nonisolated enum Openmarket_Api_V1_ItemCondition: SwiftProtobuf.Enum, Swift.CaseIterable {
-  public typealias RawValue = Int
-  case unspecified // = 0
-  case new // = 1
-  case usedLikeNew // = 2
-  case usedGood // = 3
-  case usedFair // = 4
-  case UNRECOGNIZED(Int)
-
-  public init() {
-    self = .unspecified
-  }
-
-  public init?(rawValue: Int) {
-    switch rawValue {
-    case 0: self = .unspecified
-    case 1: self = .new
-    case 2: self = .usedLikeNew
-    case 3: self = .usedGood
-    case 4: self = .usedFair
-    default: self = .UNRECOGNIZED(rawValue)
-    }
-  }
-
-  public var rawValue: Int {
-    switch self {
-    case .unspecified: return 0
-    case .new: return 1
-    case .usedLikeNew: return 2
-    case .usedGood: return 3
-    case .usedFair: return 4
-    case .UNRECOGNIZED(let i): return i
-    }
-  }
-
-  // The compiler won't synthesize support with the UNRECOGNIZED case.
-  public static let allCases: [Openmarket_Api_V1_ItemCondition] = [
-    .unspecified,
-    .new,
-    .usedLikeNew,
-    .usedGood,
-    .usedFair,
-  ]
-
-}
-
 /// What the seller is holding, as the model reads it.
 public nonisolated struct Openmarket_Api_V1_IdentifyItemRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -116,9 +68,10 @@ public nonisolated struct Openmarket_Api_V1_IdentifyItemResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Threads the whole run together: the client carries it into PriceItem, into
-  /// feedback, and into the copy report. Issued here because the row is written
-  /// here — a run that dies before it finds a market is still a row worth having.
+  /// Threads the whole run together: the client carries it into
+  /// CompletePriceCheck, into feedback, and into the copy report. Issued here
+  /// because the row is written here — a run that dies before it finds a market
+  /// is still a row worth having.
   public var priceCheckID: String = String()
 
   /// What the thing is, in as few words as identify it. Shown in the transcript,
@@ -134,86 +87,45 @@ public nonisolated struct Openmarket_Api_V1_IdentifyItemResponse: Sendable {
   /// browse tab's request budget to hedge a query that was probably fine.
   public var searchQueries: [String] = []
 
-  /// A guess from the photo, and only ever a guess. Never used to narrow the
-  /// comparable search — condition words narrow the search without narrowing the
-  /// market, which is why `SearchTerm` strips them.
-  public var condition: Openmarket_Api_V1_ItemCondition = .unspecified
-
   /// Distinguishing facts the model could see or was told: "six drawers",
-  /// "original box", "left armrest torn". Feeds the listing description, and
-  /// exists so that description is built from observations rather than invented
-  /// — a small model asked for richer prose wrote "a few minor scratches on the
-  /// frame" about a bike whose seller mentioned none.
+  /// "original box", "left armrest torn". These are the working behind the
+  /// description below — kept separate from it so the observations can be
+  /// checked against the prose that was built from them.
   public var keyAttributes: [String] = []
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+  /// **The listing, written here.** This is the whole of the model's output
+  /// besides the identification, and it is produced before a single comparable
+  /// exists.
+  ///
+  /// That ordering is not a saving, it is the fix. The failure this feature is
+  /// built around is a model taking the item's identity from the comparables —
+  /// a stroller titled "IKEA Malm 4 Drawer Dresser White", three runs of three.
+  /// Writing the copy in the call that cannot see the market makes that
+  /// unreachable, where the previous shape spent a prompt rule arguing with it.
+  ///
+  /// Empty is possible and survivable: the price does not depend on these, and a
+  /// run that produced numbers but no prose is still a useful run.
+  public var listingTitle: String = String()
 
-  public init() {}
-}
-
-/// One comparable, as the phone read it off a card.
-public nonisolated struct Openmarket_Api_V1_Comparable: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var title: String = String()
-
-  /// Minor units. Absent when the card had no price we could read, which is
-  /// ordinary — and different from zero, which means Free. Free items are
-  /// excluded from the arithmetic upstream (seven of twelve sold couches in San
-  /// Francisco were free), but they are still sent, because "most of these went
-  /// for nothing" is a fact about the market.
-  public var priceMinor: Int64 {
-    get {_priceMinor ?? 0}
-    set {_priceMinor = newValue}
-  }
-  /// Returns true if `priceMinor` has been explicitly set.
-  public var hasPriceMinor: Bool {self._priceMinor != nil}
-  /// Clears the value of `priceMinor`. Subsequent reads from it will return its default value.
-  public mutating func clearPriceMinor() {self._priceMinor = nil}
-
-  /// Seller-marked. Means "no longer for sale", never "sold for this".
-  public var isSold: Bool = false
-
-  /// How long it had been listed. On a sold card this is the useful one: it is
-  /// an upper bound on how long it took to sell, because Facebook publishes no
-  /// sale date — `creation_time` is the only time field on a listing.
-  public var daysListed: Int32 {
-    get {_daysListed ?? 0}
-    set {_daysListed = newValue}
-  }
-  /// Returns true if `daysListed` has been explicitly set.
-  public var hasDaysListed: Bool {self._daysListed != nil}
-  /// Clears the value of `daysListed`. Subsequent reads from it will return its default value.
-  public mutating func clearDaysListed() {self._daysListed = nil}
-
-  public var city: String {
-    get {_city ?? String()}
-    set {_city = newValue}
-  }
-  /// Returns true if `city` has been explicitly set.
-  public var hasCity: Bool {self._city != nil}
-  /// Clears the value of `city`. Subsequent reads from it will return its default value.
-  public mutating func clearCity() {self._city = nil}
+  public var listingDescription: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _priceMinor: Int64? = nil
-  fileprivate var _daysListed: Int32? = nil
-  fileprivate var _city: String? = nil
 }
 
 /// The market reduced to numbers, computed by `PriceGuide` on the device.
 ///
-/// **Sent because the model must not derive them.** Asked to justify its own
+/// **No model has ever seen these and none ever will.** They used to be sent to
+/// one, because it could not be trusted to derive them: asked to justify its own
 /// figure against fourteen prices it had just been shown, the on-device model
 /// wrote "you are asking CA$20 more than the median price of CA$80" — the median
 /// was CA$77 and the gap was CA$33, two wrong numbers in one confident sentence,
-/// printed under the one figure a person acts on. Arithmetic about a sample
-/// belongs to whoever computed the sample.
+/// printed under the one figure a person acts on.
+///
+/// The price is now these numbers directly, so that whole class of failure is
+/// gone rather than guarded. What arrives here is a record of what the device
+/// found and what it therefore recommended.
 public nonisolated struct Openmarket_Api_V1_MarketStats: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -281,7 +193,17 @@ public nonisolated struct Openmarket_Api_V1_MarketStats: Sendable {
   fileprivate var _medianDaysToSell: Int32? = nil
 }
 
-public nonisolated struct Openmarket_Api_V1_PriceItemRequest: Sendable {
+/// What the device found, and what it therefore recommended.
+///
+/// **This call reaches no model.** It closes the row, and that is all — the
+/// price it carries was computed by `PriceGuide` on the phone, from the
+/// comparables the phone scraped, and the server's job is to write it down.
+///
+/// It stays a round trip anyway, because the row is the point: without it a
+/// check that found a market is indistinguishable from one that died at the
+/// identify call, and "how often does the search come back empty" is the first
+/// question anyone will ask of this feature.
+public nonisolated struct Openmarket_Api_V1_CompletePriceCheckRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -292,9 +214,12 @@ public nonisolated struct Openmarket_Api_V1_PriceItemRequest: Sendable {
   /// bad identification and a bad market are distinguishable afterwards.
   public var searchQueryUsed: String = String()
 
-  /// Capped well above the ~15 a search page returns, so the ceiling is a bound
-  /// on abuse rather than a limit the feature can reach.
-  public var comparables: [Openmarket_Api_V1_Comparable] = []
+  /// How many comparables the search returned. A count, not the listings:
+  /// nothing here stores them and nothing reads them any more, so sending a
+  /// hundred cards for the server to drop on the floor would be Facebook's data
+  /// leaving the phone for no reason at all. `MarketStats.priced_count` is the
+  /// subset that carried a usable price, and the pair is the interesting part.
+  public var compsFound: Int32 = 0
 
   public var stats: Openmarket_Api_V1_MarketStats {
     get {_stats ?? Openmarket_Api_V1_MarketStats()}
@@ -305,9 +230,11 @@ public nonisolated struct Openmarket_Api_V1_PriceItemRequest: Sendable {
   /// Clears the value of `stats`. Subsequent reads from it will return its default value.
   public mutating func clearStats() {self._stats = nil}
 
-  /// Where, in the words the user sees — "San Francisco Bay Area". Context for
-  /// the listing copy, not a filter.
-  public var marketName: String = String()
+  /// Minor units. Derived, not decided: the median of the asking prices, which
+  /// is what the screen falls back to and what the model was being steered
+  /// towards anyway. It arrives already inside the observed range by
+  /// construction, which is why nothing clamps it now.
+  public var recommendedPriceMinor: Int64 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -316,22 +243,10 @@ public nonisolated struct Openmarket_Api_V1_PriceItemRequest: Sendable {
   fileprivate var _stats: Openmarket_Api_V1_MarketStats? = nil
 }
 
-public nonisolated struct Openmarket_Api_V1_PriceItemResponse: Sendable {
+public nonisolated struct Openmarket_Api_V1_CompletePriceCheckResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
-
-  /// Minor units, and a judgement rather than a calculation: the model picks a
-  /// point given the band, the item, and what sold. The client clamps it to the
-  /// observed range before showing it, because a recommendation outside the
-  /// evidence is not a bolder opinion about the market, it is a number with
-  /// nothing behind it.
-  public var recommendedPriceMinor: Int64 = 0
-
-  /// A listing title and body, ready to paste into Facebook.
-  public var title: String = String()
-
-  public var description_p: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -392,10 +307,6 @@ public nonisolated struct Openmarket_Api_V1_RecordPriceCopiedResponse: Sendable 
 
 fileprivate nonisolated let _protobuf_package = "openmarket.api.v1"
 
-nonisolated extension Openmarket_Api_V1_ItemCondition: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ITEM_CONDITION_UNSPECIFIED\0\u{1}ITEM_CONDITION_NEW\0\u{1}ITEM_CONDITION_USED_LIKE_NEW\0\u{1}ITEM_CONDITION_USED_GOOD\0\u{1}ITEM_CONDITION_USED_FAIR\0")
-}
-
 nonisolated extension Openmarket_Api_V1_IdentifyItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".IdentifyItemRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}description\0\u{1}photos\0")
@@ -433,7 +344,7 @@ nonisolated extension Openmarket_Api_V1_IdentifyItemRequest: SwiftProtobuf.Messa
 
 nonisolated extension Openmarket_Api_V1_IdentifyItemResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".IdentifyItemResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0\u{3}identified_name\0\u{3}search_queries\0\u{1}condition\0\u{3}key_attributes\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0\u{3}identified_name\0\u{3}search_queries\0\u{4}\u{2}key_attributes\0\u{3}listing_title\0\u{3}listing_description\0\u{b}condition\0\u{c}\u{4}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -444,8 +355,9 @@ nonisolated extension Openmarket_Api_V1_IdentifyItemResponse: SwiftProtobuf.Mess
       case 1: try { try decoder.decodeSingularStringField(value: &self.priceCheckID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.identifiedName) }()
       case 3: try { try decoder.decodeRepeatedStringField(value: &self.searchQueries) }()
-      case 4: try { try decoder.decodeSingularEnumField(value: &self.condition) }()
       case 5: try { try decoder.decodeRepeatedStringField(value: &self.keyAttributes) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.listingTitle) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.listingDescription) }()
       default: break
       }
     }
@@ -461,11 +373,14 @@ nonisolated extension Openmarket_Api_V1_IdentifyItemResponse: SwiftProtobuf.Mess
     if !self.searchQueries.isEmpty {
       try visitor.visitRepeatedStringField(value: self.searchQueries, fieldNumber: 3)
     }
-    if self.condition != .unspecified {
-      try visitor.visitSingularEnumField(value: self.condition, fieldNumber: 4)
-    }
     if !self.keyAttributes.isEmpty {
       try visitor.visitRepeatedStringField(value: self.keyAttributes, fieldNumber: 5)
+    }
+    if !self.listingTitle.isEmpty {
+      try visitor.visitSingularStringField(value: self.listingTitle, fieldNumber: 6)
+    }
+    if !self.listingDescription.isEmpty {
+      try visitor.visitSingularStringField(value: self.listingDescription, fieldNumber: 7)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -474,62 +389,9 @@ nonisolated extension Openmarket_Api_V1_IdentifyItemResponse: SwiftProtobuf.Mess
     if lhs.priceCheckID != rhs.priceCheckID {return false}
     if lhs.identifiedName != rhs.identifiedName {return false}
     if lhs.searchQueries != rhs.searchQueries {return false}
-    if lhs.condition != rhs.condition {return false}
     if lhs.keyAttributes != rhs.keyAttributes {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-nonisolated extension Openmarket_Api_V1_Comparable: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Comparable"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}title\0\u{3}price_minor\0\u{3}is_sold\0\u{3}days_listed\0\u{1}city\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.title) }()
-      case 2: try { try decoder.decodeSingularInt64Field(value: &self._priceMinor) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.isSold) }()
-      case 4: try { try decoder.decodeSingularInt32Field(value: &self._daysListed) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self._city) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.title.isEmpty {
-      try visitor.visitSingularStringField(value: self.title, fieldNumber: 1)
-    }
-    try { if let v = self._priceMinor {
-      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
-    } }()
-    if self.isSold != false {
-      try visitor.visitSingularBoolField(value: self.isSold, fieldNumber: 3)
-    }
-    try { if let v = self._daysListed {
-      try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
-    } }()
-    try { if let v = self._city {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Openmarket_Api_V1_Comparable, rhs: Openmarket_Api_V1_Comparable) -> Bool {
-    if lhs.title != rhs.title {return false}
-    if lhs._priceMinor != rhs._priceMinor {return false}
-    if lhs.isSold != rhs.isSold {return false}
-    if lhs._daysListed != rhs._daysListed {return false}
-    if lhs._city != rhs._city {return false}
+    if lhs.listingTitle != rhs.listingTitle {return false}
+    if lhs.listingDescription != rhs.listingDescription {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -609,9 +471,9 @@ nonisolated extension Openmarket_Api_V1_MarketStats: SwiftProtobuf.Message, Swif
   }
 }
 
-nonisolated extension Openmarket_Api_V1_PriceItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".PriceItemRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0\u{3}search_query_used\0\u{1}comparables\0\u{1}stats\0\u{3}market_name\0")
+nonisolated extension Openmarket_Api_V1_CompletePriceCheckRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompletePriceCheckRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0\u{3}search_query_used\0\u{3}comps_found\0\u{1}stats\0\u{4}\u{2}recommended_price_minor\0\u{b}market_name\0\u{c}\u{5}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -621,9 +483,9 @@ nonisolated extension Openmarket_Api_V1_PriceItemRequest: SwiftProtobuf.Message,
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.priceCheckID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.searchQueryUsed) }()
-      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.comparables) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self.compsFound) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._stats) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.marketName) }()
+      case 6: try { try decoder.decodeSingularInt64Field(value: &self.recommendedPriceMinor) }()
       default: break
       }
     }
@@ -640,64 +502,43 @@ nonisolated extension Openmarket_Api_V1_PriceItemRequest: SwiftProtobuf.Message,
     if !self.searchQueryUsed.isEmpty {
       try visitor.visitSingularStringField(value: self.searchQueryUsed, fieldNumber: 2)
     }
-    if !self.comparables.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.comparables, fieldNumber: 3)
+    if self.compsFound != 0 {
+      try visitor.visitSingularInt32Field(value: self.compsFound, fieldNumber: 3)
     }
     try { if let v = self._stats {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
     } }()
-    if !self.marketName.isEmpty {
-      try visitor.visitSingularStringField(value: self.marketName, fieldNumber: 5)
+    if self.recommendedPriceMinor != 0 {
+      try visitor.visitSingularInt64Field(value: self.recommendedPriceMinor, fieldNumber: 6)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Openmarket_Api_V1_PriceItemRequest, rhs: Openmarket_Api_V1_PriceItemRequest) -> Bool {
+  public static func ==(lhs: Openmarket_Api_V1_CompletePriceCheckRequest, rhs: Openmarket_Api_V1_CompletePriceCheckRequest) -> Bool {
     if lhs.priceCheckID != rhs.priceCheckID {return false}
     if lhs.searchQueryUsed != rhs.searchQueryUsed {return false}
-    if lhs.comparables != rhs.comparables {return false}
+    if lhs.compsFound != rhs.compsFound {return false}
     if lhs._stats != rhs._stats {return false}
-    if lhs.marketName != rhs.marketName {return false}
+    if lhs.recommendedPriceMinor != rhs.recommendedPriceMinor {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-nonisolated extension Openmarket_Api_V1_PriceItemResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".PriceItemResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}recommended_price_minor\0\u{1}title\0\u{1}description\0")
+nonisolated extension Openmarket_Api_V1_CompletePriceCheckResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompletePriceCheckResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.recommendedPriceMinor) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.title) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.recommendedPriceMinor != 0 {
-      try visitor.visitSingularInt64Field(value: self.recommendedPriceMinor, fieldNumber: 1)
-    }
-    if !self.title.isEmpty {
-      try visitor.visitSingularStringField(value: self.title, fieldNumber: 2)
-    }
-    if !self.description_p.isEmpty {
-      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
-    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Openmarket_Api_V1_PriceItemResponse, rhs: Openmarket_Api_V1_PriceItemResponse) -> Bool {
-    if lhs.recommendedPriceMinor != rhs.recommendedPriceMinor {return false}
-    if lhs.title != rhs.title {return false}
-    if lhs.description_p != rhs.description_p {return false}
+  public static func ==(lhs: Openmarket_Api_V1_CompletePriceCheckResponse, rhs: Openmarket_Api_V1_CompletePriceCheckResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

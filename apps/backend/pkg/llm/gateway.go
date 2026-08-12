@@ -117,13 +117,17 @@ func (g *GatewayProvider) Identify(ctx context.Context, in IdentifyInput) (Ident
 	var out struct {
 		Name          string   `json:"name"`
 		SearchQueries []string `json:"search_queries"`
-		Condition     string   `json:"condition"`
 		KeyAttributes []string `json:"key_attributes"`
+		ListingTitle  string   `json:"listing_title"`
+		ListingBody   string   `json:"listing_description"`
 	}
 	usage, err := g.call(ctx, parts, "item_identification", identifySchema, &out)
 	if err != nil {
 		return IdentifiedItem{}, usage, err
 	}
+	// Only the name and the query are load-bearing: without them there is
+	// nothing to search and the run is over. Missing copy is a worse listing,
+	// not a dead run, so it is not checked here.
 	if strings.TrimSpace(out.Name) == "" || len(out.SearchQueries) == 0 {
 		return IdentifiedItem{}, usage, Errorf(ErrorCodeInvalidOutput,
 			"gateway: identification came back without a name or a query")
@@ -134,31 +138,10 @@ func (g *GatewayProvider) Identify(ctx context.Context, in IdentifyInput) (Ident
 	return IdentifiedItem{
 		Name:          out.Name,
 		SearchQueries: out.SearchQueries,
-		Condition:     out.Condition,
 		KeyAttributes: out.KeyAttributes,
+		ListingTitle:  out.ListingTitle,
+		ListingBody:   out.ListingBody,
 	}, usage, nil
-}
-
-func (g *GatewayProvider) Price(ctx context.Context, in PriceInput) (PricedItem, Usage, error) {
-	parts := []gatewayPart{{Type: "text", Text: pricePrompt(in)}}
-
-	// Whole units in, minor units out — see the note in GeminiProvider.Price.
-	// Both providers convert in Go for the same reason, and neither asks a
-	// model to reason about a factor of a hundred.
-	var out struct {
-		Price int64  `json:"price"`
-		Title string `json:"title"`
-		Body  string `json:"description"`
-	}
-	usage, err := g.call(ctx, parts, "item_pricing", priceSchema, &out)
-	if err != nil {
-		return PricedItem{}, usage, err
-	}
-	if out.Price <= 0 || strings.TrimSpace(out.Title) == "" {
-		return PricedItem{}, usage, Errorf(ErrorCodeInvalidOutput,
-			"gateway: pricing came back without a price or a title")
-	}
-	return PricedItem{PriceMinor: out.Price * 100, Title: out.Title, Body: out.Body}, usage, nil
 }
 
 // MARK: - Wire

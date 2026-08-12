@@ -108,13 +108,17 @@ func (g *GeminiProvider) Identify(ctx context.Context, in IdentifyInput) (Identi
 	var out struct {
 		Name          string   `json:"name"`
 		SearchQueries []string `json:"search_queries"`
-		Condition     string   `json:"condition"`
 		KeyAttributes []string `json:"key_attributes"`
+		ListingTitle  string   `json:"listing_title"`
+		ListingBody   string   `json:"listing_description"`
 	}
 	usage, err := g.call(ctx, parts, identifySchema, &out)
 	if err != nil {
 		return IdentifiedItem{}, usage, err
 	}
+	// Only the name and the query are load-bearing: without them there is
+	// nothing to search and the run is over. Missing copy is a worse listing,
+	// not a dead run.
 	if strings.TrimSpace(out.Name) == "" || len(out.SearchQueries) == 0 {
 		return IdentifiedItem{}, usage, Errorf(ErrorCodeInvalidOutput,
 			"gemini: identification came back without a name or a query")
@@ -127,37 +131,21 @@ func (g *GeminiProvider) Identify(ctx context.Context, in IdentifyInput) (Identi
 	return IdentifiedItem{
 		Name:          out.Name,
 		SearchQueries: out.SearchQueries,
-		Condition:     out.Condition,
 		KeyAttributes: out.KeyAttributes,
+		ListingTitle:  out.ListingTitle,
+		ListingBody:   out.ListingBody,
 	}, usage, nil
 }
 
-// MARK: - Price
-
-func (g *GeminiProvider) Price(ctx context.Context, in PriceInput) (PricedItem, Usage, error) {
-	parts := []geminiPart{{Type: "text", Text: pricePrompt(in)}}
-
-	// **Whole units, converted here.** The wire and the database are both minor
-	// units, and asking the model for minor units would invite the single worst
-	// bug this feature can have: a hundredfold error in a price, printed under
-	// the one figure a person acts on. Every number in the prompt is written the
-	// way the cards are written, the model answers in those same units, and the
-	// ×100 happens in Go where it cannot be reasoned about incorrectly.
-	var out struct {
-		Price int64  `json:"price"`
-		Title string `json:"title"`
-		Body  string `json:"description"`
-	}
-	usage, err := g.call(ctx, parts, priceSchema, &out)
-	if err != nil {
-		return PricedItem{}, usage, err
-	}
-	if out.Price <= 0 || strings.TrimSpace(out.Title) == "" {
-		return PricedItem{}, usage, Errorf(ErrorCodeInvalidOutput,
-			"gemini: pricing came back without a price or a title")
-	}
-	return PricedItem{PriceMinor: out.Price * 100, Title: out.Title, Body: out.Body}, usage, nil
-}
+// There was a Price method here, and the note it carried is worth keeping even
+// though the code is gone: it asked the model for **whole units** and did the
+// ×100 in Go, because asking a model for minor units invites the single worst
+// bug this feature can have — a hundredfold error in a price, printed under the
+// one figure a person acts on.
+//
+// The price is a median now, computed by `PriceGuide` in minor units from
+// minor units. The conversion the note was guarding no longer exists, which is
+// a better outcome than guarding it well.
 
 // MARK: - Wire
 

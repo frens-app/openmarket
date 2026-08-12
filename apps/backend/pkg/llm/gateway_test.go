@@ -41,7 +41,7 @@ func serveGateway(t *testing.T, status int, body string) (*GatewayProvider, *gat
 const gatewayIdentifyOK = `{
   "model": "google/gemini-3.6-flash",
   "choices": [{
-    "message": {"role":"assistant","content":"{\"name\":\"IKEA Malm 6-drawer dresser\",\"search_queries\":[\"ikea malm dresser\"],\"condition\":\"used_good\",\"key_attributes\":[\"six drawers\"]}"},
+    "message": {"role":"assistant","content":"{\"name\":\"IKEA Malm 6-drawer dresser\",\"search_queries\":[\"ikea malm dresser\"],\"key_attributes\":[\"six drawers\"],\"listing_title\":\"IKEA Malm 6-Drawer Dresser, White\",\"listing_description\":\"White IKEA Malm dresser with six drawers.\"}"},
     "finish_reason": "stop"
   }],
   "usage": {
@@ -120,18 +120,37 @@ func TestGatewaySendsImageAsDataURL(t *testing.T) {
 	}
 }
 
-func TestGatewayPriceConvertsWholeUnitsToMinor(t *testing.T) {
-	body := `{"choices":[{"message":{"content":"{\"price\":120,\"title\":\"Dresser\",\"description\":\"Six drawers.\"}"},"finish_reason":"stop"}]}`
+// The listing rides back on the same call as the identification, so a response
+// that carries one and not the other has to be caught here rather than looking
+// like an empty listing on somebody's screen.
+func TestGatewayIdentifyReturnsTheListing(t *testing.T) {
+	provider, _, _ := serveGateway(t, http.StatusOK, gatewayIdentifyOK)
+
+	item, _, err := provider.Identify(context.Background(), IdentifyInput{Description: "ikea malm dresser"})
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if item.ListingTitle != "IKEA Malm 6-Drawer Dresser, White" {
+		t.Errorf("ListingTitle = %q", item.ListingTitle)
+	}
+	if !strings.Contains(item.ListingBody, "six drawers") {
+		t.Errorf("ListingBody = %q", item.ListingBody)
+	}
+}
+
+// Copy is not load-bearing: the price is arithmetic and never touched it, so a
+// response with a name and a query but no listing is a worse result, not a
+// failed run.
+func TestGatewayIdentifySurvivesMissingCopy(t *testing.T) {
+	body := `{"choices":[{"message":{"content":"{\"name\":\"Dresser\",\"search_queries\":[\"dresser\"]}"},"finish_reason":"stop"}]}`
 	provider, _, _ := serveGateway(t, http.StatusOK, body)
 
-	priced, _, err := provider.Price(context.Background(), PriceInput{
-		Stats: MarketStats{PricedCount: 14, MedianMinor: 7700, LowestMinor: 4000, HighestMinor: 18000, CurrencySymbol: "$"},
-	})
+	item, _, err := provider.Identify(context.Background(), IdentifyInput{Description: "a dresser"})
 	if err != nil {
-		t.Fatalf("Price: %v", err)
+		t.Fatalf("Identify should not fail without copy: %v", err)
 	}
-	if priced.PriceMinor != 12000 {
-		t.Errorf("PriceMinor = %d, want 12000", priced.PriceMinor)
+	if item.Name != "Dresser" || item.ListingTitle != "" {
+		t.Errorf("item = %+v", item)
 	}
 }
 

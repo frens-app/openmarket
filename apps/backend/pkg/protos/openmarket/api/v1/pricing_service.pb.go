@@ -22,63 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Facebook's own condition values, so a guess here can be handed straight to
-// the search filter later (`SearchQuery.Condition`).
-type ItemCondition int32
-
-const (
-	ItemCondition_ITEM_CONDITION_UNSPECIFIED   ItemCondition = 0
-	ItemCondition_ITEM_CONDITION_NEW           ItemCondition = 1
-	ItemCondition_ITEM_CONDITION_USED_LIKE_NEW ItemCondition = 2
-	ItemCondition_ITEM_CONDITION_USED_GOOD     ItemCondition = 3
-	ItemCondition_ITEM_CONDITION_USED_FAIR     ItemCondition = 4
-)
-
-// Enum value maps for ItemCondition.
-var (
-	ItemCondition_name = map[int32]string{
-		0: "ITEM_CONDITION_UNSPECIFIED",
-		1: "ITEM_CONDITION_NEW",
-		2: "ITEM_CONDITION_USED_LIKE_NEW",
-		3: "ITEM_CONDITION_USED_GOOD",
-		4: "ITEM_CONDITION_USED_FAIR",
-	}
-	ItemCondition_value = map[string]int32{
-		"ITEM_CONDITION_UNSPECIFIED":   0,
-		"ITEM_CONDITION_NEW":           1,
-		"ITEM_CONDITION_USED_LIKE_NEW": 2,
-		"ITEM_CONDITION_USED_GOOD":     3,
-		"ITEM_CONDITION_USED_FAIR":     4,
-	}
-)
-
-func (x ItemCondition) Enum() *ItemCondition {
-	p := new(ItemCondition)
-	*p = x
-	return p
-}
-
-func (x ItemCondition) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ItemCondition) Descriptor() protoreflect.EnumDescriptor {
-	return file_openmarket_api_v1_pricing_service_proto_enumTypes[0].Descriptor()
-}
-
-func (ItemCondition) Type() protoreflect.EnumType {
-	return &file_openmarket_api_v1_pricing_service_proto_enumTypes[0]
-}
-
-func (x ItemCondition) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ItemCondition.Descriptor instead.
-func (ItemCondition) EnumDescriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{0}
-}
-
 // What the seller is holding, as the model reads it.
 type IdentifyItemRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -157,9 +100,10 @@ func (x *IdentifyItemRequest) GetPhotos() [][]byte {
 
 type IdentifyItemResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Threads the whole run together: the client carries it into PriceItem, into
-	// feedback, and into the copy report. Issued here because the row is written
-	// here — a run that dies before it finds a market is still a row worth having.
+	// Threads the whole run together: the client carries it into
+	// CompletePriceCheck, into feedback, and into the copy report. Issued here
+	// because the row is written here — a run that dies before it finds a market
+	// is still a row worth having.
 	PriceCheckId string `protobuf:"bytes,1,opt,name=price_check_id,json=priceCheckId,proto3" json:"price_check_id,omitempty"`
 	// What the thing is, in as few words as identify it. Shown in the transcript,
 	// because a price guide is only as good as what it thought it was pricing,
@@ -172,18 +116,27 @@ type IdentifyItemResponse struct {
 	// sold), and `RequestPacer` is a shared actor: a third query spends the
 	// browse tab's request budget to hedge a query that was probably fine.
 	SearchQueries []string `protobuf:"bytes,3,rep,name=search_queries,json=searchQueries,proto3" json:"search_queries,omitempty"`
-	// A guess from the photo, and only ever a guess. Never used to narrow the
-	// comparable search — condition words narrow the search without narrowing the
-	// market, which is why `SearchTerm` strips them.
-	Condition ItemCondition `protobuf:"varint,4,opt,name=condition,proto3,enum=openmarket.api.v1.ItemCondition" json:"condition,omitempty"`
 	// Distinguishing facts the model could see or was told: "six drawers",
-	// "original box", "left armrest torn". Feeds the listing description, and
-	// exists so that description is built from observations rather than invented
-	// — a small model asked for richer prose wrote "a few minor scratches on the
-	// frame" about a bike whose seller mentioned none.
+	// "original box", "left armrest torn". These are the working behind the
+	// description below — kept separate from it so the observations can be
+	// checked against the prose that was built from them.
 	KeyAttributes []string `protobuf:"bytes,5,rep,name=key_attributes,json=keyAttributes,proto3" json:"key_attributes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// **The listing, written here.** This is the whole of the model's output
+	// besides the identification, and it is produced before a single comparable
+	// exists.
+	//
+	// That ordering is not a saving, it is the fix. The failure this feature is
+	// built around is a model taking the item's identity from the comparables —
+	// a stroller titled "IKEA Malm 4 Drawer Dresser White", three runs of three.
+	// Writing the copy in the call that cannot see the market makes that
+	// unreachable, where the previous shape spent a prompt rule arguing with it.
+	//
+	// Empty is possible and survivable: the price does not depend on these, and a
+	// run that produced numbers but no prose is still a useful run.
+	ListingTitle       string `protobuf:"bytes,6,opt,name=listing_title,json=listingTitle,proto3" json:"listing_title,omitempty"`
+	ListingDescription string `protobuf:"bytes,7,opt,name=listing_description,json=listingDescription,proto3" json:"listing_description,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *IdentifyItemResponse) Reset() {
@@ -237,13 +190,6 @@ func (x *IdentifyItemResponse) GetSearchQueries() []string {
 	return nil
 }
 
-func (x *IdentifyItemResponse) GetCondition() ItemCondition {
-	if x != nil {
-		return x.Condition
-	}
-	return ItemCondition_ITEM_CONDITION_UNSPECIFIED
-}
-
 func (x *IdentifyItemResponse) GetKeyAttributes() []string {
 	if x != nil {
 		return x.KeyAttributes
@@ -251,100 +197,32 @@ func (x *IdentifyItemResponse) GetKeyAttributes() []string {
 	return nil
 }
 
-// One comparable, as the phone read it off a card.
-type Comparable struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Title string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	// Minor units. Absent when the card had no price we could read, which is
-	// ordinary — and different from zero, which means Free. Free items are
-	// excluded from the arithmetic upstream (seven of twelve sold couches in San
-	// Francisco were free), but they are still sent, because "most of these went
-	// for nothing" is a fact about the market.
-	PriceMinor *int64 `protobuf:"varint,2,opt,name=price_minor,json=priceMinor,proto3,oneof" json:"price_minor,omitempty"`
-	// Seller-marked. Means "no longer for sale", never "sold for this".
-	IsSold bool `protobuf:"varint,3,opt,name=is_sold,json=isSold,proto3" json:"is_sold,omitempty"`
-	// How long it had been listed. On a sold card this is the useful one: it is
-	// an upper bound on how long it took to sell, because Facebook publishes no
-	// sale date — `creation_time` is the only time field on a listing.
-	DaysListed    *int32  `protobuf:"varint,4,opt,name=days_listed,json=daysListed,proto3,oneof" json:"days_listed,omitempty"`
-	City          *string `protobuf:"bytes,5,opt,name=city,proto3,oneof" json:"city,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Comparable) Reset() {
-	*x = Comparable{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Comparable) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Comparable) ProtoMessage() {}
-
-func (x *Comparable) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[2]
+func (x *IdentifyItemResponse) GetListingTitle() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Comparable.ProtoReflect.Descriptor instead.
-func (*Comparable) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Comparable) GetTitle() string {
-	if x != nil {
-		return x.Title
+		return x.ListingTitle
 	}
 	return ""
 }
 
-func (x *Comparable) GetPriceMinor() int64 {
-	if x != nil && x.PriceMinor != nil {
-		return *x.PriceMinor
-	}
-	return 0
-}
-
-func (x *Comparable) GetIsSold() bool {
+func (x *IdentifyItemResponse) GetListingDescription() string {
 	if x != nil {
-		return x.IsSold
-	}
-	return false
-}
-
-func (x *Comparable) GetDaysListed() int32 {
-	if x != nil && x.DaysListed != nil {
-		return *x.DaysListed
-	}
-	return 0
-}
-
-func (x *Comparable) GetCity() string {
-	if x != nil && x.City != nil {
-		return *x.City
+		return x.ListingDescription
 	}
 	return ""
 }
 
 // The market reduced to numbers, computed by `PriceGuide` on the device.
 //
-// **Sent because the model must not derive them.** Asked to justify its own
+// **No model has ever seen these and none ever will.** They used to be sent to
+// one, because it could not be trusted to derive them: asked to justify its own
 // figure against fourteen prices it had just been shown, the on-device model
 // wrote "you are asking CA$20 more than the median price of CA$80" — the median
 // was CA$77 and the gap was CA$33, two wrong numbers in one confident sentence,
-// printed under the one figure a person acts on. Arithmetic about a sample
-// belongs to whoever computed the sample.
+// printed under the one figure a person acts on.
+//
+// The price is now these numbers directly, so that whole class of failure is
+// gone rather than guarded. What arrives here is a record of what the device
+// found and what it therefore recommended.
 type MarketStats struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// How many comparables carried a usable price. Not the number sent: a guide
@@ -376,7 +254,7 @@ type MarketStats struct {
 
 func (x *MarketStats) Reset() {
 	*x = MarketStats{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[3]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -388,7 +266,7 @@ func (x *MarketStats) String() string {
 func (*MarketStats) ProtoMessage() {}
 
 func (x *MarketStats) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[3]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -401,7 +279,7 @@ func (x *MarketStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarketStats.ProtoReflect.Descriptor instead.
 func (*MarketStats) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{3}
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *MarketStats) GetPricedCount() int32 {
@@ -467,38 +345,53 @@ func (x *MarketStats) GetMedianDaysToSell() int32 {
 	return 0
 }
 
-type PriceItemRequest struct {
+// What the device found, and what it therefore recommended.
+//
+// **This call reaches no model.** It closes the row, and that is all — the
+// price it carries was computed by `PriceGuide` on the phone, from the
+// comparables the phone scraped, and the server's job is to write it down.
+//
+// It stays a round trip anyway, because the row is the point: without it a
+// check that found a market is indistinguishable from one that died at the
+// identify call, and "how often does the search come back empty" is the first
+// question anyone will ask of this feature.
+type CompletePriceCheckRequest struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	PriceCheckId string                 `protobuf:"bytes,1,opt,name=price_check_id,json=priceCheckId,proto3" json:"price_check_id,omitempty"`
 	// Which of the returned queries actually produced this market. Recorded so a
 	// bad identification and a bad market are distinguishable afterwards.
 	SearchQueryUsed string `protobuf:"bytes,2,opt,name=search_query_used,json=searchQueryUsed,proto3" json:"search_query_used,omitempty"`
-	// Capped well above the ~15 a search page returns, so the ceiling is a bound
-	// on abuse rather than a limit the feature can reach.
-	Comparables []*Comparable `protobuf:"bytes,3,rep,name=comparables,proto3" json:"comparables,omitempty"`
-	Stats       *MarketStats  `protobuf:"bytes,4,opt,name=stats,proto3" json:"stats,omitempty"`
-	// Where, in the words the user sees — "San Francisco Bay Area". Context for
-	// the listing copy, not a filter.
-	MarketName    string `protobuf:"bytes,5,opt,name=market_name,json=marketName,proto3" json:"market_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// How many comparables the search returned. A count, not the listings:
+	// nothing here stores them and nothing reads them any more, so sending a
+	// hundred cards for the server to drop on the floor would be Facebook's data
+	// leaving the phone for no reason at all. `MarketStats.priced_count` is the
+	// subset that carried a usable price, and the pair is the interesting part.
+	CompsFound int32        `protobuf:"varint,3,opt,name=comps_found,json=compsFound,proto3" json:"comps_found,omitempty"`
+	Stats      *MarketStats `protobuf:"bytes,4,opt,name=stats,proto3" json:"stats,omitempty"`
+	// Minor units. Derived, not decided: the median of the asking prices, which
+	// is what the screen falls back to and what the model was being steered
+	// towards anyway. It arrives already inside the observed range by
+	// construction, which is why nothing clamps it now.
+	RecommendedPriceMinor int64 `protobuf:"varint,6,opt,name=recommended_price_minor,json=recommendedPriceMinor,proto3" json:"recommended_price_minor,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
-func (x *PriceItemRequest) Reset() {
-	*x = PriceItemRequest{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[4]
+func (x *CompletePriceCheckRequest) Reset() {
+	*x = CompletePriceCheckRequest{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PriceItemRequest) String() string {
+func (x *CompletePriceCheckRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PriceItemRequest) ProtoMessage() {}
+func (*CompletePriceCheckRequest) ProtoMessage() {}
 
-func (x *PriceItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[4]
+func (x *CompletePriceCheckRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -509,76 +402,67 @@ func (x *PriceItemRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PriceItemRequest.ProtoReflect.Descriptor instead.
-func (*PriceItemRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use CompletePriceCheckRequest.ProtoReflect.Descriptor instead.
+func (*CompletePriceCheckRequest) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PriceItemRequest) GetPriceCheckId() string {
+func (x *CompletePriceCheckRequest) GetPriceCheckId() string {
 	if x != nil {
 		return x.PriceCheckId
 	}
 	return ""
 }
 
-func (x *PriceItemRequest) GetSearchQueryUsed() string {
+func (x *CompletePriceCheckRequest) GetSearchQueryUsed() string {
 	if x != nil {
 		return x.SearchQueryUsed
 	}
 	return ""
 }
 
-func (x *PriceItemRequest) GetComparables() []*Comparable {
+func (x *CompletePriceCheckRequest) GetCompsFound() int32 {
 	if x != nil {
-		return x.Comparables
+		return x.CompsFound
 	}
-	return nil
+	return 0
 }
 
-func (x *PriceItemRequest) GetStats() *MarketStats {
+func (x *CompletePriceCheckRequest) GetStats() *MarketStats {
 	if x != nil {
 		return x.Stats
 	}
 	return nil
 }
 
-func (x *PriceItemRequest) GetMarketName() string {
+func (x *CompletePriceCheckRequest) GetRecommendedPriceMinor() int64 {
 	if x != nil {
-		return x.MarketName
+		return x.RecommendedPriceMinor
 	}
-	return ""
+	return 0
 }
 
-type PriceItemResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Minor units, and a judgement rather than a calculation: the model picks a
-	// point given the band, the item, and what sold. The client clamps it to the
-	// observed range before showing it, because a recommendation outside the
-	// evidence is not a bolder opinion about the market, it is a number with
-	// nothing behind it.
-	RecommendedPriceMinor int64 `protobuf:"varint,1,opt,name=recommended_price_minor,json=recommendedPriceMinor,proto3" json:"recommended_price_minor,omitempty"`
-	// A listing title and body, ready to paste into Facebook.
-	Title         string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+type CompletePriceCheckResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PriceItemResponse) Reset() {
-	*x = PriceItemResponse{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[5]
+func (x *CompletePriceCheckResponse) Reset() {
+	*x = CompletePriceCheckResponse{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PriceItemResponse) String() string {
+func (x *CompletePriceCheckResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PriceItemResponse) ProtoMessage() {}
+func (*CompletePriceCheckResponse) ProtoMessage() {}
 
-func (x *PriceItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[5]
+func (x *CompletePriceCheckResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -589,30 +473,9 @@ func (x *PriceItemResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PriceItemResponse.ProtoReflect.Descriptor instead.
-func (*PriceItemResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *PriceItemResponse) GetRecommendedPriceMinor() int64 {
-	if x != nil {
-		return x.RecommendedPriceMinor
-	}
-	return 0
-}
-
-func (x *PriceItemResponse) GetTitle() string {
-	if x != nil {
-		return x.Title
-	}
-	return ""
-}
-
-func (x *PriceItemResponse) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
+// Deprecated: Use CompletePriceCheckResponse.ProtoReflect.Descriptor instead.
+func (*CompletePriceCheckResponse) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{4}
 }
 
 type SubmitPriceCheckFeedbackRequest struct {
@@ -629,7 +492,7 @@ type SubmitPriceCheckFeedbackRequest struct {
 
 func (x *SubmitPriceCheckFeedbackRequest) Reset() {
 	*x = SubmitPriceCheckFeedbackRequest{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[6]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +504,7 @@ func (x *SubmitPriceCheckFeedbackRequest) String() string {
 func (*SubmitPriceCheckFeedbackRequest) ProtoMessage() {}
 
 func (x *SubmitPriceCheckFeedbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[6]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +517,7 @@ func (x *SubmitPriceCheckFeedbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitPriceCheckFeedbackRequest.ProtoReflect.Descriptor instead.
 func (*SubmitPriceCheckFeedbackRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{6}
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SubmitPriceCheckFeedbackRequest) GetPriceCheckId() string {
@@ -679,7 +542,7 @@ type SubmitPriceCheckFeedbackResponse struct {
 
 func (x *SubmitPriceCheckFeedbackResponse) Reset() {
 	*x = SubmitPriceCheckFeedbackResponse{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[7]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -691,7 +554,7 @@ func (x *SubmitPriceCheckFeedbackResponse) String() string {
 func (*SubmitPriceCheckFeedbackResponse) ProtoMessage() {}
 
 func (x *SubmitPriceCheckFeedbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[7]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -704,7 +567,7 @@ func (x *SubmitPriceCheckFeedbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitPriceCheckFeedbackResponse.ProtoReflect.Descriptor instead.
 func (*SubmitPriceCheckFeedbackResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{7}
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{6}
 }
 
 type RecordPriceCopiedRequest struct {
@@ -716,7 +579,7 @@ type RecordPriceCopiedRequest struct {
 
 func (x *RecordPriceCopiedRequest) Reset() {
 	*x = RecordPriceCopiedRequest{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[8]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -728,7 +591,7 @@ func (x *RecordPriceCopiedRequest) String() string {
 func (*RecordPriceCopiedRequest) ProtoMessage() {}
 
 func (x *RecordPriceCopiedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[8]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -741,7 +604,7 @@ func (x *RecordPriceCopiedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordPriceCopiedRequest.ProtoReflect.Descriptor instead.
 func (*RecordPriceCopiedRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{8}
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RecordPriceCopiedRequest) GetPriceCheckId() string {
@@ -759,7 +622,7 @@ type RecordPriceCopiedResponse struct {
 
 func (x *RecordPriceCopiedResponse) Reset() {
 	*x = RecordPriceCopiedResponse{}
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[9]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -771,7 +634,7 @@ func (x *RecordPriceCopiedResponse) String() string {
 func (*RecordPriceCopiedResponse) ProtoMessage() {}
 
 func (x *RecordPriceCopiedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[9]
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -784,7 +647,7 @@ func (x *RecordPriceCopiedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordPriceCopiedResponse.ProtoReflect.Descriptor instead.
 func (*RecordPriceCopiedResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{9}
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{8}
 }
 
 var File_openmarket_api_v1_pricing_service_proto protoreflect.FileDescriptor
@@ -795,25 +658,14 @@ const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"\x13IdentifyItemRequest\x12*\n" +
 	"\vdescription\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fR\vdescription\x12)\n" +
 	"\x06photos\x18\x02 \x03(\fB\x11\xbaH\x0e\x92\x01\v\x10\x01\"\az\x05\x18\x80\x80\x80\x02R\x06photos:\x99\x01\xbaH\x95\x01\x1a\x92\x01\n" +
-	"\x1bidentify_item.needs_an_item\x12=send a description of at least 3 characters, a photo, or both\x1a4size(this.description) >= 3 || size(this.photos) > 0\"\xf3\x01\n" +
+	"\x1bidentify_item.needs_an_item\x12=send a description of at least 3 characters, a photo, or both\x1a4size(this.description) >= 3 || size(this.photos) > 0\"\x9a\x02\n" +
 	"\x14IdentifyItemResponse\x12$\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tR\fpriceCheckId\x12'\n" +
 	"\x0fidentified_name\x18\x02 \x01(\tR\x0eidentifiedName\x12%\n" +
-	"\x0esearch_queries\x18\x03 \x03(\tR\rsearchQueries\x12>\n" +
-	"\tcondition\x18\x04 \x01(\x0e2 .openmarket.api.v1.ItemConditionR\tcondition\x12%\n" +
-	"\x0ekey_attributes\x18\x05 \x03(\tR\rkeyAttributes\"\xc9\x01\n" +
-	"\n" +
-	"Comparable\x12\x14\n" +
-	"\x05title\x18\x01 \x01(\tR\x05title\x12$\n" +
-	"\vprice_minor\x18\x02 \x01(\x03H\x00R\n" +
-	"priceMinor\x88\x01\x01\x12\x17\n" +
-	"\ais_sold\x18\x03 \x01(\bR\x06isSold\x12$\n" +
-	"\vdays_listed\x18\x04 \x01(\x05H\x01R\n" +
-	"daysListed\x88\x01\x01\x12\x17\n" +
-	"\x04city\x18\x05 \x01(\tH\x02R\x04city\x88\x01\x01B\x0e\n" +
-	"\f_price_minorB\x0e\n" +
-	"\f_days_listedB\a\n" +
-	"\x05_city\"\xcf\x03\n" +
+	"\x0esearch_queries\x18\x03 \x03(\tR\rsearchQueries\x12%\n" +
+	"\x0ekey_attributes\x18\x05 \x03(\tR\rkeyAttributes\x12#\n" +
+	"\rlisting_title\x18\x06 \x01(\tR\flistingTitle\x12/\n" +
+	"\x13listing_description\x18\a \x01(\tR\x12listingDescriptionJ\x04\b\x04\x10\x05R\tcondition\"\xcf\x03\n" +
 	"\vMarketStats\x12!\n" +
 	"\fpriced_count\x18\x01 \x01(\x05R\vpricedCount\x12!\n" +
 	"\fmedian_minor\x18\x02 \x01(\x03R\vmedianMinor\x12!\n" +
@@ -827,34 +679,25 @@ const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"\x13median_days_to_sell\x18\t \x01(\x05H\x02R\x10medianDaysToSell\x88\x01\x01B\x17\n" +
 	"\x15_lower_quartile_minorB\x17\n" +
 	"\x15_upper_quartile_minorB\x16\n" +
-	"\x14_median_days_to_sell\"\x9b\x02\n" +
-	"\x10PriceItemRequest\x121\n" +
+	"\x14_median_days_to_sell\"\xa4\x02\n" +
+	"\x19CompletePriceCheckRequest\x121\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\fpriceCheckId\x12*\n" +
-	"\x11search_query_used\x18\x02 \x01(\tR\x0fsearchQueryUsed\x12I\n" +
-	"\vcomparables\x18\x03 \x03(\v2\x1d.openmarket.api.v1.ComparableB\b\xbaH\x05\x92\x01\x02\x10dR\vcomparables\x12<\n" +
-	"\x05stats\x18\x04 \x01(\v2\x1e.openmarket.api.v1.MarketStatsB\x06\xbaH\x03\xc8\x01\x01R\x05stats\x12\x1f\n" +
-	"\vmarket_name\x18\x05 \x01(\tR\n" +
-	"marketName\"\x83\x01\n" +
-	"\x11PriceItemResponse\x126\n" +
-	"\x17recommended_price_minor\x18\x01 \x01(\x03R\x15recommendedPriceMinor\x12\x14\n" +
-	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\"n\n" +
+	"\x11search_query_used\x18\x02 \x01(\tR\x0fsearchQueryUsed\x12\x1f\n" +
+	"\vcomps_found\x18\x03 \x01(\x05R\n" +
+	"compsFound\x12<\n" +
+	"\x05stats\x18\x04 \x01(\v2\x1e.openmarket.api.v1.MarketStatsB\x06\xbaH\x03\xc8\x01\x01R\x05stats\x126\n" +
+	"\x17recommended_price_minor\x18\x06 \x01(\x03R\x15recommendedPriceMinorJ\x04\b\x05\x10\x06R\vmarket_name\"\x1c\n" +
+	"\x1aCompletePriceCheckResponse\"n\n" +
 	"\x1fSubmitPriceCheckFeedbackRequest\x121\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\fpriceCheckId\x12\x18\n" +
 	"\ahelpful\x18\x02 \x01(\bR\ahelpful\"\"\n" +
 	" SubmitPriceCheckFeedbackResponse\"M\n" +
 	"\x18RecordPriceCopiedRequest\x121\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\fpriceCheckId\"\x1b\n" +
-	"\x19RecordPriceCopiedResponse*\xa5\x01\n" +
-	"\rItemCondition\x12\x1e\n" +
-	"\x1aITEM_CONDITION_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12ITEM_CONDITION_NEW\x10\x01\x12 \n" +
-	"\x1cITEM_CONDITION_USED_LIKE_NEW\x10\x02\x12\x1c\n" +
-	"\x18ITEM_CONDITION_USED_GOOD\x10\x03\x12\x1c\n" +
-	"\x18ITEM_CONDITION_USED_FAIR\x10\x042\xbf\x03\n" +
+	"\x19RecordPriceCopiedResponse2\xda\x03\n" +
 	"\x0ePricingService\x12_\n" +
-	"\fIdentifyItem\x12&.openmarket.api.v1.IdentifyItemRequest\x1a'.openmarket.api.v1.IdentifyItemResponse\x12V\n" +
-	"\tPriceItem\x12#.openmarket.api.v1.PriceItemRequest\x1a$.openmarket.api.v1.PriceItemResponse\x12\x83\x01\n" +
+	"\fIdentifyItem\x12&.openmarket.api.v1.IdentifyItemRequest\x1a'.openmarket.api.v1.IdentifyItemResponse\x12q\n" +
+	"\x12CompletePriceCheck\x12,.openmarket.api.v1.CompletePriceCheckRequest\x1a-.openmarket.api.v1.CompletePriceCheckResponse\x12\x83\x01\n" +
 	"\x18SubmitPriceCheckFeedback\x122.openmarket.api.v1.SubmitPriceCheckFeedbackRequest\x1a3.openmarket.api.v1.SubmitPriceCheckFeedbackResponse\x12n\n" +
 	"\x11RecordPriceCopied\x12+.openmarket.api.v1.RecordPriceCopiedRequest\x1a,.openmarket.api.v1.RecordPriceCopiedResponseB\xd3\x01\n" +
 	"\x15com.openmarket.api.v1B\x13PricingServiceProtoP\x01Z?frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1;apiv1\xa2\x02\x03OAX\xaa\x02\x11Openmarket.Api.V1\xca\x02\x11Openmarket\\Api\\V1\xe2\x02\x1dOpenmarket\\Api\\V1\\GPBMetadata\xea\x02\x13Openmarket::Api::V1b\x06proto3"
@@ -871,38 +714,33 @@ func file_openmarket_api_v1_pricing_service_proto_rawDescGZIP() []byte {
 	return file_openmarket_api_v1_pricing_service_proto_rawDescData
 }
 
-var file_openmarket_api_v1_pricing_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_openmarket_api_v1_pricing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_openmarket_api_v1_pricing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_openmarket_api_v1_pricing_service_proto_goTypes = []any{
-	(ItemCondition)(0),                       // 0: openmarket.api.v1.ItemCondition
-	(*IdentifyItemRequest)(nil),              // 1: openmarket.api.v1.IdentifyItemRequest
-	(*IdentifyItemResponse)(nil),             // 2: openmarket.api.v1.IdentifyItemResponse
-	(*Comparable)(nil),                       // 3: openmarket.api.v1.Comparable
-	(*MarketStats)(nil),                      // 4: openmarket.api.v1.MarketStats
-	(*PriceItemRequest)(nil),                 // 5: openmarket.api.v1.PriceItemRequest
-	(*PriceItemResponse)(nil),                // 6: openmarket.api.v1.PriceItemResponse
-	(*SubmitPriceCheckFeedbackRequest)(nil),  // 7: openmarket.api.v1.SubmitPriceCheckFeedbackRequest
-	(*SubmitPriceCheckFeedbackResponse)(nil), // 8: openmarket.api.v1.SubmitPriceCheckFeedbackResponse
-	(*RecordPriceCopiedRequest)(nil),         // 9: openmarket.api.v1.RecordPriceCopiedRequest
-	(*RecordPriceCopiedResponse)(nil),        // 10: openmarket.api.v1.RecordPriceCopiedResponse
+	(*IdentifyItemRequest)(nil),              // 0: openmarket.api.v1.IdentifyItemRequest
+	(*IdentifyItemResponse)(nil),             // 1: openmarket.api.v1.IdentifyItemResponse
+	(*MarketStats)(nil),                      // 2: openmarket.api.v1.MarketStats
+	(*CompletePriceCheckRequest)(nil),        // 3: openmarket.api.v1.CompletePriceCheckRequest
+	(*CompletePriceCheckResponse)(nil),       // 4: openmarket.api.v1.CompletePriceCheckResponse
+	(*SubmitPriceCheckFeedbackRequest)(nil),  // 5: openmarket.api.v1.SubmitPriceCheckFeedbackRequest
+	(*SubmitPriceCheckFeedbackResponse)(nil), // 6: openmarket.api.v1.SubmitPriceCheckFeedbackResponse
+	(*RecordPriceCopiedRequest)(nil),         // 7: openmarket.api.v1.RecordPriceCopiedRequest
+	(*RecordPriceCopiedResponse)(nil),        // 8: openmarket.api.v1.RecordPriceCopiedResponse
 }
 var file_openmarket_api_v1_pricing_service_proto_depIdxs = []int32{
-	0,  // 0: openmarket.api.v1.IdentifyItemResponse.condition:type_name -> openmarket.api.v1.ItemCondition
-	3,  // 1: openmarket.api.v1.PriceItemRequest.comparables:type_name -> openmarket.api.v1.Comparable
-	4,  // 2: openmarket.api.v1.PriceItemRequest.stats:type_name -> openmarket.api.v1.MarketStats
-	1,  // 3: openmarket.api.v1.PricingService.IdentifyItem:input_type -> openmarket.api.v1.IdentifyItemRequest
-	5,  // 4: openmarket.api.v1.PricingService.PriceItem:input_type -> openmarket.api.v1.PriceItemRequest
-	7,  // 5: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:input_type -> openmarket.api.v1.SubmitPriceCheckFeedbackRequest
-	9,  // 6: openmarket.api.v1.PricingService.RecordPriceCopied:input_type -> openmarket.api.v1.RecordPriceCopiedRequest
-	2,  // 7: openmarket.api.v1.PricingService.IdentifyItem:output_type -> openmarket.api.v1.IdentifyItemResponse
-	6,  // 8: openmarket.api.v1.PricingService.PriceItem:output_type -> openmarket.api.v1.PriceItemResponse
-	8,  // 9: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:output_type -> openmarket.api.v1.SubmitPriceCheckFeedbackResponse
-	10, // 10: openmarket.api.v1.PricingService.RecordPriceCopied:output_type -> openmarket.api.v1.RecordPriceCopiedResponse
-	7,  // [7:11] is the sub-list for method output_type
-	3,  // [3:7] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	2, // 0: openmarket.api.v1.CompletePriceCheckRequest.stats:type_name -> openmarket.api.v1.MarketStats
+	0, // 1: openmarket.api.v1.PricingService.IdentifyItem:input_type -> openmarket.api.v1.IdentifyItemRequest
+	3, // 2: openmarket.api.v1.PricingService.CompletePriceCheck:input_type -> openmarket.api.v1.CompletePriceCheckRequest
+	5, // 3: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:input_type -> openmarket.api.v1.SubmitPriceCheckFeedbackRequest
+	7, // 4: openmarket.api.v1.PricingService.RecordPriceCopied:input_type -> openmarket.api.v1.RecordPriceCopiedRequest
+	1, // 5: openmarket.api.v1.PricingService.IdentifyItem:output_type -> openmarket.api.v1.IdentifyItemResponse
+	4, // 6: openmarket.api.v1.PricingService.CompletePriceCheck:output_type -> openmarket.api.v1.CompletePriceCheckResponse
+	6, // 7: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:output_type -> openmarket.api.v1.SubmitPriceCheckFeedbackResponse
+	8, // 8: openmarket.api.v1.PricingService.RecordPriceCopied:output_type -> openmarket.api.v1.RecordPriceCopiedResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_openmarket_api_v1_pricing_service_proto_init() }
@@ -911,20 +749,18 @@ func file_openmarket_api_v1_pricing_service_proto_init() {
 		return
 	}
 	file_openmarket_api_v1_pricing_service_proto_msgTypes[2].OneofWrappers = []any{}
-	file_openmarket_api_v1_pricing_service_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openmarket_api_v1_pricing_service_proto_rawDesc), len(file_openmarket_api_v1_pricing_service_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   10,
+			NumEnums:      0,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_openmarket_api_v1_pricing_service_proto_goTypes,
 		DependencyIndexes: file_openmarket_api_v1_pricing_service_proto_depIdxs,
-		EnumInfos:         file_openmarket_api_v1_pricing_service_proto_enumTypes,
 		MessageInfos:      file_openmarket_api_v1_pricing_service_proto_msgTypes,
 	}.Build()
 	File_openmarket_api_v1_pricing_service_proto = out.File
