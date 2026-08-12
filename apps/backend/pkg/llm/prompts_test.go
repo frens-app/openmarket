@@ -71,11 +71,23 @@ func TestPromptWithNoDescriptionSaysThereIsNone(t *testing.T) {
 	if strings.Contains(prompt, "The seller's description:") {
 		t.Error("photo-only prompt still quotes a description that does not exist")
 	}
-	if !strings.Contains(prompt, "a photo and nothing else") {
-		t.Error("photo-only prompt should say the photo is all there is")
+	if !strings.Contains(prompt, "photos and nothing else") {
+		t.Error("photo-only prompt should say the photos are all there is")
 	}
 	if !strings.Contains(prompt, "no seller description at all") {
 		t.Error("photo-only prompt should constrain the listing to what is visible")
+	}
+}
+
+// Up to three photos arrive now, and a model handed three images with no
+// framing describes three items — a dresser, a drawer, and a label. The proto
+// comment predicted this before the cap rose; the sentence is unconditional
+// because the prompt is built without knowing how many arrived.
+func TestPromptSaysThePhotosAreOneItem(t *testing.T) {
+	for _, description := range []string{"", "a dresser"} {
+		if !strings.Contains(identifyPrompt(description), "ONE item") {
+			t.Errorf("prompt for %q does not say the photos are one item", description)
+		}
 	}
 }
 

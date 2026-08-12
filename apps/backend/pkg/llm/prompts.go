@@ -81,10 +81,21 @@ func identifyPrompt(description string) string {
 	// silence than saying there was none.
 	hasWords := strings.TrimSpace(description) != ""
 	if hasWords {
-		b.WriteString("You are given the seller's own description, and usually a photo.\n")
+		b.WriteString("You are given the seller's own description, and usually one or more photos.\n")
 	} else {
-		b.WriteString("You are given a photo and nothing else. The seller wrote no description.\n")
+		b.WriteString("You are given photos and nothing else. The seller wrote no description.\n")
 	}
+
+	// **Said out loud, because leaving it implicit is a known failure.** A model
+	// handed three images and no framing describes three items — a dresser, a
+	// drawer, and a label — which is the same mistake as taking the identity
+	// from the comparables, arrived at from the other direction. Stated
+	// unconditionally rather than only when photoCount > 1: this string is built
+	// without knowing how many arrived, and a sentence about "the photos" costs
+	// nothing on a request that carried one.
+	b.WriteString(`
+Any photos you are given are of ONE item, taken from different angles or showing different details. They are never several items to describe separately.
+`)
 
 	b.WriteString(`
 Identify the item, write the search queries that would find comparable listings for it, and write the listing the seller will paste.
@@ -108,7 +119,7 @@ Writing the listing:
 		// condition under which a model starts writing the sentences it has seen
 		// in a thousand listings.
 		b.WriteString(`
-- On this run there is no seller description at all, so the photo is everything that is known. A two-sentence listing naming the item and what is visible is the right answer; anything about condition, completeness, or how well it works would be invented.`)
+- On this run there is no seller description at all, so the photos are everything that is known. A two-sentence listing naming the item and what is visible is the right answer; anything about condition, completeness, or how well it works would be invented.`)
 	}
 
 	if hasWords {

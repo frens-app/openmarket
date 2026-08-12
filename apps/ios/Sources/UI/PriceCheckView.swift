@@ -29,16 +29,34 @@ struct PriceCheckView: View {
     @State private var selected: Listing?
     @Namespace private var heroNamespace
 
-    /// The picker's selection, and what it resolved to.
+    /// Up to `maxPhotos`, in the order they were added.
     ///
-    /// Single-selection, because the request accepts one photo. Going to
-    /// several means the array-binding `PhotosPicker` and a `maxSelectionCount`
-    /// here, plus raising the cap on the request — the wire field is already a
-    /// list, so nothing about that is a migration.
-    @State private var pickedPhoto: PhotosPickerItem?
-    @State private var photo: ItemPhoto?
-    @State private var photoPreview: Image?
+    /// The library picker and the camera both land here, which is why this is
+    /// the state rather than `PhotosPickerItem`s: a captured `UIImage` has no
+    /// picker item, so a selection-shaped source of truth could only hold half
+    /// of what the screen accepts.
+    @State private var photos: [PreparedPhoto] = []
+    @State private var pickerSelection: [PhotosPickerItem] = []
     @State private var isPreparingPhoto = false
+    @State private var isChoosingSource = false
+    @State private var isChoosingFromLibrary = false
+    @State private var isTakingPhoto = false
+
+    /// Three, matching `max_items` on the request. Both numbers exist because
+    /// the client should not be able to build a request the server refuses, and
+    /// the server should not trust that it can't.
+    private static let maxPhotos = 3
+
+    /// A photo and the thumbnail for it, kept together because they are made
+    /// together — the preview is rendered from the prepared bytes rather than
+    /// the original, so what is on screen is exactly what will be sent.
+    struct PreparedPhoto: Identifiable, Equatable {
+        let id = UUID()
+        let photo: ItemPhoto
+        let preview: Image
+
+        static func == (a: PreparedPhoto, b: PreparedPhoto) -> Bool { a.id == b.id }
+    }
 
     var body: some View {
         ScrollView {
@@ -83,7 +101,11 @@ struct PriceCheckView: View {
     /// two are meant to agree — this one so the button is honest about whether
     /// it will work, that one because the server cannot trust a client.
     private var canRun: Bool {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 || photo != nil
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 || !photos.isEmpty
+    }
+
+    private var canAddPhoto: Bool {
+        photos.count < Self.maxPhotos && !model.phase.isRunning
     }
 
     /// The one way a run starts, whether it came from the button or from Done.
@@ -94,76 +116,63 @@ struct PriceCheckView: View {
     private func submit() {
         guard !model.phase.isRunning, canRun else { return }
         isTyping = false
-        model.start(draft, photo: photo)
+        model.start(draft, photos: photos.map(\.photo))
     }
 
-    /// Downscales and encodes the picked photo off the main actor.
+    /// Downscales and encodes off the main actor, then appends.
     ///
     /// A full-resolution phone photo is around 4000px on the long edge; scaling
     /// and JPEG-encoding it is tens of milliseconds of work, which is a visible
-    /// stutter if it happens between a tap and the next frame. The preview is
-    /// built from the prepared bytes rather than the original, so what is on
-    /// screen is what will be sent.
-    private func prepare(_ item: PhotosPickerItem?) async {
-        guard let item else {
-            photo = nil
-            photoPreview = nil
-            return
-        }
+    /// stutter if it happens between a tap and the next frame — and three of
+    /// them at once is three times that.
+    ///
+    /// A photo that will not encode is dropped silently rather than surfaced.
+    /// The run works without it, and refusing to price something because one of
+    /// its pictures would not compress is the worse outcome.
+    private func add(_ image: UIImage) async {
+        guard photos.count < Self.maxPhotos else { return }
         isPreparingPhoto = true
         defer { isPreparingPhoto = false }
 
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data),
-              let prepared = await Task.detached(priority: .userInitiated, operation: {
-                  ItemPhotoPreparer.prepare(image)
-              }).value
-        else {
-            // Treated as "no photo" rather than surfaced. The run works on the
-            // description alone, and refusing to price something because its
-            // photo would not encode is the worse outcome.
-            photo = nil
-            photoPreview = nil
-            return
+        guard let prepared = await Task.detached(priority: .userInitiated, operation: {
+            ItemPhotoPreparer.prepare(image)
+        }).value,
+            let preview = UIImage(data: prepared.jpeg)
+        else { return }
+
+        photos.append(PreparedPhoto(photo: prepared, preview: Image(uiImage: preview)))
+    }
+
+    /// Loads whatever the library picker handed back, in the order picked.
+    ///
+    /// The selection is cleared afterwards so the picker opens empty next time:
+    /// leaving it set would show the previous choice pre-ticked, and unticking
+    /// it there would not remove the thumbnail here — two views of one list,
+    /// disagreeing.
+    private func load(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard photos.count < Self.maxPhotos else { break }
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data)
+            else { continue }
+            await add(image)
         }
-        photo = prepared
-        photoPreview = UIImage(data: prepared.jpeg).map(Image.init(uiImage:))
+        pickerSelection = []
     }
 
     private var prompt: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Two lines: where it looks, and what to type. The second is the
-            // one that earns its place — the description is the only input the
-            // user controls, and nothing else on screen says that condition and
-            // brand are what make the listing good. A photo shows the model a
-            // dresser; only the seller knows the drawer sticks.
-            //
-            // No heading. The navigation bar is already saying "Price Check"
-            // two lines above this, and a title under a title reads as a
-            // rendering mistake.
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Checks what's listed and what's sold in \(model.marketName).")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Add anything that would help someone buying it — condition, brand and model, what's included, anything wrong with it. It writes the listing from what you say.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            photoStrip
 
-            // The placeholder carries the rule, so nothing else has to. With no
-            // photo it is an example of a good description; with one attached
-            // it says the field is now optional and what it is still good for.
-            // A line of copy explaining "either input will do" would be a line
-            // of copy on a screen that just lost three of them, and it would be
-            // on screen in both states to explain one of them.
-            TextField(photo == nil
-                        ? "A white IKEA Malm dresser, six drawers, one scratch on top, from a smoke-free home"
-                        : "Optional — condition, brand, what's included, anything wrong with it",
+            // The placeholder is the only instruction on this screen. It names
+            // the four things worth typing, which is what the removed paragraph
+            // was for, and it disappears the moment somebody starts typing —
+            // where a caption stays on screen forever explaining a field that
+            // is already full.
+            TextField("Description — condition, brand, issues",
                       text: $draft,
                       axis: .vertical)
-                .lineLimit(3...6)
+                .lineLimit(2...6)
                 .textFieldStyle(.plain)
                 .focused($isTyping)
                 .submitLabel(.done)
@@ -186,8 +195,6 @@ struct PriceCheckView: View {
                 .padding(12)
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
 
-            photoRow
-
             Button(action: submit) {
                 HStack(spacing: 8) {
                     if model.phase.isRunning {
@@ -204,66 +211,118 @@ struct PriceCheckView: View {
         }
     }
 
-    /// The picker, and what it produced.
+    // MARK: - Photos
+
+    /// The photos, at the top, sized to be the first thing on the screen.
     ///
-    /// Optional on purpose, and it says so: the run works on the description
-    /// alone, so this is worded as something that improves the answer rather
-    /// than something the screen is waiting for.
-    @ViewBuilder
-    private var photoRow: some View {
-        HStack(spacing: 12) {
-            PhotosPicker(selection: $pickedPhoto, matching: .images) {
-                HStack(spacing: 8) {
-                    if isPreparingPhoto {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: photo == nil ? "camera" : "checkmark.circle.fill")
-                    }
-                    Text(photo == nil ? "Add a photo" : "Change photo")
-                        .font(.subheadline)
+    /// It used to be a full-width button with the thumbnail hung off the end of
+    /// it and a caption underneath calling itself optional — which read as a
+    /// setting rather than as the main input. It is still optional; a run works
+    /// on the description alone. But a photo is what separates "dresser" from
+    /// "IKEA Malm 6-drawer", so it is drawn like the thing to do and left empty
+    /// without comment, rather than labelled as skippable.
+    ///
+    /// The tiles are all one size and sit in a row, so one photo and three are
+    /// the same layout rather than two designs. The add tile is the last of
+    /// them and disappears at `maxPhotos` — a full set needs no empty slot, and
+    /// a disabled one would be a control that says no.
+    private var photoStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(photos) { entry in
+                    entry.preview
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: Self.tile, height: Self.tile)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(alignment: .topTrailing) { removeButton(for: entry) }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-            .disabled(model.phase.isRunning)
 
-            if let photoPreview {
-                photoPreview
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(alignment: .topTrailing) { removePhotoButton }
+                if canAddPhoto { addTile }
             }
+            // Room for the remove buttons, which overhang the tiles.
+            .padding(.vertical, 4)
+            .padding(.horizontal, 2)
         }
-        .onChange(of: pickedPhoto) { _, item in
-            Task { await prepare(item) }
-        }
+        .animation(.easeOut(duration: 0.2), value: photos)
+    }
 
-        // Kept, shortened. The nudge earns its line: a photo is what separates
-        // "dresser" from "IKEA Malm 6-drawer", and the run is measurably worse
-        // without one. What it does not need is the joke it used to carry.
-        if photo == nil {
-            Text("Optional, but it identifies the item far better.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    private static let tile: CGFloat = 104
+
+    /// Library and camera in one tile.
+    ///
+    /// One tile with a choice behind it, rather than two side by side: two
+    /// buttons is a decision to make before the interesting one, and the tile
+    /// is meant to read as "put a picture here".
+    ///
+    /// **The choice is a `confirmationDialog`, and both pickers are presented
+    /// by modifiers.** The obvious version — a `Menu` containing a
+    /// `PhotosPicker` — builds and runs and does nothing: choosing the item
+    /// dismisses the menu, and the picker's presentation goes with the view
+    /// that was hosting it. So the menu items only set state, and the sheets
+    /// hang off the tile where nothing is about to disappear underneath them.
+    ///
+    /// The camera item is absent rather than disabled where there is no camera.
+    /// A disabled control is a control that says no; an absent one is a device
+    /// that never offered.
+    @ViewBuilder
+    private var addTile: some View {
+        Button {
+            // Straight to the library when that is the only option, because a
+            // one-item menu is a tap that asks permission to do the only thing
+            // it can do.
+            if CameraPicker.isAvailable {
+                isChoosingSource = true
+            } else {
+                isChoosingFromLibrary = true
+            }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color(.separator), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                if isPreparingPhoto {
+                    ProgressView()
+                } else {
+                    Image(systemName: photos.isEmpty ? "camera.fill" : "plus")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: Self.tile, height: Self.tile)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(photos.isEmpty ? "Add a photo" : "Add another photo")
+        .confirmationDialog("Add a photo", isPresented: $isChoosingSource, titleVisibility: .hidden) {
+            Button("Take Photo") { isTakingPhoto = true }
+            Button("Choose Photo") { isChoosingFromLibrary = true }
+        }
+        .photosPicker(isPresented: $isChoosingFromLibrary,
+                      selection: $pickerSelection,
+                      maxSelectionCount: Self.maxPhotos - photos.count,
+                      matching: .images)
+        .onChange(of: pickerSelection) { _, items in
+            guard !items.isEmpty else { return }
+            Task { await load(items) }
+        }
+        .sheet(isPresented: $isTakingPhoto) {
+            CameraPicker { image in
+                Task { await add(image) }
+            }
+            .ignoresSafeArea()
         }
     }
 
-    private var removePhotoButton: some View {
+    private func removeButton(for entry: PreparedPhoto) -> some View {
         Button {
-            pickedPhoto = nil
-            photo = nil
-            photoPreview = nil
+            photos.removeAll { $0.id == entry.id }
         } label: {
             Image(systemName: "xmark.circle.fill")
-                .font(.caption)
+                .font(.body)
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(.white, .black.opacity(0.5))
-                .padding(3)
+                .foregroundStyle(.white, .black.opacity(0.55))
+                .padding(5)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove photo")
@@ -455,16 +514,18 @@ struct PriceCheckView: View {
     // MARK: - Endings
 
     private func failureCard(_ message: String) -> some View {
-        InlineNotice(text: message, actionTitle: "Try again") { model.start(draft, photo: photo) }
+        // Retries with the same inputs, photos included — a failed run is
+        // usually a network or a provider having a moment, and making somebody
+        // re-attach three photographs to find that out would be its own defeat.
+        InlineNotice(text: message, actionTitle: "Try again") { submit() }
     }
 
     private var startOver: some View {
         Button("Start over", role: .destructive) {
             model.reset()
             draft = ""
-            pickedPhoto = nil
-            photo = nil
-            photoPreview = nil
+            photos = []
+            pickerSelection = []
         }
             .font(.subheadline)
             .frame(maxWidth: .infinity)

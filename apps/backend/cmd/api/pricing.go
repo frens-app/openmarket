@@ -63,13 +63,29 @@ func (s *pricingServer) IdentifyItem(
 		// price check over.
 		DeviceID:    s.deviceIDForSession(ctx),
 		Description: req.Msg.GetDescription(),
-		PhotoSha256: meta.sha256,
-		PhotoBytes:  meta.byteCount,
-		PhotoWidth:  meta.width,
-		PhotoHeight: meta.height,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create price check: %w", err))
+	}
+
+	// Logged and continued rather than returned. The photos are already decoded
+	// and about to go to a model; failing the whole check because a metadata row
+	// would not insert would throw away the answer to keep the footnote.
+	for _, photo := range meta {
+		if err := s.queries.AddPriceCheckPhoto(ctx, db.AddPriceCheckPhotoParams{
+			PriceCheckID: check.ID,
+			Ordinal:      photo.ordinal,
+			Sha256:       photo.sha256,
+			Bytes:        photo.byteCount,
+			Width:        photo.width,
+			Height:       photo.height,
+		}); err != nil {
+			s.logger.Warn("record price check photo",
+				zap.Error(err),
+				zap.String("price_check_id", check.ID.String()),
+				zap.Int("ordinal", int(photo.ordinal)),
+			)
+		}
 	}
 
 	item, err := s.runner.Identify(ctx, llm.Subject{UserID: userID, PriceCheckID: &check.ID},
@@ -274,46 +290,47 @@ func modelError(err error, what string) error {
 	}
 }
 
-// photoMeta is what survives a photo: its shape, never its bytes.
+// photoMeta is what survives a photo: its shape and its ordinal, never its
+// bytes. One of these per photo, matching `price_check_photos`.
 type photoMeta struct {
+	ordinal   int16
 	sha256    []byte
-	byteCount *int32
-	width     *int32
-	height    *int32
+	byteCount int32
+	width     int32
+	height    int32
 }
 
-// decodePhotos validates the images and measures them.
+// decodePhotos validates the images and measures every one of them.
 //
-// Only the first photo's shape is kept, because only one can be sent today —
-// the request schema caps `photos` at one item. When that cap rises this
-// returns a slice and the four columns become a child table.
-func decodePhotos(raw [][]byte) ([]llm.Photo, photoMeta, error) {
-	var meta photoMeta
+// `image.DecodeConfig` is doing two jobs and the second is the important one:
+// it reads the dimensions, and by reading them it proves the bytes are an image
+// rather than whatever else a client felt like putting in the field. Only the
+// header is parsed, so a 4 MiB photo costs almost nothing here.
+func decodePhotos(raw [][]byte) ([]llm.Photo, []photoMeta, error) {
 	if len(raw) == 0 {
-		return nil, meta, nil
+		return nil, nil, nil
 	}
 
 	photos := make([]llm.Photo, 0, len(raw))
+	meta := make([]photoMeta, 0, len(raw))
 	for i, data := range raw {
 		if len(data) == 0 {
-			return nil, meta, fmt.Errorf("photos[%d] is empty", i)
+			return nil, nil, fmt.Errorf("photos[%d] is empty", i)
 		}
 		cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 		if err != nil {
-			return nil, meta, fmt.Errorf("photos[%d] is not a readable image: %w", i, err)
+			return nil, nil, fmt.Errorf("photos[%d] is not a readable image: %w", i, err)
 		}
 		photos = append(photos, llm.Photo{Data: data, MediaType: "image/" + format})
 
-		if i == 0 {
-			sum := sha256.Sum256(data)
-			byteCount, width, height := int32(len(data)), int32(cfg.Width), int32(cfg.Height)
-			meta = photoMeta{
-				sha256:    sum[:],
-				byteCount: &byteCount,
-				width:     &width,
-				height:    &height,
-			}
-		}
+		sum := sha256.Sum256(data)
+		meta = append(meta, photoMeta{
+			ordinal:   int16(i),
+			sha256:    sum[:],
+			byteCount: int32(len(data)),
+			width:     int32(cfg.Width),
+			height:    int32(cfg.Height),
+		})
 	}
 	return photos, meta, nil
 }

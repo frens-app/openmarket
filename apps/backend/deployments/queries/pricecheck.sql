@@ -11,22 +11,35 @@
 INSERT INTO price_checks (
     user_id,
     device_id,
-    description,
-    photo_sha256,
-    photo_bytes,
-    photo_width,
-    photo_height
+    description
 )
 VALUES (
     sqlc.arg('user_id'),
     sqlc.narg('device_id'),
-    sqlc.arg('description'),
-    sqlc.narg('photo_sha256'),
-    sqlc.narg('photo_bytes'),
-    sqlc.narg('photo_width'),
-    sqlc.narg('photo_height')
+    sqlc.arg('description')
 )
 RETURNING *;
+
+-- name: AddPriceCheckPhoto :exec
+-- One row per photo, shape only — see migration 00007. Called in a loop rather
+-- than as a batch because there are at most three of them, and a failure to
+-- record photo metadata must not lose the price check it belongs to.
+INSERT INTO price_check_photos (
+    price_check_id,
+    ordinal,
+    sha256,
+    bytes,
+    width,
+    height
+)
+VALUES (
+    sqlc.arg('price_check_id'),
+    sqlc.arg('ordinal'),
+    sqlc.arg('sha256'),
+    sqlc.arg('bytes'),
+    sqlc.arg('width'),
+    sqlc.arg('height')
+);
 
 -- name: SetPriceCheckIdentification :one
 -- Everything the model produced, written where it is produced.

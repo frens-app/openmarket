@@ -246,10 +246,6 @@ type PriceCheck struct {
 	UserID                uuid.UUID
 	DeviceID              *uuid.UUID
 	Description           string
-	PhotoSha256           []byte
-	PhotoBytes            *int32
-	PhotoWidth            *int32
-	PhotoHeight           *int32
 	IdentifiedName        *string
 	SearchQueries         []string
 	SearchQueryUsed       *string
@@ -266,6 +262,15 @@ type PriceCheck struct {
 	CompletedAt           pgtype.Timestamptz
 	ListingTitle          *string
 	ListingDescription    *string
+}
+
+type PriceCheckPhoto struct {
+	PriceCheckID uuid.UUID
+	Ordinal      int16
+	Sha256       []byte
+	Bytes        int32
+	Width        int32
+	Height       int32
 }
 
 type User struct {

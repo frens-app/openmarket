@@ -68,6 +68,12 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSLocationWhenInUseUsageDescription: "Used to centre your search on your area, and to estimate how long it takes to reach a listing."
+        # Price Check's camera button. There is deliberately no
+        # NSPhotoLibraryUsageDescription beside it: the library is read through
+        # `PhotosPicker`, which runs out of process and hands back only what the
+        # user picked, so it needs no permission and asking for one would be
+        # requesting access this app never has.
+        NSCameraUsageDescription: "Take a photo of what you're selling, so Price Check can identify it."
         # No NSAppTransportSecurity block, deliberately. A per-configuration
         # ATS exception cannot be expressed here: plist variable substitution
         # produces strings, and `NSAllowsLocalNetworking` is specified as a

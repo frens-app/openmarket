@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addPriceCheckPhoto = `-- name: AddPriceCheckPhoto :exec
+INSERT INTO price_check_photos (
+    price_check_id,
+    ordinal,
+    sha256,
+    bytes,
+    width,
+    height
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+`
+
+type AddPriceCheckPhotoParams struct {
+	PriceCheckID uuid.UUID
+	Ordinal      int16
+	Sha256       []byte
+	Bytes        int32
+	Width        int32
+	Height       int32
+}
+
+// One row per photo, shape only — see migration 00007. Called in a loop rather
+// than as a batch because there are at most three of them, and a failure to
+// record photo metadata must not lose the price check it belongs to.
+func (q *Queries) AddPriceCheckPhoto(ctx context.Context, arg AddPriceCheckPhotoParams) error {
+	_, err := q.db.Exec(ctx, addPriceCheckPhoto,
+		arg.PriceCheckID,
+		arg.Ordinal,
+		arg.Sha256,
+		arg.Bytes,
+		arg.Width,
+		arg.Height,
+	)
+	return err
+}
+
 const completePriceCheck = `-- name: CompletePriceCheck :one
 UPDATE price_checks
 SET search_query_used = $1::text,
@@ -23,7 +66,7 @@ SET search_query_used = $1::text,
     completed_at = CURRENT_TIMESTAMP
 WHERE id = $7
   AND user_id = $8
-RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
 type CompletePriceCheckParams struct {
@@ -63,10 +106,6 @@ func (q *Queries) CompletePriceCheck(ctx context.Context, arg CompletePriceCheck
 		&i.UserID,
 		&i.DeviceID,
 		&i.Description,
-		&i.PhotoSha256,
-		&i.PhotoBytes,
-		&i.PhotoWidth,
-		&i.PhotoHeight,
 		&i.IdentifiedName,
 		&i.SearchQueries,
 		&i.SearchQueryUsed,
@@ -119,32 +158,20 @@ const createPriceCheck = `-- name: CreatePriceCheck :one
 INSERT INTO price_checks (
     user_id,
     device_id,
-    description,
-    photo_sha256,
-    photo_bytes,
-    photo_width,
-    photo_height
+    description
 )
 VALUES (
     $1,
     $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7
+    $3
 )
-RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
 type CreatePriceCheckParams struct {
 	UserID      uuid.UUID
 	DeviceID    *uuid.UUID
 	Description string
-	PhotoSha256 []byte
-	PhotoBytes  *int32
-	PhotoWidth  *int32
-	PhotoHeight *int32
 }
 
 // Every mutation below matches on `user_id` as well as `id`, and returns the
@@ -156,25 +183,13 @@ type CreatePriceCheckParams struct {
 // still a row. The identify call is the expensive part and the part most likely
 // to break; a table that only records successes cannot show that.
 func (q *Queries) CreatePriceCheck(ctx context.Context, arg CreatePriceCheckParams) (PriceCheck, error) {
-	row := q.db.QueryRow(ctx, createPriceCheck,
-		arg.UserID,
-		arg.DeviceID,
-		arg.Description,
-		arg.PhotoSha256,
-		arg.PhotoBytes,
-		arg.PhotoWidth,
-		arg.PhotoHeight,
-	)
+	row := q.db.QueryRow(ctx, createPriceCheck, arg.UserID, arg.DeviceID, arg.Description)
 	var i PriceCheck
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.DeviceID,
 		&i.Description,
-		&i.PhotoSha256,
-		&i.PhotoBytes,
-		&i.PhotoWidth,
-		&i.PhotoHeight,
 		&i.IdentifiedName,
 		&i.SearchQueries,
 		&i.SearchQueryUsed,
@@ -196,7 +211,7 @@ func (q *Queries) CreatePriceCheck(ctx context.Context, arg CreatePriceCheckPara
 }
 
 const getPriceCheck = `-- name: GetPriceCheck :one
-SELECT id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+SELECT id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 FROM price_checks
 WHERE id = $1
   AND user_id = $2
@@ -215,10 +230,6 @@ func (q *Queries) GetPriceCheck(ctx context.Context, arg GetPriceCheckParams) (P
 		&i.UserID,
 		&i.DeviceID,
 		&i.Description,
-		&i.PhotoSha256,
-		&i.PhotoBytes,
-		&i.PhotoWidth,
-		&i.PhotoHeight,
 		&i.IdentifiedName,
 		&i.SearchQueries,
 		&i.SearchQueryUsed,
@@ -245,7 +256,7 @@ SET price_copied = true,
     price_copied_at = COALESCE(price_copied_at, CURRENT_TIMESTAMP)
 WHERE id = $1
   AND user_id = $2
-RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
 type MarkPriceCheckPriceCopiedParams struct {
@@ -265,10 +276,6 @@ func (q *Queries) MarkPriceCheckPriceCopied(ctx context.Context, arg MarkPriceCh
 		&i.UserID,
 		&i.DeviceID,
 		&i.Description,
-		&i.PhotoSha256,
-		&i.PhotoBytes,
-		&i.PhotoWidth,
-		&i.PhotoHeight,
 		&i.IdentifiedName,
 		&i.SearchQueries,
 		&i.SearchQueryUsed,
@@ -385,7 +392,7 @@ SET helpful = $1,
     helpful_at = CURRENT_TIMESTAMP
 WHERE id = $2
   AND user_id = $3
-RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
 type SetPriceCheckHelpfulParams struct {
@@ -409,10 +416,6 @@ func (q *Queries) SetPriceCheckHelpful(ctx context.Context, arg SetPriceCheckHel
 		&i.UserID,
 		&i.DeviceID,
 		&i.Description,
-		&i.PhotoSha256,
-		&i.PhotoBytes,
-		&i.PhotoWidth,
-		&i.PhotoHeight,
 		&i.IdentifiedName,
 		&i.SearchQueries,
 		&i.SearchQueryUsed,
@@ -441,7 +444,7 @@ SET identified_name = $1::text,
     listing_description = $4::text
 WHERE id = $5
   AND user_id = $6
-RETURNING id, user_id, device_id, description, photo_sha256, photo_bytes, photo_width, photo_height, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
 `
 
 type SetPriceCheckIdentificationParams struct {
@@ -479,10 +482,6 @@ func (q *Queries) SetPriceCheckIdentification(ctx context.Context, arg SetPriceC
 		&i.UserID,
 		&i.DeviceID,
 		&i.Description,
-		&i.PhotoSha256,
-		&i.PhotoBytes,
-		&i.PhotoWidth,
-		&i.PhotoHeight,
 		&i.IdentifiedName,
 		&i.SearchQueries,
 		&i.SearchQueryUsed,

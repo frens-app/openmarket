@@ -34,16 +34,19 @@ type IdentifyItemRequest struct {
 	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
 	// JPEG, downscaled by the client before it is sent.
 	//
-	// **Repeated, capped at one.** One photo is all the app offers today and all
-	// the server will accept — but a seller with a scratched tabletop and an
-	// intact drawer front obviously wants to send both, and raising this cap
-	// later must not cost an App Store release. `repeated` now makes that a
-	// one-line change to `max_items`; `optional bytes photo` now would make it a
-	// new field number and a compatibility shim.
+	// **Capped at three**, up from one — and the cap being a number here rather
+	// than a field shape is exactly why that was a one-line change. `optional
+	// bytes photo` would have needed a new field number and a compatibility shim.
 	//
-	// When the cap does rise, the prompt has to say the photos are the same item
-	// from different angles. Left implicit, a model describes them as separate
-	// items — the same class of failure as taking the identity from the comps.
+	// Three because a seller with a scratched tabletop, an intact drawer front
+	// and a label on the back wants all three, and because every photo is input
+	// tokens on the only call this feature makes — the fourth picture of a
+	// dresser tells a model very little the first three did not.
+	//
+	// **The prompt says they are one item from several angles**, which the
+	// previous version of this comment predicted would be needed. Left implicit,
+	// a model describes them as separate items — the same class of failure as
+	// taking the identity from the comparables.
 	//
 	// Optional, as long as there are words: an empty list runs on the description
 	// alone, which is roughly what the tool did before it could see anything.
@@ -657,7 +660,7 @@ const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"'openmarket/api/v1/pricing_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\"\x88\x02\n" +
 	"\x13IdentifyItemRequest\x12*\n" +
 	"\vdescription\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fR\vdescription\x12)\n" +
-	"\x06photos\x18\x02 \x03(\fB\x11\xbaH\x0e\x92\x01\v\x10\x01\"\az\x05\x18\x80\x80\x80\x02R\x06photos:\x99\x01\xbaH\x95\x01\x1a\x92\x01\n" +
+	"\x06photos\x18\x02 \x03(\fB\x11\xbaH\x0e\x92\x01\v\x10\x03\"\az\x05\x18\x80\x80\x80\x02R\x06photos:\x99\x01\xbaH\x95\x01\x1a\x92\x01\n" +
 	"\x1bidentify_item.needs_an_item\x12=send a description of at least 3 characters, a photo, or both\x1a4size(this.description) >= 3 || size(this.photos) > 0\"\x9a\x02\n" +
 	"\x14IdentifyItemResponse\x12$\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tR\fpriceCheckId\x12'\n" +

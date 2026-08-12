@@ -145,16 +145,16 @@ final class SellerToolsModel: ObservableObject {
 
     // MARK: - The run
 
-    /// Needs three characters of description **or** a photo. The photo alone is
-    /// a real run — a vision model naming an item from an image is the thing
-    /// this feature is built on — so the guard is on having something to send,
-    /// not on having words.
-    func start(_ text: String, photo: ItemPhoto? = nil) {
+    /// Needs three characters of description **or** at least one photo. Photos
+    /// alone are a real run — a vision model naming an item from an image is
+    /// the thing this feature is built on — so the guard is on having something
+    /// to send, not on having words.
+    func start(_ text: String, photos: [ItemPhoto] = []) {
         let item = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard item.count >= 3 || photo != nil else { return }
+        guard item.count >= 3 || !photos.isEmpty else { return }
         input = item
         task?.cancel()
-        task = Task { await run(item, photo: photo) }
+        task = Task { await run(item, photos: photos) }
     }
 
     // MARK: - Afterwards
@@ -208,7 +208,7 @@ final class SellerToolsModel: ObservableObject {
         priceCheckID = nil
     }
 
-    private func run(_ item: String, photo: ItemPhoto?) async {
+    private func run(_ item: String, photos: [ItemPhoto]) async {
         clearResults()
         phase = .running
 
@@ -222,10 +222,10 @@ final class SellerToolsModel: ObservableObject {
         // Load-bearing: without a query there is nothing to search, so a
         // failure here ends the run. The steps after it are not — see the
         // writing step at the bottom.
-        begin(.identify, photo == nil ? "Working out what you're selling" : "Looking at your photo")
+        begin(.identify, Self.identifyStepText(photoCount: photos.count))
         let term: String
         do {
-            let identified = try await pricing.identify(description: item, photo: photo)
+            let identified = try await pricing.identify(description: item, photos: photos)
             guard !Task.isCancelled else { return }
             priceCheckID = identified.priceCheckID
             identifiedName = identified.name.isEmpty ? nil : identified.name
@@ -357,6 +357,20 @@ final class SellerToolsModel: ObservableObject {
     }
 
     // MARK: - Words for things
+
+    /// What the first step calls itself, which depends on what was sent.
+    ///
+    /// Named for what the app is doing rather than for how long it takes: this
+    /// line is on screen for the four or five seconds the model call takes, and
+    /// "Looking at your photos" is a claim the user can check against what they
+    /// attached.
+    static func identifyStepText(photoCount: Int) -> String {
+        switch photoCount {
+        case 0: "Working out what you're selling"
+        case 1: "Looking at your photo"
+        default: "Looking at your \(photoCount) photos"
+        }
+    }
 
     /// States the count as well as the band.
     ///

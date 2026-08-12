@@ -44,14 +44,18 @@ final class PricingService {
 
     // MARK: - The run
 
-    func identify(description: String, photo: ItemPhoto?) async throws -> Identification {
+    func identify(description: String, photos: [ItemPhoto]) async throws -> Identification {
         var request = IdentifyItemRequest()
         request.description_p = description
-        // A missing photo is an empty list, not an error. The server runs on
-        // the description alone, which is roughly what this tool did before it
+        // No photos is an empty list, not an error. The server runs on the
+        // description alone, which is roughly what this tool did before it
         // could see anything — so a picker the user skipped degrades the answer
         // instead of blocking it.
-        request.photos = photo.map { [$0.jpeg] } ?? []
+        //
+        // Order is preserved and meaningful: the first photo is the one the
+        // seller led with, and the prompt tells the model they are one item
+        // from several angles rather than several items.
+        request.photos = photos.map(\.jpeg)
 
         let response = await client.identifyItem(request: request, headers: try await session.authorizedHeaders())
         let message = try unwrap(response)

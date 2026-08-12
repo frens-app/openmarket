@@ -60,16 +60,19 @@ message IdentifyItemRequest {
 
   // JPEG, downscaled by the client before it is sent.
   //
-  // **Repeated, capped at one.** One photo is all the app offers today and all
-  // the server will accept — but a seller with a scratched tabletop and an
-  // intact drawer front obviously wants to send both, and raising this cap
-  // later must not cost an App Store release. `repeated` now makes that a
-  // one-line change to `max_items`; `optional bytes photo` now would make it a
-  // new field number and a compatibility shim.
+  // **Capped at three**, up from one — and the cap being a number here rather
+  // than a field shape is exactly why that was a one-line change. `optional
+  // bytes photo` would have needed a new field number and a compatibility shim.
   //
-  // When the cap does rise, the prompt has to say the photos are the same item
-  // from different angles. Left implicit, a model describes them as separate
-  // items — the same class of failure as taking the identity from the comps.
+  // Three because a seller with a scratched tabletop, an intact drawer front
+  // and a label on the back wants all three, and because every photo is input
+  // tokens on the only call this feature makes — the fourth picture of a
+  // dresser tells a model very little the first three did not.
+  //
+  // **The prompt says they are one item from several angles**, which the
+  // previous version of this comment predicted would be needed. Left implicit,
+  // a model describes them as separate items — the same class of failure as
+  // taking the identity from the comparables.
   //
   // Optional, as long as there are words: an empty list runs on the description
   // alone, which is roughly what the tool did before it could see anything.
@@ -77,7 +80,7 @@ message IdentifyItemRequest {
   // end. See the message rule above for the one combination that is refused.
   repeated bytes photos = 2 [
     (buf.validate.field).repeated = {
-      max_items: 1
+      max_items: 3
       items: {
         bytes: {max_len: 4194304}
       }
