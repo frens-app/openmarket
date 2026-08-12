@@ -65,6 +65,27 @@ struct SoldSignal: Equatable {
             : "\(sold), typically within \(days) days of listing"
     }
 
+    /// How fast things like this go, in words rather than a number of days.
+    ///
+    /// "About two weeks" and "13 days" are the same fact, and only one of them
+    /// is a decision somebody can act on — thirteen is a median of a handful of
+    /// samples, and rendering it exactly claims a precision the sample does not
+    /// have. The buckets are wide for the same reason.
+    ///
+    /// Nil below three sold listings: "sells within a day" off a sample of one
+    /// is not a pattern, it is a coincidence with a confident voice.
+    var speed: String? {
+        guard comps.count >= 3, let days = medianDaysToSell else { return nil }
+        switch days {
+        case ..<2: return "Similar ones usually sell within a day."
+        case 2...4: return "Similar ones usually sell in a few days."
+        case 5...10: return "Similar ones usually sell in about a week."
+        case 11...18: return "Similar ones usually sell in about two weeks."
+        case 19...45: return "Similar ones usually take a few weeks to sell."
+        default: return "Similar ones can take a month or more to sell."
+        }
+    }
+
     /// How this reads under the price, when there is enough of it to say
     /// anything. Kept vague about precision on purpose — with a handful of
     /// samples, a band is a suggestion and a point estimate would be a lie.

@@ -8,6 +8,7 @@
 
 public typealias AuthServiceClient = Openmarket_Api_V1_AuthServiceClient
 public typealias UserServiceClient = Openmarket_Api_V1_UserServiceClient
+public typealias PricingServiceClient = Openmarket_Api_V1_PricingServiceClient
 
 public typealias Viewer = Openmarket_Api_V1_Viewer
 public typealias Device = Openmarket_Api_V1_Device
@@ -27,3 +28,19 @@ public typealias UpdateViewerRequest = Openmarket_Api_V1_UpdateViewerRequest
 public typealias RegisterDeviceTokenRequest = Openmarket_Api_V1_RegisterDeviceTokenRequest
 public typealias SetFacebookConnectionRequest = Openmarket_Api_V1_SetFacebookConnectionRequest
 public typealias DeleteAccountRequest = Openmarket_Api_V1_DeleteAccountRequest
+
+public typealias IdentifyItemRequest = Openmarket_Api_V1_IdentifyItemRequest
+public typealias IdentifyItemResponse = Openmarket_Api_V1_IdentifyItemResponse
+public typealias CompletePriceCheckRequest = Openmarket_Api_V1_CompletePriceCheckRequest
+public typealias SubmitPriceCheckFeedbackRequest = Openmarket_Api_V1_SubmitPriceCheckFeedbackRequest
+public typealias RecordPriceCheckCopyRequest = Openmarket_Api_V1_RecordPriceCheckCopyRequest
+public typealias MarketStats = Openmarket_Api_V1_MarketStats
+public typealias ListPriceChecksRequest = Openmarket_Api_V1_ListPriceChecksRequest
+public typealias PriceCheckSummary = Openmarket_Api_V1_PriceCheckSummary
+
+// `ProtoComparable` was aliased here, for a `Comparable` message that carried
+// each listing to the pricing model. Both are gone: no model sees a listing
+// now, so the wire carries a count instead. The reason for the awkward name is
+// worth keeping in case anything like it comes back — a plain `Comparable`
+// alias shadows the Swift standard library protocol across every file importing
+// this module, including the `<` operators the app's own sorts rely on.

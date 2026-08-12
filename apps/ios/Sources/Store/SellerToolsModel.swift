@@ -9,27 +9,32 @@ import WebKit
 /// to Browse and back. Someone pricing a dresser is very likely to go and look
 /// at the dressers.
 ///
-/// **There was a writing step here, and it is gone for now.** Apple's on-device
-/// model named the item, chose a price inside the measured band and drafted a
-/// description. It worked — verified against the real model — but not anywhere
-/// it could be relied on: `SystemLanguageModel.availability` reports
-/// `.available` on the strength of Apple Intelligence being switched on, and
-/// then generation fails if the 3B asset isn't actually installed. That is the
-/// permanent state of the iOS simulator, whose model assets all carry
-/// `version: (none)` with `update available false`, so the whole feature
-/// degraded to an apology on the machine it gets developed on.
+/// **The writing step is back, and it is server-side now.** It was Apple's
+/// on-device model, and it went out because `SystemLanguageModel.availability`
+/// reports `.available` on the strength of Apple Intelligence being switched
+/// on, saying nothing about whether the 3B asset is installed — the permanent
+/// state of the simulator, so the feature degraded to an apology on the machine
+/// it gets developed on. A server has no such ambiguity: it is reachable or it
+/// is not, and the difference is a network error rather than a guess.
 ///
-/// What is left is the part that never needed a model: the market search, the
-/// arithmetic, and the price. That was always the load-bearing half — every
-/// number was Swift's already, and the model only chose a point inside a range
-/// Swift computed and held it there. Removing it costs the title and the
-/// description and nothing else.
+/// Everything learned from that version still holds (README, "The on-device
+/// writer"), and none of it is prompted for any more — each one was designed
+/// out instead:
 ///
-/// The implementation and its measured prompts are in commit `1c54a9f`, and
-/// what was learned from them is written up in the README rather than left in
-/// the history: four narrow calls beat one wide one, the model cannot do
-/// arithmetic about evidence it was just shown, and every push for richer prose
-/// made it invent condition the seller never described.
+/// * **The model cannot do arithmetic about its own evidence.** It is never
+///   shown any. `PriceGuide` computes the numbers, picks the median, and
+///   `PriceGuide.explanation` writes the sentence underneath.
+/// * **It takes the item's identity from the comparables if it can see them.**
+///   It cannot see one. The item is named and the listing is written from the
+///   photo, in the only call there is, before any comparable exists.
+/// * **Its answer needs clamping to the observed range.** Nothing needs
+///   clamping: the recommendation is the median of the observed prices, so it
+///   is inside the range by construction.
+///
+/// The run is four steps — identify, search, check what sold, read the prices —
+/// and exactly one of them leaves this device to reach a model. The search
+/// cannot move off the phone at all: it is a `WKWebView` against the user's own
+/// Facebook session.
 @MainActor
 final class SellerToolsModel: ObservableObject {
     /// One line of the transcript.
@@ -39,7 +44,10 @@ final class SellerToolsModel: ObservableObject {
     /// for the whole run would hide that the app went and looked at the actual
     /// market, which is the part worth trusting.
     struct Step: Identifiable, Equatable {
-        enum Kind: Hashable { case understand, search, sold, price }
+        // `write` was a fifth kind, for the model call that priced the item and
+        // wrote the listing. The listing is written during `identify` now and
+        // the price is arithmetic, so there is no step left to name.
+        enum Kind: Hashable { case identify, search, sold, price }
         enum State: Equatable { case running, done, failed }
 
         let kind: Kind
@@ -78,16 +86,62 @@ final class SellerToolsModel: ObservableObject {
     /// What sold nearby in the last month. Empty is an ordinary outcome, not a
     /// failure — plenty of things simply haven't sold near you lately.
     @Published private(set) var sold = SoldSignal(comps: [])
-    /// The number to ask, and why. The median of what similar things are listed
-    /// for, which is exactly where the model was steered anyway.
+    /// What we recommended: the median of what similar things are listed for.
+    /// Fixed for the run, and the number the server records.
     @Published private(set) var recommendedPrice: Int?
+    /// What the user settled on, which starts as the recommendation and moves
+    /// when they use the stepper.
+    ///
+    /// **Kept separate from `recommendedPrice` rather than replacing it**, and
+    /// the gap between the two is the most interesting number this feature can
+    /// produce. "Sellers move our price up 20% on average" is the finding that
+    /// says the median is the wrong statistic; overwriting the recommendation
+    /// with the seller's edit would erase the evidence for it.
+    @Published private(set) var askingPrice: Int?
     @Published private(set) var priceRationale: String?
     /// What we actually searched for, which is usually not what the user typed.
     /// Shown, because a price guide is only as good as the comparables behind
     /// it and the user is the one who can tell whether we searched sensibly.
     @Published private(set) var searchTerm: String?
 
+    /// What the model made of the photo. Shown for the same reason as the
+    /// search term: it is checkable by the person holding the object, and a
+    /// price for the wrong item is worse than no price.
+    @Published private(set) var identifiedName: String?
+
+    /// The listing, ready to paste. Absent when the writing step failed — which
+    /// leaves the price standing, because the price never depended on it.
+    @Published private(set) var listingTitle: String?
+    @Published private(set) var listingBody: String?
+
+    /// The answer to "were these helpful?", or nil for unanswered. Three
+    /// states, not two: somebody who said no and somebody who never looked are
+    /// not the same person, and a Bool defaulting to false would merge them.
+    @Published private(set) var feedback: Bool?
+
+    /// Ties this run to its row on the server, for the price call and for both
+    /// feedback signals afterwards. Nil until the identify call returns.
+    private(set) var priceCheckID: String?
+
+    /// The runs already done, newest first.
+    ///
+    /// **Read from the server, not remembered here.** The row has been written
+    /// on every run since this feature existed — before the model is called, so
+    /// that a run which dies is still countable — so a history was already in
+    /// the database waiting to be read; the alternative would have been a
+    /// second copy on the device, disagreeing with it after the first
+    /// reinstall.
+    ///
+    /// Kept on this object rather than in the screen so it survives a tab
+    /// switch, same reasoning as the result itself.
+    @Published private(set) var recent: [PastPriceCheck] = []
+    /// True only for the first load, so an empty list can tell "nothing yet"
+    /// from "we haven't looked". A refresh behind an already-populated list is
+    /// silent — nobody needs a spinner over rows they can already read.
+    @Published private(set) var isLoadingRecent = false
+
     private let search: ComparableSearch
+    private let pricing: PricingService
     /// Read from, never written to.
     ///
     /// Specifically: this tab must never call `prefs.recordSearch`. The terms it
@@ -102,8 +156,11 @@ final class SellerToolsModel: ObservableObject {
     /// constraint as the browse engines, same fix in `RootView`.
     var webView: WKWebView { search.webView }
 
-    init(search: ComparableSearch? = nil, prefs: Preferences = .shared) {
+    init(search: ComparableSearch? = nil,
+         pricing: PricingService? = nil,
+         prefs: Preferences = .shared) {
         self.search = search ?? ComparableSearch()
+        self.pricing = pricing ?? PricingService(session: .shared)
         self.prefs = prefs
     }
 
@@ -114,12 +171,128 @@ final class SellerToolsModel: ObservableObject {
 
     // MARK: - The run
 
-    func start(_ text: String) {
+    /// Needs three characters of description **or** at least one photo. Photos
+    /// alone are a real run — a vision model naming an item from an image is
+    /// the thing this feature is built on — so the guard is on having something
+    /// to send, not on having words.
+    func start(_ text: String, photos: [ItemPhoto] = []) {
         let item = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard item.count >= 3 else { return }
+        guard item.count >= 3 || !photos.isEmpty else { return }
         input = item
         task?.cancel()
-        task = Task { await run(item) }
+        task = Task { await run(item, photos: photos) }
+    }
+
+    // MARK: - Afterwards
+
+    /// Moves the asking price one step, and rewrites the sentence under it.
+    ///
+    /// Clamped to the observed prices, deliberately the full range rather than
+    /// the middle half: an item that genuinely is the best one listed should be
+    /// allowed to ask what the best one listed is asking. Outside the observed
+    /// range there is no evidence at all, and the bar has nowhere to draw it.
+    func nudgePrice(by direction: Int) {
+        guard let guide, let current = askingPrice else { return }
+        let stepped = current + direction * Self.step(around: current)
+        let next = guide.clamped(stepped)
+        guard next != current else { return }
+        askingPrice = next
+        priceRationale = sold.rationale(for: next, against: guide)
+    }
+
+    /// Round numbers, scaled to what is being sold.
+    ///
+    /// A $5 step is right for a $150 grill and absurd for a $4,000 piano —
+    /// eight hundred taps to cross its own range. Roughly 3% of the price,
+    /// rounded to something a person would actually write on a listing.
+    static func step(around price: Int) -> Int {
+        switch price {
+        case ..<50: 1
+        case 50..<200: 5
+        case 200..<1_000: 10
+        case 1_000..<5_000: 50
+        default: 100
+        }
+    }
+
+    /// Whether the stepper can still move in a direction — so a button that
+    /// would do nothing is disabled rather than silently ignoring a tap.
+    func canNudge(_ direction: Int) -> Bool {
+        guard let guide, let current = askingPrice else { return false }
+        return guide.clamped(current + direction * Self.step(around: current)) != current
+    }
+
+    /// Records the answer to the helpful question, and keeps it on screen.
+    ///
+    /// Optimistic: the button fills in immediately and the call goes out behind
+    /// it. Somebody's opinion of a finished screen is not worth a spinner, and a
+    /// failure here costs one row of telemetry.
+    func recordFeedback(helpful: Bool) {
+        guard let priceCheckID, feedback != helpful else { return }
+        feedback = helpful
+        Task { await pricing.submitFeedback(priceCheckID: priceCheckID, helpful: helpful) }
+    }
+
+    /// Records that the price was copied, **and which price it was**.
+    ///
+    /// The signal worth having: copying the number is what somebody does right
+    /// before pasting it into Facebook's price box, and it arrives from
+    /// everybody rather than from the few who stop to answer a question.
+    ///
+    /// Now that the number is adjustable, what they copied is a different fact
+    /// from what we recommended, and it is the better one — it is the price
+    /// that goes on a real listing. Sending it beside a stored
+    /// `recommended_price_minor` makes the gap queryable.
+    func recordPriceCopied() {
+        guard let priceCheckID else { return }
+        let copied = askingPrice
+        Task { await pricing.recordCopy(priceCheckID: priceCheckID, price: copied) }
+    }
+
+    /// Records the listing text as it was copied, edited or not.
+    ///
+    /// Sent even when it is word-for-word what the model wrote: "they read it
+    /// and used it unchanged" is the result this feature is hoping for, and it
+    /// has to be distinguishable from "they never copied it at all". A null
+    /// column means the latter.
+    func recordListingCopied(title: String? = nil, description: String? = nil) {
+        guard let priceCheckID else { return }
+        Task { await pricing.recordCopy(priceCheckID: priceCheckID, title: title, description: description) }
+    }
+
+    /// Refreshes the recent list, quietly.
+    ///
+    /// A failure leaves whatever was already there and says nothing. This is a
+    /// list of things the user has already seen once; an error banner over it
+    /// would interrupt somebody who came here to price a chair, about a
+    /// convenience they had not asked for yet.
+    func loadRecent() async {
+        if recent.isEmpty { isLoadingRecent = true }
+        defer { isLoadingRecent = false }
+        guard let checks = try? await pricing.recentChecks() else { return }
+        recent = checks
+    }
+
+    /// The same three signals, from a run that finished some time ago.
+    ///
+    /// Separate from the two above only because it names its subject: those
+    /// read `priceCheckID`, which is the run in progress, and a copy taken off
+    /// the history screen belongs to a different row.
+    ///
+    /// Recorded rather than skipped, and it is arguably the better version of
+    /// the signal: somebody who comes back a week later to copy the title again
+    /// is telling us the copy was worth keeping, which no measurement taken
+    /// thirty seconds after it was written can.
+    func recordCopy(of check: PastPriceCheck,
+                    price: Int? = nil,
+                    title: String? = nil,
+                    description: String? = nil) {
+        Task {
+            await pricing.recordCopy(priceCheckID: check.id,
+                                     price: price,
+                                     title: title,
+                                     description: description)
+        }
     }
 
     func cancel() {
@@ -128,12 +301,12 @@ final class SellerToolsModel: ObservableObject {
         if phase.isRunning { phase = .idle }
     }
 
-    func reset() {
-        cancel()
-        input = ""
-        clearResults()
-        phase = .idle
-    }
+    // `reset()` stood here, and nothing calls it any more. It existed for the
+    // "start over" button, which existed because the results replaced the input
+    // screen — the run is a pushed screen now, so going back *is* the reset and
+    // `start` already clears the previous results. Deleted rather than kept
+    // "in case": an uncalled method that wipes the model is a thing somebody
+    // wires to a button later without checking what it does to a running task.
 
     private func clearResults() {
         steps = []
@@ -141,22 +314,66 @@ final class SellerToolsModel: ObservableObject {
         guide = nil
         sold = SoldSignal(comps: [])
         recommendedPrice = nil
+        askingPrice = nil
         priceRationale = nil
         searchTerm = nil
+        identifiedName = nil
+        listingTitle = nil
+        listingBody = nil
+        feedback = nil
+        priceCheckID = nil
     }
 
-    private func run(_ item: String) async {
+    private func run(_ item: String, photos: [ItemPhoto]) async {
         clearResults()
         phase = .running
 
-        // 1 — what to search for.
+        // 1 — what this is, and what to search for.
         //
+        // A round trip, because it is the only step that can see the photo.
         // Separated from the search itself because it can be wrong in a way the
-        // user can see and correct: "searching for ikea malm dresser" is
-        // checkable, "found 14 listings" is not.
-        let term = SearchTerm.from(item)
+        // user can see and correct: "we think this is a Vitamix 5200, searching
+        // for vitamix 5200 blender" is checkable, "found 14 listings" is not.
+        //
+        // Load-bearing: without a query there is nothing to search, so a
+        // failure here ends the run. The steps after it are not — see the
+        // writing step at the bottom.
+        begin(.identify, Self.identifyStepText(photoCount: photos.count))
+        let term: String
+        do {
+            let identified = try await pricing.identify(description: item, photos: photos)
+            guard !Task.isCancelled else { return }
+            priceCheckID = identified.priceCheckID
+            identifiedName = identified.name.isEmpty ? nil : identified.name
+            // The fallback re-derives a query from what the user typed, and on
+            // a photo-only run there is nothing to derive it from. An empty
+            // term is not a weak search, it is a search for the entire
+            // marketplace — so this stops instead, which is the same thing the
+            // step already does when the server has no query for us.
+            let typed = SearchTerm.from(item)
+            guard let query = identified.primaryQuery ?? (typed.isEmpty ? nil : typed) else {
+                let message = "Couldn't work out what this is. Try adding a description."
+                fail(.identify, message)
+                phase = .failed(message)
+                return
+            }
+            term = query
+            // The listing arrives here now, with the identification, because
+            // both are read off the same photograph. Nothing later can improve
+            // them and one thing later could poison them — see the note on
+            // `IdentifiedItem` in the llm package.
+            listingTitle = identified.listingTitle.isEmpty ? nil : identified.listingTitle
+            listingBody = identified.listingBody.isEmpty ? nil : identified.listingBody
+        } catch {
+            guard !Task.isCancelled else { return }
+            let message = Self.message(for: error)
+            fail(.identify, message)
+            phase = .failed(message)
+            return
+        }
         searchTerm = term
-        steps.append(Step(kind: .understand, text: "Searching for “\(term)”", state: .done))
+        finish(.identify, identifiedName.map { "\($0) — searching for “\(term)”" }
+               ?? "Searching for “\(term)”")
 
         // 2 — the market itself. One page load.
         begin(.search, "Checking what similar things are listed for in \(marketName)")
@@ -189,20 +406,56 @@ final class SellerToolsModel: ObservableObject {
         if case .success(let found) = soldResult { sold = SoldSignal(comps: found) }
         finish(.sold, sold.summary)
 
-        // 4 — arithmetic, in Swift, instantly. Its own step anyway: it is a
-        // separate claim from "we found some listings", and it is the one that
-        // can come back empty when everything found was free or sold.
+        // 4 — arithmetic, in Swift, instantly, and this is the answer.
+        //
+        // There used to be a fifth step here that sent all of this to a model
+        // and asked it for a number. It is gone, and the reason is in the
+        // table: on runs where the seller wrote nothing about condition it
+        // returned this median, four seconds and thirteen hundred tokens later.
+        // Where they did write something it moved ±10–20%, which is a judgement
+        // this screen is not in a position to check and the user is — they can
+        // see the whole range and the middle half a few points up.
         begin(.price, "Reading the prices")
         let computed = PriceGuide(comps: comps)
         guide = computed
-        recommendedPrice = computed.median
-        priceRationale = computed.median.map { sold.rationale(for: $0, against: computed) }
-        if computed.median != nil {
-            finish(.price, Self.summary(of: computed))
-        } else {
+        guard let median = computed.median else {
             fail(.price, "None of them had a price to compare")
+            phase = .done
+            return
         }
+        recommendedPrice = median
+        askingPrice = median
+        priceRationale = sold.rationale(for: median, against: computed)
+        finish(.price, "\(Self.summary(of: computed)) — suggesting \(computed.money(median))")
+
         phase = .done
+
+        // 5 — the row, after the screen is already finished.
+        //
+        // Deliberately last and deliberately unawaited-for: this call returns
+        // nothing the user is waiting on, so making them watch it would be
+        // making them wait on bookkeeping. A failure loses one row of telemetry
+        // and nothing else, which is why it is swallowed rather than shown.
+        await record(compsFound: comps.count, price: median, guide: computed)
+
+        // The row this run just wrote is the one the input screen is about to
+        // show at the top of its list, so it is fetched now rather than when
+        // that screen reappears — the user is still reading the answer, and the
+        // list is populated by the time they press Back.
+        await loadRecent()
+    }
+
+    /// Reports the finished run. Silent on failure, by the reasoning above.
+    private func record(compsFound: Int, price: Int, guide: PriceGuide) async {
+        guard let priceCheckID else { return }
+        try? await pricing.complete(
+            priceCheckID: priceCheckID,
+            searchQuery: searchTerm ?? "",
+            compsFound: compsFound,
+            recommendedPrice: price,
+            guide: guide,
+            sold: sold
+        )
     }
 
     // MARK: - Transcript
@@ -228,6 +481,20 @@ final class SellerToolsModel: ObservableObject {
 
     // MARK: - Words for things
 
+    /// What the first step calls itself, which depends on what was sent.
+    ///
+    /// Named for what the app is doing rather than for how long it takes: this
+    /// line is on screen for the four or five seconds the model call takes, and
+    /// "Looking at your photos" is a claim the user can check against what they
+    /// attached.
+    static func identifyStepText(photoCount: Int) -> String {
+        switch photoCount {
+        case 0: "Working out what you're selling"
+        case 1: "Looking at your photo"
+        default: "Looking at your \(photoCount) photos"
+        }
+    }
+
     /// States the count as well as the band.
     ///
     /// Without it the transcript reads "Found 15 nearby listings" then "Most
@@ -246,6 +513,16 @@ final class SellerToolsModel: ObservableObject {
                 : "\(guide.count) prices, around \(guide.money(median))"
         }
         return "None of them had a price to compare"
+    }
+
+    /// What to say when a server call fails.
+    ///
+    /// `APIError` already carries text written for a person — the API client
+    /// only lets a server message through for the codes where the server meant
+    /// it to be read — so it is used verbatim. Anything else is a network
+    /// problem described as one.
+    static func message(for error: Error) -> String {
+        (error as? APIError)?.errorDescription ?? APIError.network.errorDescription ?? "Something went wrong."
     }
 
     static func message(for error: ComparableSearch.Failure) -> String {

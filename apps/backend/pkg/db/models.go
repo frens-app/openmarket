@@ -96,6 +96,90 @@ func (ns NullDevicePlatform) Value() (driver.Value, error) {
 	return string(ns.DevicePlatform), nil
 }
 
+type LlmRunStage string
+
+const (
+	LlmRunStageIDENTIFY LlmRunStage = "IDENTIFY"
+	LlmRunStagePRICE    LlmRunStage = "PRICE"
+)
+
+func (e *LlmRunStage) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LlmRunStage(s)
+	case string:
+		*e = LlmRunStage(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LlmRunStage: %T", src)
+	}
+	return nil
+}
+
+type NullLlmRunStage struct {
+	LlmRunStage LlmRunStage
+	Valid       bool // Valid is true if LlmRunStage is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLlmRunStage) Scan(value interface{}) error {
+	if value == nil {
+		ns.LlmRunStage, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LlmRunStage.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLlmRunStage) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LlmRunStage), nil
+}
+
+type LlmRunStatus string
+
+const (
+	LlmRunStatusOK    LlmRunStatus = "OK"
+	LlmRunStatusERROR LlmRunStatus = "ERROR"
+)
+
+func (e *LlmRunStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LlmRunStatus(s)
+	case string:
+		*e = LlmRunStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LlmRunStatus: %T", src)
+	}
+	return nil
+}
+
+type NullLlmRunStatus struct {
+	LlmRunStatus LlmRunStatus
+	Valid        bool // Valid is true if LlmRunStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLlmRunStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.LlmRunStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LlmRunStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLlmRunStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LlmRunStatus), nil
+}
+
 type NotificationPermissionStatus string
 
 const (
@@ -137,6 +221,59 @@ func (ns NullNotificationPermissionStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.NotificationPermissionStatus), nil
+}
+
+type LlmRun struct {
+	ID                uuid.UUID
+	PriceCheckID      *uuid.UUID
+	UserID            uuid.UUID
+	Stage             LlmRunStage
+	Attempt           int32
+	Provider          string
+	Model             string
+	InputTokens       *int32
+	OutputTokens      *int32
+	CachedInputTokens *int32
+	LatencyMs         int32
+	Status            LlmRunStatus
+	ErrorCode         *string
+	CreatedAt         pgtype.Timestamptz
+	ThoughtTokens     *int32
+}
+
+type PriceCheck struct {
+	ID                       uuid.UUID
+	UserID                   uuid.UUID
+	DeviceID                 *uuid.UUID
+	Description              string
+	IdentifiedName           *string
+	SearchQueries            []string
+	SearchQueryUsed          *string
+	CompsFound               *int32
+	SoldFound                *int32
+	RecommendedPriceMinor    *int64
+	MedianPriceMinor         *int64
+	CurrencySymbol           *string
+	Helpful                  *bool
+	HelpfulAt                pgtype.Timestamptz
+	PriceCopied              bool
+	PriceCopiedAt            pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
+	CompletedAt              pgtype.Timestamptz
+	ListingTitle             *string
+	ListingDescription       *string
+	CopiedPriceMinor         *int64
+	CopiedListingTitle       *string
+	CopiedListingDescription *string
+}
+
+type PriceCheckPhoto struct {
+	PriceCheckID uuid.UUID
+	Ordinal      int16
+	Sha256       []byte
+	Bytes        int32
+	Width        int32
+	Height       int32
 }
 
 type User struct {

@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/validate"
 	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
+	"frens.lol/openmarket/backend/pkg/llm"
 	"frens.lol/openmarket/backend/pkg/phone"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
 	"frens.lol/openmarket/backend/pkg/verify"
@@ -37,6 +38,20 @@ const (
 	readHeaderTimeout   = 10 * time.Second
 	verificationPruneAt = time.Hour
 )
+
+// maxRequestBytes is the ceiling on a single request body.
+//
+// Derived, not picked. The largest legitimate request is IdentifyItem carrying
+// three photos of four MiB each — but **the wire format is Connect JSON**, and
+// JSON has no bytes type, so each photo crosses as base64 at four thirds its
+// size: 12 MiB of image is 16 MiB of body before a single field name. Twenty
+// leaves room for that and the envelope around it.
+//
+// The two numbers have to move together. Raising `max_len` or `max_items` on
+// `IdentifyItemRequest.photos` without raising this produces the worst possible
+// failure mode — a request the schema calls valid and the reader hangs up on,
+// with a size error that names no field.
+const maxRequestBytes = 20 << 20
 
 func main() {
 	cfg := config.LoadAPI()
@@ -86,6 +101,16 @@ func main() {
 		newAuthInterceptor(cfg.JWTSecret, queries),
 	)
 
+	// **The size limit is not an interceptor, and that is the whole reason it
+	// has to exist.** `max_len` on `IdentifyItemRequest.photos` is a
+	// protovalidate rule, and protovalidate runs on a message — which means the
+	// body has already been read off the socket and unmarshalled into memory
+	// before anything looks at how big it was. A caller who posts a gigabyte to
+	// a field capped at four megabytes gets a validation error, and we pay for
+	// the gigabyte first. This one is enforced by the reader, so oversized
+	// requests stop at the door.
+	handlerOptions := []connect.HandlerOption{interceptors, connect.WithReadMaxBytes(maxRequestBytes)}
+
 	authSvc := &authServer{
 		queries:             queries,
 		pool:                pool,
@@ -104,10 +129,25 @@ func main() {
 		pool:    pool,
 		logger:  logger.Named("user"),
 	}
+	modelProvider, err := buildModelProvider(cfg)
+	if err != nil {
+		logger.Fatal("configure model provider", zap.Error(err))
+	}
+	pricingSvc := &pricingServer{
+		queries: queries,
+		runner: llm.NewRunner(modelProvider, queries, logger.Named("llm"), llm.Config{
+			MaxCallsPerUser: cfg.LLMMaxCallsPerUser,
+			Window:          cfg.LLMCallWindow,
+			MaxAttempts:     cfg.LLMMaxAttempts,
+			Timeout:         cfg.LLMTimeout,
+		}),
+		logger: logger.Named("pricing"),
+	}
 
 	mux := http.NewServeMux()
-	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, interceptors))
-	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, interceptors))
+	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
+	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))
+	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, handlerOptions...))
 	mux.HandleFunc("/health", healthHandler(pool))
 
 	// Reflection is for grpcurl against a local server. Off in production:
@@ -117,6 +157,7 @@ func main() {
 		reflector := grpcreflect.NewStaticReflector(
 			apiv1connect.AuthServiceName,
 			apiv1connect.UserServiceName,
+			apiv1connect.PricingServiceName,
 		)
 		mux.Handle(grpcreflect.NewHandlerV1(reflector))
 		mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
@@ -178,6 +219,34 @@ func buildSender(cfg config.ServiceConfig, logger *zap.Logger) (verify.Sender, e
 		provider,
 		logger.Named("verify"),
 	)
+}
+
+// buildModelProvider selects the vendor behind Price Check.
+//
+// The stub is a real code path chosen by configuration, the same way the
+// verification bypass is — not a test double injected here. config.LoadAPI has
+// already refused it under ENV=production and refused a real provider with no
+// key, so by this point the choice is known-good and this only has to make it.
+func buildModelProvider(cfg config.ServiceConfig) (llm.Provider, error) {
+	switch cfg.LLMProvider {
+	case config.LLMProviderStub:
+		return llm.StubProvider{}, nil
+	case config.LLMProviderGoogle:
+		return llm.NewGeminiProvider(llm.GeminiOptions{
+			APIKey: cfg.LLMAPIKey,
+			Model:  cfg.LLMModel,
+		})
+	case config.LLMProviderVercel:
+		return llm.NewGatewayProvider(llm.GatewayOptions{
+			APIKey: cfg.LLMAPIKey,
+			Model:  cfg.LLMModel,
+		})
+	default:
+		// Never silently the stub. A deployment that believes it is calling a
+		// model and is not would serve invented prices that look exactly like
+		// real ones.
+		return nil, fmt.Errorf("unknown llm_provider %q", cfg.LLMProvider)
+	}
 }
 
 func runMigrations(pool *pgxpool.Pool, logger *zap.Logger) error {
