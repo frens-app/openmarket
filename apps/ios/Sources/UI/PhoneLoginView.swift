@@ -17,51 +17,61 @@ struct PhoneLoginView: View {
     var onSignedIn: (_ isNewUser: Bool) -> Void = { _ in }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.step == .phone ? "What's your number?" : "Check your messages")
+                        .font(.largeTitle.bold())
+                    Text(model.step == .phone
+                         ? "We'll text you a code. It's how you get back into your account on a new phone."
+                         : "We sent a \(model.codeLength)-digit code to \(model.formattedPhoneNumber).")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(model.step == .phone ? "What's your number?" : "Check your messages")
-                    .font(.largeTitle.bold())
-                Text(model.step == .phone
-                     ? "We'll text you a code. It's how you get back into your account on a new phone."
-                     : "We sent a \(model.codeLength)-digit code to \(model.formattedPhoneNumber).")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if model.step == .phone {
+                    phoneField
+                } else {
+                    codeField
+                }
+
+                if let error = model.errorMessage {
+                    Label(error, systemImage: "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                primaryButton
+
+                if model.step == .code {
+                    secondaryControls
+                }
+
+                #if DEBUG
+                devSkip
+                #endif
             }
-
-            if model.step == .phone {
-                phoneField
-            } else {
-                codeField
-            }
-
-            if let error = model.errorMessage {
-                Label(error, systemImage: "exclamationmark.circle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            primaryButton
-
-            if model.step == .code {
-                secondaryControls
-            }
-
-            #if DEBUG
-            devSkip
-            #endif
-
-            Spacer(minLength: 0)
+            // Keep the form anchored while the keyboard's AutoFill row appears
+            // and disappears. Flexible spacers above and below used to recenter
+            // the whole screen every time the keyboard changed height.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 48)
+            .padding(.bottom, 28)
         }
-        .padding(.horizontal, 28)
+        .scrollDismissesKeyboard(.interactively)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.snappy, value: model.step)
         .onAppear { focused = .phone }
         .onChange(of: model.step) { _, step in
-            focused = step == .phone ? .phone : .code
+            // The new field is created by this same state change. Waiting one
+            // run-loop turn avoids assigning focus to a field that does not yet
+            // exist, which can leave the outgoing phone field as first responder.
+            Task { @MainActor in
+                await Task.yield()
+                focused = step == .phone ? .phone : .code
+            }
         }
         .onChange(of: model.signedInIsNewUser) { _, isNewUser in
             guard let isNewUser else { return }
@@ -103,9 +113,6 @@ struct PhoneLoginView: View {
             .focused($focused, equals: .code)
             .padding(.vertical, 14)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
-            .onChange(of: model.code) { _, _ in
-                Task { await model.submitIfComplete() }
-            }
     }
 
     private var primaryButton: some View {
@@ -240,7 +247,17 @@ final class PhoneLoginModel: ObservableObject {
     }
     #endif
 
-    private var digits: String { nationalNumber.filter(\.isNumber) }
+    private var digits: String {
+        let raw = nationalNumber.filter(\.isNumber)
+        // Contact AutoFill usually includes the country code, whereas the field
+        // itself asks for the ten national digits beside a fixed "+1" label.
+        if raw.count == 11, raw.first == "1" { return String(raw.dropFirst()) }
+        return raw
+    }
+
+    private var cleanedCode: String {
+        String(code.filter(\.isNumber).prefix(codeLength))
+    }
 
     /// E.164 for the server. The "+1" the UI shows is not part of the text
     /// field, so it is added here rather than parsed back out.
@@ -251,23 +268,21 @@ final class PhoneLoginModel: ObservableObject {
     var canAdvance: Bool {
         switch step {
         case .phone: return digits.count == 10
-        case .code: return code.count >= 4
+        case .code: return cleanedCode.count == codeLength
         }
     }
 
     func advance() async {
         switch step {
         case .phone: await sendCode()
-        case .code: await submit()
+        case .code:
+            // Normalise only after the explicit Continue tap. Mutating the
+            // binding while AutoFill is inserting was what made a one-shot fill
+            // vulnerable to being overwritten.
+            code = cleanedCode
+            guard code.count == codeLength else { return }
+            await submit()
         }
-    }
-
-    /// Submits as soon as the code is the length the server said to expect, so
-    /// an autofilled code doesn't also need a tap.
-    func submitIfComplete() async {
-        code = String(code.filter(\.isNumber).prefix(codeLength))
-        guard code.count == codeLength, !isBusy else { return }
-        await submit()
     }
 
     func backToPhone() {
@@ -306,7 +321,8 @@ final class PhoneLoginModel: ObservableObject {
         do {
             signedInIsNewUser = try await session.verify(phoneNumber: e164, code: code)
         } catch {
-            code = ""
+            // Keep the entered value visible so a server or network failure does
+            // not look like AutoFill failed to populate the field.
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "That code isn't right."
         }
     }

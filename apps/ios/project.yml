@@ -15,6 +15,17 @@ options:
 configFiles:
   Debug: Configurations/Debug.xcconfig
   Release: Configurations/Release.xcconfig
+# The two above are the only ones Xcode would otherwise show, because they are
+# the only ones the *project* references. `Debug.local.xcconfig` is pulled in a
+# level lower — by `#include?` inside Debug.xcconfig, which the build system
+# resolves off disk — so it works while being invisible in the navigator, which
+# reads as a missing file rather than a deliberate one.
+#
+# Listing the directory here puts all of them in the navigator, editable in
+# place. It adds file references only: nothing is compiled or copied, and on a
+# machine with no local override the file simply isn't listed.
+fileGroups:
+  - Configurations
 # Local, not remote: the contents are generated from /protos by `buf generate`,
 # so the package is only ever as current as the last regenerate — pinning it to
 # a version would let the Swift types drift from the Go ones, which is the exact

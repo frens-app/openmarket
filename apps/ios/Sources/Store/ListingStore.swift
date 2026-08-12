@@ -23,6 +23,18 @@ final class ListingStore: ObservableObject {
     @Published private(set) var reachedEnd = false
     @Published var query: SearchQuery?
 
+    /// Bumped every time the grid's contents are *replaced* rather than
+    /// extended — a new search, a re-run, or going back to the home screen.
+    ///
+    /// Exists for one reason: the scroll offset survives the swap. Someone five
+    /// pages into "desk" who searches for "lamp" keeps their offset over a grid
+    /// that has just been emptied and refilled with twelve cards, so the screen
+    /// goes blank and the only way back to the results is to scroll up through
+    /// the space where the old ones were. Appending never does this, which is
+    /// why this is a counter on replacement rather than something watching
+    /// `listings`. `ResultsView` scrolls back to the top on each change.
+    @Published private(set) var resultsGeneration = 0
+
     /// The primary search path. Desktop is the only surface with working
     /// filters and sorting, and the only one that embeds a structured payload —
     /// see `docs/decision-desktop-primary.md`.
@@ -116,6 +128,7 @@ final class ListingStore: ObservableObject {
 
     func run(_ query: SearchQuery) async {
         self.query = query
+        resultsGeneration += 1
         listings = []
         seenIDs = []
         deepestIndexSeen = -1
@@ -263,9 +276,12 @@ final class ListingStore: ObservableObject {
         await run(query)
     }
 
-    /// Back to the home screen.
+    /// Back to the home screen. Counts as a replacement for scrolling purposes:
+    /// the home screen is usually shorter than the results it replaces, so an
+    /// offset carried over from deep in a result set lands past the end of it.
     func clearQuery() {
         query = nil
+        resultsGeneration += 1
     }
 
     // MARK: - Ingestion

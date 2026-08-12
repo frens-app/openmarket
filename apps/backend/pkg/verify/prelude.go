@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -74,6 +76,7 @@ type PreludeSender struct {
 	baseURL        string
 	httpClient     *http.Client
 	codeLengthHint int
+	logger         *zap.Logger
 }
 
 // PreludeOptions configures the sender.
@@ -85,6 +88,8 @@ type PreludeOptions struct {
 	BaseURL    string
 	CodeLength int
 	HTTPClient *http.Client
+	// Logger records the status of every send. Optional; nil discards.
+	Logger *zap.Logger
 }
 
 // NewPreludeSender builds a Prelude Verify client.
@@ -104,11 +109,16 @@ func NewPreludeSender(opts PreludeOptions) (*PreludeSender, error) {
 	if client == nil {
 		client = &http.Client{Timeout: preludeTimeout}
 	}
+	logger := opts.Logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &PreludeSender{
 		apiKey:         opts.APIKey,
 		baseURL:        base,
 		httpClient:     client,
 		codeLengthHint: codeLength,
+		logger:         logger,
 	}, nil
 }
 
@@ -165,6 +175,16 @@ func (p *PreludeSender) Start(ctx context.Context, e164 string, signals Signals)
 	if err := p.post(ctx, "/v2/verification", body, &out); err != nil {
 		return err
 	}
+
+	// Logged on every send, not just the failures. Four different statuses all
+	// return nil here and they do not all put an SMS on a phone — "challenged"
+	// in particular means Prelude chose some other channel — so without this
+	// line "the server said it sent a code" and "a text message arrived" are
+	// indistinguishable from the outside. That ambiguity cost an afternoon.
+	p.logger.Info("prelude verification send",
+		zap.String("status", out.Status),
+		zap.String("reason", out.Reason),
+	)
 
 	switch out.Status {
 	case preludeStatusSuccess, preludeStatusRetry, preludeStatusChallenged, preludeStatusShadowBlocked:
