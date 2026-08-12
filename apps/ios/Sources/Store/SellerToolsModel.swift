@@ -142,9 +142,13 @@ final class SellerToolsModel: ObservableObject {
 
     // MARK: - The run
 
+    /// Needs three characters of description **or** a photo. The photo alone is
+    /// a real run — a vision model naming an item from an image is the thing
+    /// this feature is built on — so the guard is on having something to send,
+    /// not on having words.
     func start(_ text: String, photo: ItemPhoto? = nil) {
         let item = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard item.count >= 3 else { return }
+        guard item.count >= 3 || photo != nil else { return }
         input = item
         task?.cancel()
         task = Task { await run(item, photo: photo) }
@@ -222,7 +226,19 @@ final class SellerToolsModel: ObservableObject {
             guard !Task.isCancelled else { return }
             priceCheckID = identified.priceCheckID
             identifiedName = identified.name.isEmpty ? nil : identified.name
-            term = identified.primaryQuery ?? SearchTerm.from(item)
+            // The fallback re-derives a query from what the user typed, and on
+            // a photo-only run there is nothing to derive it from. An empty
+            // term is not a weak search, it is a search for the entire
+            // marketplace — so this stops instead, which is the same thing the
+            // step already does when the server has no query for us.
+            let typed = SearchTerm.from(item)
+            guard let query = identified.primaryQuery ?? (typed.isEmpty ? nil : typed) else {
+                let message = "Couldn't work out what this is. Try adding a description."
+                fail(.identify, message)
+                phase = .failed(message)
+                return
+            }
+            term = query
         } catch {
             guard !Task.isCancelled else { return }
             let message = Self.message(for: error)

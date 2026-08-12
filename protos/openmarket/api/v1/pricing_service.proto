@@ -25,15 +25,29 @@ import "buf/validate/validate.proto";
 
 // What the seller is holding, as the model reads it.
 message IdentifyItemRequest {
+  // **Either input will do, but not neither.** A photo alone identifies an item
+  // perfectly well — that is what a vision model is for — and demanding a
+  // sentence to go with it turns "point your camera at the thing" into
+  // homework. Words alone work too; that is what this tool did before it could
+  // see anything.
+  //
+  // The pair is checked here rather than on `description` because the rule is
+  // about the request, not the field: neither input is individually required
+  // and exactly one of them being absent is fine. A `required` on either one
+  // would be a lie in half the valid cases.
+  option (buf.validate.message).cel = {
+    id: "identify_item.needs_an_item"
+    message: "send a description of at least 3 characters, a photo, or both"
+    expression: "size(this.description) >= 3 || size(this.photos) > 0"
+  };
+
   // The item, in the seller's words. Not a query — people describe what they
   // are selling, and `SearchTerm` exists because that is never phrased as one.
-  string description = 1 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string = {
-      min_len: 3
-      max_len: 2000
-    }
-  ];
+  //
+  // No `min_len`: an empty description is a valid request when a photo carries
+  // it. The three-character floor lives in the rule above, where it only
+  // applies to the case that needs it.
+  string description = 1 [(buf.validate.field).string = {max_len: 2000}];
 
   // JPEG, downscaled by the client before it is sent.
   //
@@ -48,9 +62,10 @@ message IdentifyItemRequest {
   // from different angles. Left implicit, a model describes them as separate
   // items — the same class of failure as taking the identity from the comps.
   //
-  // Optional in practice: an empty list runs on the description alone, which is
-  // roughly what the tool did before it could see anything. That keeps a failed
-  // or skipped photo pick a degradation rather than a dead end.
+  // Optional, as long as there are words: an empty list runs on the description
+  // alone, which is roughly what the tool did before it could see anything.
+  // That keeps a failed or skipped photo pick a degradation rather than a dead
+  // end. See the message rule above for the one combination that is refused.
   repeated bytes photos = 2 [
     (buf.validate.field).repeated = {
       max_items: 1

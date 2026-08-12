@@ -77,15 +77,22 @@ struct PriceCheckView: View {
 
     // MARK: - Asking
 
+    /// Enough to go on: three characters of description, a photo, or both.
+    ///
+    /// Mirrors the `identify_item.needs_an_item` rule on the request, and the
+    /// two are meant to agree — this one so the button is honest about whether
+    /// it will work, that one because the server cannot trust a client.
+    private var canRun: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 || photo != nil
+    }
+
     /// The one way a run starts, whether it came from the button or from Done.
     ///
-    /// Guarded rather than trusting the caller: the button is disabled below
-    /// three characters, and Done has no such thing — it is on the keyboard
+    /// Guarded rather than trusting the caller: the button is disabled without
+    /// enough to go on, and Done has no such thing — it is on the keyboard
     /// whatever the field holds.
     private func submit() {
-        guard !model.phase.isRunning,
-              draft.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
-        else { return }
+        guard !model.phase.isRunning, canRun else { return }
         isTyping = false
         model.start(draft, photo: photo)
     }
@@ -140,7 +147,15 @@ struct PriceCheckView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            TextField("A white IKEA Malm dresser, six drawers, a few scratches on top",
+            // The placeholder carries the rule, so nothing else has to. With no
+            // photo it is an example of a good description; with one attached
+            // it says the field is now optional and what it is still good for.
+            // A line of copy explaining "either input will do" would be a line
+            // of copy on a screen that just lost three of them, and it would be
+            // on screen in both states to explain one of them.
+            TextField(photo == nil
+                        ? "A white IKEA Malm dresser, six drawers, a few scratches on top"
+                        : "Optional — anything the photo doesn't show",
                       text: $draft,
                       axis: .vertical)
                 .lineLimit(3...6)
@@ -180,7 +195,7 @@ struct PriceCheckView: View {
                 .padding(.vertical, 12)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.phase.isRunning || draft.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+            .disabled(model.phase.isRunning || !canRun)
         }
     }
 

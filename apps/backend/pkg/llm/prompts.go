@@ -70,6 +70,24 @@ var priceSchema = map[string]any{
 }
 
 func identifyPrompt(description string) string {
+	// A photo-only run is a real case — point the camera, get a price — and the
+	// difference has to be said out loud. Appending an empty description to
+	// "The seller's description:" produces a prompt that appears to quote the
+	// seller as saying nothing, which is a stronger invitation to fill the
+	// silence than saying there was none.
+	if strings.TrimSpace(description) == "" {
+		return `You identify second-hand items so they can be priced against a local marketplace.
+
+You are given a photo and nothing else. Identify the item and write the search queries that would find comparable listings for it.
+
+Rules:
+- Name the item as specifically as the photo supports. "Vitamix 5200 blender" beats "blender"; do not invent a model number you cannot actually read in the image.
+- Search queries are for finding SIMILAR items, so leave condition words out of them. "scratched", "like new" and "barely used" narrow the search without narrowing the market, and a query that returns nothing prices nothing.
+- Give one query. Give a second only if the item is genuinely known by another name, and make it a different phrasing of the SAME item, never a second item or a broader category.
+- key_attributes are things you can SEE. "six drawers", "original box", "left armrest torn". You have no seller to tell you anything else, so anything not visible in the photo does not exist as far as this answer is concerned.
+- condition is a guess from the photo. Omit the field entirely rather than guess blindly; it is optional, and "no answer" is a better answer than a wrong one.`
+	}
+
 	return `You identify second-hand items so they can be priced against a local marketplace.
 
 You are given the seller's own description, and usually a photo. Identify the item and write the search queries that would find comparable listings for it.
@@ -92,7 +110,16 @@ func pricePrompt(in PriceInput) string {
 
 `)
 	b.WriteString("The item: " + in.Item.Name + "\n")
-	b.WriteString("The seller's own words: " + in.Description + "\n")
+	// Named as absent rather than left blank. "The seller's own words: " with
+	// nothing after it reads as a seller who said nothing worth repeating; this
+	// says there was no seller input at all, which is the fact the rules below
+	// depend on — with no stated words, everything in the listing has to come
+	// from the photo or from nowhere.
+	if strings.TrimSpace(in.Description) == "" {
+		b.WriteString("The seller wrote no description — this run is from a photo alone.\n")
+	} else {
+		b.WriteString("The seller's own words: " + in.Description + "\n")
+	}
 	if len(in.Item.KeyAttributes) > 0 {
 		b.WriteString("Observed about it: " + strings.Join(in.Item.KeyAttributes, "; ") + "\n")
 	}
@@ -136,6 +163,17 @@ Rules:
 - The description must only contain facts from the seller's words and what was observed. Do not invent condition, history, smells, pets, or reasons for selling. If the only stated fault is a scratched top, do not write that the rest is in good condition — you do not know that.
 - Do not mention prices, the market, comparables, or this analysis in the title or the description. They are a listing, not a report.
 - Answer in the same units as the prices above: a whole number, no currency symbol, no decimals.`)
+
+	// The rule above says "the seller's words and what was observed". With no
+	// seller, half of that vanishes, and the remaining half is a short list —
+	// which is exactly the condition under which a model starts writing the
+	// sentences it has seen in a thousand listings. A short honest description
+	// is the correct output here, and it has to be asked for, because "write a
+	// listing" on its own does not sound like a request for three lines.
+	if strings.TrimSpace(in.Description) == "" {
+		b.WriteString(`
+- There is no seller description on this run, so the observations above are everything that is known. Write only from them. A two-sentence listing that says what the item is and nothing more is the right answer; do not pad it with condition, completeness, history, or how well it works, because none of that was established.`)
+	}
 
 	return b.String()
 }

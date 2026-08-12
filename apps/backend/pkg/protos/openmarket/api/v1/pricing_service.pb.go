@@ -84,6 +84,10 @@ type IdentifyItemRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The item, in the seller's words. Not a query — people describe what they
 	// are selling, and `SearchTerm` exists because that is never phrased as one.
+	//
+	// No `min_len`: an empty description is a valid request when a photo carries
+	// it. The three-character floor lives in the rule above, where it only
+	// applies to the case that needs it.
 	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
 	// JPEG, downscaled by the client before it is sent.
 	//
@@ -98,9 +102,10 @@ type IdentifyItemRequest struct {
 	// from different angles. Left implicit, a model describes them as separate
 	// items — the same class of failure as taking the identity from the comps.
 	//
-	// Optional in practice: an empty list runs on the description alone, which is
-	// roughly what the tool did before it could see anything. That keeps a failed
-	// or skipped photo pick a degradation rather than a dead end.
+	// Optional, as long as there are words: an empty list runs on the description
+	// alone, which is roughly what the tool did before it could see anything.
+	// That keeps a failed or skipped photo pick a degradation rather than a dead
+	// end. See the message rule above for the one combination that is refused.
 	Photos        [][]byte `protobuf:"bytes,2,rep,name=photos,proto3" json:"photos,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -786,11 +791,11 @@ var File_openmarket_api_v1_pricing_service_proto protoreflect.FileDescriptor
 
 const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"\n" +
-	"'openmarket/api/v1/pricing_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\"q\n" +
-	"\x13IdentifyItemRequest\x12/\n" +
-	"\vdescription\x18\x01 \x01(\tB\r\xbaH\n" +
-	"\xc8\x01\x01r\x05\x10\x03\x18\xd0\x0fR\vdescription\x12)\n" +
-	"\x06photos\x18\x02 \x03(\fB\x11\xbaH\x0e\x92\x01\v\x10\x01\"\az\x05\x18\x80\x80\x80\x02R\x06photos\"\xf3\x01\n" +
+	"'openmarket/api/v1/pricing_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\"\x88\x02\n" +
+	"\x13IdentifyItemRequest\x12*\n" +
+	"\vdescription\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fR\vdescription\x12)\n" +
+	"\x06photos\x18\x02 \x03(\fB\x11\xbaH\x0e\x92\x01\v\x10\x01\"\az\x05\x18\x80\x80\x80\x02R\x06photos:\x99\x01\xbaH\x95\x01\x1a\x92\x01\n" +
+	"\x1bidentify_item.needs_an_item\x12=send a description of at least 3 characters, a photo, or both\x1a4size(this.description) >= 3 || size(this.photos) > 0\"\xf3\x01\n" +
 	"\x14IdentifyItemResponse\x12$\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tR\fpriceCheckId\x12'\n" +
 	"\x0fidentified_name\x18\x02 \x01(\tR\x0eidentifiedName\x12%\n" +

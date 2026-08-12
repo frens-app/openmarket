@@ -28,8 +28,20 @@ type StubProvider struct{}
 
 func (StubProvider) Name() string { return "stub" }
 
+// stubPhotoOnlyTerm is what a photo-only run identifies as in development.
+//
+// The stub cannot see, and a photo-only request gives it nothing else to work
+// from — so without this it would answer with an empty name and an empty query,
+// and the phone would search the marketplace for "". Naming the limitation is
+// the honest answer, and it searches for something real, so the rest of the run
+// still exercises the code it is there to exercise.
+const stubPhotoOnlyTerm = "bookshelf"
+
 func (StubProvider) Identify(_ context.Context, in IdentifyInput) (IdentifiedItem, Usage, error) {
 	term := stubSearchTerm(in.Description)
+	if term == "" {
+		term = stubPhotoOnlyTerm
+	}
 	item := IdentifiedItem{
 		Name:          stubCapitalise(term),
 		SearchQueries: []string{term},
@@ -41,6 +53,12 @@ func (StubProvider) Identify(_ context.Context, in IdentifyInput) (IdentifiedIte
 	if len(in.Photos) > 0 {
 		item.KeyAttributes = append(item.KeyAttributes,
 			fmt.Sprintf("stub: received %d photo(s), %d bytes", len(in.Photos), stubPhotoBytes(in.Photos)))
+	}
+	if strings.TrimSpace(in.Description) == "" {
+		// Otherwise "bookshelf" looks like the stub read the photo, which is the
+		// one impression this provider must never leave.
+		item.KeyAttributes = append(item.KeyAttributes,
+			"stub: no description, and the stub cannot see — "+stubPhotoOnlyTerm+" is a placeholder")
 	}
 	return item, Usage{Model: "stub"}, nil
 }
@@ -60,8 +78,8 @@ func (StubProvider) Price(_ context.Context, in PriceInput) (PricedItem, Usage, 
 }
 
 // stubCapitalise upper-cases the first rune, and survives an empty string —
-// which stubSearchTerm can return for a description that is entirely filler,
-// even though the request schema's min_len makes that hard to reach.
+// which stubSearchTerm still returns for a description that is entirely filler
+// ("it is for sale"), even though the photo-only case is handled above.
 func stubCapitalise(s string) string {
 	for i, r := range s {
 		return string(unicode.ToUpper(r)) + s[i+utf8.RuneLen(r):]

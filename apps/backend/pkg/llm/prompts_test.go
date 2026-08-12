@@ -66,6 +66,44 @@ func TestSchemasMarshal(t *testing.T) {
 	}
 }
 
+// A photo-only run must not produce a prompt that ends "The seller's
+// description:" with nothing after it — that reads as a quoted silence, and a
+// model asked to work from a blank quotation fills it in.
+func TestIdentifyPromptWithNoDescriptionSaysThereIsNone(t *testing.T) {
+	prompt := identifyPrompt("   ")
+	if strings.Contains(prompt, "The seller's description:") {
+		t.Error("photo-only prompt still quotes a description that does not exist")
+	}
+	if !strings.Contains(prompt, "a photo and nothing else") {
+		t.Error("photo-only prompt should say the photo is all there is")
+	}
+}
+
+// Same failure on the second call, plus the rule that depends on it: with no
+// stated words, everything in the listing has to come from the photo.
+func TestPricePromptWithNoDescriptionConstrainsTheListing(t *testing.T) {
+	in := PriceInput{
+		Item:  IdentifiedItem{Name: "Bookshelf"},
+		Stats: MarketStats{PricedCount: 5, MedianMinor: 5000, LowestMinor: 2000, HighestMinor: 9000, CurrencySymbol: "$"},
+	}
+	prompt := pricePrompt(in)
+	if strings.Contains(prompt, "The seller's own words:") {
+		t.Error("price prompt quotes seller words on a run that had none")
+	}
+	if !strings.Contains(prompt, "no seller description on this run") {
+		t.Error("price prompt should tell the model there is nothing stated to draw on")
+	}
+
+	in.Description = "white bookshelf, one shelf cracked"
+	withWords := pricePrompt(in)
+	if !strings.Contains(withWords, "The seller's own words: white bookshelf") {
+		t.Error("the ordinary path should still quote the seller")
+	}
+	if strings.Contains(withWords, "no seller description on this run") {
+		t.Error("the photo-only rule leaked into a run that had a description")
+	}
+}
+
 // The identify prompt tells the model to omit condition. If that sentence ever
 // goes back to saying "leave it empty", the schema and the prompt disagree and
 // the model is being asked for a value the schema forbids.

@@ -81,6 +81,10 @@ public nonisolated struct Openmarket_Api_V1_IdentifyItemRequest: Sendable {
 
   /// The item, in the seller's words. Not a query — people describe what they
   /// are selling, and `SearchTerm` exists because that is never phrased as one.
+  ///
+  /// No `min_len`: an empty description is a valid request when a photo carries
+  /// it. The three-character floor lives in the rule above, where it only
+  /// applies to the case that needs it.
   public var description_p: String = String()
 
   /// JPEG, downscaled by the client before it is sent.
@@ -96,9 +100,10 @@ public nonisolated struct Openmarket_Api_V1_IdentifyItemRequest: Sendable {
   /// from different angles. Left implicit, a model describes them as separate
   /// items — the same class of failure as taking the identity from the comps.
   ///
-  /// Optional in practice: an empty list runs on the description alone, which is
-  /// roughly what the tool did before it could see anything. That keeps a failed
-  /// or skipped photo pick a degradation rather than a dead end.
+  /// Optional, as long as there are words: an empty list runs on the description
+  /// alone, which is roughly what the tool did before it could see anything.
+  /// That keeps a failed or skipped photo pick a degradation rather than a dead
+  /// end. See the message rule above for the one combination that is refused.
   public var photos: [Data] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()

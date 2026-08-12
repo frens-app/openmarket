@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,6 +279,31 @@ func TestStubSearchTermDropsFiller(t *testing.T) {
 	want := "white ikea malm dresser"
 	if got != want {
 		t.Errorf("stubSearchTerm = %q, want %q", got, want)
+	}
+}
+
+// The stub is the default dev provider and it cannot see, so a photo-only run
+// would otherwise hand the phone an empty query — which is not a weak search,
+// it is a search for the whole marketplace. It has to answer with something
+// real, and it has to say the answer is a placeholder.
+func TestStubPhotoOnlyRunReturnsAQueryAndAdmitsItGuessed(t *testing.T) {
+	item, _, err := StubProvider{}.Identify(context.Background(), IdentifyInput{
+		Photos: []Photo{{Data: []byte{0xff, 0xd8}, MediaType: "image/jpeg"}},
+	})
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if item.Name == "" || len(item.SearchQueries) == 0 || item.SearchQueries[0] == "" {
+		t.Fatalf("photo-only stub gave nothing to search: %+v", item)
+	}
+	var admits bool
+	for _, attr := range item.KeyAttributes {
+		if strings.Contains(attr, "cannot see") {
+			admits = true
+		}
+	}
+	if !admits {
+		t.Error("the stub should say the name is a placeholder, not look like it read the photo")
 	}
 }
 
