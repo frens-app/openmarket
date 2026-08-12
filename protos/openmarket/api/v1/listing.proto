@@ -10,10 +10,10 @@ import "google/protobuf/timestamp.proto";
 // and the capture context is what makes an absent field mean "not observed"
 // rather than "Facebook said no".
 
-enum FacebookMarketplaceWebVariant {
-  FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED = 0;
-  FACEBOOK_MARKETPLACE_WEB_VARIANT_DESKTOP = 1;
-  FACEBOOK_MARKETPLACE_WEB_VARIANT_MOBILE = 2;
+enum FacebookMarketplaceBrowserVariant {
+  FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED = 0;
+  FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP = 1;
+  FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE = 2;
 }
 
 enum FacebookMarketplacePageRoute {
@@ -42,9 +42,9 @@ enum FacebookAuthenticationState {
 }
 
 message FacebookMarketplaceObservationContext {
-  // The Facebook site variant that was parsed, not the observer's hardware.
+  // The Facebook browser variant that was parsed, not the observer's hardware.
   // A phone requesting the desktop site records DESKTOP here.
-  FacebookMarketplaceWebVariant web_variant = 1 [(buf.validate.field).enum.defined_only = true];
+  FacebookMarketplaceBrowserVariant browser_variant = 1 [(buf.validate.field).enum.defined_only = true];
   FacebookMarketplacePageRoute page_route = 2 [(buf.validate.field).enum.defined_only = true];
   FacebookMarketplaceExtractionMethod extraction_method = 3 [(buf.validate.field).enum.defined_only = true];
   FacebookAuthenticationState facebook_authentication_state = 4 [(buf.validate.field).enum.defined_only = true];

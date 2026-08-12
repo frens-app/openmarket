@@ -23,52 +23,52 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type FacebookMarketplaceWebVariant int32
+type FacebookMarketplaceBrowserVariant int32
 
 const (
-	FacebookMarketplaceWebVariant_FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED FacebookMarketplaceWebVariant = 0
-	FacebookMarketplaceWebVariant_FACEBOOK_MARKETPLACE_WEB_VARIANT_DESKTOP     FacebookMarketplaceWebVariant = 1
-	FacebookMarketplaceWebVariant_FACEBOOK_MARKETPLACE_WEB_VARIANT_MOBILE      FacebookMarketplaceWebVariant = 2
+	FacebookMarketplaceBrowserVariant_FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED FacebookMarketplaceBrowserVariant = 0
+	FacebookMarketplaceBrowserVariant_FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP     FacebookMarketplaceBrowserVariant = 1
+	FacebookMarketplaceBrowserVariant_FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE      FacebookMarketplaceBrowserVariant = 2
 )
 
-// Enum value maps for FacebookMarketplaceWebVariant.
+// Enum value maps for FacebookMarketplaceBrowserVariant.
 var (
-	FacebookMarketplaceWebVariant_name = map[int32]string{
-		0: "FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED",
-		1: "FACEBOOK_MARKETPLACE_WEB_VARIANT_DESKTOP",
-		2: "FACEBOOK_MARKETPLACE_WEB_VARIANT_MOBILE",
+	FacebookMarketplaceBrowserVariant_name = map[int32]string{
+		0: "FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED",
+		1: "FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP",
+		2: "FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE",
 	}
-	FacebookMarketplaceWebVariant_value = map[string]int32{
-		"FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED": 0,
-		"FACEBOOK_MARKETPLACE_WEB_VARIANT_DESKTOP":     1,
-		"FACEBOOK_MARKETPLACE_WEB_VARIANT_MOBILE":      2,
+	FacebookMarketplaceBrowserVariant_value = map[string]int32{
+		"FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED": 0,
+		"FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP":     1,
+		"FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE":      2,
 	}
 )
 
-func (x FacebookMarketplaceWebVariant) Enum() *FacebookMarketplaceWebVariant {
-	p := new(FacebookMarketplaceWebVariant)
+func (x FacebookMarketplaceBrowserVariant) Enum() *FacebookMarketplaceBrowserVariant {
+	p := new(FacebookMarketplaceBrowserVariant)
 	*p = x
 	return p
 }
 
-func (x FacebookMarketplaceWebVariant) String() string {
+func (x FacebookMarketplaceBrowserVariant) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (FacebookMarketplaceWebVariant) Descriptor() protoreflect.EnumDescriptor {
+func (FacebookMarketplaceBrowserVariant) Descriptor() protoreflect.EnumDescriptor {
 	return file_openmarket_api_v1_listing_proto_enumTypes[0].Descriptor()
 }
 
-func (FacebookMarketplaceWebVariant) Type() protoreflect.EnumType {
+func (FacebookMarketplaceBrowserVariant) Type() protoreflect.EnumType {
 	return &file_openmarket_api_v1_listing_proto_enumTypes[0]
 }
 
-func (x FacebookMarketplaceWebVariant) Number() protoreflect.EnumNumber {
+func (x FacebookMarketplaceBrowserVariant) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use FacebookMarketplaceWebVariant.Descriptor instead.
-func (FacebookMarketplaceWebVariant) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use FacebookMarketplaceBrowserVariant.Descriptor instead.
+func (FacebookMarketplaceBrowserVariant) EnumDescriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_listing_proto_rawDescGZIP(), []int{0}
 }
 
@@ -290,9 +290,9 @@ func (FacebookMarketplaceSellerSectionStatus) EnumDescriptor() ([]byte, []int) {
 
 type FacebookMarketplaceObservationContext struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The Facebook site variant that was parsed, not the observer's hardware.
+	// The Facebook browser variant that was parsed, not the observer's hardware.
 	// A phone requesting the desktop site records DESKTOP here.
-	WebVariant                  FacebookMarketplaceWebVariant       `protobuf:"varint,1,opt,name=web_variant,json=webVariant,proto3,enum=openmarket.api.v1.FacebookMarketplaceWebVariant" json:"web_variant,omitempty"`
+	BrowserVariant              FacebookMarketplaceBrowserVariant   `protobuf:"varint,1,opt,name=browser_variant,json=browserVariant,proto3,enum=openmarket.api.v1.FacebookMarketplaceBrowserVariant" json:"browser_variant,omitempty"`
 	PageRoute                   FacebookMarketplacePageRoute        `protobuf:"varint,2,opt,name=page_route,json=pageRoute,proto3,enum=openmarket.api.v1.FacebookMarketplacePageRoute" json:"page_route,omitempty"`
 	ExtractionMethod            FacebookMarketplaceExtractionMethod `protobuf:"varint,3,opt,name=extraction_method,json=extractionMethod,proto3,enum=openmarket.api.v1.FacebookMarketplaceExtractionMethod" json:"extraction_method,omitempty"`
 	FacebookAuthenticationState FacebookAuthenticationState         `protobuf:"varint,4,opt,name=facebook_authentication_state,json=facebookAuthenticationState,proto3,enum=openmarket.api.v1.FacebookAuthenticationState" json:"facebook_authentication_state,omitempty"`
@@ -338,11 +338,11 @@ func (*FacebookMarketplaceObservationContext) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_listing_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *FacebookMarketplaceObservationContext) GetWebVariant() FacebookMarketplaceWebVariant {
+func (x *FacebookMarketplaceObservationContext) GetBrowserVariant() FacebookMarketplaceBrowserVariant {
 	if x != nil {
-		return x.WebVariant
+		return x.BrowserVariant
 	}
-	return FacebookMarketplaceWebVariant_FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED
+	return FacebookMarketplaceBrowserVariant_FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED
 }
 
 func (x *FacebookMarketplaceObservationContext) GetPageRoute() FacebookMarketplacePageRoute {
@@ -1223,10 +1223,9 @@ var File_openmarket_api_v1_listing_proto protoreflect.FileDescriptor
 
 const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\n" +
-	"\x1fopenmarket/api/v1/listing.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf7\x05\n" +
-	"%FacebookMarketplaceObservationContext\x12[\n" +
-	"\vweb_variant\x18\x01 \x01(\x0e20.openmarket.api.v1.FacebookMarketplaceWebVariantB\b\xbaH\x05\x82\x01\x02\x10\x01R\n" +
-	"webVariant\x12X\n" +
+	"\x1fopenmarket/api/v1/listing.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x06\n" +
+	"%FacebookMarketplaceObservationContext\x12g\n" +
+	"\x0fbrowser_variant\x18\x01 \x01(\x0e24.openmarket.api.v1.FacebookMarketplaceBrowserVariantB\b\xbaH\x05\x82\x01\x02\x10\x01R\x0ebrowserVariant\x12X\n" +
 	"\n" +
 	"page_route\x18\x02 \x01(\x0e2/.openmarket.api.v1.FacebookMarketplacePageRouteB\b\xbaH\x05\x82\x01\x02\x10\x01R\tpageRoute\x12m\n" +
 	"\x11extraction_method\x18\x03 \x01(\x0e26.openmarket.api.v1.FacebookMarketplaceExtractionMethodB\b\xbaH\x05\x82\x01\x02\x10\x01R\x10extractionMethod\x12|\n" +
@@ -1347,11 +1346,11 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"%FacebookMarketplaceListingObservation\x12X\n" +
 	"\x06search\x18\x01 \x01(\v2>.openmarket.api.v1.FacebookMarketplaceSearchListingObservationH\x00R\x06search\x12X\n" +
 	"\x06detail\x18\x02 \x01(\v2>.openmarket.api.v1.FacebookMarketplaceListingDetailObservationH\x00R\x06detailB\r\n" +
-	"\vobservation*\xac\x01\n" +
-	"\x1dFacebookMarketplaceWebVariant\x120\n" +
-	",FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED\x10\x00\x12,\n" +
-	"(FACEBOOK_MARKETPLACE_WEB_VARIANT_DESKTOP\x10\x01\x12+\n" +
-	"'FACEBOOK_MARKETPLACE_WEB_VARIANT_MOBILE\x10\x02*\x87\x02\n" +
+	"\vobservation*\xbc\x01\n" +
+	"!FacebookMarketplaceBrowserVariant\x124\n" +
+	"0FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED\x10\x00\x120\n" +
+	",FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP\x10\x01\x12/\n" +
+	"+FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE\x10\x02*\x87\x02\n" +
 	"\x1cFacebookMarketplacePageRoute\x12/\n" +
 	"+FACEBOOK_MARKETPLACE_PAGE_ROUTE_UNSPECIFIED\x10\x00\x12*\n" +
 	"&FACEBOOK_MARKETPLACE_PAGE_ROUTE_SEARCH\x10\x01\x12,\n" +
@@ -1389,7 +1388,7 @@ func file_openmarket_api_v1_listing_proto_rawDescGZIP() []byte {
 var file_openmarket_api_v1_listing_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_openmarket_api_v1_listing_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_openmarket_api_v1_listing_proto_goTypes = []any{
-	(FacebookMarketplaceWebVariant)(0),                  // 0: openmarket.api.v1.FacebookMarketplaceWebVariant
+	(FacebookMarketplaceBrowserVariant)(0),              // 0: openmarket.api.v1.FacebookMarketplaceBrowserVariant
 	(FacebookMarketplacePageRoute)(0),                   // 1: openmarket.api.v1.FacebookMarketplacePageRoute
 	(FacebookMarketplaceExtractionMethod)(0),            // 2: openmarket.api.v1.FacebookMarketplaceExtractionMethod
 	(FacebookAuthenticationState)(0),                    // 3: openmarket.api.v1.FacebookAuthenticationState
@@ -1407,7 +1406,7 @@ var file_openmarket_api_v1_listing_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),                       // 15: google.protobuf.Timestamp
 }
 var file_openmarket_api_v1_listing_proto_depIdxs = []int32{
-	0,  // 0: openmarket.api.v1.FacebookMarketplaceObservationContext.web_variant:type_name -> openmarket.api.v1.FacebookMarketplaceWebVariant
+	0,  // 0: openmarket.api.v1.FacebookMarketplaceObservationContext.browser_variant:type_name -> openmarket.api.v1.FacebookMarketplaceBrowserVariant
 	1,  // 1: openmarket.api.v1.FacebookMarketplaceObservationContext.page_route:type_name -> openmarket.api.v1.FacebookMarketplacePageRoute
 	2,  // 2: openmarket.api.v1.FacebookMarketplaceObservationContext.extraction_method:type_name -> openmarket.api.v1.FacebookMarketplaceExtractionMethod
 	3,  // 3: openmarket.api.v1.FacebookMarketplaceObservationContext.facebook_authentication_state:type_name -> openmarket.api.v1.FacebookAuthenticationState

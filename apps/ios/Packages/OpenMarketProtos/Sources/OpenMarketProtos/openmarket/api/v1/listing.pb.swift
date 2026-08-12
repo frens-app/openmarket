@@ -20,7 +20,7 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
-public nonisolated enum Openmarket_Api_V1_FacebookMarketplaceWebVariant: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Openmarket_Api_V1_FacebookMarketplaceBrowserVariant: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case desktop // = 1
@@ -50,7 +50,7 @@ public nonisolated enum Openmarket_Api_V1_FacebookMarketplaceWebVariant: SwiftPr
   }
 
   // The compiler won't synthesize support with the UNRECOGNIZED case.
-  public static let allCases: [Openmarket_Api_V1_FacebookMarketplaceWebVariant] = [
+  public static let allCases: [Openmarket_Api_V1_FacebookMarketplaceBrowserVariant] = [
     .unspecified,
     .desktop,
     .mobile,
@@ -244,9 +244,9 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceObservationContex
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// The Facebook site variant that was parsed, not the observer's hardware.
+  /// The Facebook browser variant that was parsed, not the observer's hardware.
   /// A phone requesting the desktop site records DESKTOP here.
-  public var webVariant: Openmarket_Api_V1_FacebookMarketplaceWebVariant = .unspecified
+  public var browserVariant: Openmarket_Api_V1_FacebookMarketplaceBrowserVariant = .unspecified
 
   public var pageRoute: Openmarket_Api_V1_FacebookMarketplacePageRoute = .unspecified
 
@@ -939,8 +939,8 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceListingObservatio
 
 fileprivate nonisolated let _protobuf_package = "openmarket.api.v1"
 
-nonisolated extension Openmarket_Api_V1_FacebookMarketplaceWebVariant: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0FACEBOOK_MARKETPLACE_WEB_VARIANT_UNSPECIFIED\0\u{1}FACEBOOK_MARKETPLACE_WEB_VARIANT_DESKTOP\0\u{1}FACEBOOK_MARKETPLACE_WEB_VARIANT_MOBILE\0")
+nonisolated extension Openmarket_Api_V1_FacebookMarketplaceBrowserVariant: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0FACEBOOK_MARKETPLACE_BROWSER_VARIANT_UNSPECIFIED\0\u{1}FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP\0\u{1}FACEBOOK_MARKETPLACE_BROWSER_VARIANT_MOBILE\0")
 }
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplacePageRoute: SwiftProtobuf._ProtoNameProviding {
@@ -961,7 +961,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSellerSectionStatus: 
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceObservationContext"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}web_variant\0\u{3}page_route\0\u{3}extraction_method\0\u{3}facebook_authentication_state\0\u{3}observed_at\0\u{3}observer_device_id\0\u{3}observer_app_version\0\u{3}observer_app_build\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}browser_variant\0\u{3}page_route\0\u{3}extraction_method\0\u{3}facebook_authentication_state\0\u{3}observed_at\0\u{3}observer_device_id\0\u{3}observer_app_version\0\u{3}observer_app_build\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -969,7 +969,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: S
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularEnumField(value: &self.webVariant) }()
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.browserVariant) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.pageRoute) }()
       case 3: try { try decoder.decodeSingularEnumField(value: &self.extractionMethod) }()
       case 4: try { try decoder.decodeSingularEnumField(value: &self.facebookAuthenticationState) }()
@@ -987,8 +987,8 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: S
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if self.webVariant != .unspecified {
-      try visitor.visitSingularEnumField(value: self.webVariant, fieldNumber: 1)
+    if self.browserVariant != .unspecified {
+      try visitor.visitSingularEnumField(value: self.browserVariant, fieldNumber: 1)
     }
     if self.pageRoute != .unspecified {
       try visitor.visitSingularEnumField(value: self.pageRoute, fieldNumber: 2)
@@ -1015,7 +1015,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: S
   }
 
   public static func ==(lhs: Openmarket_Api_V1_FacebookMarketplaceObservationContext, rhs: Openmarket_Api_V1_FacebookMarketplaceObservationContext) -> Bool {
-    if lhs.webVariant != rhs.webVariant {return false}
+    if lhs.browserVariant != rhs.browserVariant {return false}
     if lhs.pageRoute != rhs.pageRoute {return false}
     if lhs.extractionMethod != rhs.extractionMethod {return false}
     if lhs.facebookAuthenticationState != rhs.facebookAuthenticationState {return false}

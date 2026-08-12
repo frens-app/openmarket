@@ -10,7 +10,7 @@ This version replaces v0.2's assumption that every listing is one of two
 shapes, "search sighting" or "detail open". What the app receives is determined
 by four independent facts:
 
-1. Facebook web variant — desktop or mobile;
+1. Facebook browser variant — desktop or mobile;
 2. Facebook page route — search/discover, item, or seller profile;
 3. extraction method — embedded structured payload or rendered DOM; and
 4. Facebook authentication state — signed in or signed out.
@@ -64,7 +64,7 @@ The wire types describe observations:
 - `FacebookMarketplaceSearchListingObservation`
 - `FacebookMarketplaceListingDetailObservation`
 - `FacebookMarketplaceListingObservation` as their `oneof` envelope
-- `FacebookMarketplaceObservationContext` carrying the Facebook web variant,
+- `FacebookMarketplaceObservationContext` carrying the Facebook browser variant,
   page route, extraction method, Facebook authentication state, `observed_at`,
   observer device id, and observer app version/build
 
@@ -303,7 +303,7 @@ CREATE TABLE listing_observations (
   observer_device_id            uuid REFERENCES user_devices(id) ON DELETE SET NULL,
   observer_app_version          text,
   observer_app_build            text,
-  facebook_web_variant          text NOT NULL,
+  facebook_browser_variant      text NOT NULL,
   facebook_page_route           text NOT NULL,
   extraction_method             text NOT NULL,
   facebook_authentication_state text NOT NULL,
@@ -335,7 +335,7 @@ CREATE TABLE listing_changes (
   availability                  text NOT NULL,
   availability_raw              text,
   changed                       text[] NOT NULL,
-  facebook_web_variant          text NOT NULL,
+  facebook_browser_variant      text NOT NULL,
   facebook_page_route           text NOT NULL,
   extraction_method             text NOT NULL,
   facebook_authentication_state text NOT NULL,
@@ -416,7 +416,7 @@ before its semantics do.
 ## 7. Open verification work
 
 1. Re-run the same matrix on mobile, signed in and signed out. Treat it as a new
-   Facebook web variant, not a responsive variant of desktop.
+   Facebook browser variant, not a responsive variant of desktop.
 2. Verify whether any desktop seller block or seller profile explicitly exposes
    seller location. Until then, `seller_location` stays unset.
 3. Verify a card cover-photo filename FBID against item-page photo position 0
@@ -437,7 +437,7 @@ before its semantics do.
 | `created_at` for Facebook's timestamp | `listed_at` | reserves `created_at` for our row |
 | `fb_*` in new schema | `facebook_*` | readable across SQL, Go, Swift, and protobuf |
 | `source_page` / `page_kind` | `facebook_page_route` | it describes the parsed URL family, not a generic page class |
-| `source_surface` / `surface` | `facebook_web_variant` | names desktop/mobile Facebook markup without implying observer hardware |
+| `source_surface` / `surface` | `facebook_browser_variant` | names desktop/mobile Facebook markup without implying observer hardware |
 | `status` | `availability` | avoids collision with moderation/deletion/ingest state |
 | `city` / `latitude` | `listing_city` / `listing_approx_lat` | prevents accidental seller-location inference |
 | `seller_id` for Facebook's id | `facebook_profile_id` | `seller_id` remains our foreign key |
