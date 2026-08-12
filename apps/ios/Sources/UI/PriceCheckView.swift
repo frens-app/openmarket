@@ -17,8 +17,18 @@ import UIKit
 /// and a spinner followed by a number asks the user to take that on faith.
 /// Watching it go and look is the evidence.
 ///
-/// The comparables are on screen *above* the recommendation for the same
-/// reason. They are the working, not an illustration.
+/// **The comparables used to sit above the recommendation**, on the argument
+/// that they are the working rather than an illustration. They are below it
+/// now, and the argument survives the move: the transcript already states the
+/// working in the line above the price — how many listings were found, how many
+/// sold, what band they were asking in. The claim "we went and looked" is made
+/// by the checkmarks, before the number appears, which is what putting the
+/// strips first was for.
+///
+/// What putting them first also did was bury the answer under two horizontal
+/// scrollers on a phone. Somebody who wants to check the evidence scrolls; the
+/// order now matches what they came for, and the strips are what backs it up
+/// rather than what stands in front of it.
 struct PriceCheckView: View {
     @EnvironmentObject private var model: SellerToolsModel
     /// The description being typed, held here rather than on the model — see
@@ -60,12 +70,18 @@ struct PriceCheckView: View {
 
     var body: some View {
         ScrollView {
+            // Inputs, what happened, the answer, then the evidence behind it.
+            //
+            // The two questions at the end come after everything rather than
+            // straight after the price: "were these helpful" is about the whole
+            // run, and asking it with two sections still to scroll past would be
+            // asking before the user has seen what they are judging.
             VStack(alignment: .leading, spacing: 20) {
                 prompt
                 if !model.steps.isEmpty { transcript }
+                if model.hasResult { priceField }
                 if !model.comps.isEmpty { comparables }
                 if !model.sold.isEmpty { recentlySold }
-                if model.hasResult { priceField }
                 if case .failed(let message) = model.phase { failureCard(message) }
                 if model.phase == .done { helpfulPrompt }
                 if model.phase == .done { startOver }
