@@ -23,13 +23,13 @@ public protocol Openmarket_Api_V1_PricingServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `submitPriceCheckFeedback`(request: Openmarket_Api_V1_SubmitPriceCheckFeedbackRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_SubmitPriceCheckFeedbackResponse>
 
-    /// The unasked one, and the better of the two. Copying the price is what
-    /// somebody does immediately before pasting it into Facebook's price box: it
-    /// is captured on nearly every successful run, where a prompt is answered by
-    /// the minority who feel strongly enough to stop and tap — which skews
-    /// negative. Idempotent; the first copy keeps the timestamp.
+    /// The unasked one, and the better of the two. Copying is what somebody does
+    /// immediately before pasting into Facebook: it is captured on nearly every
+    /// successful run, where a prompt is answered by the minority who feel
+    /// strongly enough to stop and tap — which skews negative. Idempotent; the
+    /// first price copy keeps the timestamp.
     @available(iOS 13, *)
-    func `recordPriceCopied`(request: Openmarket_Api_V1_RecordPriceCopiedRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_RecordPriceCopiedResponse>
+    func `recordPriceCheckCopy`(request: Openmarket_Api_V1_RecordPriceCheckCopyRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_RecordPriceCheckCopyResponse>
 }
 
 /// Concrete implementation of `Openmarket_Api_V1_PricingServiceClientInterface`.
@@ -56,8 +56,8 @@ public final class Openmarket_Api_V1_PricingServiceClient: Openmarket_Api_V1_Pri
     }
 
     @available(iOS 13, *)
-    public func `recordPriceCopied`(request: Openmarket_Api_V1_RecordPriceCopiedRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_RecordPriceCopiedResponse> {
-        return await self.client.unary(path: "/openmarket.api.v1.PricingService/RecordPriceCopied", idempotencyLevel: .unknown, request: request, headers: headers)
+    public func `recordPriceCheckCopy`(request: Openmarket_Api_V1_RecordPriceCheckCopyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_RecordPriceCheckCopyResponse> {
+        return await self.client.unary(path: "/openmarket.api.v1.PricingService/RecordPriceCheckCopy", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
     public enum Metadata {
@@ -65,7 +65,7 @@ public final class Openmarket_Api_V1_PricingServiceClient: Openmarket_Api_V1_Pri
             public static let identifyItem = Connect.MethodSpec(name: "IdentifyItem", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let completePriceCheck = Connect.MethodSpec(name: "CompletePriceCheck", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let submitPriceCheckFeedback = Connect.MethodSpec(name: "SubmitPriceCheckFeedback", service: "openmarket.api.v1.PricingService", type: .unary)
-            public static let recordPriceCopied = Connect.MethodSpec(name: "RecordPriceCopied", service: "openmarket.api.v1.PricingService", type: .unary)
+            public static let recordPriceCheckCopy = Connect.MethodSpec(name: "RecordPriceCheckCopy", service: "openmarket.api.v1.PricingService", type: .unary)
         }
     }
 }

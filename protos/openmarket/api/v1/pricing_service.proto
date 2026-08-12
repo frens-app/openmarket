@@ -240,14 +240,42 @@ message SubmitPriceCheckFeedbackRequest {
 
 message SubmitPriceCheckFeedbackResponse {}
 
-message RecordPriceCopiedRequest {
+// What the seller took away, which is not necessarily what was offered.
+//
+// Everything on the result screen is now editable — the price has a stepper,
+// the title and the description are text fields — so for each of them there are
+// two facts: what was generated, and what was actually used. The generated
+// side is already stored (`recommended_price_minor`, `listing_title`,
+// `listing_description`); this call carries the other side.
+//
+// **The gap between the pair is the only real measure of quality this feature
+// has.** "Helpful? yes" is an opinion from the minority who stop to tap;
+// "every seller rewrites the title and moves the price up 20%" is behaviour,
+// from everybody, and it says exactly what to fix. Overwriting the generated
+// values with the edits — the obvious single-column design — would erase the
+// comparison that makes either number worth having.
+//
+// Every field is optional and only what was copied is sent, so three copy
+// buttons are three calls that each say one true thing.
+message RecordPriceCheckCopyRequest {
   string price_check_id = 1 [
     (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
+
+  // Minor units. Present only on a price copy, which is also what sets
+  // `price_copied` — the boolean has always meant "took the number", and a
+  // title copy is not that.
+  optional int64 copied_price_minor = 2;
+
+  // The listing as it was copied. Sent whether or not it differs from what was
+  // generated: "they read it and used it unchanged" is a result, and inferring
+  // it from an absent field would confuse it with "they never copied at all".
+  optional string copied_listing_title = 3 [(buf.validate.field).string.max_len = 200];
+  optional string copied_listing_description = 4 [(buf.validate.field).string.max_len = 2400];
 }
 
-message RecordPriceCopiedResponse {}
+message RecordPriceCheckCopyResponse {}
 
 service PricingService {
   // The only call that reaches a model.
@@ -259,10 +287,10 @@ service PricingService {
   // The asked question.
   rpc SubmitPriceCheckFeedback(SubmitPriceCheckFeedbackRequest) returns (SubmitPriceCheckFeedbackResponse);
 
-  // The unasked one, and the better of the two. Copying the price is what
-  // somebody does immediately before pasting it into Facebook's price box: it
-  // is captured on nearly every successful run, where a prompt is answered by
-  // the minority who feel strongly enough to stop and tap — which skews
-  // negative. Idempotent; the first copy keeps the timestamp.
-  rpc RecordPriceCopied(RecordPriceCopiedRequest) returns (RecordPriceCopiedResponse);
+  // The unasked one, and the better of the two. Copying is what somebody does
+  // immediately before pasting into Facebook: it is captured on nearly every
+  // successful run, where a prompt is answered by the minority who feel
+  // strongly enough to stop and tap — which skews negative. Idempotent; the
+  // first price copy keeps the timestamp.
+  rpc RecordPriceCheckCopy(RecordPriceCheckCopyRequest) returns (RecordPriceCheckCopyResponse);
 }

@@ -33,7 +33,7 @@ public typealias IdentifyItemRequest = Openmarket_Api_V1_IdentifyItemRequest
 public typealias IdentifyItemResponse = Openmarket_Api_V1_IdentifyItemResponse
 public typealias CompletePriceCheckRequest = Openmarket_Api_V1_CompletePriceCheckRequest
 public typealias SubmitPriceCheckFeedbackRequest = Openmarket_Api_V1_SubmitPriceCheckFeedbackRequest
-public typealias RecordPriceCopiedRequest = Openmarket_Api_V1_RecordPriceCopiedRequest
+public typealias RecordPriceCheckCopyRequest = Openmarket_Api_V1_RecordPriceCheckCopyRequest
 public typealias MarketStats = Openmarket_Api_V1_MarketStats
 
 // `ProtoComparable` was aliased here, for a `Comparable` message that carried

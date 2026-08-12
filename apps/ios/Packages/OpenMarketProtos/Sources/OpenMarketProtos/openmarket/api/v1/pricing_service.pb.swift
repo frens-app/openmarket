@@ -284,19 +284,73 @@ public nonisolated struct Openmarket_Api_V1_SubmitPriceCheckFeedbackResponse: Se
   public init() {}
 }
 
-public nonisolated struct Openmarket_Api_V1_RecordPriceCopiedRequest: Sendable {
+/// What the seller took away, which is not necessarily what was offered.
+///
+/// Everything on the result screen is now editable — the price has a stepper,
+/// the title and the description are text fields — so for each of them there are
+/// two facts: what was generated, and what was actually used. The generated
+/// side is already stored (`recommended_price_minor`, `listing_title`,
+/// `listing_description`); this call carries the other side.
+///
+/// **The gap between the pair is the only real measure of quality this feature
+/// has.** "Helpful? yes" is an opinion from the minority who stop to tap;
+/// "every seller rewrites the title and moves the price up 20%" is behaviour,
+/// from everybody, and it says exactly what to fix. Overwriting the generated
+/// values with the edits — the obvious single-column design — would erase the
+/// comparison that makes either number worth having.
+///
+/// Every field is optional and only what was copied is sent, so three copy
+/// buttons are three calls that each say one true thing.
+public nonisolated struct Openmarket_Api_V1_RecordPriceCheckCopyRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var priceCheckID: String = String()
 
+  /// Minor units. Present only on a price copy, which is also what sets
+  /// `price_copied` — the boolean has always meant "took the number", and a
+  /// title copy is not that.
+  public var copiedPriceMinor: Int64 {
+    get {_copiedPriceMinor ?? 0}
+    set {_copiedPriceMinor = newValue}
+  }
+  /// Returns true if `copiedPriceMinor` has been explicitly set.
+  public var hasCopiedPriceMinor: Bool {self._copiedPriceMinor != nil}
+  /// Clears the value of `copiedPriceMinor`. Subsequent reads from it will return its default value.
+  public mutating func clearCopiedPriceMinor() {self._copiedPriceMinor = nil}
+
+  /// The listing as it was copied. Sent whether or not it differs from what was
+  /// generated: "they read it and used it unchanged" is a result, and inferring
+  /// it from an absent field would confuse it with "they never copied at all".
+  public var copiedListingTitle: String {
+    get {_copiedListingTitle ?? String()}
+    set {_copiedListingTitle = newValue}
+  }
+  /// Returns true if `copiedListingTitle` has been explicitly set.
+  public var hasCopiedListingTitle: Bool {self._copiedListingTitle != nil}
+  /// Clears the value of `copiedListingTitle`. Subsequent reads from it will return its default value.
+  public mutating func clearCopiedListingTitle() {self._copiedListingTitle = nil}
+
+  public var copiedListingDescription: String {
+    get {_copiedListingDescription ?? String()}
+    set {_copiedListingDescription = newValue}
+  }
+  /// Returns true if `copiedListingDescription` has been explicitly set.
+  public var hasCopiedListingDescription: Bool {self._copiedListingDescription != nil}
+  /// Clears the value of `copiedListingDescription`. Subsequent reads from it will return its default value.
+  public mutating func clearCopiedListingDescription() {self._copiedListingDescription = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _copiedPriceMinor: Int64? = nil
+  fileprivate var _copiedListingTitle: String? = nil
+  fileprivate var _copiedListingDescription: String? = nil
 }
 
-public nonisolated struct Openmarket_Api_V1_RecordPriceCopiedResponse: Sendable {
+public nonisolated struct Openmarket_Api_V1_RecordPriceCheckCopyResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -601,9 +655,9 @@ nonisolated extension Openmarket_Api_V1_SubmitPriceCheckFeedbackResponse: SwiftP
   }
 }
 
-nonisolated extension Openmarket_Api_V1_RecordPriceCopiedRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".RecordPriceCopiedRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0")
+nonisolated extension Openmarket_Api_V1_RecordPriceCheckCopyRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RecordPriceCheckCopyRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0\u{3}copied_price_minor\0\u{3}copied_listing_title\0\u{3}copied_listing_description\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -612,27 +666,46 @@ nonisolated extension Openmarket_Api_V1_RecordPriceCopiedRequest: SwiftProtobuf.
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.priceCheckID) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self._copiedPriceMinor) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._copiedListingTitle) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self._copiedListingDescription) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.priceCheckID.isEmpty {
       try visitor.visitSingularStringField(value: self.priceCheckID, fieldNumber: 1)
     }
+    try { if let v = self._copiedPriceMinor {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._copiedListingTitle {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._copiedListingDescription {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Openmarket_Api_V1_RecordPriceCopiedRequest, rhs: Openmarket_Api_V1_RecordPriceCopiedRequest) -> Bool {
+  public static func ==(lhs: Openmarket_Api_V1_RecordPriceCheckCopyRequest, rhs: Openmarket_Api_V1_RecordPriceCheckCopyRequest) -> Bool {
     if lhs.priceCheckID != rhs.priceCheckID {return false}
+    if lhs._copiedPriceMinor != rhs._copiedPriceMinor {return false}
+    if lhs._copiedListingTitle != rhs._copiedListingTitle {return false}
+    if lhs._copiedListingDescription != rhs._copiedListingDescription {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-nonisolated extension Openmarket_Api_V1_RecordPriceCopiedResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".RecordPriceCopiedResponse"
+nonisolated extension Openmarket_Api_V1_RecordPriceCheckCopyResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RecordPriceCheckCopyResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -644,7 +717,7 @@ nonisolated extension Openmarket_Api_V1_RecordPriceCopiedResponse: SwiftProtobuf
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Openmarket_Api_V1_RecordPriceCopiedResponse, rhs: Openmarket_Api_V1_RecordPriceCopiedResponse) -> Bool {
+  public static func ==(lhs: Openmarket_Api_V1_RecordPriceCheckCopyResponse, rhs: Openmarket_Api_V1_RecordPriceCheckCopyResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

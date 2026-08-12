@@ -42,9 +42,9 @@ const (
 	// PricingServiceSubmitPriceCheckFeedbackProcedure is the fully-qualified name of the
 	// PricingService's SubmitPriceCheckFeedback RPC.
 	PricingServiceSubmitPriceCheckFeedbackProcedure = "/openmarket.api.v1.PricingService/SubmitPriceCheckFeedback"
-	// PricingServiceRecordPriceCopiedProcedure is the fully-qualified name of the PricingService's
-	// RecordPriceCopied RPC.
-	PricingServiceRecordPriceCopiedProcedure = "/openmarket.api.v1.PricingService/RecordPriceCopied"
+	// PricingServiceRecordPriceCheckCopyProcedure is the fully-qualified name of the PricingService's
+	// RecordPriceCheckCopy RPC.
+	PricingServiceRecordPriceCheckCopyProcedure = "/openmarket.api.v1.PricingService/RecordPriceCheckCopy"
 )
 
 // PricingServiceClient is a client for the openmarket.api.v1.PricingService service.
@@ -55,12 +55,12 @@ type PricingServiceClient interface {
 	CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error)
 	// The asked question.
 	SubmitPriceCheckFeedback(context.Context, *connect.Request[v1.SubmitPriceCheckFeedbackRequest]) (*connect.Response[v1.SubmitPriceCheckFeedbackResponse], error)
-	// The unasked one, and the better of the two. Copying the price is what
-	// somebody does immediately before pasting it into Facebook's price box: it
-	// is captured on nearly every successful run, where a prompt is answered by
-	// the minority who feel strongly enough to stop and tap — which skews
-	// negative. Idempotent; the first copy keeps the timestamp.
-	RecordPriceCopied(context.Context, *connect.Request[v1.RecordPriceCopiedRequest]) (*connect.Response[v1.RecordPriceCopiedResponse], error)
+	// The unasked one, and the better of the two. Copying is what somebody does
+	// immediately before pasting into Facebook: it is captured on nearly every
+	// successful run, where a prompt is answered by the minority who feel
+	// strongly enough to stop and tap — which skews negative. Idempotent; the
+	// first price copy keeps the timestamp.
+	RecordPriceCheckCopy(context.Context, *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error)
 }
 
 // NewPricingServiceClient constructs a client for the openmarket.api.v1.PricingService service. By
@@ -92,10 +92,10 @@ func NewPricingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(pricingServiceMethods.ByName("SubmitPriceCheckFeedback")),
 			connect.WithClientOptions(opts...),
 		),
-		recordPriceCopied: connect.NewClient[v1.RecordPriceCopiedRequest, v1.RecordPriceCopiedResponse](
+		recordPriceCheckCopy: connect.NewClient[v1.RecordPriceCheckCopyRequest, v1.RecordPriceCheckCopyResponse](
 			httpClient,
-			baseURL+PricingServiceRecordPriceCopiedProcedure,
-			connect.WithSchema(pricingServiceMethods.ByName("RecordPriceCopied")),
+			baseURL+PricingServiceRecordPriceCheckCopyProcedure,
+			connect.WithSchema(pricingServiceMethods.ByName("RecordPriceCheckCopy")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -106,7 +106,7 @@ type pricingServiceClient struct {
 	identifyItem             *connect.Client[v1.IdentifyItemRequest, v1.IdentifyItemResponse]
 	completePriceCheck       *connect.Client[v1.CompletePriceCheckRequest, v1.CompletePriceCheckResponse]
 	submitPriceCheckFeedback *connect.Client[v1.SubmitPriceCheckFeedbackRequest, v1.SubmitPriceCheckFeedbackResponse]
-	recordPriceCopied        *connect.Client[v1.RecordPriceCopiedRequest, v1.RecordPriceCopiedResponse]
+	recordPriceCheckCopy     *connect.Client[v1.RecordPriceCheckCopyRequest, v1.RecordPriceCheckCopyResponse]
 }
 
 // IdentifyItem calls openmarket.api.v1.PricingService.IdentifyItem.
@@ -124,9 +124,9 @@ func (c *pricingServiceClient) SubmitPriceCheckFeedback(ctx context.Context, req
 	return c.submitPriceCheckFeedback.CallUnary(ctx, req)
 }
 
-// RecordPriceCopied calls openmarket.api.v1.PricingService.RecordPriceCopied.
-func (c *pricingServiceClient) RecordPriceCopied(ctx context.Context, req *connect.Request[v1.RecordPriceCopiedRequest]) (*connect.Response[v1.RecordPriceCopiedResponse], error) {
-	return c.recordPriceCopied.CallUnary(ctx, req)
+// RecordPriceCheckCopy calls openmarket.api.v1.PricingService.RecordPriceCheckCopy.
+func (c *pricingServiceClient) RecordPriceCheckCopy(ctx context.Context, req *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error) {
+	return c.recordPriceCheckCopy.CallUnary(ctx, req)
 }
 
 // PricingServiceHandler is an implementation of the openmarket.api.v1.PricingService service.
@@ -137,12 +137,12 @@ type PricingServiceHandler interface {
 	CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error)
 	// The asked question.
 	SubmitPriceCheckFeedback(context.Context, *connect.Request[v1.SubmitPriceCheckFeedbackRequest]) (*connect.Response[v1.SubmitPriceCheckFeedbackResponse], error)
-	// The unasked one, and the better of the two. Copying the price is what
-	// somebody does immediately before pasting it into Facebook's price box: it
-	// is captured on nearly every successful run, where a prompt is answered by
-	// the minority who feel strongly enough to stop and tap — which skews
-	// negative. Idempotent; the first copy keeps the timestamp.
-	RecordPriceCopied(context.Context, *connect.Request[v1.RecordPriceCopiedRequest]) (*connect.Response[v1.RecordPriceCopiedResponse], error)
+	// The unasked one, and the better of the two. Copying is what somebody does
+	// immediately before pasting into Facebook: it is captured on nearly every
+	// successful run, where a prompt is answered by the minority who feel
+	// strongly enough to stop and tap — which skews negative. Idempotent; the
+	// first price copy keeps the timestamp.
+	RecordPriceCheckCopy(context.Context, *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error)
 }
 
 // NewPricingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -170,10 +170,10 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(pricingServiceMethods.ByName("SubmitPriceCheckFeedback")),
 		connect.WithHandlerOptions(opts...),
 	)
-	pricingServiceRecordPriceCopiedHandler := connect.NewUnaryHandler(
-		PricingServiceRecordPriceCopiedProcedure,
-		svc.RecordPriceCopied,
-		connect.WithSchema(pricingServiceMethods.ByName("RecordPriceCopied")),
+	pricingServiceRecordPriceCheckCopyHandler := connect.NewUnaryHandler(
+		PricingServiceRecordPriceCheckCopyProcedure,
+		svc.RecordPriceCheckCopy,
+		connect.WithSchema(pricingServiceMethods.ByName("RecordPriceCheckCopy")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/openmarket.api.v1.PricingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,8 +184,8 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 			pricingServiceCompletePriceCheckHandler.ServeHTTP(w, r)
 		case PricingServiceSubmitPriceCheckFeedbackProcedure:
 			pricingServiceSubmitPriceCheckFeedbackHandler.ServeHTTP(w, r)
-		case PricingServiceRecordPriceCopiedProcedure:
-			pricingServiceRecordPriceCopiedHandler.ServeHTTP(w, r)
+		case PricingServiceRecordPriceCheckCopyProcedure:
+			pricingServiceRecordPriceCheckCopyHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -207,6 +207,6 @@ func (UnimplementedPricingServiceHandler) SubmitPriceCheckFeedback(context.Conte
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.SubmitPriceCheckFeedback is not implemented"))
 }
 
-func (UnimplementedPricingServiceHandler) RecordPriceCopied(context.Context, *connect.Request[v1.RecordPriceCopiedRequest]) (*connect.Response[v1.RecordPriceCopiedResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.RecordPriceCopied is not implemented"))
+func (UnimplementedPricingServiceHandler) RecordPriceCheckCopy(context.Context, *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.RecordPriceCheckCopy is not implemented"))
 }

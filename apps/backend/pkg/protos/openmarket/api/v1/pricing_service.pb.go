@@ -573,27 +573,53 @@ func (*SubmitPriceCheckFeedbackResponse) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{6}
 }
 
-type RecordPriceCopiedRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PriceCheckId  string                 `protobuf:"bytes,1,opt,name=price_check_id,json=priceCheckId,proto3" json:"price_check_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+// What the seller took away, which is not necessarily what was offered.
+//
+// Everything on the result screen is now editable — the price has a stepper,
+// the title and the description are text fields — so for each of them there are
+// two facts: what was generated, and what was actually used. The generated
+// side is already stored (`recommended_price_minor`, `listing_title`,
+// `listing_description`); this call carries the other side.
+//
+// **The gap between the pair is the only real measure of quality this feature
+// has.** "Helpful? yes" is an opinion from the minority who stop to tap;
+// "every seller rewrites the title and moves the price up 20%" is behaviour,
+// from everybody, and it says exactly what to fix. Overwriting the generated
+// values with the edits — the obvious single-column design — would erase the
+// comparison that makes either number worth having.
+//
+// Every field is optional and only what was copied is sent, so three copy
+// buttons are three calls that each say one true thing.
+type RecordPriceCheckCopyRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	PriceCheckId string                 `protobuf:"bytes,1,opt,name=price_check_id,json=priceCheckId,proto3" json:"price_check_id,omitempty"`
+	// Minor units. Present only on a price copy, which is also what sets
+	// `price_copied` — the boolean has always meant "took the number", and a
+	// title copy is not that.
+	CopiedPriceMinor *int64 `protobuf:"varint,2,opt,name=copied_price_minor,json=copiedPriceMinor,proto3,oneof" json:"copied_price_minor,omitempty"`
+	// The listing as it was copied. Sent whether or not it differs from what was
+	// generated: "they read it and used it unchanged" is a result, and inferring
+	// it from an absent field would confuse it with "they never copied at all".
+	CopiedListingTitle       *string `protobuf:"bytes,3,opt,name=copied_listing_title,json=copiedListingTitle,proto3,oneof" json:"copied_listing_title,omitempty"`
+	CopiedListingDescription *string `protobuf:"bytes,4,opt,name=copied_listing_description,json=copiedListingDescription,proto3,oneof" json:"copied_listing_description,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
-func (x *RecordPriceCopiedRequest) Reset() {
-	*x = RecordPriceCopiedRequest{}
+func (x *RecordPriceCheckCopyRequest) Reset() {
+	*x = RecordPriceCheckCopyRequest{}
 	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RecordPriceCopiedRequest) String() string {
+func (x *RecordPriceCheckCopyRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RecordPriceCopiedRequest) ProtoMessage() {}
+func (*RecordPriceCheckCopyRequest) ProtoMessage() {}
 
-func (x *RecordPriceCopiedRequest) ProtoReflect() protoreflect.Message {
+func (x *RecordPriceCheckCopyRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -605,38 +631,59 @@ func (x *RecordPriceCopiedRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordPriceCopiedRequest.ProtoReflect.Descriptor instead.
-func (*RecordPriceCopiedRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RecordPriceCheckCopyRequest.ProtoReflect.Descriptor instead.
+func (*RecordPriceCheckCopyRequest) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *RecordPriceCopiedRequest) GetPriceCheckId() string {
+func (x *RecordPriceCheckCopyRequest) GetPriceCheckId() string {
 	if x != nil {
 		return x.PriceCheckId
 	}
 	return ""
 }
 
-type RecordPriceCopiedResponse struct {
+func (x *RecordPriceCheckCopyRequest) GetCopiedPriceMinor() int64 {
+	if x != nil && x.CopiedPriceMinor != nil {
+		return *x.CopiedPriceMinor
+	}
+	return 0
+}
+
+func (x *RecordPriceCheckCopyRequest) GetCopiedListingTitle() string {
+	if x != nil && x.CopiedListingTitle != nil {
+		return *x.CopiedListingTitle
+	}
+	return ""
+}
+
+func (x *RecordPriceCheckCopyRequest) GetCopiedListingDescription() string {
+	if x != nil && x.CopiedListingDescription != nil {
+		return *x.CopiedListingDescription
+	}
+	return ""
+}
+
+type RecordPriceCheckCopyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RecordPriceCopiedResponse) Reset() {
-	*x = RecordPriceCopiedResponse{}
+func (x *RecordPriceCheckCopyResponse) Reset() {
+	*x = RecordPriceCheckCopyResponse{}
 	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RecordPriceCopiedResponse) String() string {
+func (x *RecordPriceCheckCopyResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RecordPriceCopiedResponse) ProtoMessage() {}
+func (*RecordPriceCheckCopyResponse) ProtoMessage() {}
 
-func (x *RecordPriceCopiedResponse) ProtoReflect() protoreflect.Message {
+func (x *RecordPriceCheckCopyResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -648,8 +695,8 @@ func (x *RecordPriceCopiedResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordPriceCopiedResponse.ProtoReflect.Descriptor instead.
-func (*RecordPriceCopiedResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use RecordPriceCheckCopyResponse.ProtoReflect.Descriptor instead.
+func (*RecordPriceCheckCopyResponse) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{8}
 }
 
@@ -694,15 +741,21 @@ const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"\x1fSubmitPriceCheckFeedbackRequest\x121\n" +
 	"\x0eprice_check_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\fpriceCheckId\x12\x18\n" +
 	"\ahelpful\x18\x02 \x01(\bR\ahelpful\"\"\n" +
-	" SubmitPriceCheckFeedbackResponse\"M\n" +
-	"\x18RecordPriceCopiedRequest\x121\n" +
-	"\x0eprice_check_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\fpriceCheckId\"\x1b\n" +
-	"\x19RecordPriceCopiedResponse2\xda\x03\n" +
+	" SubmitPriceCheckFeedbackResponse\"\xe0\x02\n" +
+	"\x1bRecordPriceCheckCopyRequest\x121\n" +
+	"\x0eprice_check_id\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\xb0\x01\x01R\fpriceCheckId\x121\n" +
+	"\x12copied_price_minor\x18\x02 \x01(\x03H\x00R\x10copiedPriceMinor\x88\x01\x01\x12?\n" +
+	"\x14copied_listing_title\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01H\x01R\x12copiedListingTitle\x88\x01\x01\x12K\n" +
+	"\x1acopied_listing_description\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\xe0\x12H\x02R\x18copiedListingDescription\x88\x01\x01B\x15\n" +
+	"\x13_copied_price_minorB\x17\n" +
+	"\x15_copied_listing_titleB\x1d\n" +
+	"\x1b_copied_listing_description\"\x1e\n" +
+	"\x1cRecordPriceCheckCopyResponse2\xe3\x03\n" +
 	"\x0ePricingService\x12_\n" +
 	"\fIdentifyItem\x12&.openmarket.api.v1.IdentifyItemRequest\x1a'.openmarket.api.v1.IdentifyItemResponse\x12q\n" +
 	"\x12CompletePriceCheck\x12,.openmarket.api.v1.CompletePriceCheckRequest\x1a-.openmarket.api.v1.CompletePriceCheckResponse\x12\x83\x01\n" +
-	"\x18SubmitPriceCheckFeedback\x122.openmarket.api.v1.SubmitPriceCheckFeedbackRequest\x1a3.openmarket.api.v1.SubmitPriceCheckFeedbackResponse\x12n\n" +
-	"\x11RecordPriceCopied\x12+.openmarket.api.v1.RecordPriceCopiedRequest\x1a,.openmarket.api.v1.RecordPriceCopiedResponseB\xd3\x01\n" +
+	"\x18SubmitPriceCheckFeedback\x122.openmarket.api.v1.SubmitPriceCheckFeedbackRequest\x1a3.openmarket.api.v1.SubmitPriceCheckFeedbackResponse\x12w\n" +
+	"\x14RecordPriceCheckCopy\x12..openmarket.api.v1.RecordPriceCheckCopyRequest\x1a/.openmarket.api.v1.RecordPriceCheckCopyResponseB\xd3\x01\n" +
 	"\x15com.openmarket.api.v1B\x13PricingServiceProtoP\x01Z?frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1;apiv1\xa2\x02\x03OAX\xaa\x02\x11Openmarket.Api.V1\xca\x02\x11Openmarket\\Api\\V1\xe2\x02\x1dOpenmarket\\Api\\V1\\GPBMetadata\xea\x02\x13Openmarket::Api::V1b\x06proto3"
 
 var (
@@ -726,19 +779,19 @@ var file_openmarket_api_v1_pricing_service_proto_goTypes = []any{
 	(*CompletePriceCheckResponse)(nil),       // 4: openmarket.api.v1.CompletePriceCheckResponse
 	(*SubmitPriceCheckFeedbackRequest)(nil),  // 5: openmarket.api.v1.SubmitPriceCheckFeedbackRequest
 	(*SubmitPriceCheckFeedbackResponse)(nil), // 6: openmarket.api.v1.SubmitPriceCheckFeedbackResponse
-	(*RecordPriceCopiedRequest)(nil),         // 7: openmarket.api.v1.RecordPriceCopiedRequest
-	(*RecordPriceCopiedResponse)(nil),        // 8: openmarket.api.v1.RecordPriceCopiedResponse
+	(*RecordPriceCheckCopyRequest)(nil),      // 7: openmarket.api.v1.RecordPriceCheckCopyRequest
+	(*RecordPriceCheckCopyResponse)(nil),     // 8: openmarket.api.v1.RecordPriceCheckCopyResponse
 }
 var file_openmarket_api_v1_pricing_service_proto_depIdxs = []int32{
 	2, // 0: openmarket.api.v1.CompletePriceCheckRequest.stats:type_name -> openmarket.api.v1.MarketStats
 	0, // 1: openmarket.api.v1.PricingService.IdentifyItem:input_type -> openmarket.api.v1.IdentifyItemRequest
 	3, // 2: openmarket.api.v1.PricingService.CompletePriceCheck:input_type -> openmarket.api.v1.CompletePriceCheckRequest
 	5, // 3: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:input_type -> openmarket.api.v1.SubmitPriceCheckFeedbackRequest
-	7, // 4: openmarket.api.v1.PricingService.RecordPriceCopied:input_type -> openmarket.api.v1.RecordPriceCopiedRequest
+	7, // 4: openmarket.api.v1.PricingService.RecordPriceCheckCopy:input_type -> openmarket.api.v1.RecordPriceCheckCopyRequest
 	1, // 5: openmarket.api.v1.PricingService.IdentifyItem:output_type -> openmarket.api.v1.IdentifyItemResponse
 	4, // 6: openmarket.api.v1.PricingService.CompletePriceCheck:output_type -> openmarket.api.v1.CompletePriceCheckResponse
 	6, // 7: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:output_type -> openmarket.api.v1.SubmitPriceCheckFeedbackResponse
-	8, // 8: openmarket.api.v1.PricingService.RecordPriceCopied:output_type -> openmarket.api.v1.RecordPriceCopiedResponse
+	8, // 8: openmarket.api.v1.PricingService.RecordPriceCheckCopy:output_type -> openmarket.api.v1.RecordPriceCheckCopyResponse
 	5, // [5:9] is the sub-list for method output_type
 	1, // [1:5] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -752,6 +805,7 @@ func file_openmarket_api_v1_pricing_service_proto_init() {
 		return
 	}
 	file_openmarket_api_v1_pricing_service_proto_msgTypes[2].OneofWrappers = []any{}
+	file_openmarket_api_v1_pricing_service_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

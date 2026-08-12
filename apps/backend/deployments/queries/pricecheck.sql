@@ -99,14 +99,38 @@ WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
--- name: MarkPriceCheckPriceCopied :one
--- Idempotent, and the **first** copy keeps the timestamp — unlike the feedback
--- above, because the question here is "how long did it take them to act on it",
--- and someone copying the same number a second time an hour later has not
--- changed their mind about anything.
+-- name: RecordPriceCheckCopy :one
+-- One copy, of whatever was copied.
+--
+-- Three rules in six lines, and each is deliberate:
+--
+-- `price_copied` only goes true when a price came with the call. The flag has
+-- always meant "took the number", and a title copy is not that — letting it be
+-- set by any copy would quietly redefine every chart built on it.
+--
+-- `price_copied_at` keeps the **first** value, because the question it answers
+-- is how long somebody took to act, and copying the same number again an hour
+-- later has not changed that.
+--
+-- The three value columns take the **latest**, because somebody who copies,
+-- rewrites the title and copies again has changed their mind about exactly
+-- what these measure. COALESCE on the argument rather than the column, so a
+-- call carrying one field leaves the other two alone instead of blanking them.
+--
+-- The `::bigint` casts are load-bearing rather than decoration. The first time
+-- this argument appears it is inside `IS NOT NULL`, which is a boolean context,
+-- and sqlc types the parameter from that first sighting — generating a `*bool`
+-- for a column holding money. Naming the type on every use pins it.
 UPDATE price_checks
-SET price_copied = true,
-    price_copied_at = COALESCE(price_copied_at, CURRENT_TIMESTAMP)
+SET price_copied = price_copied OR sqlc.narg('copied_price_minor')::bigint IS NOT NULL,
+    price_copied_at = CASE
+        WHEN sqlc.narg('copied_price_minor')::bigint IS NOT NULL
+        THEN COALESCE(price_copied_at, CURRENT_TIMESTAMP)
+        ELSE price_copied_at
+    END,
+    copied_price_minor = COALESCE(sqlc.narg('copied_price_minor')::bigint, copied_price_minor),
+    copied_listing_title = COALESCE(sqlc.narg('copied_listing_title'), copied_listing_title),
+    copied_listing_description = COALESCE(sqlc.narg('copied_listing_description'), copied_listing_description)
 WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
 RETURNING *;

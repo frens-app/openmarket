@@ -86,9 +86,18 @@ final class SellerToolsModel: ObservableObject {
     /// What sold nearby in the last month. Empty is an ordinary outcome, not a
     /// failure — plenty of things simply haven't sold near you lately.
     @Published private(set) var sold = SoldSignal(comps: [])
-    /// The number to ask, and why. The median of what similar things are listed
-    /// for, which is exactly where the model was steered anyway.
+    /// What we recommended: the median of what similar things are listed for.
+    /// Fixed for the run, and the number the server records.
     @Published private(set) var recommendedPrice: Int?
+    /// What the user settled on, which starts as the recommendation and moves
+    /// when they use the stepper.
+    ///
+    /// **Kept separate from `recommendedPrice` rather than replacing it**, and
+    /// the gap between the two is the most interesting number this feature can
+    /// produce. "Sellers move our price up 20% on average" is the finding that
+    /// says the median is the wrong statistic; overwriting the recommendation
+    /// with the seller's edit would erase the evidence for it.
+    @Published private(set) var askingPrice: Int?
     @Published private(set) var priceRationale: String?
     /// What we actually searched for, which is usually not what the user typed.
     /// Shown, because a price guide is only as good as the comparables behind
@@ -159,6 +168,43 @@ final class SellerToolsModel: ObservableObject {
 
     // MARK: - Afterwards
 
+    /// Moves the asking price one step, and rewrites the sentence under it.
+    ///
+    /// Clamped to the observed prices, deliberately the full range rather than
+    /// the middle half: an item that genuinely is the best one listed should be
+    /// allowed to ask what the best one listed is asking. Outside the observed
+    /// range there is no evidence at all, and the bar has nowhere to draw it.
+    func nudgePrice(by direction: Int) {
+        guard let guide, let current = askingPrice else { return }
+        let stepped = current + direction * Self.step(around: current)
+        let next = guide.clamped(stepped)
+        guard next != current else { return }
+        askingPrice = next
+        priceRationale = sold.rationale(for: next, against: guide)
+    }
+
+    /// Round numbers, scaled to what is being sold.
+    ///
+    /// A $5 step is right for a $150 grill and absurd for a $4,000 piano —
+    /// eight hundred taps to cross its own range. Roughly 3% of the price,
+    /// rounded to something a person would actually write on a listing.
+    static func step(around price: Int) -> Int {
+        switch price {
+        case ..<50: 1
+        case 50..<200: 5
+        case 200..<1_000: 10
+        case 1_000..<5_000: 50
+        default: 100
+        }
+    }
+
+    /// Whether the stepper can still move in a direction — so a button that
+    /// would do nothing is disabled rather than silently ignoring a tap.
+    func canNudge(_ direction: Int) -> Bool {
+        guard let guide, let current = askingPrice else { return false }
+        return guide.clamped(current + direction * Self.step(around: current)) != current
+    }
+
     /// Records the answer to the helpful question, and keeps it on screen.
     ///
     /// Optimistic: the button fills in immediately and the call goes out behind
@@ -170,14 +216,31 @@ final class SellerToolsModel: ObservableObject {
         Task { await pricing.submitFeedback(priceCheckID: priceCheckID, helpful: helpful) }
     }
 
-    /// Records that the price was copied.
+    /// Records that the price was copied, **and which price it was**.
     ///
     /// The signal worth having: copying the number is what somebody does right
     /// before pasting it into Facebook's price box, and it arrives from
     /// everybody rather than from the few who stop to answer a question.
+    ///
+    /// Now that the number is adjustable, what they copied is a different fact
+    /// from what we recommended, and it is the better one — it is the price
+    /// that goes on a real listing. Sending it beside a stored
+    /// `recommended_price_minor` makes the gap queryable.
     func recordPriceCopied() {
         guard let priceCheckID else { return }
-        Task { await pricing.recordPriceCopied(priceCheckID: priceCheckID) }
+        let copied = askingPrice
+        Task { await pricing.recordCopy(priceCheckID: priceCheckID, price: copied) }
+    }
+
+    /// Records the listing text as it was copied, edited or not.
+    ///
+    /// Sent even when it is word-for-word what the model wrote: "they read it
+    /// and used it unchanged" is the result this feature is hoping for, and it
+    /// has to be distinguishable from "they never copied it at all". A null
+    /// column means the latter.
+    func recordListingCopied(title: String? = nil, description: String? = nil) {
+        guard let priceCheckID else { return }
+        Task { await pricing.recordCopy(priceCheckID: priceCheckID, title: title, description: description) }
     }
 
     func cancel() {
@@ -199,6 +262,7 @@ final class SellerToolsModel: ObservableObject {
         guide = nil
         sold = SoldSignal(comps: [])
         recommendedPrice = nil
+        askingPrice = nil
         priceRationale = nil
         searchTerm = nil
         identifiedName = nil
@@ -308,6 +372,7 @@ final class SellerToolsModel: ObservableObject {
             return
         }
         recommendedPrice = median
+        askingPrice = median
         priceRationale = sold.rationale(for: median, against: computed)
         finish(.price, "\(Self.summary(of: computed)) — suggesting \(computed.money(median))")
 

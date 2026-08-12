@@ -119,11 +119,23 @@ final class PricingService {
     /// box. It arrives from everybody who gets that far, where the feedback
     /// buttons are answered by the few who stop to tap one. Same fire-and-forget
     /// treatment, for the same reason.
-    func recordPriceCopied(priceCheckID: String) async {
+    /// Records one copy, carrying only what was copied.
+    ///
+    /// Each field is left unset rather than zeroed or emptied when it is not
+    /// what the user took. They are `optional` on the wire precisely so the
+    /// server can tell "not part of this copy" from "copied, and it was empty"
+    /// — and so three buttons are three calls that each say one true thing.
+    func recordCopy(priceCheckID: String,
+                    price: Int? = nil,
+                    title: String? = nil,
+                    description: String? = nil) async {
         guard let headers = try? await session.authorizedHeaders() else { return }
-        var request = RecordPriceCopiedRequest()
+        var request = RecordPriceCheckCopyRequest()
         request.priceCheckID = priceCheckID
-        _ = await client.recordPriceCopied(request: request, headers: headers)
+        if let price { request.copiedPriceMinor = Int64(price) * 100 }
+        if let title { request.copiedListingTitle = title }
+        if let description { request.copiedListingDescription = description }
+        _ = await client.recordPriceCheckCopy(request: request, headers: headers)
     }
 
     // MARK: - Wire

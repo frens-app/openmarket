@@ -242,26 +242,29 @@ type LlmRun struct {
 }
 
 type PriceCheck struct {
-	ID                    uuid.UUID
-	UserID                uuid.UUID
-	DeviceID              *uuid.UUID
-	Description           string
-	IdentifiedName        *string
-	SearchQueries         []string
-	SearchQueryUsed       *string
-	CompsFound            *int32
-	SoldFound             *int32
-	RecommendedPriceMinor *int64
-	MedianPriceMinor      *int64
-	CurrencySymbol        *string
-	Helpful               *bool
-	HelpfulAt             pgtype.Timestamptz
-	PriceCopied           bool
-	PriceCopiedAt         pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	CompletedAt           pgtype.Timestamptz
-	ListingTitle          *string
-	ListingDescription    *string
+	ID                       uuid.UUID
+	UserID                   uuid.UUID
+	DeviceID                 *uuid.UUID
+	Description              string
+	IdentifiedName           *string
+	SearchQueries            []string
+	SearchQueryUsed          *string
+	CompsFound               *int32
+	SoldFound                *int32
+	RecommendedPriceMinor    *int64
+	MedianPriceMinor         *int64
+	CurrencySymbol           *string
+	Helpful                  *bool
+	HelpfulAt                pgtype.Timestamptz
+	PriceCopied              bool
+	PriceCopiedAt            pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
+	CompletedAt              pgtype.Timestamptz
+	ListingTitle             *string
+	ListingDescription       *string
+	CopiedPriceMinor         *int64
+	CopiedListingTitle       *string
+	CopiedListingDescription *string
 }
 
 type PriceCheckPhoto struct {

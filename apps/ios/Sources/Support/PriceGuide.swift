@@ -119,6 +119,30 @@ struct PriceGuide: Equatable {
         return min(max(price, lowest), highest)
     }
 
+    /// Where a price sits, in one short phrase.
+    ///
+    /// The short form exists because the numbers moved. `explanation(for:)`
+    /// below spells out the lowest, the median, the middle half and the count,
+    /// which was right when prose was the only way to say them — the screen now
+    /// draws them as a bar with its own labels, and repeating them underneath in
+    /// a sentence is the same data twice.
+    ///
+    /// What a bar cannot say is what the position *means*, which is this.
+    func position(for price: Int) -> String? {
+        guard let median, count > 0 else { return nil }
+        let asks = "\(count) nearby ask\(count == 1 ? "" : "s")"
+
+        if let range = typicalRange, price >= range.lowerBound, price <= range.upperBound {
+            return price == median
+                ? "Right in the middle of \(asks)."
+                : "In the range most of \(asks) sit in."
+        }
+        if price > median {
+            return "Above most of \(asks)."
+        }
+        return "Below most of \(asks)."
+    }
+
     /// Why this price, in numbers that are true by construction.
     ///
     /// Written here rather than by the model, and that is a correctness fix

@@ -200,28 +200,38 @@ func (s *pricingServer) SubmitPriceCheckFeedback(
 	return connect.NewResponse(&v1.SubmitPriceCheckFeedbackResponse{}), nil
 }
 
-// RecordPriceCopied is the signal that costs the user nothing to give.
+// RecordPriceCheckCopy is the signal that costs the user nothing to give.
 //
-// Copying the price is the action immediately before pasting it into Facebook's
-// price box, so it is about as close to "this worked" as anything observable
-// gets — and it arrives from everybody, where the feedback buttons are answered
-// by the minority who stop to tap one.
-func (s *pricingServer) RecordPriceCopied(
+// Copying is the action immediately before pasting into Facebook, so it is
+// about as close to "this worked" as anything observable gets — and it arrives
+// from everybody, where the feedback buttons are answered by the minority who
+// stop to tap one.
+//
+// What it carries is what was *taken*, beside what was offered: a price that
+// may have been stepped, and listing copy that may have been rewritten. See
+// migration 00008 for why those are separate columns rather than an overwrite.
+func (s *pricingServer) RecordPriceCheckCopy(
 	ctx context.Context,
-	req *connect.Request[v1.RecordPriceCopiedRequest],
-) (*connect.Response[v1.RecordPriceCopiedResponse], error) {
+	req *connect.Request[v1.RecordPriceCheckCopyRequest],
+) (*connect.Response[v1.RecordPriceCheckCopyResponse], error) {
 	userID, checkID, err := subjectOf(ctx, req.Msg.GetPriceCheckId())
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := s.queries.MarkPriceCheckPriceCopied(ctx, db.MarkPriceCheckPriceCopiedParams{
-		ID:     checkID,
-		UserID: userID,
+	// Every field passed through as-is, nil included: the query only overwrites
+	// where there is something to overwrite with, so a call reporting one copy
+	// leaves the other two columns alone.
+	if _, err := s.queries.RecordPriceCheckCopy(ctx, db.RecordPriceCheckCopyParams{
+		ID:                       checkID,
+		UserID:                   userID,
+		CopiedPriceMinor:         req.Msg.CopiedPriceMinor,
+		CopiedListingTitle:       req.Msg.CopiedListingTitle,
+		CopiedListingDescription: req.Msg.CopiedListingDescription,
 	}); err != nil {
-		return nil, notFoundOrInternalCheck(err, "record price copied")
+		return nil, notFoundOrInternalCheck(err, "record price check copy")
 	}
-	return connect.NewResponse(&v1.RecordPriceCopiedResponse{}), nil
+	return connect.NewResponse(&v1.RecordPriceCheckCopyResponse{}), nil
 }
 
 // deviceIDForSession returns the install this call came from, or nil.

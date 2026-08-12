@@ -66,7 +66,7 @@ SET search_query_used = $1::text,
     completed_at = CURRENT_TIMESTAMP
 WHERE id = $7
   AND user_id = $8
-RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
 `
 
 type CompletePriceCheckParams struct {
@@ -122,6 +122,9 @@ func (q *Queries) CompletePriceCheck(ctx context.Context, arg CompletePriceCheck
 		&i.CompletedAt,
 		&i.ListingTitle,
 		&i.ListingDescription,
+		&i.CopiedPriceMinor,
+		&i.CopiedListingTitle,
+		&i.CopiedListingDescription,
 	)
 	return i, err
 }
@@ -165,7 +168,7 @@ VALUES (
     $2,
     $3
 )
-RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
 `
 
 type CreatePriceCheckParams struct {
@@ -206,12 +209,15 @@ func (q *Queries) CreatePriceCheck(ctx context.Context, arg CreatePriceCheckPara
 		&i.CompletedAt,
 		&i.ListingTitle,
 		&i.ListingDescription,
+		&i.CopiedPriceMinor,
+		&i.CopiedListingTitle,
+		&i.CopiedListingDescription,
 	)
 	return i, err
 }
 
 const getPriceCheck = `-- name: GetPriceCheck :one
-SELECT id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+SELECT id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
 FROM price_checks
 WHERE id = $1
   AND user_id = $2
@@ -246,52 +252,9 @@ func (q *Queries) GetPriceCheck(ctx context.Context, arg GetPriceCheckParams) (P
 		&i.CompletedAt,
 		&i.ListingTitle,
 		&i.ListingDescription,
-	)
-	return i, err
-}
-
-const markPriceCheckPriceCopied = `-- name: MarkPriceCheckPriceCopied :one
-UPDATE price_checks
-SET price_copied = true,
-    price_copied_at = COALESCE(price_copied_at, CURRENT_TIMESTAMP)
-WHERE id = $1
-  AND user_id = $2
-RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
-`
-
-type MarkPriceCheckPriceCopiedParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
-}
-
-// Idempotent, and the **first** copy keeps the timestamp — unlike the feedback
-// above, because the question here is "how long did it take them to act on it",
-// and someone copying the same number a second time an hour later has not
-// changed their mind about anything.
-func (q *Queries) MarkPriceCheckPriceCopied(ctx context.Context, arg MarkPriceCheckPriceCopiedParams) (PriceCheck, error) {
-	row := q.db.QueryRow(ctx, markPriceCheckPriceCopied, arg.ID, arg.UserID)
-	var i PriceCheck
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.DeviceID,
-		&i.Description,
-		&i.IdentifiedName,
-		&i.SearchQueries,
-		&i.SearchQueryUsed,
-		&i.CompsFound,
-		&i.SoldFound,
-		&i.RecommendedPriceMinor,
-		&i.MedianPriceMinor,
-		&i.CurrencySymbol,
-		&i.Helpful,
-		&i.HelpfulAt,
-		&i.PriceCopied,
-		&i.PriceCopiedAt,
-		&i.CreatedAt,
-		&i.CompletedAt,
-		&i.ListingTitle,
-		&i.ListingDescription,
+		&i.CopiedPriceMinor,
+		&i.CopiedListingTitle,
+		&i.CopiedListingDescription,
 	)
 	return i, err
 }
@@ -386,13 +349,95 @@ func (q *Queries) RecordLLMRun(ctx context.Context, arg RecordLLMRunParams) (Llm
 	return i, err
 }
 
+const recordPriceCheckCopy = `-- name: RecordPriceCheckCopy :one
+UPDATE price_checks
+SET price_copied = price_copied OR $1::bigint IS NOT NULL,
+    price_copied_at = CASE
+        WHEN $1::bigint IS NOT NULL
+        THEN COALESCE(price_copied_at, CURRENT_TIMESTAMP)
+        ELSE price_copied_at
+    END,
+    copied_price_minor = COALESCE($1::bigint, copied_price_minor),
+    copied_listing_title = COALESCE($2, copied_listing_title),
+    copied_listing_description = COALESCE($3, copied_listing_description)
+WHERE id = $4
+  AND user_id = $5
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
+`
+
+type RecordPriceCheckCopyParams struct {
+	CopiedPriceMinor         *int64
+	CopiedListingTitle       *string
+	CopiedListingDescription *string
+	ID                       uuid.UUID
+	UserID                   uuid.UUID
+}
+
+// One copy, of whatever was copied.
+//
+// Three rules in six lines, and each is deliberate:
+//
+// `price_copied` only goes true when a price came with the call. The flag has
+// always meant "took the number", and a title copy is not that — letting it be
+// set by any copy would quietly redefine every chart built on it.
+//
+// `price_copied_at` keeps the **first** value, because the question it answers
+// is how long somebody took to act, and copying the same number again an hour
+// later has not changed that.
+//
+// The three value columns take the **latest**, because somebody who copies,
+// rewrites the title and copies again has changed their mind about exactly
+// what these measure. COALESCE on the argument rather than the column, so a
+// call carrying one field leaves the other two alone instead of blanking them.
+//
+// The `::bigint` casts are load-bearing rather than decoration. The first time
+// this argument appears it is inside `IS NOT NULL`, which is a boolean context,
+// and sqlc types the parameter from that first sighting — generating a `*bool`
+// for a column holding money. Naming the type on every use pins it.
+func (q *Queries) RecordPriceCheckCopy(ctx context.Context, arg RecordPriceCheckCopyParams) (PriceCheck, error) {
+	row := q.db.QueryRow(ctx, recordPriceCheckCopy,
+		arg.CopiedPriceMinor,
+		arg.CopiedListingTitle,
+		arg.CopiedListingDescription,
+		arg.ID,
+		arg.UserID,
+	)
+	var i PriceCheck
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DeviceID,
+		&i.Description,
+		&i.IdentifiedName,
+		&i.SearchQueries,
+		&i.SearchQueryUsed,
+		&i.CompsFound,
+		&i.SoldFound,
+		&i.RecommendedPriceMinor,
+		&i.MedianPriceMinor,
+		&i.CurrencySymbol,
+		&i.Helpful,
+		&i.HelpfulAt,
+		&i.PriceCopied,
+		&i.PriceCopiedAt,
+		&i.CreatedAt,
+		&i.CompletedAt,
+		&i.ListingTitle,
+		&i.ListingDescription,
+		&i.CopiedPriceMinor,
+		&i.CopiedListingTitle,
+		&i.CopiedListingDescription,
+	)
+	return i, err
+}
+
 const setPriceCheckHelpful = `-- name: SetPriceCheckHelpful :one
 UPDATE price_checks
 SET helpful = $1,
     helpful_at = CURRENT_TIMESTAMP
 WHERE id = $2
   AND user_id = $3
-RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
 `
 
 type SetPriceCheckHelpfulParams struct {
@@ -432,6 +477,9 @@ func (q *Queries) SetPriceCheckHelpful(ctx context.Context, arg SetPriceCheckHel
 		&i.CompletedAt,
 		&i.ListingTitle,
 		&i.ListingDescription,
+		&i.CopiedPriceMinor,
+		&i.CopiedListingTitle,
+		&i.CopiedListingDescription,
 	)
 	return i, err
 }
@@ -444,7 +492,7 @@ SET identified_name = $1::text,
     listing_description = $4::text
 WHERE id = $5
   AND user_id = $6
-RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description
+RETURNING id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
 `
 
 type SetPriceCheckIdentificationParams struct {
@@ -498,6 +546,9 @@ func (q *Queries) SetPriceCheckIdentification(ctx context.Context, arg SetPriceC
 		&i.CompletedAt,
 		&i.ListingTitle,
 		&i.ListingDescription,
+		&i.CopiedPriceMinor,
+		&i.CopiedListingTitle,
+		&i.CopiedListingDescription,
 	)
 	return i, err
 }

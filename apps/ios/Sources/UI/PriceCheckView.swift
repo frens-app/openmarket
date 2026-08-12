@@ -51,6 +51,18 @@ struct PriceCheckView: View {
     @State private var isChoosingSource = false
     @State private var isChoosingFromLibrary = false
     @State private var isTakingPhoto = false
+    @State private var isShowingEvidence = false
+
+    /// The listing, as the user may have rewritten it.
+    ///
+    /// Held here rather than on the model for the reason `SellerToolsModel.input`
+    /// documents: a `TextField` re-rendered from a `@Published` value mid-edit
+    /// loses an uncommitted autocorrect composition, and hands back the marked
+    /// substring doubled. Seeded once when the run produces copy; theirs after
+    /// that.
+    @State private var editedTitle = ""
+    @State private var editedBody = ""
+    @State private var didCopyPrice = false
 
     /// Three, matching `max_items` on the request. Both numbers exist because
     /// the client should not be able to build a request the server refuses, and
@@ -68,45 +80,156 @@ struct PriceCheckView: View {
         static func == (a: PreparedPhoto, b: PreparedPhoto) -> Bool { a.id == b.id }
     }
 
+    /// **Two screens, not one scroll.**
+    ///
+    /// The old version stacked the question, the working and the answer in one
+    /// column, which meant the inputs stayed on screen forever — a form asking
+    /// "what are you selling?" above a price it had already worked out. Asking
+    /// and answering are different moments, so they are different screens now,
+    /// with the run itself as the third thing in between.
     var body: some View {
-        ScrollView {
-            // Inputs, what happened, the answer, then the evidence behind it.
-            //
-            // The two questions at the end come after everything rather than
-            // straight after the price: "were these helpful" is about the whole
-            // run, and asking it with two sections still to scroll past would be
-            // asking before the user has seen what they are judging.
-            VStack(alignment: .leading, spacing: 20) {
-                prompt
-                if !model.steps.isEmpty { transcript }
-                if model.hasResult { priceField }
-                if !model.comps.isEmpty { comparables }
-                if !model.sold.isEmpty { recentlySold }
-                if case .failed(let message) = model.phase { failureCard(message) }
-                if model.phase == .done { helpfulPrompt }
-                if model.phase == .done { startOver }
+        Group {
+            if model.hasResult {
+                answer
+            } else {
+                question
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 60)
         }
-        .scrollDismissesKeyboard(.interactively)
-        // Dragging already puts the keyboard away; tapping off the field
-        // should too, and on a phone most of this screen is "off the
-        // field" — the transcript and both comparable strips arrive
-        // underneath the keyboard, so a keyboard that only leaves on a
-        // drag is a keyboard sitting on top of the answer.
-        //
-        // Simultaneous rather than `onTapGesture`, so it never competes
-        // with the button or the cards for the same tap: they run their
-        // own action and the keyboard goes away either way.
-        .contentShape(Rectangle())
-        .simultaneousGesture(TapGesture().onEnded { isTyping = false })
-        .navigationTitle("Price Check")
+        .navigationTitle("Price check")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selected) { listing in
             DetailView(listing: listing, namespace: heroNamespace)
         }
+        .navigationDestination(isPresented: $isShowingEvidence) { evidence }
+        // Seeds the editable copy the moment a run produces it, and only then:
+        // the fields own their text afterwards, so that a keystroke does not
+        // fight a republish. Same reasoning as `SellerToolsModel.input`.
+        .onChange(of: model.listingTitle) { _, title in editedTitle = title ?? "" }
+        .onChange(of: model.listingBody) { _, body in editedBody = body ?? "" }
+    }
+
+    // MARK: - Asking
+
+    /// One question, two ways to answer it, one button.
+    ///
+    /// The button is pinned rather than scrolled to, because on a phone the
+    /// keyboard covers the bottom of the screen the moment somebody starts
+    /// typing — and the button they need next was underneath it.
+    private var question: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("What are you selling?")
+                            .font(.largeTitle.bold())
+                        // The one line of instruction on the screen, and it is
+                        // here rather than under a field because it answers the
+                        // question somebody has before they touch anything:
+                        // which of these two boxes do I have to fill in.
+                        Text("A photo or a sentence is enough. Both is better.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 8)
+
+                    photoStrip
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionLabel("Anything worth knowing")
+                        descriptionField
+                        // Not "this is optional" — the line above already said
+                        // that. This says what to write, which is the more
+                        // useful thing and the reason the field exists.
+                        Text("Condition, age and what's included move the price most.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !model.steps.isEmpty { transcript }
+                    if case .failed(let message) = model.phase { failureCard(message) }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+
+            runBar
+        }
+        // Tapping anywhere off the field puts the keyboard away. Simultaneous
+        // rather than `onTapGesture` so it never competes with a control for
+        // the same tap: they run their own action and the keyboard goes either
+        // way.
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { isTyping = false })
+    }
+
+    private var descriptionField: some View {
+        TextField("Weber Genesis II gas grill, three burners, cover included, grates need cleaning",
+                  text: $draft,
+                  axis: .vertical)
+            .lineLimit(3...8)
+            .textFieldStyle(.plain)
+            .focused($isTyping)
+            .submitLabel(.done)
+            // A vertical-axis field treats Return as a newline and never calls
+            // `onSubmit`, so Done is caught here: the newline that arrives is
+            // the tap on the key, and it goes straight back out rather than
+            // being left in the description.
+            .onChange(of: draft) { _, text in
+                guard text.contains("\n") else { return }
+                draft = text.replacingOccurrences(of: "\n", with: " ")
+                isTyping = false
+                submit()
+            }
+            .padding(12)
+            .frame(minHeight: 96, alignment: .topLeading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// The button, and the promise underneath it.
+    ///
+    /// The second line is doing real work: this run takes the better part of
+    /// ten seconds, most of it two page loads against Facebook, and a button
+    /// that silently thinks for that long reads as broken. Saying where the
+    /// numbers come from and roughly how long it takes turns a wait into a
+    /// wait for something.
+    private var runBar: some View {
+        VStack(spacing: 8) {
+            Button(action: submit) {
+                HStack(spacing: 8) {
+                    if model.phase.isRunning {
+                        ProgressView().controlSize(.small).tint(.white)
+                    }
+                    Text(model.phase.isRunning ? "Checking the price…" : "Check the price")
+                        .font(.headline)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.phase.isRunning || !canRun)
+
+            Text("We read recent Marketplace sales near you. About ten seconds.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        // Same tab-bar clearance as the answer screen, for the same reason —
+        // here it is the reassurance line that would sit under the capsule.
+        .padding(.bottom, 76)
+        .background(.bar)
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.semibold))
+            .tracking(0.8)
+            .foregroundStyle(.secondary)
     }
 
     // MARK: - Asking
@@ -382,111 +505,238 @@ struct PriceCheckView: View {
         }
     }
 
-    // MARK: - The evidence
-
-    /// Both strips used to carry a caption, and most of what they said is still
-    /// on screen: `PriceGuide.explanation` under the price says "N nearby
-    /// asking prices…" and "N that sold were listed at…", which makes the
-    /// asking-not-paid and listed-not-sold-for claims in the place the number
-    /// is, where they bear on a decision. Saying them again in grey text under
-    /// each strip was the screen repeating itself, and repetition is what gets
-    /// skipped — eventually including the copy that matters.
-    ///
-    /// **One claim did not survive the cut**: that a list filtered on having
-    /// sold cannot contain the things that didn't, so nothing here can show a
-    /// price is too high. The prompt still tells the model (see
-    /// `pricePrompt`), and `SoldSignal`'s own documentation still explains it,
-    /// but no user-visible text makes that point now. If a seller ever reads
-    /// "$100–$400 sold" as "$400 is achievable", this is the sentence that
-    /// used to stand in the way, and the honest place to put it back is the
-    /// explanation under the price rather than a caption on the strip.
-    private var comparables: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("What's listed nearby")
-                .font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(model.comps) { comp in
-                        CompCard(comp: comp)
-                            .onTapGesture { selected = comp.listing }
-                    }
-                }
-                .padding(.horizontal, 2)
-            }
-        }
-    }
-
-    /// The half of the market the app has never been able to show.
-    ///
-    /// A default Marketplace search returns nothing that has sold — measured,
-    /// 0 of 14 — so until now every listing this app has ever displayed was
-    /// something still sitting unsold. These are the ones that went.
-    ///
-    /// Each card carries its own age rather than the strip carrying an average,
-    /// because the age *is* the claim: this was listed four days ago and it is
-    /// gone, so it sold in at most four days.
-    private var recentlySold: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recently sold nearby")
-                .font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(model.sold.comps) { comp in
-                        CompCard(comp: comp, footnote: soldFootnote(comp))
-                            .onTapGesture { selected = comp.listing }
-                    }
-                }
-                .padding(.horizontal, 2)
-            }
-        }
-    }
-
-    /// "Sold in ~4 days" — approximate, because it is. It was listed then and
-    /// it is gone now; it may have gone in an hour.
-    private func soldFootnote(_ comp: MarketComp) -> String? {
-        guard let days = comp.daysListed else { return "Sold" }
-        if days <= 1 { return "Sold within a day" }
-        return "Sold in ~\(days) days"
-    }
-
     // MARK: - The answer
 
-    /// One field, because there is one answer.
+    /// The decision, then the paste.
     ///
-    /// This used to sit under a "Your listing" heading beside a generated title
-    /// and description. Those are gone with the on-device model
-    /// (`SellerToolsModel`), and the price was always the part the market
-    /// evidence actually supported — the strips above are its working.
-    private var priceField: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Your listing")
-                .font(.headline)
-            if let price = model.recommendedPrice {
-                CopyableField(caption: "PRICE",
-                              // Labelled the way the comparables above are —
-                              // "CA$80" beside a strip of CA$ cards, never "$80".
-                              display: model.guide?.money(price) ?? "\(price)",
-                              // Bare, because it is going into Facebook's price
-                              // box, which wants a number.
-                              copies: String(price),
-                              footnote: model.priceRationale,
-                              // The one signal worth collecting without asking.
-                              // Copying the price is the action immediately
-                              // before pasting it into Facebook, so it says
-                              // "this worked" from everybody who gets this far
-                              // — where the buttons below are answered by the
-                              // few who stop to tap one.
-                              onCopy: model.recordPriceCopied)
+    /// Everything above the "ready to paste" label is one question — what do I
+    /// ask for this — and it is answerable without scrolling: the number, what
+    /// the number means, and where it sits against everyone else. Everything
+    /// below it is clerical.
+    private var answer: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                identifiedHeader
+                priceBlock
+                evidenceRow
+                listingBlock
+                helpfulPrompt
+                startOver
             }
-            // Absent when the writing step failed, which leaves the price
-            // standing on its own — it never depended on these.
-            if let title = model.listingTitle {
-                CopyableField(caption: "TITLE", display: title, copies: title)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            // Clears the floating tab bar, which is an overlay rather than a
+            // safe-area inset — so nothing reserves this space and the last
+            // control on any screen sits underneath it. Measured against the
+            // capsule, not guessed.
+            .padding(.bottom, 96)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// What it decided this is, and where it got that.
+    ///
+    /// Small and at the top, because it is the one thing on the screen the
+    /// person holding the object can check better than the app can — and a
+    /// price for the wrong item is worse than no price. It replaces the
+    /// transcript, which said the same thing at four times the height and only
+    /// mattered while the run was going.
+    @ViewBuilder
+    private var identifiedHeader: some View {
+        HStack(spacing: 12) {
+            if let preview = photos.first?.preview {
+                preview
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            if let body = model.listingBody {
-                CopyableField(caption: "DESCRIPTION", display: body, copies: body, isProse: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.identifiedName ?? model.input)
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(photos.isEmpty ? "Read from what you wrote" : "Read from your photo and notes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// The number, the stepper, the sentence, and the bar.
+    ///
+    /// **The stepper is the point.** The recommendation is a median, which is a
+    /// statement about other people's listings rather than about this object,
+    /// and the person holding it knows things the median cannot — that it is
+    /// boxed, or that the drawer sticks. Letting them move it and rewriting the
+    /// sentence as they do turns a number handed down into a number chosen,
+    /// with the consequences visible while they choose.
+    @ViewBuilder
+    private var priceBlock: some View {
+        if let price = model.askingPrice, let guide = model.guide {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionLabel("List it at")
+
+                HStack(alignment: .center, spacing: 12) {
+                    // The number is the copy button.
+                    //
+                    // The design sketch had no control here, and a seller can
+                    // certainly type "150" — but copying the price is the one
+                    // signal this feature gets from everybody rather than from
+                    // the few who answer a question, and it is what tells us
+                    // whether the recommendation is any good. So the affordance
+                    // stays; it is the number itself plus a small glyph rather
+                    // than a third button crowding the stepper.
+                    Button(action: copyPrice) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(guide.money(price))
+                                .font(.system(size: 52, weight: .bold, design: .rounded))
+                                .minimumScaleFactor(0.5)
+                                .lineLimit(1)
+                                .contentTransition(.numericText())
+                                .animation(.easeOut(duration: 0.15), value: price)
+                            Image(systemName: didCopyPrice ? "checkmark" : "doc.on.doc")
+                                .font(.footnote)
+                                .foregroundStyle(didCopyPrice ? Color.accentColor : .secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(didCopyPrice ? "Price copied" : "Copy price")
+                    Spacer(minLength: 8)
+                    stepButton(systemName: "minus", direction: -1)
+                    stepButton(systemName: "plus", direction: 1)
+                }
+
+                if let sentence = priceSentence(for: price, guide: guide) {
+                    Text(sentence)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                PriceRangeBar(price: price, guide: guide)
             }
         }
+    }
+
+    /// Two short sentences: where it sits, and how fast things like it go.
+    ///
+    /// Both are arithmetic written in Swift — see `PriceGuide.position` for why
+    /// the long form moved to the evidence screen, and `SoldSignal.speed` for
+    /// why "about two weeks" beats "13 days".
+    private func priceSentence(for price: Int, guide: PriceGuide) -> String? {
+        let parts = [guide.position(for: price), model.sold.speed].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    /// Copies the bare number — Facebook's price box wants digits, not "$150".
+    private func copyPrice() {
+        guard let price = model.askingPrice else { return }
+        UIPasteboard.general.string = String(price)
+        model.recordPriceCopied()
+        withAnimation(.easeOut(duration: 0.15)) { didCopyPrice = true }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation(.easeOut(duration: 0.2)) { didCopyPrice = false }
+        }
+    }
+
+    private func stepButton(systemName: String, direction: Int) -> some View {
+        Button {
+            model.nudgePrice(by: direction)
+        } label: {
+            Image(systemName: systemName)
+                .font(.headline)
+                .frame(width: 44, height: 44)
+                .background(Color(.secondarySystemBackground), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!model.canNudge(direction))
+        .accessibilityLabel(direction > 0 ? "Increase price" : "Decrease price")
+    }
+
+    /// The comparables, one tap away.
+    ///
+    /// It states the counts on its face rather than only behind the chevron,
+    /// because the counts are the claim — "10 nearby listings · 15 sold last
+    /// month" is what makes the number above it something other than a guess,
+    /// and a row that made you tap to find that out would be hiding the part
+    /// that matters to keep the part that is merely interesting.
+    @ViewBuilder
+    private var evidenceRow: some View {
+        if !model.comps.isEmpty {
+            Button {
+                isShowingEvidence = true
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("What this is based on")
+                            .font(.subheadline.weight(.semibold))
+                        Text(evidenceSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(14)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+        }
+    }
+
+    private var evidenceSummary: String {
+        var parts = ["\(model.comps.count) nearby listing\(model.comps.count == 1 ? "" : "s")"]
+        if model.sold.count > 0 {
+            parts.append("\(model.sold.count) sold last month")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The listing, editable before it is copied.
+    ///
+    /// Editable because the model wrote it from a photograph and two lines of
+    /// notes, and the seller knows the rest. Making them paste it into Facebook
+    /// and fix it there means fixing it in the one place where a mistake is
+    /// already public.
+    @ViewBuilder
+    private var listingBlock: some View {
+        if model.listingTitle != nil || model.listingBody != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionLabel("Ready to paste")
+
+                VStack(spacing: 0) {
+                    if model.listingTitle != nil {
+                        EditableCopyField(caption: "Title", text: $editedTitle, isProse: false) {
+                            model.recordListingCopied(title: editedTitle)
+                        }
+                        Divider().padding(.leading, 14)
+                    }
+                    if model.listingBody != nil {
+                        EditableCopyField(caption: "Description", text: $editedBody, isProse: true) {
+                            model.recordListingCopied(description: editedBody)
+                        }
+                    }
+                }
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+
+                Text("Tap a field to rewrite it before you copy.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var evidence: some View {
+        PriceEvidenceView(comps: model.comps,
+                          sold: model.sold,
+                          guide: model.guide ?? PriceGuide(comps: []),
+                          price: model.askingPrice ?? model.recommendedPrice ?? 0,
+                          marketName: model.marketName,
+                          searchTerm: model.searchTerm)
     }
 
     /// The asked question, once there is something to judge.
@@ -499,23 +749,26 @@ struct PriceCheckView: View {
     @ViewBuilder
     private var helpfulPrompt: some View {
         if model.hasResult {
-            VStack(alignment: .leading, spacing: 10) {
+            // One row rather than a stacked question: it is the last thing on
+            // the screen and the least important, and a two-line block there
+            // reads as another section to deal with.
+            HStack(spacing: 10) {
                 if let feedback = model.feedback {
                     Label(feedback ? "Thanks — glad it helped." : "Thanks — noted.",
                           systemImage: "checkmark.circle.fill")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
                 } else {
-                    Text("Were these results helpful?")
+                    Text("Was this price helpful?")
                         .font(.subheadline)
-                    HStack(spacing: 10) {
-                        helpfulButton(title: "Yes", helpful: true)
-                        helpfulButton(title: "No", helpful: false)
-                    }
+                    Spacer(minLength: 8)
+                    helpfulButton(title: "Yes", helpful: true)
+                    helpfulButton(title: "No", helpful: false)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
+            .padding(12)
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
             .animation(.easeOut(duration: 0.2), value: model.feedback)
         }
@@ -550,54 +803,50 @@ struct PriceCheckView: View {
 
 /// A field the user is going to paste somewhere else, so copying is the
 /// primary action rather than a long-press away.
-private struct CopyableField: View {
+private struct EditableCopyField: View {
     let caption: String
-    let display: String
-    let copies: String
-    var footnote: String?
-    var isProse = false
-    /// Called on a successful copy. Nil where nobody is counting.
-    var onCopy: (() -> Void)?
+    @Binding var text: String
+    /// Prose wraps and gets the smaller face; a title is one line at headline
+    /// weight, which is roughly how Facebook renders it in a grid.
+    let isProse: Bool
+    /// Called with the copy, so the text that left is the text recorded.
+    let onCopy: () -> Void
 
     @State private var didCopy = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(caption)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(display)
-                        .font(isProse ? .subheadline : .headline)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-                Spacer(minLength: 12)
-                Button(action: copy) {
-                    Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.subheadline)
-                        .frame(width: 34, height: 34)
-                        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 9))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(didCopy ? "\(caption) copied" : "Copy \(caption.lowercased())")
-            }
-            if let footnote {
-                Text(footnote)
-                    .font(.caption)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(caption)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // A `TextField` rather than a `Text`, which is the whole
+                // difference: the copy is a draft written from a photograph and
+                // two lines of notes, and the seller knows the rest. Fixing it
+                // here beats fixing it in Facebook, where a mistake is already
+                // public.
+                TextField(caption, text: $text, axis: .vertical)
+                    .font(isProse ? .subheadline : .headline)
+                    .textFieldStyle(.plain)
+                    .lineLimit(isProse ? 2...8 : 1...3)
             }
+            Button(action: copy) {
+                Text(didCopy ? "Copied" : "Copy")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color(.tertiarySystemFill), in: Capsule())
+                    .contentTransition(.opacity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(didCopy ? "\(caption) copied" : "Copy \(caption.lowercased())")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func copy() {
-        UIPasteboard.general.string = copies
-        onCopy?()
+        UIPasteboard.general.string = text
+        onCopy()
         withAnimation(.easeOut(duration: 0.15)) { didCopy = true }
         Task {
             try? await Task.sleep(for: .seconds(2))
@@ -608,7 +857,10 @@ private struct CopyableField: View {
 
 /// A comparable at strip size: price first, because price is the only reason
 /// this card is on the screen.
-private struct CompCard: View {
+/// Internal rather than private: `PriceEvidenceView` draws the same card, and
+/// two copies of a card that has to stay consistent with the price beside it is
+/// how the two drift.
+struct CompCard: View {
     let comp: MarketComp
     /// Shown under the title on the sold strip, where how fast it went is the
     /// whole reason the card is there. Nil on the active strip.
