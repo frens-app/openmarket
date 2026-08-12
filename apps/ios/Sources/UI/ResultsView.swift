@@ -3,6 +3,11 @@ import CoreLocation
 import UIKit
 
 struct ResultsView: View {
+    private enum Surface {
+        case discover
+        case search
+    }
+
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var location: LocationProvider
@@ -15,10 +20,10 @@ struct ResultsView: View {
     /// Whether the search field is presented. Only needed to tell a deliberate
     /// clear from the field simply closing — see the `searchText` handler.
     @State private var isSearching = false
-    /// The term the results currently on screen belong to. Kept separately from
-    /// `store.query` because it has to be readable the instant the field is
-    /// dismissed, which is before the search it triggered has run.
-    @State private var activeTerm = ""
+    /// Search is a temporary surface over the home feed, not the owner of it.
+    /// Keeping this separate from `store.query` lets Search retain its results
+    /// while Cancel reveals the exact Discover view underneath.
+    @State private var surface: Surface = .discover
     @State private var selected: Listing?
     @State private var showSettings = false
     @State private var showFilters = false
@@ -41,20 +46,19 @@ struct ResultsView: View {
     /// the next one.
     @State private var hiddenAsViewed: Set<String> = []
 
-    @Namespace private var heroNamespace
+    @Namespace private var discoverNamespace
+    @Namespace private var searchNamespace
 
     /// The zero-height marker at the very top of the scroll, and the whole
     /// reason there is a `ScrollViewReader` on this screen. It is the first
     /// thing in the stack rather than attached to any particular section, so it
     /// can be scrolled to whatever `content` is currently drawing — results, the
     /// home screen, a skeleton or a notice.
-    private static let topAnchor = "results-top"
+    private static let searchTopAnchor = "search-results-top"
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                results(proxy)
-            }
+            results
         }
     }
 
@@ -63,8 +67,8 @@ struct ResultsView: View {
     ///
     /// Split from `searchSurface` because the two chains together are past
     /// what the type checker will accept in one expression.
-    private func results(_ proxy: ScrollViewProxy) -> some View {
-        searchSurface(proxy)
+    private var results: some View {
+        browseSurfaces
         // Pinned rather than scrolled with the results: the point of the
         // bar is that what shaped this result set is readable *while*
         // reading the result set, and a readout that scrolls away answers
@@ -74,7 +78,7 @@ struct ResultsView: View {
         // sort to order, and a control that does nothing is worse than no
         // control.
         .safeAreaInset(edge: .top, spacing: 0) {
-            if store.query != nil {
+            if surface == .search {
                 ActiveFilterBar(
                     onLocation: { showLocationPicker = true },
                     onRerun: { Task { await rerunCurrentQuery() } }
@@ -90,7 +94,7 @@ struct ResultsView: View {
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showFilters) {
-            FilterSheet { Task { await rerunCurrentQuery() } }
+            FilterSheet { refreshVisibleSurfaceAfterFilters() }
         }
         .sheet(isPresented: $showSignIn) {
             SignInView {
@@ -105,13 +109,18 @@ struct ResultsView: View {
                 // this is a plain reload.
                 Task {
                     store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
-                    await store.retry()
+                    if surface == .search {
+                        await store.retry()
+                    }
                     await loadDiscover()
                 }
             }
         }
         .navigationDestination(item: $selected) { listing in
-            DetailView(listing: listing, namespace: heroNamespace)
+            DetailView(
+                listing: listing,
+                namespace: surface == .discover ? discoverNamespace : searchNamespace
+            )
         }
         // A confirmed change of place, and the results catch up.
         //
@@ -158,7 +167,9 @@ struct ResultsView: View {
             distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace,
                                                               deviceFix: location.coordinate))
             Task {
-                await rerunCurrentQuery()
+                if surface == .search {
+                    await rerunCurrentQuery()
+                }
                 discover.markStale()
                 await loadDiscover()
             }
@@ -168,26 +179,15 @@ struct ResultsView: View {
         .onChange(of: location.coordinate?.latitude) {
             distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace, deviceFix: location.coordinate))
         }
-        // Emptying the search bar goes home, to the saved list — but Cancel
-        // empties it too, and cancelling a search field should not throw
-        // away the results behind it.
-        //
-        // The two are told apart on the next tick, once the text and the
-        // dismissal have both landed: an empty field with the search UI
-        // still up is a deliberate clear, and an empty field because the
-        // field went away restores the term instead. That restore is also
-        // what puts the term back on screen — a field that closed without
-        // its binding changing keeps drawing the prompt until something
-        // writes to it.
+        // Clear and Cancel both mean "back to what I was browsing." Discover
+        // remains mounted underneath Search, so this is only a surface switch:
+        // no feed reset, no network request, and no lost scroll position.
         .onChange(of: searchText) { _, text in
             guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             Task { @MainActor in
                 await Task.yield()
-                if isSearching {
-                    activeTerm = ""
-                    store.clearQuery()
-                } else if !activeTerm.isEmpty {
-                    searchText = activeTerm
+                if surface == .search {
+                    returnToDiscover()
                 }
             }
         }
@@ -237,69 +237,22 @@ struct ResultsView: View {
         .onChange(of: isCoveredBySheet) { _, covered in
             if !covered { Task { await loadDiscover() } }
         }
-        .refreshable {
-            // The gesture means "get me a fresh version of this screen",
-            // and which screen that is depends on whether a search is up.
-            if store.query == nil {
-                await loadDiscover(force: true)
-            } else {
-                await rerunCurrentQuery()
-            }
-        }
     }
 
-    /// The results themselves, and the field that asks for them.
-    private func searchSurface(_ proxy: ScrollViewProxy) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                Color.clear.frame(height: 0).id(Self.topAnchor)
-                content
-            }
-        }
-        // The engagement half of the read-ahead. Both grids start their next
-        // batch about two screens from the end, which is early enough to
-        // land before the user does — but only for a user who has moved the
-        // screen since the last one arrived. This is where that is noticed.
-        //
-        // A simultaneous gesture rather than a scroll-offset observer: it
-        // recognises alongside the scroll instead of competing with it,
-        // taps still reach the cards under it, and the question being asked
-        // is "is someone dragging this?", not "how far down are they?".
-        // `minimumDistance` keeps a tap that drifts a pixel from counting.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 12)
-                .onChanged { _ in
-                    // Only arm the feed the user can see. Forwarding every drag
-                    // to both stores made a Search swipe start a hidden
-                    // Discover top-up, competing for WebKit and request-pacer
-                    // time while the visible page was trying to paginate.
-                    if store.query == nil {
-                        discover.noteScroll()
-                    } else {
-                        store.noteScroll()
-                    }
-                }
-        )
-        .scrollDismissesKeyboard(.immediately)
-        // A new result set starts at the top of it.
-        //
-        // The scroll offset is a property of the scroll view, not of what is
-        // in it, so it outlives the cards it was measured against: search for
-        // something else from five pages down and the offset stays where it
-        // was over a grid that is now twelve cards long. What that looks like
-        // is a blank screen and no results, with the only way back being to
-        // scroll up through the empty space where the old ones used to be —
-        // which nobody should have to guess at, and which reads as the search
-        // having failed.
-        //
-        // Driven off `resultsGeneration` rather than `store.listings` or the
-        // query, because the thing being reacted to is precisely a *wholesale
-        // replacement* of the grid: paging in more cards changes `listings`
-        // constantly and must never move the screen, and a re-run with the
-        // same term (a filter change, a new city, pull-to-refresh) leaves the
-        // query equal to itself while replacing every card behind it.
-        .onChange(of: store.resultsGeneration) {
-            proxy.scrollTo(Self.topAnchor, anchor: .top)
+    /// Two stable scroll views occupy the same shell. Hiding one instead of
+    /// replacing it is intentional: its UIKit scroll view, lazy-cell identity,
+    /// and exact offset remain alive while the other surface is visible.
+    private var browseSurfaces: some View {
+        ZStack {
+            discoverSurface
+                .opacity(surface == .discover ? 1 : 0)
+                .allowsHitTesting(surface == .discover)
+                .accessibilityHidden(surface != .discover)
+
+            searchSurface
+                .opacity(surface == .search ? 1 : 0)
+                .allowsHitTesting(surface == .search)
+                .accessibilityHidden(surface != .search)
         }
         .navigationTitle("Open Market")
         .navigationBarTitleDisplayMode(.inline)
@@ -314,29 +267,41 @@ struct ResultsView: View {
                     prompt: "Search local listings")
         .searchSuggestions { SearchSuggestions() }
         .keepToolbarDuringSearch()
-        // The search session is deliberately *not* closed here. A field left
-        // open keeps showing what it was searched for, which is the point:
-        // results with an empty-looking search bar over them don't say what
-        // they are. `keepToolbarDuringSearch` is what makes that affordable
-        // — without it, staying open would cost the title and both toolbar
-        // buttons for as long as the results were on screen.
-        //
-        // The only visible difference from the un-searched screen is the
-        // Cancel button beside the field, and dismissing with it keeps both
-        // the results and the term.
-        .onSubmit(of: .search) {
-            let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !term.isEmpty else { return }
-            // Tapping a suggestion submits through here just as Return does,
-            // and in both cases the keyboard has no further job — it would
-            // otherwise sit over the results the tap just asked for. The
-            // search session itself stays open on purpose (see above), so the
-            // field keeps showing the term; only the keyboard goes away.
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                            to: nil, from: nil, for: nil)
-            activeTerm = term
-            Task { await search(term) }
+        .onSubmit(of: .search, submitSearch)
+    }
+
+    private var discoverSurface: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                home
+            }
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { _ in discover.noteScroll() }
+        )
+        .refreshable { await loadDiscover(force: true) }
+    }
+
+    private var searchSurface: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    Color.clear.frame(height: 0).id(Self.searchTopAnchor)
+                    searchContent
+                }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { _ in store.noteScroll() }
+            )
+            .refreshable { await rerunCurrentQuery() }
+            // A new result set starts at the top; pagination does not.
+            .onChange(of: store.resultsGeneration) {
+                proxy.scrollTo(Self.searchTopAnchor, anchor: .top)
+            }
+        }
+        .scrollDismissesKeyboard(.immediately)
     }
 
     // MARK: - Pieces
@@ -385,7 +350,7 @@ struct ResultsView: View {
     // inside the search field, which is where someone is when they want them.
 
     @ViewBuilder
-    private var content: some View {
+    private var searchContent: some View {
         switch store.feedState {
         case .loginWall:
             LoginWallCard(signIn: { showSignIn = true },
@@ -404,13 +369,11 @@ struct ResultsView: View {
         default:
             if store.isLoadingFirstPage {
                 SkeletonGrid()
-            } else if store.listings.isEmpty && store.query != nil {
+            } else if store.listings.isEmpty {
                 InlineNotice(text: "Nothing found nearby.", actionTitle: nil, action: nil)
                     .padding()
-            } else if store.query == nil {
-                home
             } else {
-                grid
+                searchGrid
             }
         }
     }
@@ -471,7 +434,7 @@ struct ResultsView: View {
     /// rather than something to browse. A rail says that; a grid says "start
     /// here", which is Discover's job now.
     ///
-    /// `RecentCard` rather than `ListingCard` also keeps `heroNamespace` ids
+    /// `RecentCard` rather than `ListingCard` also keeps transition ids
     /// unique across the screen, which the zoom transition requires: a saved
     /// listing may perfectly well appear in Discover as well, and two cards
     /// claiming one source id leaves the push no single thing to zoom out of.
@@ -511,38 +474,27 @@ struct ResultsView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
             }
-            // The skeleton holds for the whole fill.
-            //
-            // A fill publishes once, so there is no half-built state to show —
-            // and nothing that could be shown would survive: a partial feed
-            // reflows when the rest lands, which moves cards out from under
-            // whoever is already reading them.
-            //
-            // On a refresh the current cards stay up instead, because there is
-            // something better than a skeleton to look at and the gesture was
-            // "get me a fresh version of this", not "take this away".
+            // A fresh fill uses the full skeleton until its first usable batch
+            // arrives. On refresh the current cards stay up instead, because
+            // there is something better than a placeholder to look at.
             if discover.isLoading && discover.listings.isEmpty {
                 SkeletonGrid()
             } else {
-                StaggeredGrid(items: w.items, columns: 2, spacing: 12) { listing in
-                    ListingCard(listing: listing, namespace: heroNamespace)
-                        .onTapGesture { selected = listing }
-                        // A no-op unless the card is near the end of the feed.
-                        .task { await discover.loadMoreIfNeeded(currentItem: listing) }
-                }
-                .padding(.horizontal, 12)
-
-                if discover.isLoadingMore {
-                    ProgressView().frame(maxWidth: .infinity).padding()
-                }
-                // The home feed is where this matters most: it fills itself
-                // without being asked, so an empty one has no user action behind
-                // it to explain it, and there is no filter bar up here to read
-                // the place and radius off.
-                if w.isEmptiedByDistance {
-                    distanceNotice(w)
-                } else {
-                    discoverFooter(isEmpty: w.items.isEmpty)
+                PaginatedListingGrid(
+                    items: w.items,
+                    namespace: discoverNamespace,
+                    isLoadingMore: discover.isLoadingTail,
+                    onSelect: { selected = $0 },
+                    onItemAppear: { await discover.loadMoreIfNeeded(currentItem: $0) }
+                ) {
+                    // The home feed is where this matters most: it fills itself
+                    // without being asked, so an empty one has no user action
+                    // behind it to explain it.
+                    if w.isEmptiedByDistance {
+                        distanceNotice(w)
+                    } else {
+                        discoverFooter
+                    }
                 }
             }
         }
@@ -561,38 +513,13 @@ struct ResultsView: View {
     /// instead, where it is read before the scrolling starts rather than after
     /// it stops.
     @ViewBuilder
-    private func discoverFooter(isEmpty: Bool) -> some View {
-        if discover.reachedEnd {
-            // Signed out, the end of this feed is Facebook's ~24-card cap far
-            // more often than it is the end of the neighbourhood, so "there's
-            // nothing else in your area" would be a claim about the area made
-            // on evidence about the session. The offer to log in is the one
-            // that describes what actually happens next.
-            if discover.isAnonymous {
-                endOfResultsSignIn
-            } else {
-                endOfArea(isEmpty: isEmpty)
-            }
+    private var discoverFooter: some View {
+        // Signed out, the end of this feed is Facebook's ~24-card cap rather
+        // than evidence that the neighbourhood is exhausted. Signed-in harvest
+        // limits are retryable and deliberately have no terminal footer.
+        if discover.reachedEnd, discover.isAnonymous {
+            endOfResultsSignIn
         }
-    }
-
-    /// The end of what's nearby.
-    ///
-    /// Deliberately about the *area* rather than the feed, because the area is
-    /// what ran out: Facebook keeps going, and this is the point at which
-    /// nothing it offers next is close enough to be worth showing.
-    ///
-    /// "Nothing else" would be a small lie on a screen that never had anything
-    /// on it, so an empty one drops the word.
-    private func endOfArea(isEmpty: Bool) -> some View {
-        Text(isEmpty ? "There's nothing in your area." : "There's nothing else in your area.")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 32)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
     }
 
     /// The grid, after the two filters Facebook won't apply for us — and what
@@ -664,22 +591,15 @@ struct ResultsView: View {
         return result
     }
 
-    private var grid: some View {
-        VStack(spacing: 0) {
-            let winnowed = winnowed(store.listings)
-            let items = winnowed.items
-            StaggeredGrid(items: items, columns: 2, spacing: 12) { listing in
-                ListingCard(listing: listing, namespace: heroNamespace)
-                    .onTapGesture { selected = listing }
-                    .task { await store.loadMoreIfNeeded(currentItem: listing) }
-            }
-            .padding(.horizontal, 12)
-            .overlay(alignment: .bottom) {
-                if store.isLoadingMore {
-                    ProgressView().padding()
-                }
-            }
-
+    private var searchGrid: some View {
+        let winnowed = winnowed(store.listings)
+        return PaginatedListingGrid(
+            items: winnowed.items,
+            namespace: searchNamespace,
+            isLoadingMore: store.isLoadingMore,
+            onSelect: { selected = $0 },
+            onItemAppear: { await store.loadMoreIfNeeded(currentItem: $0) }
+        ) {
             // "Only new listings" runs here rather than at Facebook, so the
             // cards it removes disappear with no explanation unless one is
             // given — and it has an undo, which is the point of naming it.
@@ -699,9 +619,7 @@ struct ResultsView: View {
             if winnowed.isEmptiedByDistance {
                 distanceNotice(winnowed)
             } else if store.session == .unauthed {
-                if !items.isEmpty { endOfResultsSignIn }
-            } else if store.reachedEnd || items.isEmpty {
-                endOfArea(isEmpty: items.isEmpty)
+                if !winnowed.items.isEmpty { endOfResultsSignIn }
             }
         }
     }
@@ -819,10 +737,30 @@ struct ResultsView: View {
 
     // MARK: - Actions
 
+    private func submitSearch() {
+        let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
+        Task { await search(term) }
+    }
+
+    /// Reveals the already-mounted home feed. Search results remain in their
+    /// store for a subsequent search, but the field is reset to its home state.
+    private func returnToDiscover() {
+        surface = .discover
+        if !searchText.isEmpty {
+            searchText = ""
+        }
+    }
+
     private func search(_ term: String) async {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        activeTerm = trimmed
+        // Switch in the same main-actor turn that clears/replaces Search's
+        // results, so a retained result set cannot flash between submission
+        // and the new query entering its loading state.
+        surface = .search
         prefs.recordSearch(trimmed)
         prefs.recordLastQuery(.search(trimmed))
         await run(.search(trimmed))
@@ -850,6 +788,16 @@ struct ResultsView: View {
     private func rerunCurrentQuery() async {
         guard let existing = store.query else { return }
         await run(existing.kind)
+    }
+
+    private func refreshVisibleSurfaceAfterFilters() {
+        Task {
+            if surface == .search {
+                await rerunCurrentQuery()
+            } else {
+                await loadDiscover()
+            }
+        }
     }
 
     /// The same place every search uses, so Discover and a search from the home
@@ -897,6 +845,51 @@ struct ResultsView: View {
             minPrice: prefs.minPrice,
             maxPrice: prefs.maxPrice
         )
+    }
+}
+
+/// The structure Search and Discover genuinely share: the aligned listing grid,
+/// pagination placeholders, selection, and per-card prefetch callback. Each
+/// surface supplies its own store and footer because their loading and terminal
+/// semantics are deliberately different.
+private struct PaginatedListingGrid<Footer: View>: View {
+    let items: [Listing]
+    let namespace: Namespace.ID
+    let isLoadingMore: Bool
+    let onSelect: (Listing) -> Void
+    let onItemAppear: (Listing) async -> Void
+    let footer: Footer
+
+    init(items: [Listing],
+         namespace: Namespace.ID,
+         isLoadingMore: Bool,
+         onSelect: @escaping (Listing) -> Void,
+         onItemAppear: @escaping (Listing) async -> Void,
+         @ViewBuilder footer: () -> Footer) {
+        self.items = items
+        self.namespace = namespace
+        self.isLoadingMore = isLoadingMore
+        self.onSelect = onSelect
+        self.onItemAppear = onItemAppear
+        self.footer = footer()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ListingGrid(
+                items: items,
+                columns: 2,
+                spacing: 12,
+                loadingPlaceholderCount: isLoadingMore ? 4 : 0
+            ) { listing in
+                ListingCard(listing: listing, namespace: namespace)
+                    .onTapGesture { onSelect(listing) }
+                    .task { await onItemAppear(listing) }
+            }
+            .padding(.horizontal, 12)
+
+            footer
+        }
     }
 }
 
@@ -959,8 +952,8 @@ private extension View {
 
 /// A listing at strip size: square photo, price, one line of title.
 ///
-/// Deliberately not a `ListingCard`. That card is built for a column of a
-/// staggered grid — variable height, distance line, saved bookmark — and none of
+/// Deliberately not a `ListingCard`. That card is built for a two-column result
+/// grid — full-size image, distance line, saved bookmark — and none of
 /// that survives being squeezed into a 128pt horizontal rail. It also marks
 /// itself as a zoom-transition source, which would collide with the grid above
 /// if the same listing appeared in both.

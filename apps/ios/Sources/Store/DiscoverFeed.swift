@@ -59,7 +59,20 @@ final class DiscoverFeed: ObservableObject {
     @Published private(set) var isLoading = false
     /// Scrolling for more, with cards already on screen.
     @Published private(set) var isLoadingMore = false
-    /// Whether there is any point scrolling further.
+    /// Whether placeholders should extend the published grid.
+    ///
+    /// This covers ordinary pagination and the tail of a brand-new progressive
+    /// fill after its first usable batch appears. It deliberately excludes
+    /// refreshes: those already have a complete grid worth keeping on screen.
+    var isLoadingTail: Bool {
+        isLoadingMore || (isLoading && !hasLoaded && !listings.isEmpty)
+    }
+    /// Whether this session cannot scroll further.
+    ///
+    /// Only anonymous and login-walled sessions are terminal. A signed-in
+    /// harvest that reaches its dry-screen budget, or briefly fails to advance,
+    /// has learned nothing conclusive about Facebook's feed and remains
+    /// retryable on the next user drag.
     @Published private(set) var reachedEnd = false
     /// Whether the cards on screen were fetched without a working account.
     ///
@@ -83,13 +96,13 @@ final class DiscoverFeed: ObservableObject {
     /// half-empty screen look like the whole of what's nearby.
     static let browseTarget = 12
     /// How many screens one harvest may scroll in total, and how many of those
-    /// may turn up new listings that are *all* too far before it gives up.
+    /// may turn up new listings that are *all* too far before this attempt ends.
     ///
     /// The first is a time bound — an already-rendered screen settles quickly,
-    /// but a network boundary can still cost ~0.9s. The second is the end-of-area
-    /// test, and it counts a very specific thing: screens that produced new
-    /// listings, none of which were close enough. A screen that produced no new
-    /// listings at all is **not** counted, because it is not evidence of anything.
+    /// but a network boundary can still cost ~0.9s. The second is an effort bound,
+    /// and it counts a very specific thing: screens that produced new listings,
+    /// none of which were close enough. A screen that produced no new listings
+    /// at all is **not** counted, because it is not evidence of anything.
     ///
     /// That distinction is the whole of it. The feed virtualises, and a fill has
     /// already taken every card in the DOM, so the first several screens of a
@@ -97,15 +110,15 @@ final class DiscoverFeed: ObservableObject {
     /// Counting those as dry ended the feed after 2644px of a 6650px document —
     /// measured, signed in, with the feed still happily paginating.
     static let scrollBudget = 14
-    static let dryScreenLimit = 4
+    static let dryScreenBudget = 4
 
     /// How many cards from the end a top-up starts.
     ///
     /// Ten is roughly two screens of a two-column grid, and it is chosen against
-    /// the cost of the fetch rather than the length of the feed: a top-up is a
-    /// webview scrolled a screen at a time at ~0.9s a screen, so a trigger three
-    /// cards from the bottom guarantees the spinner is seen. Two screens of
-    /// runway is enough for a normal scroll to arrive after the cards do.
+    /// the cost of the fetch rather than the length of the feed: a top-up drives
+    /// a hidden webview a screen at a time, so starting near the final card would
+    /// expose the loading placeholders for too long. Two screens of runway let
+    /// a normal scroll reach the new cards after they arrive.
     ///
     /// This is not a read-ahead cache. Nothing is fetched that the user was not
     /// already scrolling towards, and see `scrolledSinceLastTopUp` for what
@@ -225,8 +238,7 @@ final class DiscoverFeed: ObservableObject {
                 wanted: Self.browseTarget - collected.count,
                 publishEachBatch: publishesProgressively
             )
-            collected += harvest.cards
-            reachedEnd = harvest.exhausted
+            collected += harvest
         }
         if !publishesProgressively {
             // One replacement: a pull-to-refresh keeps the old cards exactly
@@ -296,7 +308,6 @@ final class DiscoverFeed: ObservableObject {
         // by scrolling through this one, and the scrolling done to reach the
         // trigger has already been spent reaching it.
         scrolledSinceLastTopUp = false
-        defer { isLoadingMore = false }
         Logger.discover.info("""
             top-up: at \(self.deepestIndexSeen, privacy: .public) \
             of \(self.listings.count, privacy: .public)
@@ -306,9 +317,18 @@ final class DiscoverFeed: ObservableObject {
         // appends below the reader, so there is no layout stability benefit to
         // withholding three usable cards while the hidden webview hunts for nine
         // more. A refresh is the path that still replaces atomically.
-        let harvest = await scrollForMore(wanted: Self.browseTarget,
-                                          publishEachBatch: true)
-        reachedEnd = harvest.exhausted
+        await scrollForMore(wanted: Self.browseTarget,
+                            publishEachBatch: true)
+        isLoadingMore = false
+
+        // A drag that happened during the harvest is one queued request, not a
+        // no-op. `noteScroll` cannot start it while `isLoadingMore` is true, and
+        // a dry harvest appends no cell whose `.task` could re-check the margin.
+        // Consume the queued intent now that the current attempt has released
+        // the gate. Repeated gesture callbacks still coalesce into the one Bool.
+        if scrolledSinceLastTopUp {
+            await topUpIfAtMargin()
+        }
     }
 
     /// Scrolls the feed a screen at a time, keeping what is inside the radius,
@@ -319,27 +339,25 @@ final class DiscoverFeed: ObservableObject {
     /// as they leave the viewport, so a single read at the bottom returns the
     /// last window rather than the feed (`docs/logged-in-findings.md` §3).
     ///
-    /// `exhausted` means "stop asking", and it has two causes worth telling
-    /// apart in the log but not in the UI: the document stopped growing, which
-    /// is the literal end of the feed — logged out, that is the ~24-card cap —
-    /// or several screens in a row carried nothing within the radius, which is
-    /// the end of the part of it that this app is for. Running out of scroll
-    /// budget is neither — it is just this call's turn ending, and the next one
-    /// picks up where it left off.
+    /// Every stop condition ends only this attempt. On a signed-in feed neither
+    /// a temporarily stationary scroller nor several distant windows proves
+    /// there is nothing farther down. The next user drag may try again from the
+    /// current position. Anonymous feeds never enter this method.
     /// - Parameter publishEachBatch: Appends each filtered webview screen below
     ///   cards already published. Used by pagination and by the slow tail of a
     ///   fresh fill; refreshes keep it false and replace the feed atomically.
+    @discardableResult
     private func scrollForMore(wanted: Int,
-                               publishEachBatch: Bool = false) async -> (cards: [Listing], exhausted: Bool) {
+                               publishEachBatch: Bool = false) async -> [Listing] {
         var found: [Listing] = []
         var dryScreens = 0
         var screens = 0
 
-        while found.count < wanted, dryScreens < Self.dryScreenLimit, screens < Self.scrollBudget {
+        while found.count < wanted, dryScreens < Self.dryScreenBudget, screens < Self.scrollBudget {
             screens += 1
             guard await engine.scrollOnce() else {
-                Logger.discover.info("browse feed stopped growing after \(screens, privacy: .public) screens")
-                return (found, true)
+                Logger.discover.info("harvest paused after scroll did not advance on screen \(screens, privacy: .public)")
+                break
             }
             let batch = await nearby(await engine.renderedCards())
             found += batch.kept
@@ -354,9 +372,18 @@ final class DiscoverFeed: ObservableObject {
             }
         }
 
-        let exhausted = dryScreens >= Self.dryScreenLimit
-        Logger.discover.info("harvest: \(found.count, privacy: .public) kept over \(screens, privacy: .public) screens, dry \(dryScreens, privacy: .public), exhausted \(exhausted, privacy: .public)")
-        return (found, exhausted)
+        let reason: String
+        if found.count >= wanted {
+            reason = "target"
+        } else if dryScreens >= Self.dryScreenBudget {
+            reason = "dry budget"
+        } else if screens >= Self.scrollBudget {
+            reason = "scroll budget"
+        } else {
+            reason = "no movement"
+        }
+        Logger.discover.info("harvest: \(found.count, privacy: .public) kept over \(screens, privacy: .public) screens, dry \(dryScreens, privacy: .public), stopped for \(reason, privacy: .public), retryable")
+        return found
     }
 
     /// Rendered cards, minus everything this feed shouldn't carry: duplicates,

@@ -28,7 +28,7 @@ out. **The session decides one thing: whether it scrolls.**
 |---|---|---|
 | Fill | one page, published as-is | scroll until `browseTarget` (12) in-radius cards |
 | Pagination | none — Facebook stops at ~20–24 cards and never loads more | a screen at a time, never yet observed to stop |
-| Footer | the offer to log in | "There's nothing else in your area", at `reachedEnd` |
+| Footer | the offer to log in | no terminal claim; a later drag may retry |
 | Ranking | a popularity pool on an IP and a cookie (§3) | the account's own history |
 
 **This replaced the search-seeded feed on 2026-08-10**, which is what §1 used to
@@ -73,7 +73,7 @@ browse feed stopped growing after 5 screens
 
 Six of the ten seconds went on scrolling a feed that never grows: the scroll
 position advanced 0→2410px of a fixed 3188px container while the card count sat
-at 20 the entire way. `dryScreenLimit` cannot catch this — it counts screens
+at 20 the entire way. `dryScreenBudget` cannot catch this — it counts screens
 that produced *new* listings and kept none, and these produced no new listings
 at all (§0.1, and that rule is correct for the signed-in top-up it was written
 for). The cap itself is not new: `feasibility-2026-07-31.md` §9.1 recorded it as
@@ -181,21 +181,20 @@ and nothing vanishes from under a reader later. Geocoding is lossy — one measu
 batch resolved 1 of 2 places — so this does discard the occasional real
 neighbour, which is the price of not showing California.
 
-A harvest stops on one of three things:
+A signed-in harvest attempt stops on one of three things:
 
-| | Meaning | `reachedEnd` |
+| | Meaning | Next drag |
 |---|---|---|
-| Scroll position stops advancing (after a retry) | The literal end of the feed | yes |
-| 4 screens that produced new listings and kept none | The end of the part of it this app is for | yes |
-| 14 screens scrolled | This call's turn is over | no — the next scroll resumes |
+| Scroll position stops advancing (after a retry) | Facebook may still be hydrating | retries |
+| 4 screens that produced new listings and kept none | This attempt's distance budget is spent | retries |
+| 14 screens scrolled | This attempt's total budget is spent | retries |
 
 Note what the middle row counts, and §0.1 for why: screens that produced nothing
 *new* are not counted at all.
 
 Measured after the fixes, signed in, 10 mi: a fill publishes 19 cards, and a
 top-up returned `26 raw, 0 unparsed, 2 dupes, 24 new, 9 in radius` — 12 kept over
-6 screens, `exhausted false`. Roughly a third of what Facebook offers survives
-the radius.
+6 screens. Roughly a third of what Facebook offers survives the radius.
 
 ### 0.2 What a browse card is worth
 
@@ -230,8 +229,8 @@ What replaces it:
 | | Bottom of Discover |
 |---|---|
 | Anonymous (always at `reachedEnd`, §0.0) | The offer to log in — nothing else |
-| Signed in, more to come | Nothing (a spinner while a top-up runs) |
-| Signed in, `reachedEnd` | "There's nothing else in your area." |
+| Signed in, fresh-fill tail or top-up running | Two rows of card skeletons |
+| Signed in, top-up paused | Nothing; the next drag can retry |
 
 The anonymous row is not a nudge dressed as information. Its feed genuinely
 stops, so "log in to keep scrolling" is a statement about the next scroll. It
@@ -242,10 +241,28 @@ The radius moved into the caption beside the heading — "Facebook Marketplace,
 within 10 mi of Seattle, WA" — which is where §4.3 said to put it and is read
 before the scrolling rather than after it stops.
 
-The same footers now end a **search result set**, which previously ended in
-silence for a signed-in user; `ListingStore.reachedEnd` records three scrolls
-that produced nothing. The "already viewed" notice keeps its own line and its
-own undo, because that filter is the app's own and has something to undo.
+Search pagination follows the same retryable rule. Three windows that add no
+cards pause that attempt without claiming the area or result set is exhausted;
+the next drag may try again, and two skeleton rows stand in for the incoming
+page while it does. The "already viewed" notice keeps its own line and its own
+undo, because that filter is the app's own and has something to undo.
+
+Search and Discover share the navigation shell and `PaginatedListingGrid`, but
+not a webview, store, or scroll view. Both scroll surfaces remain mounted while
+the other is visible. Submitting a search resets only Search to its top; Cancel
+reveals Discover at the same cards and offset without loading it again. Keeping
+the engines separate is load-bearing: navigating one hidden webview between a
+browse URL and a search URL would make either surface destroy the other's paging
+context.
+
+The shared result grid is row-aligned rather than masonry. Every listing reserves
+the same 180-point image, two title lines, and one location/distance line, even
+when a field is missing or shorter. Loading skeletons use the same two-column
+geometry. That makes each row a stable unit for pagination, future controls, and
+the Search ↔ Discover transition instead of letting card copy reshape the feed.
+Pagination placeholders are inserted into that same grid, so an odd final result
+is paired with the first skeleton instead of leaving a hole above a detached
+block of loading rows.
 
 The blanket empty state — a full-screen "Nothing saved yet" with advice about
 bookmarks — is gone with them. An empty home screen is a statement about the
@@ -495,26 +512,25 @@ that category actually says. None have been measured against result counts.
 Much cheaper than it was: a bad term used to cost a third of a fresh install's
 home screen, and now costs one suggestion that returns little when tapped.
 
-### 4.9 "There's nothing else in your area" is inferred, never observed
+### 4.9 "There's nothing else in your area" was inferred, never observed
 
-**It was also, for a while, simply wrong** — it fired on the first scroll of
-every signed-in session, for the four reasons in §0.1, none of which had anything
-to do with the area. Fixed; the wider point stands and is worth keeping.
+**It was simply wrong** — first because it fired on the first scroll of every
+signed-in session for the four implementation failures in §0.1, then in
+production because four consecutive windows outside the radius permanently
+ended an otherwise live feed. Neither condition had anything to do with the
+area actually running out.
 
-The message fires on either of §0.1's two `reachedEnd` conditions, and only one
-of them is what it says. A position that stops advancing is the end of *the
-feed*, which may be a cap rather than an exhausted area — whether the signed-in
-feed caps has still never been observed, because in testing it never stopped.
-Four dry screens is a heuristic about a ranking nobody has documented.
+A stationary scroll position is not conclusive either. It may be the end of the
+feed, a transient network boundary, or a WebKit/script failure; whether the
+signed-in feed caps has still never been observed. Four dry screens is likewise
+a useful time budget for one attempt, not evidence about a ranking nobody has
+documented. Both now pause the current harvest and leave the next drag free to
+retry. Signed-in Discover therefore makes no terminal claim.
 
 **The anonymous case is no longer one of these**, which is the one improvement
 here since it was written: that feed reaches its end by construction (§0.0) and
 says "log in to keep scrolling", a claim about the session it can support,
 rather than a claim about the neighbourhood it cannot.
-
-So the sentence is a reasonable summary of "we scrolled and found nothing else
-close enough", stated more confidently than the evidence supports. The two causes
-are now logged separately, which is what makes the next round of this decidable.
 
 The general lesson, which cost most of the debugging: **every failure path in the
 scroll returned the same value as "the feed ended"** — a nil script result, an
@@ -543,15 +559,16 @@ Worth measuring before adding: send one filter to a browse URL and check whether
 the result set moves, using the §3 discipline of comparing result sets rather
 than trusting the chip.
 
-### 4.11 A top-up can cost several seconds of silent scrolling
+### 4.11 A top-up can cost several seconds
 
-A `loadMoreIfNeeded` may scroll up to 10 screens at ~0.9s of settling each before
-returning anything, and the spinner only appears under cards that are already on
-screen. In a sparse area — where most screens are dry — the user reaches the
-bottom and waits with nothing to read.
+A `loadMoreIfNeeded` may scroll up to 14 screens before
+returning anything. Two rows of skeleton cards now reserve the incoming space
+under the existing grid for the duration; they replace the detached circular
+spinner that gave no sense of what was loading.
 
-Untested against a real sparse feed. The levers are `scrollBudget`,
-`dryScreenLimit`, and triggering the top-up earlier than 6 cards from the end.
+Validated against a live signed-in feed with an intentionally sparse radius.
+The levers remain `scrollBudget`, `dryScreenBudget`, and triggering the top-up
+earlier than 10 cards from the end.
 
 Signed-in only: an anonymous feed never tops up (§0.0), which is the one form
 of silent scrolling that has been removed rather than tuned.
