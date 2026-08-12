@@ -274,6 +274,10 @@ app broke on contact with a session. None of them were about data.
 
 ### 7.2 The exposure this leaves
 
+> **Superseded for item detail by §7.4.** The signed-in desktop detail extractor
+> has now been exercised and repaired. The general rule below still holds for
+> any selector not re-checked with cookies present.
+
 Everything in this app was built and verified **logged out**, over months, and
 the four failures above all sat latent that whole time. That is the finding
 worth keeping, more than any individual selector:

@@ -12,6 +12,7 @@ struct RawDetail: Decodable {
     /// Seller fields are `var` because they arrive later than everything else
     /// and get merged in from a second read — see `DetailEngine.loadDetail`.
     /// Nothing else about this struct is mutable, and nothing else should be.
+    var sellerProfileID: String?
     var sellerName: String?
     var sellerJoined: String?
     var sellerRatingText: String?
@@ -62,6 +63,7 @@ struct RawDetail: Decodable {
             postedText: postedText,
             conditionText: conditionText,
             locationText: locationText,
+            sellerProfileID: sellerProfileID,
             sellerName: sellerName,
             sellerJoined: sellerJoined,
             sellerRating: sellerRatingText.flatMap(Double.init),
