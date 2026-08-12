@@ -37,6 +37,24 @@ struct PriceCheckView: View {
     @State private var isChoosingFromLibrary = false
     @State private var isTakingPhoto = false
     @State private var isRunning = false
+    /// A past run being read. Separate from `isRunning` because they are
+    /// different destinations, not two states of one.
+    @State private var selectedPast: PastPriceCheck?
+
+    /// The first photo of the run in progress, held here because the strip it
+    /// came from is cleared the moment the run starts. `PriceCheckRunView`
+    /// shows it beside the identification and has no picker of its own.
+    @State private var runThumbnail: Image?
+
+    /// What was submitted, kept only until the run either succeeds or doesn't.
+    ///
+    /// Clearing the form on submit is right for the ordinary case — the answer
+    /// is on the next screen and coming back to a stale copy of the question is
+    /// clutter. It is wrong for the failed one: "couldn't reach the server" and
+    /// an empty form together means retyping the description and re-picking
+    /// three photos to try again. So the inputs are put back when the run
+    /// failed, and only then.
+    @State private var submitted: (draft: String, photos: [PreparedPhoto])?
 
     /// Three, matching `max_items` on the request. Both numbers exist because
     /// the client should not be able to build a request the server refuses, and
@@ -59,57 +77,65 @@ struct PriceCheckView: View {
             .navigationTitle("Price check")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: $isRunning) {
-                PriceCheckRunView(thumbnail: photos.first?.preview)
+                PriceCheckRunView(thumbnail: runThumbnail)
+            }
+            .navigationDestination(item: $selectedPast) { PastPriceCheckView(check: $0) }
+            // Fetched once when the screen appears, and again whenever a run
+            // ends — `SellerToolsModel` refreshes the list itself as the last
+            // thing a successful run does, so by the time Back lands the new row
+            // is already at the top.
+            .task { await model.loadRecent() }
+            .onChange(of: isRunning) { _, running in
+                guard !running else { return }
+                restoreIfRunFailed()
             }
     }
 
     // MARK: - Asking
 
-    /// One question, two ways to answer it, one button.
+    /// One question, two ways to answer it, one button, and what you asked
+    /// before.
     ///
-    /// The button is pinned rather than scrolled to, because on a phone the
-    /// keyboard covers the bottom of the screen the moment somebody starts
-    /// typing — and the button they need next was underneath it.
+    /// **The button scrolls with the form now** rather than being pinned to the
+    /// bottom. It was pinned because the keyboard covers the bottom of the
+    /// screen while somebody types — but a bar welded across the foot of the
+    /// screen also sat between the form and everything under it, which is the
+    /// reason there was nothing under it. The keyboard case is covered where it
+    /// actually happens: Return submits, and the scroll dismisses
+    /// interactively.
     private var question: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("What are you selling?")
-                            .font(.largeTitle.bold())
-                        // The one line of instruction on the screen, and it is
-                        // here rather than under a field because it answers the
-                        // question somebody has before they touch anything:
-                        // which of these two boxes do I have to fill in.
-                        Text("A photo or a sentence is enough. Both is better.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 8)
-
-                    photoStrip
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        sectionLabel("Anything worth knowing")
-                        descriptionField
-                        // Not "this is optional" — the line above already said
-                        // that. This says what to write, which is the more
-                        // useful thing and the reason the field exists.
-                        Text("Condition, age and what's included move the price most.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("What are you selling?")
+                        .font(.largeTitle.bold())
+                    // The one line of instruction on the screen, and it is here
+                    // rather than under a field because it answers the question
+                    // somebody has before they touch anything: which of these
+                    // two boxes do I have to fill in.
+                    Text("A photo or a sentence is enough. Both is better.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 24)
-            }
-            .scrollDismissesKeyboard(.interactively)
+                .padding(.top, 8)
 
-            runBar
+                photoStrip
+
+                VStack(alignment: .leading, spacing: 10) {
+                    descriptionField
+                    runButton
+                }
+
+                recentSection
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            // Clears the floating tab bar, which is an overlay rather than a
+            // safe-area inset, so nothing reserves this space on its own.
+            .padding(.bottom, 96)
         }
+        .scrollDismissesKeyboard(.interactively)
         // Tapping anywhere off the field puts the keyboard away. Simultaneous
         // rather than `onTapGesture` so it never competes with a control for
         // the same tap: they run their own action and the keyboard goes either
@@ -118,6 +144,13 @@ struct PriceCheckView: View {
         .simultaneousGesture(TapGesture().onEnded { isTyping = false })
     }
 
+    /// The placeholder is the only instruction the field gets.
+    ///
+    /// It replaced a caps label above and a caption below — three explanations
+    /// of one text box, two of which stay on screen forever describing a field
+    /// that is already full. The example does the work of all three by being an
+    /// example: it shows the make, the model, what's included and what's wrong
+    /// with it, and it disappears the moment somebody starts typing.
     private var descriptionField: some View {
         TextField("Weber Genesis II gas grill, three burners, cover included, grates need cleaning",
                   text: $draft,
@@ -141,43 +174,91 @@ struct PriceCheckView: View {
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    /// The button, and the promise underneath it.
+    /// The button, directly under the thing it acts on.
     ///
-    /// The second line is doing real work: this run takes the better part of
-    /// ten seconds, most of it two page loads against Facebook, and a button
-    /// that silently thinks for that long reads as broken. Saying where the
-    /// numbers come from and roughly how long it takes turns a wait into a
-    /// wait for something.
-    private var runBar: some View {
-        VStack(spacing: 8) {
-            // No spinner and no "checking…" state. The run is a screen now, and
-            // this button's whole job is to get there — a button that sat here
-            // spinning would be reporting on work happening somewhere the user
-            // can already see.
-            Button(action: submit) {
-                Text("Check the price")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canRun)
-
-            Text("We read recent Marketplace sales near you. About ten seconds.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+    /// No spinner and no "checking…" state: the run is a screen, and this
+    /// button's whole job is to get there. A button reporting on work happening
+    /// somewhere the user can already see would be describing it twice.
+    ///
+    /// The line of reassurance that used to sit under it — where the numbers
+    /// come from, how long it takes — is gone with the pinned bar. It was
+    /// answering "is this broken?" for a button that thought silently for ten
+    /// seconds, and the next screen answers that better by naming each step as
+    /// it happens.
+    private var runButton: some View {
+        Button(action: submit) {
+            Text("Check the price")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        // Same tab-bar clearance as the answer screen, for the same reason —
-        // here it is the reassurance line that would sit under the capsule.
-        .padding(.bottom, 76)
-        .background(.bar)
+        .buttonStyle(.borderedProminent)
+        .disabled(!canRun)
     }
 
-    private func sectionLabel(_ text: String) -> some View { SectionLabel(text) }
+    // MARK: - What you asked before
+
+    /// The runs already done, newest first.
+    ///
+    /// Under the form rather than on a screen of its own, because it is only
+    /// worth anything to somebody who is already here — and because the two
+    /// most useful things it can do are both about the form above it: showing
+    /// the listing copy from a run whose answer was already taken, and stopping
+    /// a second run on something priced last week.
+    ///
+    /// Absent when empty rather than showing an empty state. A section
+    /// explaining that you have no history yet is a paragraph about nothing on
+    /// the screen with the least room for one.
+    @ViewBuilder
+    private var recentSection: some View {
+        if !model.recent.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel("Recent")
+
+                VStack(spacing: 0) {
+                    ForEach(Array(model.recent.enumerated()), id: \.element.id) { index, check in
+                        if index > 0 { Divider().padding(.leading, 14) }
+                        recentRow(check)
+                    }
+                }
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    private func recentRow(_ check: PastPriceCheck) -> some View {
+        Button {
+            selectedPast = check
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(check.label)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                    if let when = check.whenText {
+                        Text(when)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                // The price is the reason to tap the row, so it is on the row.
+                // A run that found no market says so rather than showing a gap,
+                // which would read as a value that failed to load.
+                Text(check.priceText ?? "No price")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(check.priceText == nil ? .secondary : .primary)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+    }
 
     // MARK: - Asking
 
@@ -202,11 +283,38 @@ struct PriceCheckView: View {
     ///
     /// Starts the run and pushes in the same breath, so the next screen is
     /// already showing the first step by the time the transition lands.
+    ///
+    /// **And empties the form.** The question has been asked and answered on
+    /// the screen in front of them; coming back to a copy of it is a stale
+    /// draft of something that is already done, and the next thing anyone does
+    /// here is price a different object. The submitted values are held in
+    /// `submitted` until the run's outcome is known, and put back if it failed
+    /// — see `restoreIfRunFailed`.
     private func submit() {
         guard canRun else { return }
         isTyping = false
         model.start(draft, photos: photos.map(\.photo))
+        submitted = (draft, photos)
+        runThumbnail = photos.first?.preview
+        draft = ""
+        photos = []
         isRunning = true
+    }
+
+    /// Puts the question back if it never got an answer.
+    ///
+    /// Runs when the run screen is popped, and does nothing unless the run
+    /// actually failed — a completed run leaves the form clear, which is the
+    /// point of clearing it. Only when there is nothing to go back to does the
+    /// form become the place to fix it, and then the photos need to still be
+    /// there.
+    private func restoreIfRunFailed() {
+        guard let submitted else { return }
+        if case .failed = model.phase {
+            draft = submitted.draft
+            photos = submitted.photos
+        }
+        self.submitted = nil
     }
 
     /// Downscales and encodes off the main actor, then appends.
@@ -248,57 +356,6 @@ struct PriceCheckView: View {
             await add(image)
         }
         pickerSelection = []
-    }
-
-    private var prompt: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            photoStrip
-
-            // The placeholder is the only instruction on this screen. It names
-            // the four things worth typing, which is what the removed paragraph
-            // was for, and it disappears the moment somebody starts typing —
-            // where a caption stays on screen forever explaining a field that
-            // is already full.
-            TextField("Description — condition, brand, issues",
-                      text: $draft,
-                      axis: .vertical)
-                .lineLimit(2...6)
-                .textFieldStyle(.plain)
-                .focused($isTyping)
-                .submitLabel(.done)
-                // A vertical-axis field treats Return as a newline and never
-                // calls `onSubmit`, so Done is caught here: the newline that
-                // arrives is the tap on the key, and it goes back out again
-                // rather than being left in the description.
-                //
-                // Same three things the button does, in the same order, so
-                // Done and the button cannot drift apart.
-                .onChange(of: draft) { _, text in
-                    guard text.contains("\n") else { return }
-                    draft = text.replacingOccurrences(of: "\n", with: " ")
-                    // Down either way. Done on a description too short to
-                    // search is still the user saying they're finished
-                    // typing, and leaving the keyboard up would ignore that.
-                    isTyping = false
-                    submit()
-                }
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-
-            Button(action: submit) {
-                HStack(spacing: 8) {
-                    if model.phase.isRunning {
-                        ProgressView().controlSize(.small).tint(.white)
-                    }
-                    Text(model.phase.isRunning ? "Analysing the market…" : "Analyse the market")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.phase.isRunning || !canRun)
-        }
     }
 
     // MARK: - Photos

@@ -138,6 +138,24 @@ final class PricingService {
         _ = await client.recordPriceCheckCopy(request: request, headers: headers)
     }
 
+    // MARK: - History
+
+    /// The runs already done, newest first.
+    ///
+    /// Read from the server rather than kept on the device, and that is the
+    /// cheap answer rather than a compromise: the row has been written on every
+    /// run since this feature existed — before the model is called, so a run
+    /// that fails is still a row — so there was nothing to build but the read.
+    /// It also means a history that survives a reinstall and follows the
+    /// account onto a second phone, which a local cache would not.
+    func recentChecks(limit: Int = 20) async throws -> [PastPriceCheck] {
+        var request = ListPriceChecksRequest()
+        request.limit = Int32(limit)
+        let response = await client.listPriceChecks(request: request,
+                                                    headers: try await session.authorizedHeaders())
+        return try unwrap(response).checks.map(PastPriceCheck.init)
+    }
+
     // MARK: - Wire
 
     private func unwrap<T>(_ response: ResponseMessage<T>) throws -> T {

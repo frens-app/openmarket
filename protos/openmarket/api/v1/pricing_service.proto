@@ -277,6 +277,64 @@ message RecordPriceCheckCopyRequest {
 
 message RecordPriceCheckCopyResponse {}
 
+// The runs this user has already done, newest first.
+//
+// The row was always being written — see `CreatePriceCheck`, which runs before
+// the model is called precisely so a run that dies is still a row. This reads
+// them back, which is the whole of what "recent checks" needs: no new table, no
+// new column, and nothing kept on the device.
+message ListPriceChecksRequest {
+  // Clamped server-side as well. This is a list somebody scrolls past on the
+  // way to typing, not a data export.
+  int32 limit = 1 [(buf.validate.field).int32 = {gte: 0, lte: 50}];
+}
+
+// One past run, as much of it as survives.
+//
+// **The comparables are not here, and this is the honest shape rather than a
+// gap.** Nothing has ever stored them: a card that was live during the run is a
+// 404 a week later, and a strip of dead listings under a price is worse than no
+// strip (migration 00006). So a past check can say what it decided and what it
+// decided from — a count and a search term — and cannot show its working. The
+// listing copy, which is the part somebody comes back for, survives in full.
+message PriceCheckSummary {
+  string price_check_id = 1;
+
+  // RFC 3339. A string rather than a Timestamp because that is what
+  // `Viewer.created_at` already is, and one timestamp convention beats two.
+  string created_at = 2;
+
+  // What the model called it, and what the seller called it. Both, because
+  // either can be the useful one: the identification is usually the better
+  // label, and the description is what to show when the run died before there
+  // was an identification.
+  string identified_name = 3;
+  string description = 4;
+
+  // Absent on a run that never found a market — which is a real outcome and
+  // stays in the list, since "I checked that dresser and it found nothing" is
+  // something a person remembers doing.
+  optional int64 recommended_price_minor = 5;
+  string currency_symbol = 6;
+
+  int32 comps_found = 7;
+  int32 sold_found = 8;
+  string search_query_used = 9;
+
+  // **What the seller ended up with, not what was generated**, where the two
+  // differ: the server prefers the copied columns and falls back to the
+  // generated ones. Both are still stored separately — the gap between them is
+  // the quality signal this feature is built on — but a history screen is the
+  // user's record, not ours, and handing back the version they rewrote as
+  // though they had not is the wrong side of that distinction.
+  string listing_title = 10;
+  string listing_description = 11;
+}
+
+message ListPriceChecksResponse {
+  repeated PriceCheckSummary checks = 1;
+}
+
 service PricingService {
   // The only call that reaches a model.
   rpc IdentifyItem(IdentifyItemRequest) returns (IdentifyItemResponse);
@@ -293,4 +351,8 @@ service PricingService {
   // strongly enough to stop and tap — which skews negative. Idempotent; the
   // first price copy keeps the timestamp.
   rpc RecordPriceCheckCopy(RecordPriceCheckCopyRequest) returns (RecordPriceCheckCopyResponse);
+
+  // Reads the rows back. Costs nothing and calls nothing — the row was written
+  // either way.
+  rpc ListPriceChecks(ListPriceChecksRequest) returns (ListPriceChecksResponse);
 }

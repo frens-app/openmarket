@@ -35,6 +35,8 @@ public typealias CompletePriceCheckRequest = Openmarket_Api_V1_CompletePriceChec
 public typealias SubmitPriceCheckFeedbackRequest = Openmarket_Api_V1_SubmitPriceCheckFeedbackRequest
 public typealias RecordPriceCheckCopyRequest = Openmarket_Api_V1_RecordPriceCheckCopyRequest
 public typealias MarketStats = Openmarket_Api_V1_MarketStats
+public typealias ListPriceChecksRequest = Openmarket_Api_V1_ListPriceChecksRequest
+public typealias PriceCheckSummary = Openmarket_Api_V1_PriceCheckSummary
 
 // `ProtoComparable` was aliased here, for a `Comparable` message that carried
 // each listing to the pricing model. Both are gone: no model sees a listing

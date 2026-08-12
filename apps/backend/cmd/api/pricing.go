@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"time"
 	// Registered for their DecodeConfig side effects. Decoding the header is
 	// what turns "some bytes" into known dimensions, and it doubles as the only
 	// check that the client sent an image at all — a provider handed a
@@ -232,6 +233,100 @@ func (s *pricingServer) RecordPriceCheckCopy(
 		return nil, notFoundOrInternalCheck(err, "record price check copy")
 	}
 	return connect.NewResponse(&v1.RecordPriceCheckCopyResponse{}), nil
+}
+
+// ListPriceChecks hands back the rows this user has already made.
+//
+// No model, no market, no new storage: `CreatePriceCheck` has written a row on
+// every run since this feature existed, specifically so a run that fails is
+// still countable. Reading them back is what turns that into a history the
+// seller can see.
+func (s *pricingServer) ListPriceChecks(
+	ctx context.Context,
+	req *connect.Request[v1.ListPriceChecksRequest],
+) (*connect.Response[v1.ListPriceChecksResponse], error) {
+	userID, err := auth.UserID(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// Clamped rather than trusted, and defaulted rather than refused: the field
+	// is a hint from a screen, and a client that sends 0 wants the sensible
+	// number rather than an error about it.
+	limit := req.Msg.GetLimit()
+	if limit <= 0 {
+		limit = defaultPriceCheckPage
+	}
+	limit = min(limit, maxPriceCheckPage)
+
+	rows, err := s.queries.ListPriceChecks(ctx, db.ListPriceChecksParams{UserID: userID, Limit: limit})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list price checks: %w", err))
+	}
+
+	checks := make([]*v1.PriceCheckSummary, 0, len(rows))
+	for _, row := range rows {
+		checks = append(checks, priceCheckSummary(row))
+	}
+	return connect.NewResponse(&v1.ListPriceChecksResponse{Checks: checks}), nil
+}
+
+const (
+	defaultPriceCheckPage = 20
+	maxPriceCheckPage     = 50
+)
+
+// priceCheckSummary is the row as the seller's own history, which is not quite
+// the row as the table holds it.
+//
+// The listing fields prefer what was copied over what was generated. Both
+// columns exist because the gap between them is the only real measure of
+// quality this feature has (migration 00008) — but that is a question for a
+// query, not for the person who rewrote the title. What they get back is what
+// they wrote.
+func priceCheckSummary(row db.PriceCheck) *v1.PriceCheckSummary {
+	summary := &v1.PriceCheckSummary{
+		PriceCheckId:          row.ID.String(),
+		IdentifiedName:        derefString(row.IdentifiedName),
+		Description:           row.Description,
+		RecommendedPriceMinor: row.RecommendedPriceMinor,
+		CurrencySymbol:        derefString(row.CurrencySymbol),
+		CompsFound:            derefInt32(row.CompsFound),
+		SoldFound:             derefInt32(row.SoldFound),
+		SearchQueryUsed:       derefString(row.SearchQueryUsed),
+		ListingTitle:          preferring(row.CopiedListingTitle, row.ListingTitle),
+		ListingDescription:    preferring(row.CopiedListingDescription, row.ListingDescription),
+	}
+	if row.CreatedAt.Valid {
+		summary.CreatedAt = row.CreatedAt.Time.UTC().Format(time.RFC3339)
+	}
+	return summary
+}
+
+// preferring returns the first of the two that was actually written.
+//
+// Empty counts as written: a seller who cleared the title and copied that meant
+// it, and falling through to the generated one would put words back that they
+// deleted.
+func preferring(chosen, generated *string) string {
+	if chosen != nil {
+		return *chosen
+	}
+	return derefString(generated)
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func derefInt32(value *int32) int32 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 // deviceIDForSession returns the install this call came from, or nil.

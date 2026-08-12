@@ -135,6 +135,26 @@ WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
 RETURNING *;
 
+-- name: ListPriceChecks :many
+-- Recent runs for one user, newest first.
+--
+-- Served entirely by `price_checks_user_id_idx (user_id, created_at DESC)`,
+-- which is why the ordering here is `created_at` and not `id` — the ids are
+-- uuidv7 and would sort the same way, but only one of the two is indexed.
+--
+-- `identified_name IS NOT NULL` is the whole filter, and it is about what a
+-- person can recognise rather than about success. A row without one died in the
+-- model call, so it holds a description and nothing else; a row with one has a
+-- name, and usually a listing, even when the market came back empty. The
+-- unnamed ones are still in the table and still counted — they are just not
+-- something to hand back as "you checked this".
+SELECT *
+FROM price_checks
+WHERE user_id = sqlc.arg('user_id')
+  AND identified_name IS NOT NULL
+ORDER BY created_at DESC
+LIMIT sqlc.arg('limit');
+
 -- name: GetPriceCheck :one
 SELECT *
 FROM price_checks

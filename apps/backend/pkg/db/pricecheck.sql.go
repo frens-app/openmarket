@@ -259,6 +259,76 @@ func (q *Queries) GetPriceCheck(ctx context.Context, arg GetPriceCheckParams) (P
 	return i, err
 }
 
+const listPriceChecks = `-- name: ListPriceChecks :many
+SELECT id, user_id, device_id, description, identified_name, search_queries, search_query_used, comps_found, sold_found, recommended_price_minor, median_price_minor, currency_symbol, helpful, helpful_at, price_copied, price_copied_at, created_at, completed_at, listing_title, listing_description, copied_price_minor, copied_listing_title, copied_listing_description
+FROM price_checks
+WHERE user_id = $1
+  AND identified_name IS NOT NULL
+ORDER BY created_at DESC
+LIMIT $2
+`
+
+type ListPriceChecksParams struct {
+	UserID uuid.UUID
+	Limit  int32
+}
+
+// Recent runs for one user, newest first.
+//
+// Served entirely by `price_checks_user_id_idx (user_id, created_at DESC)`,
+// which is why the ordering here is `created_at` and not `id` — the ids are
+// uuidv7 and would sort the same way, but only one of the two is indexed.
+//
+// `identified_name IS NOT NULL` is the whole filter, and it is about what a
+// person can recognise rather than about success. A row without one died in the
+// model call, so it holds a description and nothing else; a row with one has a
+// name, and usually a listing, even when the market came back empty. The
+// unnamed ones are still in the table and still counted — they are just not
+// something to hand back as "you checked this".
+func (q *Queries) ListPriceChecks(ctx context.Context, arg ListPriceChecksParams) ([]PriceCheck, error) {
+	rows, err := q.db.Query(ctx, listPriceChecks, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PriceCheck
+	for rows.Next() {
+		var i PriceCheck
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DeviceID,
+			&i.Description,
+			&i.IdentifiedName,
+			&i.SearchQueries,
+			&i.SearchQueryUsed,
+			&i.CompsFound,
+			&i.SoldFound,
+			&i.RecommendedPriceMinor,
+			&i.MedianPriceMinor,
+			&i.CurrencySymbol,
+			&i.Helpful,
+			&i.HelpfulAt,
+			&i.PriceCopied,
+			&i.PriceCopiedAt,
+			&i.CreatedAt,
+			&i.CompletedAt,
+			&i.ListingTitle,
+			&i.ListingDescription,
+			&i.CopiedPriceMinor,
+			&i.CopiedListingTitle,
+			&i.CopiedListingDescription,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recordLLMRun = `-- name: RecordLLMRun :one
 INSERT INTO llm_runs (
     price_check_id,

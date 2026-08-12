@@ -123,6 +123,23 @@ final class SellerToolsModel: ObservableObject {
     /// feedback signals afterwards. Nil until the identify call returns.
     private(set) var priceCheckID: String?
 
+    /// The runs already done, newest first.
+    ///
+    /// **Read from the server, not remembered here.** The row has been written
+    /// on every run since this feature existed — before the model is called, so
+    /// that a run which dies is still countable — so a history was already in
+    /// the database waiting to be read; the alternative would have been a
+    /// second copy on the device, disagreeing with it after the first
+    /// reinstall.
+    ///
+    /// Kept on this object rather than in the screen so it survives a tab
+    /// switch, same reasoning as the result itself.
+    @Published private(set) var recent: [PastPriceCheck] = []
+    /// True only for the first load, so an empty list can tell "nothing yet"
+    /// from "we haven't looked". A refresh behind an already-populated list is
+    /// silent — nobody needs a spinner over rows they can already read.
+    @Published private(set) var isLoadingRecent = false
+
     private let search: ComparableSearch
     private let pricing: PricingService
     /// Read from, never written to.
@@ -241,6 +258,41 @@ final class SellerToolsModel: ObservableObject {
     func recordListingCopied(title: String? = nil, description: String? = nil) {
         guard let priceCheckID else { return }
         Task { await pricing.recordCopy(priceCheckID: priceCheckID, title: title, description: description) }
+    }
+
+    /// Refreshes the recent list, quietly.
+    ///
+    /// A failure leaves whatever was already there and says nothing. This is a
+    /// list of things the user has already seen once; an error banner over it
+    /// would interrupt somebody who came here to price a chair, about a
+    /// convenience they had not asked for yet.
+    func loadRecent() async {
+        if recent.isEmpty { isLoadingRecent = true }
+        defer { isLoadingRecent = false }
+        guard let checks = try? await pricing.recentChecks() else { return }
+        recent = checks
+    }
+
+    /// The same three signals, from a run that finished some time ago.
+    ///
+    /// Separate from the two above only because it names its subject: those
+    /// read `priceCheckID`, which is the run in progress, and a copy taken off
+    /// the history screen belongs to a different row.
+    ///
+    /// Recorded rather than skipped, and it is arguably the better version of
+    /// the signal: somebody who comes back a week later to copy the title again
+    /// is telling us the copy was worth keeping, which no measurement taken
+    /// thirty seconds after it was written can.
+    func recordCopy(of check: PastPriceCheck,
+                    price: Int? = nil,
+                    title: String? = nil,
+                    description: String? = nil) {
+        Task {
+            await pricing.recordCopy(priceCheckID: check.id,
+                                     price: price,
+                                     title: title,
+                                     description: description)
+        }
     }
 
     func cancel() {
@@ -385,6 +437,12 @@ final class SellerToolsModel: ObservableObject {
         // making them wait on bookkeeping. A failure loses one row of telemetry
         // and nothing else, which is why it is swallowed rather than shown.
         await record(compsFound: comps.count, price: median, guide: computed)
+
+        // The row this run just wrote is the one the input screen is about to
+        // show at the top of its list, so it is fetched now rather than when
+        // that screen reappears — the user is still reading the answer, and the
+        // list is populated by the time they press Back.
+        await loadRecent()
     }
 
     /// Reports the finished run. Silent on failure, by the reasoning above.

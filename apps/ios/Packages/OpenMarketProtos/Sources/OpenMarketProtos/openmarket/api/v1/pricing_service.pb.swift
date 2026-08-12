@@ -360,6 +360,102 @@ public nonisolated struct Openmarket_Api_V1_RecordPriceCheckCopyResponse: Sendab
   public init() {}
 }
 
+/// The runs this user has already done, newest first.
+///
+/// The row was always being written — see `CreatePriceCheck`, which runs before
+/// the model is called precisely so a run that dies is still a row. This reads
+/// them back, which is the whole of what "recent checks" needs: no new table, no
+/// new column, and nothing kept on the device.
+public nonisolated struct Openmarket_Api_V1_ListPriceChecksRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Clamped server-side as well. This is a list somebody scrolls past on the
+  /// way to typing, not a data export.
+  public var limit: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// One past run, as much of it as survives.
+///
+/// **The comparables are not here, and this is the honest shape rather than a
+/// gap.** Nothing has ever stored them: a card that was live during the run is a
+/// 404 a week later, and a strip of dead listings under a price is worse than no
+/// strip (migration 00006). So a past check can say what it decided and what it
+/// decided from — a count and a search term — and cannot show its working. The
+/// listing copy, which is the part somebody comes back for, survives in full.
+public nonisolated struct Openmarket_Api_V1_PriceCheckSummary: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var priceCheckID: String = String()
+
+  /// RFC 3339. A string rather than a Timestamp because that is what
+  /// `Viewer.created_at` already is, and one timestamp convention beats two.
+  public var createdAt: String = String()
+
+  /// What the model called it, and what the seller called it. Both, because
+  /// either can be the useful one: the identification is usually the better
+  /// label, and the description is what to show when the run died before there
+  /// was an identification.
+  public var identifiedName: String = String()
+
+  public var description_p: String = String()
+
+  /// Absent on a run that never found a market — which is a real outcome and
+  /// stays in the list, since "I checked that dresser and it found nothing" is
+  /// something a person remembers doing.
+  public var recommendedPriceMinor: Int64 {
+    get {_recommendedPriceMinor ?? 0}
+    set {_recommendedPriceMinor = newValue}
+  }
+  /// Returns true if `recommendedPriceMinor` has been explicitly set.
+  public var hasRecommendedPriceMinor: Bool {self._recommendedPriceMinor != nil}
+  /// Clears the value of `recommendedPriceMinor`. Subsequent reads from it will return its default value.
+  public mutating func clearRecommendedPriceMinor() {self._recommendedPriceMinor = nil}
+
+  public var currencySymbol: String = String()
+
+  public var compsFound: Int32 = 0
+
+  public var soldFound: Int32 = 0
+
+  public var searchQueryUsed: String = String()
+
+  /// **What the seller ended up with, not what was generated**, where the two
+  /// differ: the server prefers the copied columns and falls back to the
+  /// generated ones. Both are still stored separately — the gap between them is
+  /// the quality signal this feature is built on — but a history screen is the
+  /// user's record, not ours, and handing back the version they rewrote as
+  /// though they had not is the wrong side of that distinction.
+  public var listingTitle: String = String()
+
+  public var listingDescription: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _recommendedPriceMinor: Int64? = nil
+}
+
+public nonisolated struct Openmarket_Api_V1_ListPriceChecksResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var checks: [Openmarket_Api_V1_PriceCheckSummary] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "openmarket.api.v1"
@@ -718,6 +814,150 @@ nonisolated extension Openmarket_Api_V1_RecordPriceCheckCopyResponse: SwiftProto
   }
 
   public static func ==(lhs: Openmarket_Api_V1_RecordPriceCheckCopyResponse, rhs: Openmarket_Api_V1_RecordPriceCheckCopyResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_ListPriceChecksRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListPriceChecksRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}limit\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.limit) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.limit != 0 {
+      try visitor.visitSingularInt32Field(value: self.limit, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_ListPriceChecksRequest, rhs: Openmarket_Api_V1_ListPriceChecksRequest) -> Bool {
+    if lhs.limit != rhs.limit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_PriceCheckSummary: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PriceCheckSummary"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}price_check_id\0\u{3}created_at\0\u{3}identified_name\0\u{1}description\0\u{3}recommended_price_minor\0\u{3}currency_symbol\0\u{3}comps_found\0\u{3}sold_found\0\u{3}search_query_used\0\u{3}listing_title\0\u{3}listing_description\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.priceCheckID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.createdAt) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.identifiedName) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 5: try { try decoder.decodeSingularInt64Field(value: &self._recommendedPriceMinor) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.currencySymbol) }()
+      case 7: try { try decoder.decodeSingularInt32Field(value: &self.compsFound) }()
+      case 8: try { try decoder.decodeSingularInt32Field(value: &self.soldFound) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self.searchQueryUsed) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.listingTitle) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.listingDescription) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.priceCheckID.isEmpty {
+      try visitor.visitSingularStringField(value: self.priceCheckID, fieldNumber: 1)
+    }
+    if !self.createdAt.isEmpty {
+      try visitor.visitSingularStringField(value: self.createdAt, fieldNumber: 2)
+    }
+    if !self.identifiedName.isEmpty {
+      try visitor.visitSingularStringField(value: self.identifiedName, fieldNumber: 3)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 4)
+    }
+    try { if let v = self._recommendedPriceMinor {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 5)
+    } }()
+    if !self.currencySymbol.isEmpty {
+      try visitor.visitSingularStringField(value: self.currencySymbol, fieldNumber: 6)
+    }
+    if self.compsFound != 0 {
+      try visitor.visitSingularInt32Field(value: self.compsFound, fieldNumber: 7)
+    }
+    if self.soldFound != 0 {
+      try visitor.visitSingularInt32Field(value: self.soldFound, fieldNumber: 8)
+    }
+    if !self.searchQueryUsed.isEmpty {
+      try visitor.visitSingularStringField(value: self.searchQueryUsed, fieldNumber: 9)
+    }
+    if !self.listingTitle.isEmpty {
+      try visitor.visitSingularStringField(value: self.listingTitle, fieldNumber: 10)
+    }
+    if !self.listingDescription.isEmpty {
+      try visitor.visitSingularStringField(value: self.listingDescription, fieldNumber: 11)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_PriceCheckSummary, rhs: Openmarket_Api_V1_PriceCheckSummary) -> Bool {
+    if lhs.priceCheckID != rhs.priceCheckID {return false}
+    if lhs.createdAt != rhs.createdAt {return false}
+    if lhs.identifiedName != rhs.identifiedName {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs._recommendedPriceMinor != rhs._recommendedPriceMinor {return false}
+    if lhs.currencySymbol != rhs.currencySymbol {return false}
+    if lhs.compsFound != rhs.compsFound {return false}
+    if lhs.soldFound != rhs.soldFound {return false}
+    if lhs.searchQueryUsed != rhs.searchQueryUsed {return false}
+    if lhs.listingTitle != rhs.listingTitle {return false}
+    if lhs.listingDescription != rhs.listingDescription {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_ListPriceChecksResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListPriceChecksResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}checks\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.checks) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.checks.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.checks, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_ListPriceChecksResponse, rhs: Openmarket_Api_V1_ListPriceChecksResponse) -> Bool {
+    if lhs.checks != rhs.checks {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

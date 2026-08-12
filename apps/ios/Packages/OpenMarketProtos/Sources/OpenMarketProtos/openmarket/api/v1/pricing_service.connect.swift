@@ -30,6 +30,11 @@ public protocol Openmarket_Api_V1_PricingServiceClientInterface: Sendable {
     /// first price copy keeps the timestamp.
     @available(iOS 13, *)
     func `recordPriceCheckCopy`(request: Openmarket_Api_V1_RecordPriceCheckCopyRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_RecordPriceCheckCopyResponse>
+
+    /// Reads the rows back. Costs nothing and calls nothing — the row was written
+    /// either way.
+    @available(iOS 13, *)
+    func `listPriceChecks`(request: Openmarket_Api_V1_ListPriceChecksRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_ListPriceChecksResponse>
 }
 
 /// Concrete implementation of `Openmarket_Api_V1_PricingServiceClientInterface`.
@@ -60,12 +65,18 @@ public final class Openmarket_Api_V1_PricingServiceClient: Openmarket_Api_V1_Pri
         return await self.client.unary(path: "/openmarket.api.v1.PricingService/RecordPriceCheckCopy", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listPriceChecks`(request: Openmarket_Api_V1_ListPriceChecksRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_ListPriceChecksResponse> {
+        return await self.client.unary(path: "/openmarket.api.v1.PricingService/ListPriceChecks", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let identifyItem = Connect.MethodSpec(name: "IdentifyItem", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let completePriceCheck = Connect.MethodSpec(name: "CompletePriceCheck", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let submitPriceCheckFeedback = Connect.MethodSpec(name: "SubmitPriceCheckFeedback", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let recordPriceCheckCopy = Connect.MethodSpec(name: "RecordPriceCheckCopy", service: "openmarket.api.v1.PricingService", type: .unary)
+            public static let listPriceChecks = Connect.MethodSpec(name: "ListPriceChecks", service: "openmarket.api.v1.PricingService", type: .unary)
         }
     }
 }

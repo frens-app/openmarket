@@ -45,6 +45,9 @@ const (
 	// PricingServiceRecordPriceCheckCopyProcedure is the fully-qualified name of the PricingService's
 	// RecordPriceCheckCopy RPC.
 	PricingServiceRecordPriceCheckCopyProcedure = "/openmarket.api.v1.PricingService/RecordPriceCheckCopy"
+	// PricingServiceListPriceChecksProcedure is the fully-qualified name of the PricingService's
+	// ListPriceChecks RPC.
+	PricingServiceListPriceChecksProcedure = "/openmarket.api.v1.PricingService/ListPriceChecks"
 )
 
 // PricingServiceClient is a client for the openmarket.api.v1.PricingService service.
@@ -61,6 +64,9 @@ type PricingServiceClient interface {
 	// strongly enough to stop and tap — which skews negative. Idempotent; the
 	// first price copy keeps the timestamp.
 	RecordPriceCheckCopy(context.Context, *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error)
+	// Reads the rows back. Costs nothing and calls nothing — the row was written
+	// either way.
+	ListPriceChecks(context.Context, *connect.Request[v1.ListPriceChecksRequest]) (*connect.Response[v1.ListPriceChecksResponse], error)
 }
 
 // NewPricingServiceClient constructs a client for the openmarket.api.v1.PricingService service. By
@@ -98,6 +104,12 @@ func NewPricingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(pricingServiceMethods.ByName("RecordPriceCheckCopy")),
 			connect.WithClientOptions(opts...),
 		),
+		listPriceChecks: connect.NewClient[v1.ListPriceChecksRequest, v1.ListPriceChecksResponse](
+			httpClient,
+			baseURL+PricingServiceListPriceChecksProcedure,
+			connect.WithSchema(pricingServiceMethods.ByName("ListPriceChecks")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -107,6 +119,7 @@ type pricingServiceClient struct {
 	completePriceCheck       *connect.Client[v1.CompletePriceCheckRequest, v1.CompletePriceCheckResponse]
 	submitPriceCheckFeedback *connect.Client[v1.SubmitPriceCheckFeedbackRequest, v1.SubmitPriceCheckFeedbackResponse]
 	recordPriceCheckCopy     *connect.Client[v1.RecordPriceCheckCopyRequest, v1.RecordPriceCheckCopyResponse]
+	listPriceChecks          *connect.Client[v1.ListPriceChecksRequest, v1.ListPriceChecksResponse]
 }
 
 // IdentifyItem calls openmarket.api.v1.PricingService.IdentifyItem.
@@ -129,6 +142,11 @@ func (c *pricingServiceClient) RecordPriceCheckCopy(ctx context.Context, req *co
 	return c.recordPriceCheckCopy.CallUnary(ctx, req)
 }
 
+// ListPriceChecks calls openmarket.api.v1.PricingService.ListPriceChecks.
+func (c *pricingServiceClient) ListPriceChecks(ctx context.Context, req *connect.Request[v1.ListPriceChecksRequest]) (*connect.Response[v1.ListPriceChecksResponse], error) {
+	return c.listPriceChecks.CallUnary(ctx, req)
+}
+
 // PricingServiceHandler is an implementation of the openmarket.api.v1.PricingService service.
 type PricingServiceHandler interface {
 	// The only call that reaches a model.
@@ -143,6 +161,9 @@ type PricingServiceHandler interface {
 	// strongly enough to stop and tap — which skews negative. Idempotent; the
 	// first price copy keeps the timestamp.
 	RecordPriceCheckCopy(context.Context, *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error)
+	// Reads the rows back. Costs nothing and calls nothing — the row was written
+	// either way.
+	ListPriceChecks(context.Context, *connect.Request[v1.ListPriceChecksRequest]) (*connect.Response[v1.ListPriceChecksResponse], error)
 }
 
 // NewPricingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -176,6 +197,12 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(pricingServiceMethods.ByName("RecordPriceCheckCopy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pricingServiceListPriceChecksHandler := connect.NewUnaryHandler(
+		PricingServiceListPriceChecksProcedure,
+		svc.ListPriceChecks,
+		connect.WithSchema(pricingServiceMethods.ByName("ListPriceChecks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/openmarket.api.v1.PricingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PricingServiceIdentifyItemProcedure:
@@ -186,6 +213,8 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 			pricingServiceSubmitPriceCheckFeedbackHandler.ServeHTTP(w, r)
 		case PricingServiceRecordPriceCheckCopyProcedure:
 			pricingServiceRecordPriceCheckCopyHandler.ServeHTTP(w, r)
+		case PricingServiceListPriceChecksProcedure:
+			pricingServiceListPriceChecksHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -209,4 +238,8 @@ func (UnimplementedPricingServiceHandler) SubmitPriceCheckFeedback(context.Conte
 
 func (UnimplementedPricingServiceHandler) RecordPriceCheckCopy(context.Context, *connect.Request[v1.RecordPriceCheckCopyRequest]) (*connect.Response[v1.RecordPriceCheckCopyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.RecordPriceCheckCopy is not implemented"))
+}
+
+func (UnimplementedPricingServiceHandler) ListPriceChecks(context.Context, *connect.Request[v1.ListPriceChecksRequest]) (*connect.Response[v1.ListPriceChecksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.ListPriceChecks is not implemented"))
 }
