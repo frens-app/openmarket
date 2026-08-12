@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import UIKit
 
 struct ResultsView: View {
     @EnvironmentObject private var store: ListingStore
@@ -319,6 +320,13 @@ struct ResultsView: View {
         .onSubmit(of: .search) {
             let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !term.isEmpty else { return }
+            // Tapping a suggestion submits through here just as Return does,
+            // and in both cases the keyboard has no further job — it would
+            // otherwise sit over the results the tap just asked for. The
+            // search session itself stays open on purpose (see above), so the
+            // field keeps showing the term; only the keyboard goes away.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                            to: nil, from: nil, for: nil)
             activeTerm = term
             Task { await search(term) }
         }
