@@ -18,11 +18,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         print("[openmarket] \(Bundle.main.bundleIdentifier ?? "?") → \(API.baseURL)")
-        // Here rather than in a `.task`, because PostHog's own lifecycle events
-        // are the point of having it early: `$application_opened` has to be
-        // captured for the launch that is happening, and a SwiftUI task runs
-        // after the app is already up. It is a no-op in Debug, which ships no
-        // key — see `Analytics`.
+        // Not a `.task`: `$application_opened` has to be captured for the
+        // launch that is happening, and a SwiftUI task runs after it.
         Analytics.start()
         return true
     }
@@ -101,9 +98,7 @@ struct OpenMarketApp: App {
                 }
             } else {
                 Task { await ListingCache.shared.writeToDisk() }
-                // Same reasoning as the cache write above, applied to the event
-                // queue: it flushes on a size and a timer, neither of which
-                // helps a process about to be killed. The last events of a
+                // Same reasoning as the cache write: the last events of a
                 // session are the ones at the end of a funnel.
                 Analytics.flush()
             }
@@ -219,10 +214,8 @@ struct RootView: View {
     private func finish() {
         prefs.hasCompletedOnboarding = true
         isOnboarding = false
-        // The end of the funnel, and it is fired here rather than in
-        // `OnboardingView` because this is the one-way door: the flow can send
-        // itself back to the location step, and only reaching this line means
-        // all four questions are behind the user.
+        // Here rather than in `OnboardingView`: the flow can send itself back to
+        // the location step, and this line is the one-way door.
         Analytics.capture(.onboardingCompleted)
         // Recorded on the account too, so the answer survives a reinstall rather
         // than living only in this install's defaults.

@@ -82,14 +82,9 @@ struct PriceEvidenceView: View {
         }
     }
 
-    /// A comparable, opened as an ordinary listing.
-    ///
-    /// Counted under the same event as the four browse surfaces rather than one
-    /// of its own, because it is the same act — somebody went and looked at a
-    /// listing — and the only interesting thing about it is that they arrived
-    /// from a price check. That is what `surface` is for. It is also the one
-    /// place in the app where a *sold* listing can be opened, which is why that
-    /// goes up beside it.
+    /// The same `listing_opened` event as the browse surfaces — arriving from a
+    /// price check is a `surface`, not a different act. The one place in the app
+    /// where a *sold* listing can be opened, hence `is_sold`.
     private func open(_ comp: MarketComp, at position: Int) {
         selected = comp.listing
         var properties: [String: Any] = [
@@ -100,10 +95,8 @@ struct PriceEvidenceView: View {
             "is_sold": comp.isSold
         ]
         properties["title"] = Analytics.text(comp.listing.title)
-        // `comp.price` rather than re-parsing the text: the comparable already
-        // carries the number `PriceGuide` read out of it, and that is the one
-        // the recommendation was computed from. Parsing again here could only
-        // ever disagree with the chart beside it.
+        // `comp.price` rather than re-parsing: this is the number the
+        // recommendation was computed from.
         if let price = comp.price { properties["price"] = price }
         properties["search_term"] = Analytics.text(searchTerm?.lowercased())
         Analytics.capture(.listingOpened, properties)

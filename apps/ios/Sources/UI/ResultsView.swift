@@ -30,9 +30,8 @@ struct ResultsView: View {
     @State private var showLocationPicker = false
 
     @State private var showSignIn = false
-    /// Which prompt opened the sign-in sheet. One sheet serves two offers — the
-    /// wall in the middle of a search, and the footer at the end of a feed — and
-    /// they are different questions to be asked, so they are counted apart.
+    /// One sheet serves two offers — the wall mid-search and the footer at the
+    /// end of a feed — and they convert differently.
     @State private var signInSurface: Analytics.Surface = .search
 
     /// Whether either sheet that can change the radius is up. Discover rebuilds
@@ -689,10 +688,7 @@ struct ResultsView: View {
                 .multilineTextAlignment(.center)
             Button("Show viewed") {
                 prefs.hideViewed = false
-                // The one filter change that happens outside the filter sheet,
-                // and the most interesting instance of this event: it is
-                // somebody undoing a filter that just emptied their screen,
-                // which is the case that says the filter is too aggressive.
+                // The one filter change outside the filter sheet.
                 Analytics.capture(.filtersApplied, [
                     "source": Analytics.Surface.resultsNotice.rawValue,
                     "changed": ["hide_viewed"],
@@ -762,19 +758,8 @@ struct ResultsView: View {
     /// whether the rails, which cost two rows on every home screen, are worth
     /// the space.
     ///
-    /// **The card as it was when it was tapped**, which is the point of sending
-    /// the content rather than only the id: an id is a join key to a table this
-    /// app does not keep — listings are Facebook's, they are cached for days at
-    /// most, and a sold one is a 404 within a week. The title and the price are
-    /// the only durable record of what somebody was interested in, and they are
-    /// what makes "which categories does this app actually get used for"
-    /// answerable at all.
-    ///
-    /// Price is sent as a number as well as text. `priceText` is whatever
-    /// Facebook rendered — "$180", "Free", "C$40", "$20 - $40" — which is right
-    /// for reading and useless for averaging. `PriceGuide.parse` is the app's
-    /// own reading of it, reused rather than reimplemented so that a price in a
-    /// chart is the same number Price Check would have compared against.
+    /// The single way into a listing from this screen, so no route can be added
+    /// without being counted.
     private func open(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
         selected = listing
 
@@ -789,11 +774,11 @@ struct ResultsView: View {
         properties["title"] = Analytics.text(listing.title)
         properties["price_text"] = Analytics.text(listing.priceText)
         properties["place"] = Analytics.text(listing.locationText)
+        // `priceText` is what Facebook rendered — "Free", "C$40", "$20 - $40" —
+        // so a sortable number needs the app's own reading of it.
         if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
-        // Same precedence the card's own label uses, so a distance in the
-        // analytics is the distance the user was looking at when they tapped.
-        // Absent when unresolved rather than zero — a geocode that hasn't
-        // landed is not a listing next door.
+        // Same precedence the card's label uses, and absent rather than zero
+        // when the geocode hasn't landed.
         if let km = distances.distanceKM(for: listing.locationText,
                                          coordinate: distances.enrichedCoordinate(for: listing)) {
             properties["distance_km"] = (km * 10).rounded() / 10
@@ -838,37 +823,20 @@ struct ResultsView: View {
         prefs.recordLastQuery(.search(trimmed))
         var properties: [String: Any] = [
             "source": source.rawValue,
-            // Length and word count are kept beside the term rather than
-            // replaced by it: "people search in two words" is answerable from
-            // these without aggregating over thousands of distinct strings, and
-            // they stay correct if the term itself is ever truncated.
             "term_length": trimmed.count,
             "word_count": trimmed.split(separator: " ").count,
             "has_active_filters": prefs.hasNonDefaultFilters,
             "sort": prefs.sort.rawValue,
             "radius_km": prefs.radiusKM
         ]
-        // The single most useful string this app can send. A top-searches list
-        // is a product roadmap, and the searches that come back empty are the
-        // ones worth doing something about — neither question survives being
-        // reduced to a character count.
-        //
-        // Lowercased so "Weber Grill" and "weber grill" are one row rather than
-        // two. Marketplace does not care about the case and neither should the
-        // breakdown.
+        // Lowercased so "Weber Grill" and "weber grill" are one breakdown row.
         properties["term"] = Analytics.text(trimmed.lowercased())
         Analytics.capture(.searchSubmitted, properties)
         await run(.search(trimmed), trigger: .newSearch)
     }
 
-    /// Whether this term came from a suggestion or from the keyboard.
-    ///
-    /// A guess, and it has to be: `.searchCompletion` puts the term in the field
-    /// and submits it, so by the time `onSubmit` runs a tapped suggestion and a
-    /// typed word are the same string arriving the same way. Matching against
-    /// the two lists the field offers is as close as this gets, and it errs
-    /// towards crediting the suggestions — which is the error to prefer, since
-    /// the question being asked is whether that list earns its place.
+    /// A guess: a tapped completion and a typed word reach `onSubmit`
+    /// identically, so this matches against the two lists the field offers.
     private func searchSource(for term: String) -> Analytics.SearchSource {
         let matches = { (candidate: String) in
             candidate.caseInsensitiveCompare(term) == .orderedSame
@@ -897,13 +865,6 @@ struct ResultsView: View {
         await run(.category(category), trigger: .newSearch)
     }
 
-    /// The same query again, for one of four different reasons.
-    ///
-    /// The reason is a parameter rather than something this function works out,
-    /// because by the time it is called every route in looks identical — and the
-    /// four are not interchangeable in the data: a pull-to-refresh is somebody
-    /// distrusting the results, a filter re-run is somebody narrowing them, and
-    /// a location re-run is the app catching up on its own.
     private func rerunCurrentQuery(trigger: Analytics.SearchTrigger) async {
         guard let existing = store.query else { return }
         await run(existing.kind, trigger: trigger)
@@ -975,12 +936,7 @@ private struct PaginatedListingGrid<Footer: View>: View {
     let items: [Listing]
     let namespace: Namespace.ID
     let loadingPlaceholderCount: Int
-    /// The tapped listing and where in the grid it was.
-    ///
-    /// The index is passed rather than looked up by the caller because it is
-    /// free here and a search afterwards: only this view knows the order the
-    /// cards were drawn in, and "how far down do people tap" is one of the two
-    /// things worth knowing about a feed nobody asked for.
+    /// The tapped listing and its index — only this view knows the draw order.
     let onSelect: (Listing, Int) -> Void
     let onItemAppear: (Listing) async -> Void
     let footer: Footer
@@ -1008,11 +964,8 @@ private struct PaginatedListingGrid<Footer: View>: View {
                 loadingPlaceholderCount: loadingPlaceholderCount
             ) { listing in
                 ListingCard(listing: listing, namespace: namespace)
-                    // Looked up on the tap rather than threaded through
-                    // `ListingGrid`, whose builder deliberately hands back only
-                    // the item. One linear scan of at most a few hundred cards,
-                    // once, in response to a finger — against changing the
-                    // signature of the grid every other screen also uses.
+                    // Scanned on the tap rather than changing `ListingGrid`'s
+                    // builder signature, which every other screen also uses.
                     .onTapGesture {
                         onSelect(listing, items.firstIndex { $0.id == listing.id } ?? -1)
                     }

@@ -205,16 +205,10 @@ struct LocationPickerSheet: View {
         return (options + [prefs.radiusKM]).sorted()
     }
 
-    /// The radius, and where it moved from.
-    ///
-    /// Per tap rather than on dismissal, unlike the filter sheet, because these
-    /// pills are not part of a set somebody assembles — each one is a complete
-    /// decision, applied immediately, and the interesting pattern is the
-    /// sequence: widening twice in a row is somebody finding nothing nearby,
-    /// which is a different story from picking 20 mi once.
-    ///
-    /// The previous value is what makes that readable. "Set to 32 km" says
-    /// nothing on its own; "32 from 16" is a direction.
+    /// Per tap, unlike the filter sheet: each pill is a complete decision
+    /// applied immediately, and the sequence is the point — widening twice in a
+    /// row is somebody finding nothing nearby. The previous value gives it a
+    /// direction; "32 from 16" says something "32" doesn't.
     private func setRadius(_ km: Int) {
         guard km != prefs.radiusKM else { return }
         let previous = prefs.radiusKM
@@ -222,9 +216,7 @@ struct LocationPickerSheet: View {
         Analytics.capture(.distanceChanged, [
             "radius_km": km,
             "previous_radius_km": previous,
-            // `0` is "Any", which is not a wide radius but the absence of one —
-            // worth a property of its own so it can't be averaged in as zero
-            // miles, the exact opposite of what it means.
+            // `0` is "Any" — the absence of a radius, not a zero-mile one.
             "is_unlimited": km == 0
         ])
     }

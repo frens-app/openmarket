@@ -117,11 +117,9 @@ final class AccountSession: ObservableObject {
                 cache(viewer: message.viewer)
                 state = .signedIn(message.viewer)
                 if message.hasDevice { device = message.device }
-                // Not an `account_signed_in` event — nobody signed in, an
-                // existing session was confirmed at launch. It still has to
-                // identify, or every returning launch would file its events
-                // against a fresh anonymous id and the user count would be a
-                // count of app opens.
+                // Identify but no event: nobody signed in, a stored session was
+                // confirmed. Without this every returning launch would file
+                // against a fresh anonymous id.
                 identifyToAnalytics(message.viewer)
             case .failure(let error):
                 // Unauthenticated or a deleted account means the session is
@@ -204,11 +202,8 @@ final class AccountSession: ObservableObject {
             cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
             if message.hasDevice { device = message.device }
-            // Identify *before* the event, so the signup is the first thing on
-            // the person's profile rather than the last thing on an anonymous
-            // one. PostHog merges the anonymous history at this point, which is
-            // what keeps the onboarding funnel intact across the step that
-            // creates the account.
+            // Before the event, so the signup lands on the person's profile
+            // rather than the anonymous one it replaces.
             identifyToAnalytics(message.viewer)
             Analytics.capture(message.isNewUser ? .accountCreated : .accountSignedIn)
             return message.isNewUser
@@ -239,8 +234,7 @@ final class AccountSession: ObservableObject {
         // finds the same device row rather than orphaning its Facebook and push
         // state behind a new one.
         device = nil
-        // Captured before the reset, or it would be filed against the fresh
-        // anonymous id rather than against the account that just left.
+        // Before the reset, or it lands on the new anonymous id.
         Analytics.capture(.accountSignedOut)
         Analytics.reset()
     }
@@ -275,13 +269,8 @@ final class AccountSession: ObservableObject {
     /// foreground retries rather than the app deciding it has already reported.
     func reportFacebookConnection(_ connected: Bool) async {
         guard isSignedIn else { return }
-        // Above the dedupe, and that is the difference between the server and
-        // the analytics: the server only needs telling when the answer changes,
-        // where every *event* from here on wants it stamped on. Whether a
-        // session exists is the first breakdown any browse question asks for —
-        // an empty result set means something different signed in than signed
-        // out — and a super property is the only way to have it on events that
-        // know nothing about accounts.
+        // Above the dedupe: the server only needs telling when it changes,
+        // where every later event wants it stamped on.
         Analytics.register(["facebook_connected": connected])
         if let device, device.facebookConnected == connected { return }
         guard let headers = try? await authorizedHeaders() else { return }
@@ -333,28 +322,17 @@ final class AccountSession: ObservableObject {
         if let message = response.message {
             cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
-            // Re-identified so the person property follows the account rather
-            // than staying at whatever it was when the session started. Once
-            // per account in practice — this flag only ever goes true.
+            // So `onboarding_completed` follows the account. Once per account:
+            // the flag only ever goes true.
             identifyToAnalytics(message.viewer)
         }
     }
 
     // MARK: - Analytics
 
-    /// Files everything from here on under the account rather than the install.
-    ///
-    /// The distinct id is the server's user id, which is what makes the same
-    /// person on a second phone one person — an install-scoped id would count
-    /// them twice, and `InstallIdentity` is deliberately wiped by a reinstall.
-    ///
-    /// **The phone number is not sent, and that is the whole of the policy.** It
-    /// is the login identity, it is never shown to other users
-    /// (`docs/backend.md` §6), and there is no product question that needs it in
-    /// a third-party tool — the user id answers all of them. What goes up is
-    /// whether onboarding finished and when the account was created, the second
-    /// as `setOnce` so a later sign-in can't overwrite the cohort somebody
-    /// belongs to.
+    /// Keyed on the server's user id, not `InstallIdentity`, which a reinstall
+    /// wipes. No phone number — the user id answers everything it could.
+    /// `createdAt` is `setOnce` so a later sign-in can't move somebody's cohort.
     private func identifyToAnalytics(_ viewer: Viewer) {
         Analytics.identify(
             userID: viewer.id,

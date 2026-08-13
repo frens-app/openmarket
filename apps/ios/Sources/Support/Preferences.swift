@@ -90,29 +90,18 @@ final class Preferences: ObservableObject {
         locationSlug = place.segment
         locationName = place.name
 
-        // The only writer of a slug in the app, which makes it the only place a
-        // change of city can be counted without every route — onboarding, the
-        // filter sheet, the location sheet, the "change location" way out of an
-        // empty grid — having to remember to.
-        //
-        // The city goes up — registered as a super property, so every later
-        // event can be broken down by market — and the coordinate does not. That
-        // is not the old §8 rule, which no longer governs this: a city is a fact
-        // about a *search*, and a latitude and longitude to six decimal places
-        // is a fact about where somebody sleeps. Nothing here is improved by
-        // having the second one.
+        // The app's only writer of a slug, so the only place every route to a
+        // change of city passes through. The city is registered as a super
+        // property; the coordinate behind it is not sent.
         Analytics.register(["city_slug": place.segment])
-        // Both spelled out rather than passed through `rawValue`: those raw
-        // values are storage keys in camelCase, and letting them become
-        // breakdown rows would leave one chart in this workspace reading
-        // "deviceFix" while every other property value is snake_case.
+        // Spelled out: the raw values are camelCase storage keys, and every
+        // other property value in the workspace is snake_case.
         Analytics.capture(.locationChanged, [
             "source": place.origin == .deviceFix ? "device_fix" : "searched_city",
             "segment_kind": place.segmentKind == .placeID ? "place_id" : "slug",
             "is_verified": place.isVerified,
             // A first place is onboarding finishing; a later one is somebody
-            // deciding this app is looking in the wrong town. Same write, two
-            // completely different findings.
+            // deciding the app is looking in the wrong town.
             "is_first": previous == nil,
             "radius_km": radiusKM
         ])

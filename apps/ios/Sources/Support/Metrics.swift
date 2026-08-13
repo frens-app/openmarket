@@ -1,21 +1,13 @@
 import Foundation
 import os
 
-/// §8. These are counters and rates only — no listing content and no search
-/// terms pass through *this* file, which is a statement about what parse health
-/// and page latency are made of rather than a privacy boundary. `Analytics` does
-/// send content, deliberately, and says why.
+/// §8. Counters and rates only — no listing content and no search terms pass
+/// through here. (That describes this file, not the app: `Analytics` sends
+/// content deliberately.)
 ///
-/// The protocol exists so a backend can be chosen later without touching call
-/// sites — and for two of the five, one has been: `loginWallHit` and `handoff`
-/// are forwarded to `Analytics` as well as logged, because both are product
-/// facts rather than engine health.
-///
-/// The other three stay local, and the split is about volume, not secrecy.
-/// Parse coverage and per-page latency are properties of somebody else's HTML:
-/// they fire on every page of every search, they answer a question only this
-/// repo can act on, and sending them would be paying a third party to store a
-/// debug log.
+/// `loginWallHit` and `handoff` are also forwarded to `Analytics`, being product
+/// facts rather than engine health. The other three stay local on volume
+/// grounds: they fire on every page of every search.
 protocol MetricsReporter: AnyObject {
     func parseHealth(_ health: ParseHealth)
     func loginWallHit(surface: String)
@@ -58,19 +50,14 @@ final class LocalMetrics: MetricsReporter {
         log.info("parse: dom=\(health.domCards) extracted=\(health.extracted) dropped=\(health.dropped) rendered=\(health.rendered) failing=\(failing.joined(separator: ","))")
     }
 
-    /// The failure that stops this being a product, so it is the one piece of
-    /// engine health that also goes up.
-    ///
-    /// `loginWallCount` is per-process and answers "is it happening right now";
-    /// the event answers the question that actually decides things — what share
-    /// of sessions hit one, and whether that share is moving.
+    /// `loginWallCount` is per-process; the event is what says whether the
+    /// share of sessions hitting one is moving.
     func loginWallHit(surface: String) {
         loginWallCount += 1
         log.warning("login wall on \(surface, privacy: .public), total=\(self.loginWallCount)")
         Analytics.capture(.loginWallHit, [
             "surface": surface,
-            // Which wall within this session — the first is a rate limit, the
-            // fourth is a session that has stopped working.
+            // The first wall is a rate limit; the fourth is a dead session.
             "session_count": loginWallCount
         ])
     }
@@ -79,9 +66,8 @@ final class LocalMetrics: MetricsReporter {
         log.info("detail \(succeeded ? "ok" : "failed") in \(String(format: "%.2f", seconds))s")
     }
 
-    /// Leaving for Facebook, which is as close as this app gets to a
-    /// conversion: §4 makes every route out of a listing a link, so this is the
-    /// last thing it can observe about somebody who went on to buy something.
+    /// §4 makes every route out of a listing a link, so this is the last thing
+    /// the app can observe about somebody who went on to buy something.
     func handoff(kind: String) {
         log.info("handoff: \(kind, privacy: .public)")
         Analytics.capture(.listingOpenedOnFacebook, ["kind": kind])

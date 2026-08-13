@@ -157,20 +157,15 @@ struct DetailView: View {
             // card to draw even when this fires before enrichment lands.
             store.remember(current)
             withAnimation(.snappy(duration: 0.2)) { saved.toggle(current.id) }
-            // Two events rather than one with a boolean: saving and unsaving
-            // are not the same act observed twice, and a bookmark rate is a
-            // different question from a regret rate. `isSaved` is the state
-            // *before* the toggle, so the event names what just happened.
+            // `isSaved` is the state before the toggle, so the event names what
+            // just happened. Two events, because a bookmark rate and a regret
+            // rate are different questions.
             var properties: [String: Any] = [
                 "surface": Analytics.Surface.listingDetail.rawValue,
                 "listing_id": current.id,
-                // Whether the price was known at the moment it was kept — the
-                // saved shelf is where price alerts come from, and one with no
-                // price can never fire one.
+                // No price means no price alert can ever fire for it.
                 "has_price": current.priceText != nil,
-                // Whether they had waited for the item page. A save on the first
-                // frame is a save made on a thumbnail and a price; one after
-                // enrichment had the description and the seller behind it.
+                // Saved off the thumbnail, or after the item page landed.
                 "is_enriched": current.detail != nil
             ]
             properties["title"] = Analytics.text(current.title)

@@ -127,10 +127,8 @@ final class ListingStore: ObservableObject {
 
     // MARK: - Searching
 
-    /// `trigger` is carried for the analytics and nothing else — it changes no
-    /// behaviour here. It has to be a parameter rather than something this
-    /// object infers, because the difference between a person searching and the
-    /// filter sheet closing is only visible to the caller.
+    /// `trigger` is for the analytics only and changes no behaviour — the caller
+    /// is the only thing that knows why this ran.
     func run(_ query: SearchQuery, trigger: Analytics.SearchTrigger) async {
         self.query = query
         resultsGeneration += 1
@@ -158,9 +156,8 @@ final class ListingStore: ObservableObject {
         }
 
         let startedAt = Date()
-        // Read now, not at the end: the flag is cleared the moment live cards
-        // replace the restored ones, so asking afterwards always answers "no"
-        // for exactly the searches that had something on screen the whole time.
+        // Read now: the flag is cleared the moment live cards replace the
+        // restored ones.
         let openedOnCachedCards = isShowingCachedResults
         let payload = await desktop.load(query)
         await ingest(payload: payload)
@@ -170,8 +167,8 @@ final class ListingStore: ObservableObject {
         isLoadingFirstPage = false
         isRefreshingSearch = false
         cache.saveResults(listings, for: query, session: session)
-        report(query, trigger: trigger, startedAt: startedAt,
-               openedOnCachedCards: openedOnCachedCards)
+        captureSearchCompleted(query, trigger: trigger, startedAt: startedAt,
+                               openedOnCachedCards: openedOnCachedCards)
     }
 
     /// What the search actually did, once it has stopped doing it.
@@ -182,23 +179,13 @@ final class ListingStore: ObservableObject {
     /// throttled session, and the only way to see the wall in aggregate is to
     /// count both ends.
     ///
-    /// **The count here is what the engine returned, not what the screen shows.**
-    /// The radius and "only new" filters run in the view, above this, and they
-    /// can empty a grid that this method would report as fifteen results. That
-    /// is the honest split: this event is about the search, and the difference
-    /// between it and an empty screen is a client-side filter — the case
-    /// `distance_km` on `listing_opened` and the notices in `ResultsView` are
-    /// for.
-    ///
-    /// The term is repeated here rather than left to be joined against
-    /// `search_submitted`, because the question this event exists to answer —
-    /// *which searches come back with nothing* — should be one breakdown rather
-    /// than a funnel with a property lookup hanging off the first step. It is
-    /// the same lowercasing, so the two group together.
-    private func report(_ query: SearchQuery,
-                        trigger: Analytics.SearchTrigger,
-                        startedAt: Date,
-                        openedOnCachedCards: Bool) {
+    /// `result_count` is what the engine returned, not what the screen shows —
+    /// the radius and "only new" filters run above this and can empty a grid
+    /// this reports as fifteen.
+    private func captureSearchCompleted(_ query: SearchQuery,
+                                        trigger: Analytics.SearchTrigger,
+                                        startedAt: Date,
+                                        openedOnCachedCards: Bool) {
         let outcome: String
         switch desktop.state {
         case .loginWall: outcome = "login_wall"
@@ -207,14 +194,9 @@ final class ListingStore: ObservableObject {
         }
         var properties: [String: Any] = [
             "outcome": outcome,
-            // Filter on `new_search` for the population that pairs with
-            // `search_submitted` — see `Analytics.SearchTrigger`.
             "trigger": trigger.rawValue,
             "result_count": listings.count,
             "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000),
-            // Whether cards were on screen before the load finished, which
-            // changes what the wait felt like even when the outcome is
-            // identical.
             "from_cache": openedOnCachedCards,
             "sort": query.sort.rawValue,
             "radius_km": query.radiusKM
@@ -226,11 +208,8 @@ final class ListingStore: ObservableObject {
         case .category(let name):
             properties["kind"] = "category"
             properties["term"] = Analytics.text(name.lowercased())
-        // No term because there is no query — this is Facebook's own feed for a
-        // place. `discover_loaded` is the event that covers it in the app; this
-        // branch exists because `ListingStore.run` can technically be handed a
-        // browse query and reporting it as a search with an empty term would be
-        // a row in the top-searches list that nobody typed.
+        // Deliberately termless: an empty string here would be a row in the
+        // top-searches list that nobody typed.
         case .browse:
             properties["kind"] = "browse"
         }

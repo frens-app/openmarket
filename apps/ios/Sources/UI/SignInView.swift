@@ -15,13 +15,8 @@ struct SignInView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = SignInModel()
 
-    /// What led here, for the analytics only.
-    ///
-    /// This sheet is reachable from five places that mean five different things
-    /// — an onboarding step, a settings row, a wall in the middle of a search, a
-    /// blank seller block, the bottom of a result set — and "which prompt
-    /// actually converts" is the question worth asking of a screen offered that
-    /// many times. Nothing about the sign-in itself varies with it.
+    /// For the analytics only — this sheet is offered from five places, and
+    /// which prompt converts is worth knowing. Nothing here varies with it.
     let surface: Analytics.Surface
 
     /// Called once a session is detected, so the caller can re-run whatever the
@@ -65,12 +60,8 @@ struct SignInView: View {
             .task { await model.start() }
             .onChange(of: model.isSignedIn) { _, signedIn in
                 guard signedIn else { return }
-                // `openedWithSession` is what keeps this an event about
-                // connecting rather than about opening the sheet. The flag goes
-                // true either way — `start` sets it for a session that was
-                // already there, which is the ordinary Settings → "Manage
-                // account" path — and counting that as a connection would put
-                // every visit to this screen in the conversion numerator.
+                // Opening this on a session that already exists is not a
+                // connection — that is the ordinary Settings path.
                 if model.openedWithSession != true {
                     Analytics.capture(.facebookSessionConnected, ["surface": surface.rawValue])
                 }
@@ -115,10 +106,8 @@ final class SignInModel: ObservableObject {
     @Published private(set) var isSignedIn = false
 
     /// Whether a session already existed when this screen opened. Nil until
-    /// `start` has looked, which is a third state the view genuinely needs: for
-    /// the first frame or two the honest answer is "not yet known", and
-    /// defaulting it to false would credit the sheet with a connection made
-    /// weeks ago.
+    /// `start` has looked — defaulting to false would credit the sheet with a
+    /// connection made weeks ago.
     @Published private(set) var openedWithSession: Bool?
 
     let webView: WKWebView
@@ -139,8 +128,7 @@ final class SignInModel: ObservableObject {
 
     func start() async {
         let existing = await SessionState.isSignedIn()
-        // Before the published flag, so the view's `onChange` observes it
-        // already set rather than racing it.
+        // Before the published flag, so `onChange` doesn't race it.
         openedWithSession = existing
         isSignedIn = existing
         guard !isSignedIn else { return }
