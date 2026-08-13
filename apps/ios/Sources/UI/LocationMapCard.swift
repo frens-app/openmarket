@@ -7,8 +7,9 @@ import MapKit
 /// area rather than a pin: a pin would imply a precision that doesn't exist and
 /// would point at an address the seller never shared.
 ///
-/// The shape's size is not decoration. It says which of two very different
-/// things the centre is, and the two are kilometres apart.
+/// The blue area is reserved for Facebook's listing-specific coordinate. A
+/// city centroid is useful for orientation, but drawing an area around it would
+/// imply that Facebook narrowed the listing down when it did not.
 struct LocationMapCard: View {
     /// Not rendered — the place is named under the title, where it stays put
     /// whether or not this card can draw. Kept for the accessibility label.
@@ -28,7 +29,8 @@ struct LocationMapCard: View {
         case listing
         /// A geocoded centroid of the place name, the only thing available
         /// before the item page loads. The listing is somewhere in the city,
-        /// which is a far weaker claim and has to look like one.
+        /// which is a far weaker claim: show the city-level map without an
+        /// uncertainty circle.
         case city
         /// Nothing has been chosen yet, so there is no area to draw.
         ///
@@ -83,7 +85,10 @@ struct LocationMapCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Map(initialPosition: .region(region), interactionModes: []) {
-                if precision != .unset {
+                // Only a listing-specific point defines an uncertainty area.
+                // A city centroid is map framing, not evidence that the item
+                // is within any particular radius of downtown.
+                if precision == .listing {
                     MapCircle(center: coordinate, radius: areaRadius)
                         .foregroundStyle(.tint.opacity(0.18))
                         .stroke(.tint.opacity(0.55), lineWidth: 1)
