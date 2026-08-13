@@ -77,6 +77,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// third-party resource has finished. The data we need is in the document
     /// well before `didFinish` on both browse and search pages.
     private var commitContinuation: CheckedContinuation<Void, Never>?
+    /// The load `commitContinuation` belongs to, so that a callback for a
+    /// superseded navigation can be told apart from the one we are waiting on.
+    /// See `resumeCommittedNavigation(for:)`.
+    private var pendingNavigation: WKNavigation?
 
     /// Defaults to `.unauthed`, deliberately.
     ///
@@ -568,13 +572,41 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     private func navigate(to url: URL) async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             commitContinuation = cont
-            webView.load(URLRequest(url: url))
+            pendingNavigation = webView.load(URLRequest(url: url))
         }
     }
 
-    private func resumeCommittedNavigation() {
+    /// Resumes `navigate`, but only for the load it is actually waiting on.
+    ///
+    /// **The callback that arrives is not always for the navigation in hand.**
+    /// Since `navigate` returns at `didCommit`, a caller can harvest and start
+    /// its next load while the previous page is still pulling images and
+    /// third-party chrome. `webView.load` cancels that one, and its terminal
+    /// callback — a cancelled `didFail`, or a `didFinish` that beat it — lands
+    /// *after* the next continuation is installed. Resuming on it returned
+    /// `navigate` before the new document had committed, so the caller then
+    /// harvested the page still on screen: the previous search's payload,
+    /// complete and plausible and about the wrong query.
+    ///
+    /// Two consecutive searches in one engine is exactly the seller flow —
+    /// active comparables, then sold ones — and it is where this showed. The
+    /// sold pass came back holding the active search's cards, every one of them
+    /// still for sale, so filtering to `is_sold` emptied it and the "Recently
+    /// sold nearby" strip vanished. Everywhere else the stale payload is a set
+    /// of listings that look fine, which is why nothing else caught it.
+    ///
+    /// A nil navigation is accepted rather than ignored: WebKit omits it on
+    /// some paths, and a continuation nobody resumes hangs the caller forever.
+    private func resumeCommittedNavigation(for navigation: WKNavigation?) {
+        guard isCurrent(navigation) else { return }
         commitContinuation?.resume()
         commitContinuation = nil
+        pendingNavigation = nil
+    }
+
+    private func isCurrent(_ navigation: WKNavigation?) -> Bool {
+        guard let pendingNavigation, let navigation else { return true }
+        return navigation === pendingNavigation
     }
 
     func evaluate(_ script: String) async -> String? {
@@ -588,7 +620,7 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     nonisolated func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         Task { @MainActor in
-            self.resumeCommittedNavigation()
+            self.resumeCommittedNavigation(for: navigation)
         }
     }
 
@@ -596,23 +628,31 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         Task { @MainActor in
             // Fallback for unusual navigation paths where WebKit does not send
             // the expected commit callback.
-            self.resumeCommittedNavigation()
+            self.resumeCommittedNavigation(for: navigation)
         }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
                              withError error: Error) {
         Task { @MainActor in
-            self.state = .failed(error.localizedDescription)
-            self.resumeCommittedNavigation()
+            self.fail(navigation, error)
         }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                              withError error: Error) {
         Task { @MainActor in
-            self.state = .failed(error.localizedDescription)
-            self.resumeCommittedNavigation()
+            self.fail(navigation, error)
         }
+    }
+
+    /// A superseded load fails by definition — `webView.load` cancels whatever
+    /// was in flight — so its error describes the load we walked away from, not
+    /// the one we are waiting on. Recording it put the engine in `.failed` on
+    /// the strength of a navigation nobody was reading any more.
+    private func fail(_ navigation: WKNavigation?, _ error: Error) {
+        guard isCurrent(navigation) else { return }
+        state = .failed(error.localizedDescription)
+        resumeCommittedNavigation(for: navigation)
     }
 }
