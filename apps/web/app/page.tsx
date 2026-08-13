@@ -38,7 +38,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Is Open Market on Android or the web?",
-    a: "Not yet — Open Market is iOS-first and currently in beta through TestFlight, with the App Store release in progress.",
+    a: "Not yet — Open Market is iOS-only for now.",
   },
 ];
 
@@ -89,10 +89,10 @@ export default function HomePage() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a
-                href={SITE.testflightUrl}
+                href={SITE.downloadUrl}
                 className="rounded-full bg-accent px-7 py-3.5 text-[17px] font-semibold text-white transition hover:bg-[#3395ff]"
               >
-                Join the beta on TestFlight
+                Download for iOS
               </a>
               <Link
                 href="#buyers"

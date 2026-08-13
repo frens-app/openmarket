@@ -76,10 +76,10 @@ function Nav() {
           </Link>
         </div>
         <a
-          href={SITE.testflightUrl}
+          href={SITE.downloadUrl}
           className="rounded-full bg-accent px-4 py-2 text-[15px] font-semibold text-white transition hover:bg-[#3395ff]"
         >
-          Join the beta
+          Download for iOS
         </a>
       </nav>
     </header>
@@ -103,7 +103,7 @@ function Footer() {
             <ul className="space-y-2 text-gray-400">
               <li><Link className="hover:text-white" href="/buyers">For buyers</Link></li>
               <li><Link className="hover:text-white" href="/sellers">For sellers</Link></li>
-              <li><a className="hover:text-white" href={SITE.testflightUrl}>Join the beta</a></li>
+              <li><a className="hover:text-white" href={SITE.downloadUrl}>Download for iOS</a></li>
             </ul>
           </div>
           <div>

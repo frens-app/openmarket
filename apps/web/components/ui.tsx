@@ -95,7 +95,7 @@ export function SectionHeading({
 
 export function CtaBlock({
   title = "Get Open Market",
-  body = "Free on iOS. Now in beta via TestFlight — the App Store release is on its way.",
+  body = "Free on iOS. Search, save, and price-check local listings in seconds.",
 }: {
   title?: string;
   body?: string;
@@ -111,12 +111,11 @@ export function CtaBlock({
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
           <a
-            href={SITE.testflightUrl}
+            href={SITE.downloadUrl}
             className="rounded-full bg-accent px-7 py-3.5 text-[17px] font-semibold text-white transition hover:bg-[#3395ff]"
           >
-            Join the beta on TestFlight
+            Download for iOS
           </a>
-          <span className="text-sm text-gray-500">Coming soon to the App Store</span>
         </div>
       </div>
     </section>

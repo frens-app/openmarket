@@ -4,7 +4,7 @@
 
 Open Market is an independent app, not affiliated with Meta Platforms, Inc. Users browse with their own account; messaging and offers happen in the Facebook app via deep links. Saves, history, and sessions stay on the user's device.
 
-Availability: iOS (TestFlight beta; App Store release in progress). Website: https://openmarket.so
+Availability: iOS. Website: https://openmarket.so
 
 ## Pages
 

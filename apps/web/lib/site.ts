@@ -5,8 +5,9 @@ export const SITE = {
   title: "Open Market — local listings, with superpowers",
   description:
     "Open Market is a fast, native iOS app for browsing local Marketplace listings: location filters that actually work, real distances and travel times on every listing, instant saves, and honest price data for sellers. No sponsored posts.",
-  // Swap for the real TestFlight public link when Brian shares it.
-  testflightUrl: "https://testflight.apple.com/join/PLACEHOLDER",
+  // Placeholder until the App Store listing is live — swap for the real
+  // https://apps.apple.com/... URL (or a TestFlight link in the interim).
+  downloadUrl: "https://apps.apple.com/app/PLACEHOLDER",
   twitter: undefined as string | undefined,
 } as const;
 
