@@ -885,6 +885,7 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/logged-in-findings.md` | What a signed-in session changes: seller identity yes, structured depth no — and §7, the *rendered* page differences that broke four things built logged out |
 | `docs/discover.md` | The home screen feed — Facebook's own, scrolled. How the paging works, why the search-seeded version it replaced is gone, its open issues, and what breaks if it ever holds older cards |
 | `docs/onboarding.md` | The two things the app requires before it will show a home screen, why neither can be skipped, and how the gate is written |
+| **`docs/analytics.md`** | **The tracking plan.** Every PostHog event and its properties, why §8's "nothing leaves the device" no longer governs analytics and what is still held back anyway, and why Debug and Release must point at two different projects |
 | **`docs/location.md`** | **Everything about location, both surfaces — start here.** What Facebook accepts, why a refusal is silent, the coordinate route, the verification protocol, the fuzz lattice, and where distances are measured from |
 | `docs/location-targeting.md` | The raw desktop session record: slugs vs place ids, and the §5a/§5b correction that found the coordinate route |
 | `docs/feasibility-2026-07-31.md` | The original §9 feasibility answers and how the architecture got here |

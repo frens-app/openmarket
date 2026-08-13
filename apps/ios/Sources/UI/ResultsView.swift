@@ -30,6 +30,10 @@ struct ResultsView: View {
     @State private var showLocationPicker = false
 
     @State private var showSignIn = false
+    /// Which prompt opened the sign-in sheet. One sheet serves two offers — the
+    /// wall in the middle of a search, and the footer at the end of a feed — and
+    /// they are different questions to be asked, so they are counted apart.
+    @State private var signInSurface: Analytics.Surface = .search
 
     /// Whether either sheet that can change the radius is up. Discover rebuilds
     /// when this goes false — see the `radiusKM` handler.
@@ -81,7 +85,7 @@ struct ResultsView: View {
             if surface == .search {
                 ActiveFilterBar(
                     onLocation: { showLocationPicker = true },
-                    onRerun: { Task { await rerunCurrentQuery() } }
+                    onRerun: { Task { await rerunCurrentQuery(trigger: .rerun) } }
                 )
             }
         }
@@ -97,7 +101,7 @@ struct ResultsView: View {
             FilterSheet { refreshVisibleSurfaceAfterFilters() }
         }
         .sheet(isPresented: $showSignIn) {
-            SignInView {
+            SignInView(surface: signInSurface) {
                 // A signed-in query returns a different result set, not
                 // merely a longer one, so this re-runs rather than
                 // appending to what's already on screen.
@@ -110,7 +114,7 @@ struct ResultsView: View {
                 Task {
                     store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
                     if surface == .search {
-                        await store.retry()
+                        await store.retry(trigger: .signIn)
                     }
                     await loadDiscover()
                 }
@@ -168,7 +172,7 @@ struct ResultsView: View {
                                                               deviceFix: location.coordinate))
             Task {
                 if surface == .search {
-                    await rerunCurrentQuery()
+                    await rerunCurrentQuery(trigger: .location)
                 }
                 discover.markStale()
                 await loadDiscover()
@@ -297,7 +301,7 @@ struct ResultsView: View {
                         store.noteScroll(hiddenAsViewed: hiddenAsViewed)
                     }
             )
-            .refreshable { await rerunCurrentQuery() }
+            .refreshable { await rerunCurrentQuery(trigger: .refresh) }
             // A new result set starts at the top; pagination does not.
             .onChange(of: store.resultsGeneration) {
                 proxy.scrollTo(Self.searchTopAnchor, anchor: .top)
@@ -355,7 +359,7 @@ struct ResultsView: View {
     private var searchContent: some View {
         switch store.feedState {
         case .loginWall:
-            LoginWallCard(signIn: { showSignIn = true },
+            LoginWallCard(signIn: { presentSignIn(from: .search) },
                           retry: { Task { await store.retry() } })
                 .padding()
         // A failure replaces the screen only when there is nothing to replace.
@@ -412,10 +416,10 @@ struct ResultsView: View {
 
         return VStack(alignment: .leading, spacing: 24) {
             if !recentItems.isEmpty {
-                strip("Recently viewed", items: recentItems)
+                strip("Recently viewed", items: recentItems, surface: .recentlyViewed)
             }
             if !savedItems.isEmpty {
-                strip("Saved", items: savedItems)
+                strip("Saved", items: savedItems, surface: .saved)
             }
             discoverSection(discovered)
         }
@@ -440,14 +444,16 @@ struct ResultsView: View {
     /// unique across the screen, which the zoom transition requires: a saved
     /// listing may perfectly well appear in Discover as well, and two cards
     /// claiming one source id leaves the push no single thing to zoom out of.
-    private func strip(_ title: String, items: [Listing]) -> some View {
+    private func strip(_ title: String,
+                       items: [Listing],
+                       surface: Analytics.Surface) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle(title)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(items) { listing in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { position, listing in
                         RecentCard(listing: listing)
-                            .onTapGesture { selected = listing }
+                            .onTapGesture { open(listing, from: surface, at: position) }
                     }
                 }
                 .padding(.horizontal, 12)
@@ -486,7 +492,7 @@ struct ResultsView: View {
                     items: w.items,
                     namespace: discoverNamespace,
                     loadingPlaceholderCount: discover.loadingPlaceholderCount,
-                    onSelect: { selected = $0 },
+                    onSelect: { open($0, from: .discover, at: $1) },
                     onItemAppear: { await discover.loadMoreIfNeeded(currentItem: $0) }
                 ) {
                     // The home feed is where this matters most: it fills itself
@@ -576,7 +582,7 @@ struct ResultsView: View {
             items: winnowed.items,
             namespace: searchNamespace,
             loadingPlaceholderCount: store.loadingPlaceholderCount,
-            onSelect: { selected = $0 },
+            onSelect: { open($0, from: .search, at: $1) },
             onItemAppear: {
                 await store.loadMoreIfNeeded(
                     currentItem: $0,
@@ -681,7 +687,18 @@ struct ResultsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Show viewed") { prefs.hideViewed = false }
+            Button("Show viewed") {
+                prefs.hideViewed = false
+                // The one filter change that happens outside the filter sheet,
+                // and the most interesting instance of this event: it is
+                // somebody undoing a filter that just emptied their screen,
+                // which is the case that says the filter is too aggressive.
+                Analytics.capture(.filtersApplied, [
+                    "source": Analytics.Surface.resultsNotice.rawValue,
+                    "changed": ["hide_viewed"],
+                    "hide_viewed": false
+                ])
+            }
                 .font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity)
@@ -707,7 +724,7 @@ struct ResultsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button { showSignIn = true } label: {
+            Button { presentSignIn(from: .resultsFooter) } label: {
                 Text("Log in to Facebook")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 20)
@@ -737,6 +754,58 @@ struct ResultsView: View {
 
     // MARK: - Actions
 
+    /// Opens a listing, and records which of the four ways in was used.
+    ///
+    /// Every route to a listing on this screen goes through here, which is the
+    /// point: two personal rails and a feed compete for the same thumb above
+    /// the fold, and until this existed nothing said which one wins — or
+    /// whether the rails, which cost two rows on every home screen, are worth
+    /// the space.
+    ///
+    /// **The card as it was when it was tapped**, which is the point of sending
+    /// the content rather than only the id: an id is a join key to a table this
+    /// app does not keep — listings are Facebook's, they are cached for days at
+    /// most, and a sold one is a 404 within a week. The title and the price are
+    /// the only durable record of what somebody was interested in, and they are
+    /// what makes "which categories does this app actually get used for"
+    /// answerable at all.
+    ///
+    /// Price is sent as a number as well as text. `priceText` is whatever
+    /// Facebook rendered — "$180", "Free", "C$40", "$20 - $40" — which is right
+    /// for reading and useless for averaging. `PriceGuide.parse` is the app's
+    /// own reading of it, reused rather than reimplemented so that a price in a
+    /// chart is the same number Price Check would have compared against.
+    private func open(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
+        selected = listing
+
+        var properties: [String: Any] = [
+            "surface": surface.rawValue,
+            "position": position,
+            "listing_id": listing.id,
+            "has_price": listing.priceText != nil,
+            "is_saved": saved.contains(listing.id),
+            "is_seen": viewed.contains(listing.id)
+        ]
+        properties["title"] = Analytics.text(listing.title)
+        properties["price_text"] = Analytics.text(listing.priceText)
+        properties["place"] = Analytics.text(listing.locationText)
+        if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
+        // Same precedence the card's own label uses, so a distance in the
+        // analytics is the distance the user was looking at when they tapped.
+        // Absent when unresolved rather than zero — a geocode that hasn't
+        // landed is not a listing next door.
+        if let km = distances.distanceKM(for: listing.locationText,
+                                         coordinate: distances.enrichedCoordinate(for: listing)) {
+            properties["distance_km"] = (km * 10).rounded() / 10
+        }
+        Analytics.capture(.listingOpened, properties)
+    }
+
+    private func presentSignIn(from surface: Analytics.Surface) {
+        signInSurface = surface
+        showSignIn = true
+    }
+
     private func submitSearch() {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return }
@@ -761,17 +830,60 @@ struct ResultsView: View {
         // results, so a retained result set cannot flash between submission
         // and the new query entering its loading state.
         surface = .search
+        // Before `recordSearch`, which is what makes the provenance readable at
+        // all: that call puts this term at the top of the recents, so asking
+        // afterwards whether it was already there always answers yes.
+        let source = searchSource(for: trimmed)
         prefs.recordSearch(trimmed)
         prefs.recordLastQuery(.search(trimmed))
-        await run(.search(trimmed))
+        var properties: [String: Any] = [
+            "source": source.rawValue,
+            // Length and word count are kept beside the term rather than
+            // replaced by it: "people search in two words" is answerable from
+            // these without aggregating over thousands of distinct strings, and
+            // they stay correct if the term itself is ever truncated.
+            "term_length": trimmed.count,
+            "word_count": trimmed.split(separator: " ").count,
+            "has_active_filters": prefs.hasNonDefaultFilters,
+            "sort": prefs.sort.rawValue,
+            "radius_km": prefs.radiusKM
+        ]
+        // The single most useful string this app can send. A top-searches list
+        // is a product roadmap, and the searches that come back empty are the
+        // ones worth doing something about — neither question survives being
+        // reduced to a character count.
+        //
+        // Lowercased so "Weber Grill" and "weber grill" are one row rather than
+        // two. Marketplace does not care about the case and neither should the
+        // breakdown.
+        properties["term"] = Analytics.text(trimmed.lowercased())
+        Analytics.capture(.searchSubmitted, properties)
+        await run(.search(trimmed), trigger: .newSearch)
+    }
+
+    /// Whether this term came from a suggestion or from the keyboard.
+    ///
+    /// A guess, and it has to be: `.searchCompletion` puts the term in the field
+    /// and submits it, so by the time `onSubmit` runs a tapped suggestion and a
+    /// typed word are the same string arriving the same way. Matching against
+    /// the two lists the field offers is as close as this gets, and it errs
+    /// towards crediting the suggestions — which is the error to prefer, since
+    /// the question being asked is whether that list earns its place.
+    private func searchSource(for term: String) -> Analytics.SearchSource {
+        let matches = { (candidate: String) in
+            candidate.caseInsensitiveCompare(term) == .orderedSame
+        }
+        if prefs.recentSearches.contains(where: matches) { return .recent }
+        if prefs.chosenInterests.map(\.term).contains(where: matches) { return .interest }
+        return .typed
     }
 
     /// Every search goes through here, which is what makes the "only new"
     /// snapshot honest: it is taken once, at the start of a search, and holds
     /// for as long as those results are on screen.
-    private func run(_ kind: SearchQuery.Kind) async {
+    private func run(_ kind: SearchQuery.Kind, trigger: Analytics.SearchTrigger) async {
         hiddenAsViewed = prefs.hideViewed ? viewed.allIDs : []
-        await store.run(makeQuery(kind))
+        await store.run(makeQuery(kind), trigger: trigger)
     }
 
     /// Currently unreachable: the category pills that called it are gone, and
@@ -782,18 +894,25 @@ struct ResultsView: View {
     /// check the payload parses there first.
     private func browse(category: String) async {
         prefs.recordLastQuery(.category(category))
-        await run(.category(category))
+        await run(.category(category), trigger: .newSearch)
     }
 
-    private func rerunCurrentQuery() async {
+    /// The same query again, for one of four different reasons.
+    ///
+    /// The reason is a parameter rather than something this function works out,
+    /// because by the time it is called every route in looks identical — and the
+    /// four are not interchangeable in the data: a pull-to-refresh is somebody
+    /// distrusting the results, a filter re-run is somebody narrowing them, and
+    /// a location re-run is the app catching up on its own.
+    private func rerunCurrentQuery(trigger: Analytics.SearchTrigger) async {
         guard let existing = store.query else { return }
-        await run(existing.kind)
+        await run(existing.kind, trigger: trigger)
     }
 
     private func refreshVisibleSurfaceAfterFilters() {
         Task {
             if surface == .search {
-                await rerunCurrentQuery()
+                await rerunCurrentQuery(trigger: .filters)
             } else {
                 await loadDiscover()
             }
@@ -856,14 +975,20 @@ private struct PaginatedListingGrid<Footer: View>: View {
     let items: [Listing]
     let namespace: Namespace.ID
     let loadingPlaceholderCount: Int
-    let onSelect: (Listing) -> Void
+    /// The tapped listing and where in the grid it was.
+    ///
+    /// The index is passed rather than looked up by the caller because it is
+    /// free here and a search afterwards: only this view knows the order the
+    /// cards were drawn in, and "how far down do people tap" is one of the two
+    /// things worth knowing about a feed nobody asked for.
+    let onSelect: (Listing, Int) -> Void
     let onItemAppear: (Listing) async -> Void
     let footer: Footer
 
     init(items: [Listing],
          namespace: Namespace.ID,
          loadingPlaceholderCount: Int,
-         onSelect: @escaping (Listing) -> Void,
+         onSelect: @escaping (Listing, Int) -> Void,
          onItemAppear: @escaping (Listing) async -> Void,
          @ViewBuilder footer: () -> Footer) {
         self.items = items
@@ -883,7 +1008,14 @@ private struct PaginatedListingGrid<Footer: View>: View {
                 loadingPlaceholderCount: loadingPlaceholderCount
             ) { listing in
                 ListingCard(listing: listing, namespace: namespace)
-                    .onTapGesture { onSelect(listing) }
+                    // Looked up on the tap rather than threaded through
+                    // `ListingGrid`, whose builder deliberately hands back only
+                    // the item. One linear scan of at most a few hundred cards,
+                    // once, in response to a finger — against changing the
+                    // signature of the grid every other screen also uses.
+                    .onTapGesture {
+                        onSelect(listing, items.firstIndex { $0.id == listing.id } ?? -1)
+                    }
                     .task { await onItemAppear(listing) }
             }
             .padding(.horizontal, 12)

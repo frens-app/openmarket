@@ -72,14 +72,41 @@ struct PriceEvidenceView: View {
                 .font(.headline)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(items) { comp in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { position, comp in
                         CompCard(comp: comp, footnote: footnote?(comp))
-                            .onTapGesture { selected = comp.listing }
+                            .onTapGesture { open(comp, at: position) }
                     }
                 }
                 .padding(.horizontal, 2)
             }
         }
+    }
+
+    /// A comparable, opened as an ordinary listing.
+    ///
+    /// Counted under the same event as the four browse surfaces rather than one
+    /// of its own, because it is the same act — somebody went and looked at a
+    /// listing — and the only interesting thing about it is that they arrived
+    /// from a price check. That is what `surface` is for. It is also the one
+    /// place in the app where a *sold* listing can be opened, which is why that
+    /// goes up beside it.
+    private func open(_ comp: MarketComp, at position: Int) {
+        selected = comp.listing
+        var properties: [String: Any] = [
+            "surface": Analytics.Surface.priceCheckEvidence.rawValue,
+            "position": position,
+            "listing_id": comp.listing.id,
+            "has_price": comp.listing.priceText != nil,
+            "is_sold": comp.isSold
+        ]
+        properties["title"] = Analytics.text(comp.listing.title)
+        // `comp.price` rather than re-parsing the text: the comparable already
+        // carries the number `PriceGuide` read out of it, and that is the one
+        // the recommendation was computed from. Parsing again here could only
+        // ever disagree with the chart beside it.
+        if let price = comp.price { properties["price"] = price }
+        properties["search_term"] = Analytics.text(searchTerm?.lowercased())
+        Analytics.capture(.listingOpened, properties)
     }
 
     private func soldFootnote(_ comp: MarketComp) -> String? {

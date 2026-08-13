@@ -177,10 +177,10 @@ struct LocationPickerSheet: View {
             WrapLayout(spacing: 8) {
                 ForEach(distanceOptions, id: \.self) { km in
                     distancePill("\(SearchQuery.kilometresToMiles(km)) mi", isOn: prefs.radiusKM == km) {
-                        prefs.radiusKM = km
+                        setRadius(km)
                     }
                 }
-                distancePill("Any", isOn: prefs.radiusKM == 0) { prefs.radiusKM = 0 }
+                distancePill("Any", isOn: prefs.radiusKM == 0) { setRadius(0) }
             }
             .padding(.vertical, 4)
         } header: {
@@ -203,6 +203,30 @@ struct LocationPickerSheet: View {
         let options = Preferences.radiusOptions
         guard prefs.radiusKM > 0, !options.contains(prefs.radiusKM) else { return options }
         return (options + [prefs.radiusKM]).sorted()
+    }
+
+    /// The radius, and where it moved from.
+    ///
+    /// Per tap rather than on dismissal, unlike the filter sheet, because these
+    /// pills are not part of a set somebody assembles — each one is a complete
+    /// decision, applied immediately, and the interesting pattern is the
+    /// sequence: widening twice in a row is somebody finding nothing nearby,
+    /// which is a different story from picking 20 mi once.
+    ///
+    /// The previous value is what makes that readable. "Set to 32 km" says
+    /// nothing on its own; "32 from 16" is a direction.
+    private func setRadius(_ km: Int) {
+        guard km != prefs.radiusKM else { return }
+        let previous = prefs.radiusKM
+        prefs.radiusKM = km
+        Analytics.capture(.distanceChanged, [
+            "radius_km": km,
+            "previous_radius_km": previous,
+            // `0` is "Any", which is not a wide radius but the absence of one —
+            // worth a property of its own so it can't be averaged in as zero
+            // miles, the exact opposite of what it means.
+            "is_unlimited": km == 0
+        ])
     }
 
     private func distancePill(_ text: String, isOn: Bool, action: @escaping () -> Void) -> some View {

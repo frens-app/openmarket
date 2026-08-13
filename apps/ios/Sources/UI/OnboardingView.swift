@@ -67,6 +67,18 @@ struct OnboardingView: View {
         case phone, facebook, location, notifications
 
         var next: Step { Step(rawValue: rawValue + 1) ?? .notifications }
+
+        /// Snake_case for the analytics breakdown, spelled out rather than
+        /// derived from the case name: a rename here is a rename of a property
+        /// value, which splits a funnel in two without failing anything.
+        var analyticsName: String {
+            switch self {
+            case .phone: return "phone"
+            case .facebook: return "facebook"
+            case .location: return "location"
+            case .notifications: return "notifications"
+            }
+        }
     }
 
     var body: some View {
@@ -107,7 +119,21 @@ struct OnboardingView: View {
         .onAppear { if account.isSignedIn { current = .facebook } }
     }
 
-    private func advance() { current = current.next }
+    /// The only way forward, which is what makes it the only place a step has
+    /// to be counted.
+    ///
+    /// The flow is not resumable — quitting halfway starts the four screens over
+    /// — so a step that never fires is a step somebody quit on, and the drop-off
+    /// between these four events is the whole reason to have them. The last step
+    /// doesn't come through here: it finishes rather than advances, and
+    /// `RootView` captures that one.
+    private func advance() {
+        Analytics.capture(.onboardingStepCompleted, [
+            "step": current.analyticsName,
+            "step_index": current.rawValue + 1
+        ])
+        current = current.next
+    }
 
     /// A dot per step, and no back button.
     ///
@@ -142,6 +168,14 @@ struct OnboardingView: View {
     /// next start. So the last step settles first, and a failure sends the user
     /// back to the step that asks, where the error is already on screen.
     private func finish() {
+        // Counted here rather than in `advance`, because the last step does not
+        // advance — it finishes. The answer has been given either way, so the
+        // step is complete even on the path below that sends the user back to
+        // the location screen.
+        Analytics.capture(.onboardingStepCompleted, [
+            "step": Step.notifications.analyticsName,
+            "step_index": Step.notifications.rawValue + 1
+        ])
         Task {
             isFinishing = true
             await chooser.settle()
@@ -259,7 +293,7 @@ private struct FacebookPage: View {
                     showSignIn = true
                 }
 
-                Button(action: done) {
+                Button(action: decline) {
                     Text("Not now — browse without it")
                         .font(.subheadline.weight(.medium))
                         .frame(maxWidth: .infinity)
@@ -273,7 +307,7 @@ private struct FacebookPage: View {
         .padding(.bottom, 20)
         .task { isSignedIn = await SessionState.isSignedIn() }
         .sheet(isPresented: $showSignIn) {
-            SignInView {
+            SignInView(surface: .onboarding) {
                 Task {
                     isSignedIn = true
                     let connected = await SessionState.isSignedIn()
@@ -285,6 +319,17 @@ private struct FacebookPage: View {
                 }
             }
         }
+    }
+
+    /// "Not now", which is a real answer rather than an absence of one.
+    ///
+    /// Worth its own event rather than being read as the gap between arriving
+    /// at this step and leaving it: the share of people who decline here is the
+    /// argument for or against ever making this a gate, and that number should
+    /// not have to be inferred.
+    private func decline() {
+        Analytics.capture(.facebookConnectDeclined, ["surface": Analytics.Surface.onboarding.rawValue])
+        done()
     }
 }
 

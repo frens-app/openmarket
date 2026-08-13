@@ -154,7 +154,7 @@ struct SettingsView: View {
                 Text(deleteError ?? "")
             }
             .sheet(isPresented: $showSignIn) {
-                SignInView {
+                SignInView(surface: .settings) {
                     // The result set itself changes with the session, so drop
                     // anything cached under the old one and re-run.
                     Task {
@@ -164,7 +164,7 @@ struct SettingsView: View {
                         // cookies just written live in this app container and
                         // will not be there on the user's next phone.
                         await account.reportFacebookConnection(connected)
-                        await store.retry()
+                        await store.retry(trigger: .signIn)
                     }
                 }
             }

@@ -39,6 +39,14 @@ final class PushRegistrar: ObservableObject {
         let granted = (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) ?? false
         await refreshStatus()
 
+        // Here rather than at the onboarding screen, because this is the only
+        // place that knows what the *system* said. iOS shows this prompt once
+        // per install and every later request returns the stored answer without
+        // displaying anything, so the grant rate is a number with exactly one
+        // chance to be measured — and it is the number that decides whether
+        // price alerts, the only push this app sends, can reach anybody at all.
+        Analytics.capture(.notificationPermissionAnswered, ["granted": granted])
+
         if granted {
             UIApplication.shared.registerForRemoteNotifications()
         } else {

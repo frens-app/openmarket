@@ -198,7 +198,27 @@ final class DiscoverFeed: ObservableObject {
 
         reachedEnd = false
         deepestIndexSeen = -1
+        let startedAt = Date()
+        let isRefresh = hasLoaded
         await fill(citySlug: citySlug, session: session)
+
+        // The home screen filling itself is the one load nobody asked for, and
+        // therefore the one nobody reports when it comes back empty — they just
+        // stop opening the app. Counted here rather than in the view because
+        // this is where "empty" and "walled" are still distinguishable: by the
+        // time `ResultsView` sees it, a feed emptied by the radius filter and a
+        // feed Facebook never served look identical.
+        //
+        // At most a handful per session — a launch, a pull-to-refresh, a change
+        // of city — so this is not the chatty per-page event it might look like.
+        Analytics.capture(.discoverLoaded, [
+            "count": listings.count,
+            "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000),
+            "is_anonymous": isAnonymous,
+            "reached_end": reachedEnd,
+            "is_refresh": isRefresh,
+            "radius_km": prefs.radiusKM
+        ])
     }
 
     /// Facebook's Marketplace feed for this place, cut to the user's radius.

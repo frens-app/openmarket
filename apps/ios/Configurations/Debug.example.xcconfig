@@ -26,6 +26,12 @@
 // API_SCHEME = https
 // API_HOSTNAME = your-mac.your-tailnet.ts.net:8443
 
+// --- Analytics ------------------------------------------------------------
+// Debug already points at the dev PostHog project. Override to send somewhere
+// else, or set it empty to switch analytics off for your builds.
+//
+// POSTHOG_API_KEY =
+
 // --- A deployed backend ---------------------------------------------------
 // Running the Debug app against Railway — useful for reproducing something that
 // only happens against real data, without archiving a Release build.

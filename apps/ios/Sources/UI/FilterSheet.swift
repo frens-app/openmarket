@@ -65,9 +65,12 @@ struct FilterSheet: View {
 
     /// What a change to any of these costs: a fresh search.
     ///
-    /// `hideViewed` is deliberately absent. It is applied to listings already on
-    /// screen, so toggling it needs no network at all — including it here would
-    /// spend a whole page load to end up with the same cards, minus some.
+    /// `hideViewed` is deliberately absent from `requiresRerun`. It is applied to
+    /// listings already on screen, so toggling it needs no network at all —
+    /// counting it as a change would spend a whole page load to end up with the
+    /// same cards, minus some. It is still *recorded* here, because a filter
+    /// that costs nothing is still a filter somebody chose, and the question
+    /// "which of these six do people touch" wants all six.
     private struct FilterSnapshot: Equatable {
         var sort: SearchQuery.Sort
         var delivery: SearchQuery.Delivery
@@ -75,11 +78,40 @@ struct FilterSheet: View {
         var maxPrice: Int?
         var conditions: [SearchQuery.Condition]
         var citySlug: String?
+        var hideViewed: Bool
+
+        /// The subset that goes back to Facebook. Compared separately from
+        /// `==`, so the analytics can see every edit while the network sees
+        /// only the ones that would return different listings.
+        func requiresRerun(against other: FilterSnapshot) -> Bool {
+            sort != other.sort
+                || delivery != other.delivery
+                || minPrice != other.minPrice
+                || maxPrice != other.maxPrice
+                || conditions != other.conditions
+                || citySlug != other.citySlug
+        }
+
+        /// Which fields moved, as the property values the event carries.
+        /// Spelled out rather than reflected over, because these strings are
+        /// breakdown rows somebody will build a chart on.
+        func changes(from other: FilterSnapshot) -> [String] {
+            var changed: [String] = []
+            if sort != other.sort { changed.append("sort") }
+            if delivery != other.delivery { changed.append("delivery") }
+            if minPrice != other.minPrice { changed.append("min_price") }
+            if maxPrice != other.maxPrice { changed.append("max_price") }
+            if conditions != other.conditions { changed.append("condition") }
+            if citySlug != other.citySlug { changed.append("location") }
+            if hideViewed != other.hideViewed { changed.append("hide_viewed") }
+            return changed
+        }
     }
 
     private var current: FilterSnapshot {
         FilterSnapshot(sort: prefs.sort, delivery: prefs.delivery,                        minPrice: prefs.minPrice, maxPrice: prefs.maxPrice,
-                       conditions: prefs.conditions, citySlug: prefs.locationSlug)
+                       conditions: prefs.conditions, citySlug: prefs.locationSlug,
+                       hideViewed: prefs.hideViewed)
     }
 
     var body: some View {
@@ -116,6 +148,12 @@ struct FilterSheet: View {
                     Button("Reset") {
                         prefs.resetFilters()
                         syncPriceText()
+                        // Its own event as well as being folded into the
+                        // `filters_applied` diff on dismissal: reaching for
+                        // Reset is a statement that the filters got away from
+                        // somebody, which is a different finding from whatever
+                        // they happened to be reset *from*.
+                        Analytics.capture(.filtersReset)
                     }
                     .disabled(!prefs.hasNonDefaultFilters)
                 }
@@ -159,9 +197,18 @@ struct FilterSheet: View {
         .background(.bar)
         .onDisappear {
             commitPriceText()
+            guard let original, original != current else { return }
+            // On dismissal rather than per control, and that is the same
+            // decision the re-run makes for the same reason: somebody setting
+            // up one query touches three or four toggles, and counting each one
+            // would report four filter changes for one act of filtering. What
+            // goes up is the diff — what they changed, and what they ended up
+            // with.
+            report(original)
             // Only re-run if the query would actually differ. Dismissing a
-            // sheet you only looked at should cost nothing.
-            if let original, original != current { onApply() }
+            // sheet you only looked at should cost nothing, and neither should
+            // a local-only toggle.
+            if current.requiresRerun(against: original) { onApply() }
         }
     }
 
@@ -303,6 +350,29 @@ struct FilterSheet: View {
                 .foregroundStyle(isOn ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
+    }
+
+    /// What changed, and what it ended up as.
+    ///
+    /// Both halves matter and they answer different questions: `changed` says
+    /// which controls anybody actually uses, and the rest says what the app's
+    /// filters look like in practice — whether the local-pickup default ever
+    /// gets moved, whether price bounds are typed at all, how many conditions a
+    /// real query carries. The bounds are sent as booleans rather than amounts,
+    /// which is enough for "does anyone use this" without turning a filter into
+    /// a statement about somebody's budget.
+    private func report(_ original: FilterSnapshot) {
+        Analytics.capture(.filtersApplied, [
+            "source": Analytics.Surface.filterSheet.rawValue,
+            "changed": current.changes(from: original),
+            "sort": prefs.sort.rawValue,
+            "delivery": prefs.delivery == .any ? "any" : prefs.delivery.rawValue,
+            "radius_km": prefs.radiusKM,
+            "has_min_price": prefs.minPrice != nil,
+            "has_max_price": prefs.maxPrice != nil,
+            "condition_count": prefs.conditions.count,
+            "hide_viewed": prefs.hideViewed
+        ])
     }
 
     // Price is held as text while editing so a half-typed "1" isn't

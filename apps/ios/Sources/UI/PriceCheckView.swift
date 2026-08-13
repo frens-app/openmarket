@@ -230,6 +230,17 @@ struct PriceCheckView: View {
     private func recentRow(_ check: PastPriceCheck) -> some View {
         Button {
             selectedPast = check
+            // Whether the history is a feature or a list nobody opens. It was
+            // added on the argument that listing copy is as useful a week later
+            // as it was the minute it was written — this is the number that
+            // says whether that is true.
+            var properties: [String: Any] = [
+                "position": model.recent.firstIndex { $0.id == check.id } ?? -1,
+                "has_price": check.price != nil,
+                "has_listing_copy": check.hasListing
+            ]
+            properties["identified_name"] = Analytics.text(check.label)
+            Analytics.capture(.priceCheckHistoryOpened, properties)
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {

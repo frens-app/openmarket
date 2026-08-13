@@ -280,6 +280,14 @@ struct PriceCheckRunView: View {
         if !model.comps.isEmpty {
             Button {
                 isShowingEvidence = true
+                // Whether anybody checks the working. The claim this feature
+                // makes is "this price comes from real listings near you", and
+                // how often that claim gets opened is the measure of whether it
+                // is being believed on sight or not read at all.
+                Analytics.capture(.priceCheckEvidenceOpened, [
+                    "comps_found": model.comps.count,
+                    "sold_count": model.sold.count
+                ])
             } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {

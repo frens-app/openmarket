@@ -29,4 +29,10 @@ API_HOSTNAME = api-production-22b5.up.railway.app
 
 APNS_ENVIRONMENT = production
 
+// The production PostHog project. Committed rather than injected: a write-only
+// client token ships inside the binary either way. An empty value switches
+// analytics off — unlike API_HOSTNAME, a missing key never fails the launch.
+POSTHOG_API_KEY = phc_mkBAGeZk2epfb9wbuTCeDcHrfeDAsNvjCXjxQuS8bJYV
+POSTHOG_HOSTNAME = us.i.posthog.com
+
 #include? "Release.local.xcconfig"

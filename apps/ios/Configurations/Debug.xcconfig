@@ -39,6 +39,11 @@ API_HOSTNAME = localhost:8080
 // `development` for anything signed with a development profile.
 APNS_ENVIRONMENT = development
 
+// The dev PostHog project, not the production one — Release has its own key.
+// An empty value here switches analytics off entirely.
+POSTHOG_API_KEY = phc_qBzA8BujCc2emf9qgM8K8dgD9SX4ctdpGUTtm9qPjX2T
+POSTHOG_HOSTNAME = us.i.posthog.com
+
 // Optional per-machine overrides, gitignored. Missing is fine — the values
 // above stand. Copy Debug.example.xcconfig to get started.
 #include? "Debug.local.xcconfig"
