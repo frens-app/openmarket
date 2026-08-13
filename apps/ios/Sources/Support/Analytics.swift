@@ -143,7 +143,7 @@ enum Analytics {
         case listingOpened = "listing_opened"
         case listingSaved = "listing_saved"
         case listingUnsaved = "listing_unsaved"
-        /// §4 makes every route out of a listing a link, so this is the closest
+        /// Every route out of a listing is a link, so this is the closest
         /// thing to a conversion the app can see.
         case listingOpenedOnFacebook = "listing_opened_on_facebook"
         case loginWallHit = "login_wall_hit"

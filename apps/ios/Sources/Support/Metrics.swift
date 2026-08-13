@@ -66,7 +66,7 @@ final class LocalMetrics: MetricsReporter {
         log.info("detail \(succeeded ? "ok" : "failed") in \(String(format: "%.2f", seconds))s")
     }
 
-    /// §4 makes every route out of a listing a link, so this is the last thing
+    /// Every route out of a listing is a link, so this is the last thing
     /// the app can observe about somebody who went on to buy something.
     func handoff(kind: String) {
         log.info("handoff: \(kind, privacy: .public)")
