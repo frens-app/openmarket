@@ -15,6 +15,7 @@ Availability: iOS. Website: https://openmarket.so
 
 ## Guides
 
+- [Facebook Marketplace vs OfferUp vs Openmarket](https://openmarket.so/guides/facebook-marketplace-vs-offerup-vs-openmarket): honest three-way comparison — inventory, fees, filtering, shipping, safety
 - [Facebook Marketplace location filter not working?](https://openmarket.so/guides/facebook-marketplace-location-filter-not-working): why radius settings don't limit results and how to actually search nearby
 - [Stop scrolling past the same listings](https://openmarket.so/guides/stop-seeing-same-listings-facebook-marketplace): workarounds for repeated feeds, and filtering on your own view history
 - [How to price used items](https://openmarket.so/guides/how-to-price-used-items): sold-data-first pricing method with percentage-of-retail baselines
