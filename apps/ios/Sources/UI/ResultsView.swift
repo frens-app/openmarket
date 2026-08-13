@@ -30,6 +30,9 @@ struct ResultsView: View {
     @State private var showLocationPicker = false
 
     @State private var showSignIn = false
+    /// One sheet serves two offers — the wall mid-search and the footer at the
+    /// end of a feed — and they convert differently.
+    @State private var signInSurface: Analytics.Surface = .search
 
     /// Whether either sheet that can change the radius is up. Discover rebuilds
     /// when this goes false — see the `radiusKM` handler.
@@ -97,7 +100,7 @@ struct ResultsView: View {
             FilterSheet { refreshVisibleSurfaceAfterFilters() }
         }
         .sheet(isPresented: $showSignIn) {
-            SignInView {
+            SignInView(surface: signInSurface) {
                 // A signed-in query returns a different result set, not
                 // merely a longer one, so this re-runs rather than
                 // appending to what's already on screen.
@@ -355,7 +358,7 @@ struct ResultsView: View {
     private var searchContent: some View {
         switch store.feedState {
         case .loginWall:
-            LoginWallCard(signIn: { showSignIn = true },
+            LoginWallCard(signIn: { presentSignIn(from: .search) },
                           retry: { Task { await store.retry() } })
                 .padding()
         // A failure replaces the screen only when there is nothing to replace.
@@ -415,10 +418,10 @@ struct ResultsView: View {
                 recentSearchRail
             }
             if !recentItems.isEmpty {
-                strip("Recently viewed", items: recentItems)
+                strip("Recently viewed", items: recentItems, surface: .recentlyViewed)
             }
             if !savedItems.isEmpty {
-                strip("Saved", items: savedItems)
+                strip("Saved", items: savedItems, surface: .saved)
             }
             discoverSection(discovered)
         }
@@ -486,14 +489,16 @@ struct ResultsView: View {
     /// unique across the screen, which the zoom transition requires: a saved
     /// listing may perfectly well appear in Discover as well, and two cards
     /// claiming one source id leaves the push no single thing to zoom out of.
-    private func strip(_ title: String, items: [Listing]) -> some View {
+    private func strip(_ title: String,
+                       items: [Listing],
+                       surface: Analytics.Surface) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle(title)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(items) { listing in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { position, listing in
                         RecentCard(listing: listing)
-                            .onTapGesture { selected = listing }
+                            .onTapGesture { open(listing, from: surface, at: position) }
                     }
                 }
                 .padding(.horizontal, 12)
@@ -532,7 +537,7 @@ struct ResultsView: View {
                     items: w.items,
                     namespace: discoverNamespace,
                     loadingPlaceholderCount: discover.loadingPlaceholderCount,
-                    onSelect: { selected = $0 },
+                    onSelect: { open($0, from: .discover, at: $1) },
                     onItemAppear: { await discover.loadMoreIfNeeded(currentItem: $0) }
                 ) {
                     // The home feed is where this matters most: it fills itself
@@ -622,7 +627,7 @@ struct ResultsView: View {
             items: winnowed.items,
             namespace: searchNamespace,
             loadingPlaceholderCount: store.loadingPlaceholderCount,
-            onSelect: { selected = $0 },
+            onSelect: { open($0, from: .search, at: $1) },
             onItemAppear: {
                 await store.loadMoreIfNeeded(
                     currentItem: $0,
@@ -727,7 +732,15 @@ struct ResultsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Show viewed") { prefs.hideViewed = false }
+            Button("Show viewed") {
+                prefs.hideViewed = false
+                // The one filter change outside the filter sheet.
+                Analytics.capture(.filtersApplied, [
+                    "source": Analytics.Surface.resultsNotice.rawValue,
+                    "changed": ["hide_viewed"],
+                    "hide_viewed": false
+                ])
+            }
                 .font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity)
@@ -753,7 +766,7 @@ struct ResultsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button { showSignIn = true } label: {
+            Button { presentSignIn(from: .resultsFooter) } label: {
                 Text("Log in to Facebook")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 20)
@@ -782,6 +795,47 @@ struct ResultsView: View {
     }
 
     // MARK: - Actions
+
+    /// Opens a listing, and records which of the four ways in was used.
+    ///
+    /// Every route to a listing on this screen goes through here, which is the
+    /// point: two personal rails and a feed compete for the same thumb above
+    /// the fold, and until this existed nothing said which one wins — or
+    /// whether the rails, which cost two rows on every home screen, are worth
+    /// the space.
+    ///
+    /// The single way into a listing from this screen, so no route can be added
+    /// without being counted.
+    private func open(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
+        selected = listing
+
+        var properties: [String: Any] = [
+            "surface": surface.rawValue,
+            "position": position,
+            "listing_id": listing.id,
+            "has_price": listing.priceText != nil,
+            "is_saved": saved.contains(listing.id),
+            "is_seen": viewed.contains(listing.id)
+        ]
+        properties["title"] = Analytics.text(listing.title)
+        properties["price_text"] = Analytics.text(listing.priceText)
+        properties["place"] = Analytics.text(listing.locationText)
+        // `priceText` is what Facebook rendered — "Free", "C$40", "$20 - $40" —
+        // so a sortable number needs the app's own reading of it.
+        if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
+        // Same precedence the card's label uses, and absent rather than zero
+        // when the geocode hasn't landed.
+        if let km = distances.distanceKM(for: listing.locationText,
+                                         coordinate: distances.enrichedCoordinate(for: listing)) {
+            properties["distance_km"] = (km * 10).rounded() / 10
+        }
+        Analytics.capture(.listingOpened, properties)
+    }
+
+    private func presentSignIn(from surface: Analytics.Surface) {
+        signInSurface = surface
+        showSignIn = true
+    }
 
     private func submitSearch() {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -817,9 +871,35 @@ struct ResultsView: View {
         // results, so a retained result set cannot flash between submission
         // and the new query entering its loading state.
         surface = .search
+        // Before `recordSearch`, which is what makes the provenance readable at
+        // all: that call puts this term at the top of the recents, so asking
+        // afterwards whether it was already there always answers yes.
+        let source = searchSource(for: trimmed)
         prefs.recordSearch(trimmed)
         prefs.recordLastQuery(.search(trimmed))
+        var properties: [String: Any] = [
+            "source": source.rawValue,
+            "term_length": trimmed.count,
+            "word_count": trimmed.split(separator: " ").count,
+            "has_active_filters": prefs.hasNonDefaultFilters,
+            "sort": prefs.sort.rawValue,
+            "radius_km": prefs.radiusKM
+        ]
+        // Lowercased so "Weber Grill" and "weber grill" are one breakdown row.
+        properties["term"] = Analytics.text(trimmed.lowercased())
+        Analytics.capture(.searchSubmitted, properties)
         await run(.search(trimmed))
+    }
+
+    /// A guess: a tapped completion and a typed word reach `onSubmit`
+    /// identically, so this matches against the two lists the field offers.
+    private func searchSource(for term: String) -> Analytics.SearchSource {
+        let matches = { (candidate: String) in
+            candidate.caseInsensitiveCompare(term) == .orderedSame
+        }
+        if prefs.recentSearches.contains(where: matches) { return .recent }
+        if prefs.chosenInterests.map(\.term).contains(where: matches) { return .interest }
+        return .typed
     }
 
     /// Every search goes through here, which is what makes the "only new"
@@ -912,14 +992,15 @@ private struct PaginatedListingGrid<Footer: View>: View {
     let items: [Listing]
     let namespace: Namespace.ID
     let loadingPlaceholderCount: Int
-    let onSelect: (Listing) -> Void
+    /// The tapped listing and its index — only this view knows the draw order.
+    let onSelect: (Listing, Int) -> Void
     let onItemAppear: (Listing) async -> Void
     let footer: Footer
 
     init(items: [Listing],
          namespace: Namespace.ID,
          loadingPlaceholderCount: Int,
-         onSelect: @escaping (Listing) -> Void,
+         onSelect: @escaping (Listing, Int) -> Void,
          onItemAppear: @escaping (Listing) async -> Void,
          @ViewBuilder footer: () -> Footer) {
         self.items = items
@@ -939,7 +1020,11 @@ private struct PaginatedListingGrid<Footer: View>: View {
                 loadingPlaceholderCount: loadingPlaceholderCount
             ) { listing in
                 ListingCard(listing: listing, namespace: namespace)
-                    .onTapGesture { onSelect(listing) }
+                    // Scanned on the tap rather than changing `ListingGrid`'s
+                    // builder signature, which every other screen also uses.
+                    .onTapGesture {
+                        onSelect(listing, items.firstIndex { $0.id == listing.id } ?? -1)
+                    }
                     .task { await onItemAppear(listing) }
             }
             .padding(.horizontal, 12)

@@ -177,10 +177,10 @@ struct LocationPickerSheet: View {
             WrapLayout(spacing: 8) {
                 ForEach(distanceOptions, id: \.self) { km in
                     distancePill("\(SearchQuery.kilometresToMiles(km)) mi", isOn: prefs.radiusKM == km) {
-                        prefs.radiusKM = km
+                        setRadius(km)
                     }
                 }
-                distancePill("Any", isOn: prefs.radiusKM == 0) { prefs.radiusKM = 0 }
+                distancePill("Any", isOn: prefs.radiusKM == 0) { setRadius(0) }
             }
             .padding(.vertical, 4)
         } header: {
@@ -203,6 +203,22 @@ struct LocationPickerSheet: View {
         let options = Preferences.radiusOptions
         guard prefs.radiusKM > 0, !options.contains(prefs.radiusKM) else { return options }
         return (options + [prefs.radiusKM]).sorted()
+    }
+
+    /// Per tap, unlike the filter sheet: each pill is a complete decision
+    /// applied immediately, and the sequence is the point — widening twice in a
+    /// row is somebody finding nothing nearby. The previous value gives it a
+    /// direction; "32 from 16" says something "32" doesn't.
+    private func setRadius(_ km: Int) {
+        guard km != prefs.radiusKM else { return }
+        let previous = prefs.radiusKM
+        prefs.radiusKM = km
+        Analytics.capture(.distanceChanged, [
+            "radius_km": km,
+            "previous_radius_km": previous,
+            // `0` is "Any" — the absence of a radius, not a zero-mile one.
+            "is_unlimited": km == 0
+        ])
     }
 
     private func distancePill(_ text: String, isOn: Bool, action: @escaping () -> Void) -> some View {

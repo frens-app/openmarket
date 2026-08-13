@@ -214,7 +214,7 @@ ios-settings: ios-generate
 		printf '$(BLUE)%s$(RESET)\n' "$$cfg"; \
 		cd apps/ios && xcodebuild -project OpenMarket.xcodeproj -scheme OpenMarket \
 			-configuration $$cfg -showBuildSettings 2>/dev/null | \
-			grep -E '^\s+(PRODUCT_BUNDLE_IDENTIFIER|DISPLAY_NAME|API_SCHEME|API_HOSTNAME|APNS_ENVIRONMENT|MARKETING_VERSION|CURRENT_PROJECT_VERSION) ' | \
+			grep -E '^\s+(PRODUCT_BUNDLE_IDENTIFIER|DISPLAY_NAME|API_SCHEME|API_HOSTNAME|APNS_ENVIRONMENT|MARKETING_VERSION|CURRENT_PROJECT_VERSION|POSTHOG_API_KEY|POSTHOG_HOSTNAME|POSTHOG_CAPTURE_EVENTS) ' | \
 			sed 's/^ */  /'; cd ../..; \
 	done
 

@@ -29,7 +29,13 @@ enum API {
         "\(bundleString("API_HOSTNAME") ?? "unconfigured")"
     }
 
-    private static func bundleString(_ key: String) -> String? {
+    /// A build-time setting, or nil if this configuration didn't set one. An
+    /// empty string counts as absent: an xcconfig can't omit a key it declares,
+    /// so `POSTHOG_API_KEY =` still reaches the plist.
+    ///
+    /// Internal rather than private because `Analytics` reads its keys the same
+    /// way.
+    static func bundleString(_ key: String) -> String? {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed

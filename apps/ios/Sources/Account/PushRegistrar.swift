@@ -39,6 +39,10 @@ final class PushRegistrar: ObservableObject {
         let granted = (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) ?? false
         await refreshStatus()
 
+        // Here, not the onboarding screen: this is the only place that knows
+        // what the system said, and iOS asks once per install.
+        Analytics.capture(.notificationPermissionAnswered, ["granted": granted])
+
         if granted {
             UIApplication.shared.registerForRemoteNotifications()
         } else {

@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         print("[openmarket] \(Bundle.main.bundleIdentifier ?? "?") → \(API.baseURL)")
+        // Not a `.task`: `$application_opened` has to be captured for the
+        // launch that is happening, and a SwiftUI task runs after it.
+        Analytics.start()
         return true
     }
 
@@ -95,6 +98,9 @@ struct OpenMarketApp: App {
                 }
             } else {
                 Task { await ListingCache.shared.writeToDisk() }
+                // Same reasoning as the cache write: the last events of a
+                // session are the ones at the end of a funnel.
+                Analytics.flush()
             }
         }
     }
@@ -208,6 +214,9 @@ struct RootView: View {
     private func finish() {
         prefs.hasCompletedOnboarding = true
         isOnboarding = false
+        // Here rather than in `OnboardingView`: the flow can send itself back to
+        // the location step, and this line is the one-way door.
+        Analytics.capture(.onboardingCompleted)
         // Recorded on the account too, so the answer survives a reinstall rather
         // than living only in this install's defaults.
         Task { await account.markOnboardingComplete() }

@@ -231,6 +231,14 @@ final class SellerToolsModel: ObservableObject {
         guard let priceCheckID, feedback != helpful else { return }
         feedback = helpful
         Task { await pricing.submitFeedback(priceCheckID: priceCheckID, helpful: helpful) }
+        // Deliberately duplicated: the server row joins to the run, the event
+        // joins to everything else that person did.
+        Analytics.capture(.priceCheckFeedbackSubmitted, [
+            "helpful": helpful,
+            "comps_found": comps.count,
+            // "Your price was right" vs "wrong, and here's what I fixed it to".
+            "was_adjusted": askingPrice != recommendedPrice
+        ])
     }
 
     /// Records that the price was copied, **and which price it was**.
@@ -247,6 +255,28 @@ final class SellerToolsModel: ObservableObject {
         guard let priceCheckID else { return }
         let copied = askingPrice
         Task { await pricing.recordCopy(priceCheckID: priceCheckID, price: copied) }
+
+        // Both numbers and the gap between them: "sellers move our price up 20%
+        // on average" is the finding that would retire the median, and it needs
+        // them side by side.
+        var properties: [String: Any] = [
+            "source": Analytics.Surface.priceCheckRun.rawValue,
+            "comps_found": comps.count,
+            "sold_count": sold.count
+        ]
+        properties.merge(itemDescriptors) { current, _ in current }
+        if let recommended = recommendedPrice {
+            properties["recommended_price"] = recommended
+            if let copied {
+                properties["asking_price"] = copied
+                properties["was_adjusted"] = copied != recommended
+                if recommended > 0 {
+                    let shift = Double(copied - recommended) / Double(recommended) * 100
+                    properties["adjustment_pct"] = (shift * 10).rounded() / 10
+                }
+            }
+        }
+        Analytics.capture(.priceCheckPriceCopied, properties)
     }
 
     /// Records the listing text as it was copied, edited or not.
@@ -258,6 +288,17 @@ final class SellerToolsModel: ObservableObject {
     func recordListingCopied(title: String? = nil, description: String? = nil) {
         guard let priceCheckID else { return }
         Task { await pricing.recordCopy(priceCheckID: priceCheckID, title: title, description: description) }
+
+        // The verdict only — the text goes to our server, which holds both what
+        // the model wrote and what got pasted, and is the only place the diff
+        // can be taken.
+        var properties: [String: Any] = [
+            "source": Analytics.Surface.priceCheckRun.rawValue,
+            "field": title != nil ? "title" : "description",
+            "was_edited": title.map { $0 != listingTitle } ?? (description != listingBody)
+        ]
+        properties["identified_name"] = Analytics.text(identifiedName)
+        Analytics.capture(.priceCheckListingCopied, properties)
     }
 
     /// Refreshes the recent list, quietly.
@@ -292,6 +333,31 @@ final class SellerToolsModel: ObservableObject {
                                      price: price,
                                      title: title,
                                      description: description)
+        }
+
+        // The same two events as a fresh run, told apart by `source` rather
+        // than a third event name — "the price got copied" is one question.
+        if let price {
+            var properties: [String: Any] = [
+                "source": Analytics.Surface.priceCheckHistory.rawValue,
+                "asking_price": price,
+                // A stored run keeps its price but not the range behind it, so
+                // there is no adjustment to compute.
+                "was_adjusted": false
+            ]
+            properties["identified_name"] = Analytics.text(check.label)
+            properties["search_term"] = Analytics.text(check.searchTerm.lowercased())
+            Analytics.capture(.priceCheckPriceCopied, properties)
+        }
+        if title != nil || description != nil {
+            var properties: [String: Any] = [
+                "source": Analytics.Surface.priceCheckHistory.rawValue,
+                "field": title != nil ? "title" : "description",
+                "was_edited": title.map { $0 != check.listingTitle }
+                    ?? (description != check.listingBody)
+            ]
+            properties["identified_name"] = Analytics.text(check.label)
+            Analytics.capture(.priceCheckListingCopied, properties)
         }
     }
 
@@ -328,6 +394,18 @@ final class SellerToolsModel: ObservableObject {
         clearResults()
         phase = .running
 
+        let startedAt = Date()
+        photoCount = photos.count
+        // Photos aren't sent — they are megabytes, and already stored against
+        // the run's row on the server.
+        var started: [String: Any] = [
+            "photo_count": photos.count,
+            "has_description": !item.isEmpty,
+            "description_length": item.count
+        ]
+        started["description"] = Analytics.text(item)
+        Analytics.capture(.priceCheckStarted, started)
+
         // 1 — what this is, and what to search for.
         //
         // A round trip, because it is the only step that can see the photo.
@@ -355,6 +433,7 @@ final class SellerToolsModel: ObservableObject {
                 let message = "Couldn't work out what this is. Try adding a description."
                 fail(.identify, message)
                 phase = .failed(message)
+                captureRunFailed(.identify, reason: "no_query", startedAt: startedAt)
                 return
             }
             term = query
@@ -369,6 +448,7 @@ final class SellerToolsModel: ObservableObject {
             let message = Self.message(for: error)
             fail(.identify, message)
             phase = .failed(message)
+            captureRunFailed(.identify, reason: Self.reason(for: error), startedAt: startedAt)
             return
         }
         searchTerm = term
@@ -385,6 +465,7 @@ final class SellerToolsModel: ObservableObject {
         case .failure(let error):
             fail(.search, Self.message(for: error))
             phase = .failed(Self.message(for: error))
+            captureRunFailed(.search, reason: Self.reason(for: error), startedAt: startedAt)
             return
         case .success(let found):
             comps = found
@@ -421,6 +502,10 @@ final class SellerToolsModel: ObservableObject {
         guard let median = computed.median else {
             fail(.price, "None of them had a price to compare")
             phase = .done
+            // Completed, not failed — `phase` agrees. Comparables with no
+            // readable price is a fact about the listings. `has_price` splits it
+            // from a run that produced a number.
+            captureRunCompleted(startedAt: startedAt, price: nil)
             return
         }
         recommendedPrice = median
@@ -429,6 +514,7 @@ final class SellerToolsModel: ObservableObject {
         finish(.price, "\(Self.summary(of: computed)) — suggesting \(computed.money(median))")
 
         phase = .done
+        captureRunCompleted(startedAt: startedAt, price: median)
 
         // 5 — the row, after the screen is already finished.
         //
@@ -456,6 +542,78 @@ final class SellerToolsModel: ObservableObject {
             guide: guide,
             sold: sold
         )
+    }
+
+    // MARK: - Analytics
+
+    private func captureRunCompleted(startedAt: Date, price: Int?) {
+        var properties: [String: Any] = [
+            "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000),
+            "photo_count": photoCount,
+            "comps_found": comps.count,
+            "sold_count": sold.count,
+            "has_price": price != nil,
+            "has_listing_copy": listingTitle != nil || listingBody != nil
+        ]
+        // Omitted rather than zeroed: a run that found no market did not
+        // recommend $0, and the average shouldn't say it did.
+        if let price { properties["recommended_price"] = price }
+        properties.merge(itemDescriptors) { current, _ in current }
+        Analytics.capture(.priceCheckCompleted, properties)
+    }
+
+    private func captureRunFailed(_ step: Step.Kind, reason: String, startedAt: Date) {
+        var properties: [String: Any] = [
+            "step": Self.name(of: step),
+            "reason": reason,
+            "photo_count": photoCount,
+            "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000)
+        ]
+        properties.merge(itemDescriptors) { current, _ in current }
+        Analytics.capture(.priceCheckFailed, properties)
+    }
+
+    /// What was typed, what the model called it, what got searched. The chain a
+    /// wrong price went wrong somewhere in, so every price-check event carries
+    /// whichever links exist yet.
+    private var itemDescriptors: [String: Any] {
+        var descriptors: [String: Any] = [:]
+        descriptors["description"] = Analytics.text(input)
+        descriptors["identified_name"] = Analytics.text(identifiedName)
+        descriptors["search_term"] = Analytics.text(searchTerm?.lowercased())
+        return descriptors
+    }
+
+    /// Held because `PriceCheckView` empties its photo strip on submit, and a
+    /// finished run has nowhere else to read this from.
+    private var photoCount = 0
+
+    private static func name(of step: Step.Kind) -> String {
+        switch step {
+        case .identify: return "identify"
+        case .search: return "search"
+        case .sold: return "sold"
+        case .price: return "price"
+        }
+    }
+
+    /// A stable code rather than the sentence shown on screen, which can carry
+    /// server text and isn't worth grouping on.
+    static func reason(for error: Error) -> String {
+        switch error as? APIError {
+        case .rateLimited: return "rate_limited"
+        case .unauthenticated: return "unauthenticated"
+        case .message: return "rejected"
+        case .network, .none: return "network"
+        }
+    }
+
+    static func reason(for error: ComparableSearch.Failure) -> String {
+        switch error {
+        case .loginWall: return "login_wall"
+        case .nothingFound: return "nothing_found"
+        case .engine: return "engine"
+        }
     }
 
     // MARK: - Transcript

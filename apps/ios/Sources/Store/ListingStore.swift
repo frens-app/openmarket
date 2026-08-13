@@ -163,6 +163,15 @@ final class ListingStore: ObservableObject {
         cache.saveResults(listings, for: query, session: session)
     }
 
+    /// What the search actually did, once it has stopped doing it.
+    ///
+    /// A separate event from the submission, because the gap between the two is
+    /// the whole product: "somebody searched" and "somebody got results" are the
+    /// same number in a working app and very different ones in a walled or
+    /// throttled session, and the only way to see the wall in aggregate is to
+    /// count both ends.
+    ///
+
     /// How many cards from the end a page starts loading — about two screens of
     /// the two-column grid. A page is three webview scrolls with a settle after
     /// each, so starting near the final card would expose the loading skeletons

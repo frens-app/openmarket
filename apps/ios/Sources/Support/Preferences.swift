@@ -85,9 +85,26 @@ final class Preferences: ObservableObject {
     }
 
     func setResolvedPlace(_ place: ResolvedPlace) {
+        let previous = resolvedPlace
         resolvedPlace = place
         locationSlug = place.segment
         locationName = place.name
+
+        // The app's only writer of a slug, so the only place every route to a
+        // change of city passes through. The city is registered as a super
+        // property; the coordinate behind it is not sent.
+        Analytics.register(["city_slug": place.segment])
+        // Spelled out: the raw values are camelCase storage keys, and every
+        // other property value in the workspace is snake_case.
+        Analytics.capture(.locationChanged, [
+            "source": place.origin == .deviceFix ? "device_fix" : "searched_city",
+            "segment_kind": place.segmentKind == .placeID ? "place_id" : "slug",
+            "is_verified": place.isVerified,
+            // A first place is onboarding finishing; a later one is somebody
+            // deciding the app is looking in the wrong town.
+            "is_first": previous == nil,
+            "radius_km": radiusKM
+        ])
     }
     /// The last thing the user looked at, so reopening the app lands them back
     /// there instead of on an empty screen.

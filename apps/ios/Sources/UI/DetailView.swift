@@ -115,7 +115,7 @@ struct DetailView: View {
             }
         }
         .sheet(isPresented: $showSignIn) {
-            SignInView {
+            SignInView(surface: .listingDetail) {
                 // Signing in doesn't retroactively fill this listing in — the
                 // seller fields were never fetched, because Facebook didn't
                 // render them to an anonymous session. So re-open it against
@@ -157,6 +157,21 @@ struct DetailView: View {
             // card to draw even when this fires before enrichment lands.
             store.remember(current)
             withAnimation(.snappy(duration: 0.2)) { saved.toggle(current.id) }
+            // `isSaved` is the state before the toggle, so the event names what
+            // just happened. Two events, because a bookmark rate and a regret
+            // rate are different questions.
+            var properties: [String: Any] = [
+                "surface": Analytics.Surface.listingDetail.rawValue,
+                "listing_id": current.id,
+                // No price means no price alert can ever fire for it.
+                "has_price": current.priceText != nil,
+                // Saved off the thumbnail, or after the item page landed.
+                "is_enriched": current.detail != nil
+            ]
+            properties["title"] = Analytics.text(current.title)
+            properties["place"] = Analytics.text(placeName)
+            if let price = PriceGuide.parse(current.priceText) { properties["price"] = price }
+            Analytics.capture(isSaved ? .listingUnsaved : .listingSaved, properties)
         } label: {
             Label(isSaved ? "Saved" : "Save",
                   systemImage: isSaved ? "bookmark.fill" : "bookmark")

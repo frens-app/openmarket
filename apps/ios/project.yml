@@ -33,6 +33,15 @@ fileGroups:
 packages:
   OpenMarketProtos:
     path: Packages/OpenMarketProtos
+  # The only remote dependency declared here, and pinned exactly — same rule
+  # `Packages/OpenMarketProtos/Package.swift` states for its three, and for the
+  # same reason: with a range, two checkouts of this commit can resolve
+  # different versions and the one that breaks is whichever machine resolved
+  # later. Bumping it is a visible one-line commit, which is the right shape
+  # for something that ships inside a signed app.
+  PostHog:
+    url: https://github.com/PostHog/posthog-ios
+    exactVersion: 3.69.5
 
 targets:
   OpenMarket:
@@ -44,6 +53,7 @@ targets:
     sources: [Sources, Resources]
     dependencies:
       - package: OpenMarketProtos
+      - package: PostHog
     # Push, declared here for the same reason signing is: this file is the
     # source of truth and `xcodegen generate` rewrites the .xcodeproj wholesale,
     # so a capability added through Xcode's Signing & Capabilities pane survives
@@ -75,6 +85,15 @@ targets:
         # treats `//` as a comment — see Configurations/Debug.xcconfig.
         API_SCHEME: $(API_SCHEME)
         API_HOSTNAME: $(API_HOSTNAME)
+        # Read by `Analytics`. Debug and Release carry different PostHog
+        # projects; an empty key switches analytics off.
+        #
+        # The host is a bare hostname for the same reason `API_HOSTNAME` is:
+        # xcconfig treats `//` as a comment, so a full URL would arrive here
+        # as `https:`.
+        POSTHOG_API_KEY: $(POSTHOG_API_KEY)
+        POSTHOG_HOSTNAME: $(POSTHOG_HOSTNAME)
+        POSTHOG_CAPTURE_EVENTS: $(POSTHOG_CAPTURE_EVENTS)
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

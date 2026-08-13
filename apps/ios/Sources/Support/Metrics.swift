@@ -1,9 +1,13 @@
 import Foundation
 import os
 
-/// §8. No listing content and no search terms ever leave the device; these are
-/// counters and rates only. The protocol exists so a backend can be chosen
-/// later without touching call sites — today it logs locally.
+/// §8. Counters and rates only — no listing content and no search terms pass
+/// through here. (That describes this file, not the app: `Analytics` sends
+/// content deliberately.)
+///
+/// `loginWallHit` and `handoff` are also forwarded to `Analytics`, being product
+/// facts rather than engine health. The other three stay local on volume
+/// grounds: they fire on every page of every search.
 protocol MetricsReporter: AnyObject {
     func parseHealth(_ health: ParseHealth)
     func loginWallHit(surface: String)
@@ -46,17 +50,27 @@ final class LocalMetrics: MetricsReporter {
         log.info("parse: dom=\(health.domCards) extracted=\(health.extracted) dropped=\(health.dropped) rendered=\(health.rendered) failing=\(failing.joined(separator: ","))")
     }
 
+    /// `loginWallCount` is per-process; the event is what says whether the
+    /// share of sessions hitting one is moving.
     func loginWallHit(surface: String) {
         loginWallCount += 1
         log.warning("login wall on \(surface, privacy: .public), total=\(self.loginWallCount)")
+        Analytics.capture(.loginWallHit, [
+            "surface": surface,
+            // The first wall is a rate limit; the fourth is a dead session.
+            "session_count": loginWallCount
+        ])
     }
 
     func detailLatency(seconds: TimeInterval, succeeded: Bool) {
         log.info("detail \(succeeded ? "ok" : "failed") in \(String(format: "%.2f", seconds))s")
     }
 
+    /// §4 makes every route out of a listing a link, so this is the last thing
+    /// the app can observe about somebody who went on to buy something.
     func handoff(kind: String) {
         log.info("handoff: \(kind, privacy: .public)")
+        Analytics.capture(.listingOpenedOnFacebook, ["kind": kind])
     }
 
     func pageLoaded(index: Int, listings: Int) {

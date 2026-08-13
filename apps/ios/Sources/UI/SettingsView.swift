@@ -154,7 +154,7 @@ struct SettingsView: View {
                 Text(deleteError ?? "")
             }
             .sheet(isPresented: $showSignIn) {
-                SignInView {
+                SignInView(surface: .settings) {
                     // The result set itself changes with the session, so drop
                     // anything cached under the old one and re-run.
                     Task {

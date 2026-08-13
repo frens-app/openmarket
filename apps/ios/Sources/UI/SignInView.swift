@@ -15,6 +15,10 @@ struct SignInView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = SignInModel()
 
+    /// For the analytics only — this sheet is offered from five places, and
+    /// which prompt converts is worth knowing. Nothing here varies with it.
+    let surface: Analytics.Surface
+
     /// Called once a session is detected, so the caller can re-run whatever the
     /// user was doing — the result set differs by authentication, not just the
     /// fields on it.
@@ -55,7 +59,13 @@ struct SignInView: View {
             }
             .task { await model.start() }
             .onChange(of: model.isSignedIn) { _, signedIn in
-                if signedIn { onSignedIn() }
+                guard signedIn else { return }
+                // Opening this on a session that already exists is not a
+                // connection — that is the ordinary Settings path.
+                if model.openedWithSession != true {
+                    Analytics.capture(.facebookSessionConnected, ["surface": surface.rawValue])
+                }
+                onSignedIn()
             }
         }
     }
@@ -95,6 +105,11 @@ private struct LoginWebView: UIViewRepresentable {
 final class SignInModel: ObservableObject {
     @Published private(set) var isSignedIn = false
 
+    /// Whether a session already existed when this screen opened. Nil until
+    /// `start` has looked — defaulting to false would credit the sheet with a
+    /// connection made weeks ago.
+    @Published private(set) var openedWithSession: Bool?
+
     let webView: WKWebView
     private var pollTask: Task<Void, Never>?
 
@@ -112,7 +127,10 @@ final class SignInModel: ObservableObject {
     }
 
     func start() async {
-        isSignedIn = await SessionState.isSignedIn()
+        let existing = await SessionState.isSignedIn()
+        // Before the published flag, so `onChange` doesn't race it.
+        openedWithSession = existing
+        isSignedIn = existing
         guard !isSignedIn else { return }
         webView.load(URLRequest(url: URL(string: "https://www.facebook.com/login/")!))
         beginPolling()

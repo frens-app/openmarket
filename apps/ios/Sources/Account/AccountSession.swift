@@ -117,6 +117,9 @@ final class AccountSession: ObservableObject {
                 cache(viewer: message.viewer)
                 state = .signedIn(message.viewer)
                 if message.hasDevice { device = message.device }
+                // Link but no event and no properties: nobody signed in, a
+                // stored session was confirmed.
+                linkAnalyticsToAccount(message.viewer)
             case .failure(let error):
                 // Unauthenticated or a deleted account means the session is
                 // genuinely gone. Every other error leaves the local session
@@ -198,6 +201,10 @@ final class AccountSession: ObservableObject {
             cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
             if message.hasDevice { device = message.device }
+            // Before the event, so the signup lands on the person's profile
+            // rather than the anonymous one it replaces.
+            updateAnalyticsProfile(message.viewer)
+            Analytics.capture(message.isNewUser ? .accountCreated : .accountSignedIn)
             return message.isNewUser
         case .failure(let error):
             // On this call `unauthenticated` means "wrong code", not "your
@@ -226,6 +233,9 @@ final class AccountSession: ObservableObject {
         // finds the same device row rather than orphaning its Facebook and push
         // state behind a new one.
         device = nil
+        // Before the reset, or it lands on the new anonymous id.
+        Analytics.capture(.accountSignedOut)
+        Analytics.reset()
     }
 
     func deleteAccount() async throws {
@@ -237,6 +247,8 @@ final class AccountSession: ObservableObject {
         clearTokens()
         state = .signedOut
         device = nil
+        Analytics.capture(.accountDeleted)
+        Analytics.reset()
     }
 
     // MARK: - Facebook connection
@@ -256,6 +268,9 @@ final class AccountSession: ObservableObject {
     /// foreground retries rather than the app deciding it has already reported.
     func reportFacebookConnection(_ connected: Bool) async {
         guard isSignedIn else { return }
+        // Above the dedupe: the server only needs telling when it changes,
+        // where every later event wants it stamped on.
+        Analytics.register(["facebook_connected": connected])
         if let device, device.facebookConnected == connected { return }
         guard let headers = try? await authorizedHeaders() else { return }
 
@@ -306,7 +321,36 @@ final class AccountSession: ObservableObject {
         if let message = response.message {
             cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
+            // So `onboarding_completed` follows the account. Once per account:
+            // the flag only ever goes true.
+            updateAnalyticsProfile(message.viewer)
         }
+    }
+
+    // MARK: - Analytics
+
+    /// Points this session's events at the account, and nothing else.
+    ///
+    /// **No person properties, deliberately.** PostHog dedupes repeated property
+    /// writes against an in-memory hash that a relaunch clears, so passing them
+    /// here would bill a `$set` on every cold launch to restate a flag that
+    /// hasn't changed since signup. With none, an already-identified call is
+    /// free.
+    private func linkAnalyticsToAccount(_ viewer: Viewer) {
+        Analytics.identify(userID: viewer.id)
+    }
+
+    /// The link plus the profile, for the two moments the properties change.
+    ///
+    /// Keyed on the server's user id, not `InstallIdentity`, which a reinstall
+    /// wipes. No phone number — the user id answers everything it could.
+    /// `createdAt` is `setOnce` so a later sign-in can't move somebody's cohort.
+    private func updateAnalyticsProfile(_ viewer: Viewer) {
+        Analytics.identify(
+            userID: viewer.id,
+            properties: ["onboarding_completed": viewer.onboardingCompleted],
+            setOnce: viewer.createdAt.isEmpty ? [:] : ["account_created_at": viewer.createdAt]
+        )
     }
 
     // MARK: - Tokens

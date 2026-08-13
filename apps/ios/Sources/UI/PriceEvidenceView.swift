@@ -72,14 +72,34 @@ struct PriceEvidenceView: View {
                 .font(.headline)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(items) { comp in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { position, comp in
                         CompCard(comp: comp, footnote: footnote?(comp))
-                            .onTapGesture { selected = comp.listing }
+                            .onTapGesture { open(comp, at: position) }
                     }
                 }
                 .padding(.horizontal, 2)
             }
         }
+    }
+
+    /// The same `listing_opened` event as the browse surfaces — arriving from a
+    /// price check is a `surface`, not a different act. The one place in the app
+    /// where a *sold* listing can be opened, hence `is_sold`.
+    private func open(_ comp: MarketComp, at position: Int) {
+        selected = comp.listing
+        var properties: [String: Any] = [
+            "surface": Analytics.Surface.priceCheckEvidence.rawValue,
+            "position": position,
+            "listing_id": comp.listing.id,
+            "has_price": comp.listing.priceText != nil,
+            "is_sold": comp.isSold
+        ]
+        properties["title"] = Analytics.text(comp.listing.title)
+        // `comp.price` rather than re-parsing: this is the number the
+        // recommendation was computed from.
+        if let price = comp.price { properties["price"] = price }
+        properties["search_term"] = Analytics.text(searchTerm?.lowercased())
+        Analytics.capture(.listingOpened, properties)
     }
 
     private func soldFootnote(_ comp: MarketComp) -> String? {

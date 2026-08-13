@@ -230,6 +230,14 @@ struct PriceCheckView: View {
     private func recentRow(_ check: PastPriceCheck) -> some View {
         Button {
             selectedPast = check
+            // Whether the history is a feature or a list nobody opens.
+            var properties: [String: Any] = [
+                "position": model.recent.firstIndex { $0.id == check.id } ?? -1,
+                "has_price": check.price != nil,
+                "has_listing_copy": check.hasListing
+            ]
+            properties["identified_name"] = Analytics.text(check.label)
+            Analytics.capture(.priceCheckHistoryOpened, properties)
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {

@@ -198,7 +198,21 @@ final class DiscoverFeed: ObservableObject {
 
         reachedEnd = false
         deepestIndexSeen = -1
+        let startedAt = Date()
+        let isRefresh = hasLoaded
         await fill(citySlug: citySlug, session: session)
+
+        // Here rather than in the view, which is too late to tell "empty"
+        // from "walled". A handful per session at most: a launch, a refresh, a
+        // change of city.
+        Analytics.capture(.discoverLoaded, [
+            "count": listings.count,
+            "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000),
+            "is_anonymous": isAnonymous,
+            "reached_end": reachedEnd,
+            "is_refresh": isRefresh,
+            "radius_km": prefs.radiusKM
+        ])
     }
 
     /// Facebook's Marketplace feed for this place, cut to the user's radius.

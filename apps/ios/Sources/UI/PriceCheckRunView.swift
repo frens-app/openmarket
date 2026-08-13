@@ -280,6 +280,11 @@ struct PriceCheckRunView: View {
         if !model.comps.isEmpty {
             Button {
                 isShowingEvidence = true
+                // Whether anybody checks the working.
+                Analytics.capture(.priceCheckEvidenceOpened, [
+                    "comps_found": model.comps.count,
+                    "sold_count": model.sold.count
+                ])
             } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {

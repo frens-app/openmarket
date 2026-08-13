@@ -26,6 +26,12 @@
 // API_SCHEME = https
 // API_HOSTNAME = your-mac.your-tailnet.ts.net:8443
 
+// --- Analytics ------------------------------------------------------------
+// Debug points at the dev PostHog project but sends nothing. Turn capture on
+// while working on an event; flags work either way.
+//
+// POSTHOG_CAPTURE_EVENTS = YES
+
 // --- A deployed backend ---------------------------------------------------
 // Running the Debug app against Railway — useful for reproducing something that
 // only happens against real data, without archiving a Release build.
