@@ -3,7 +3,7 @@ import { DISCLAIMER } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Terms",
-  description: "Terms of use for the Open Market app and website.",
+  description: "Terms of use for the Openmarket app and website.",
   alternates: { canonical: "/terms" },
 };
 
@@ -14,8 +14,8 @@ export default function TermsPage() {
       <p className="mt-2 text-sm text-gray-500">Last updated August 12, 2026</p>
       <h2>The service</h2>
       <p>
-        Open Market is a browsing tool. Listings, seller profiles, messaging,
-        and transactions belong to the platforms where they live; Open Market
+        Openmarket is a browsing tool. Listings, seller profiles, messaging,
+        and transactions belong to the platforms where they live; Openmarket
         does not host listings, process payments, or participate in
         transactions. Price Check recommendations are informational, not offers
         or appraisals.

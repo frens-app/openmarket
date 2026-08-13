@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description: "How Open Market handles your data: on-device by default.",
+  description: "How Openmarket handles your data: on-device by default.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       <p className="mt-2 text-sm text-gray-500">Last updated August 12, 2026</p>
       <h2>The short version</h2>
       <p>
-        Open Market is built to keep your activity on your phone. Saves,
+        Openmarket is built to keep your activity on your phone. Saves,
         recently-viewed listings, search history, and your browsing session are
         stored on-device. We do not sell data, show ads, or track you across
         other apps.
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
         <li>Saved and recently-viewed listings, and your search history.</li>
         <li>
           Your Facebook session, if you sign in — it lives in the app&apos;s
-          browser on your phone and is never transmitted to Open Market&apos;s
+          browser on your phone and is never transmitted to Openmarket&apos;s
           servers.
         </li>
         <li>Your location, used to compute distances and travel times locally.</li>

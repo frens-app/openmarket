@@ -8,7 +8,7 @@
 
 The decision (Brian's call, 2026-08-12): mention Facebook softly — "the fastest
 way to browse local listings on Marketplace", "location filters that actually
-work" — never as an attack. The site frames Open Market as **superpowers for
+work" — never as an attack. The site frames Openmarket as **superpowers for
 buyers and sellers** on top of the marketplace their neighborhood already uses.
 
 Why not "Facebook Marketplace without the ads" as the headline:
@@ -26,13 +26,19 @@ Why not "Facebook Marketplace without the ads" as the headline:
 - **The comparison keywords are still captured** — in the guides, where
   mentioning Facebook Marketplace by name is editorial and nominative (see §3).
 
-House rules for copy, applied across the site:
+House rules for copy, applied across the site (the full language guide —
+pillars, taglines, the approved observation bank — is **`docs/messaging.md`**;
+that doc is canonical for wording, this one for where wording goes):
 
 - Headlines and H1s never contain "Facebook". Body copy may say "Marketplace"
   or "Facebook Marketplace" descriptively ("browse Marketplace listings",
   "message in the Facebook app").
 - Never disparage; the framing is "adds what's missing", not "fixes what's
   broken" — except in guides, where naming a concrete user pain is the point.
+  Where a pain is named outside guides, it is stated as a neutral observation
+  followed by our improvement ("Facebook Marketplace frequently shows
+  listings that are in different cities. We filter them down to the ones you
+  can actually reach.") — pattern and approved facts in `docs/messaging.md` §2.
 - The footer carries a standing disclaimer (independent app, trademarks belong
   to Meta, browsing uses your own account) on every page.
 - Every feature claim on the site maps to something verified in the app. The
@@ -42,16 +48,23 @@ House rules for copy, applied across the site:
 ## 2. Message architecture
 
 **Brand line:** *Local listings, with superpowers.*
+**Positioning line:** *A better way to marketplace.* (hero lead, footer, App
+Store subtitle — see `docs/messaging.md` §1)
+
+**Message pillars**, verbatim on every major surface: **filters that work**,
+**actually local listings**, **price comparisons**.
 
 **One-paragraph description** (kept consistent across the site, llms.txt, and
-future App Store copy — consistency is what LLMs and knowledge panels index):
+the App Store copy in `docs/app-store.md` — consistency is what LLMs and
+knowledge panels index):
 
-> Open Market is a free, native iOS app for browsing local Marketplace
-> listings. Buyers get location filters that actually work, distance and
-> travel time on every listing, instant saves and recently-viewed, and a
+> Openmarket is a free iOS app — a better way to browse local Marketplace
+> listings. Buyers get filters that work and actually local listings:
+> distance and travel time on every card, saves and recently-viewed, and a
 > filter that hides everything they've already seen — with sponsored posts
-> filtered out. Sellers get Price Check: an asking price backed by what's
-> listed and what's sold nearby, from a photo or a sentence.
+> filtered out. Sellers get price comparisons via Price Check: an
+> asking price backed by what's listed and what's sold nearby, from a photo
+> or a sentence.
 
 **Buyer superpowers** (order matters; strongest differentiators first):
 
@@ -68,9 +81,10 @@ future App Store copy — consistency is what LLMs and knowledge panels index):
 by nearby listed + sold comps, with ready-to-paste title/description.
 
 **Trust story** (the "how it works" section): your own account, messaging
-happens in the Facebook app, everything stays on your phone. This is
-simultaneously the honest description, the privacy pitch, and the legal
-positioning — one section doing three jobs.
+happens in the Facebook app. This is the honest description and the legal
+positioning — it is deliberately *not* a privacy pitch: privacy and storage
+mechanics are not the value proposition and stay out of marketing copy
+(`docs/messaging.md` §1).
 
 ## 3. Search strategy: Google, DuckDuckGo, and LLMs
 
@@ -80,7 +94,8 @@ ChatGPT learn the site exists.
 
 ### The keyword ladder
 
-1. **Brand** (wins immediately): "open market app", "openmarket so".
+1. **Brand** (wins immediately): "openmarket app", "openmarket ios",
+   "open market app" (the two-word spelling people will still type).
 2. **Category** (site pages): "local marketplace app iOS", "app to browse
    local listings", "price used items app". Landing, /buyers, /sellers carry
    these.

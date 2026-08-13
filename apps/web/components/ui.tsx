@@ -94,7 +94,7 @@ export function SectionHeading({
 }
 
 export function CtaBlock({
-  title = "Get Open Market",
+  title = "Get Openmarket",
   body = "Free on iOS. Search, save, and price-check local listings in seconds.",
 }: {
   title?: string;

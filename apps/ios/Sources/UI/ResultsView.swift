@@ -254,7 +254,7 @@ struct ResultsView: View {
                 .allowsHitTesting(surface == .search)
                 .accessibilityHidden(surface != .search)
         }
-        .navigationTitle("Open Market")
+        .navigationTitle("Openmarket")
         .navigationBarTitleDisplayMode(.inline)
         // Pinned under the title rather than left to `.automatic`, which on
         // iOS 26 floats it at the bottom of the screen. Searching is the

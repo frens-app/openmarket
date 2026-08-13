@@ -70,7 +70,7 @@ struct TravelTimeRow: View {
                 )
             } else if location.isDenied {
                 LocationPrompt(
-                    title: "Location is off for Open Market",
+                    title: "Location is off for Openmarket",
                     subtitle: "Turn it on in Settings to see how long it takes to get here.",
                     action: {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }

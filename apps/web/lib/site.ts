@@ -1,10 +1,10 @@
 export const SITE = {
-  name: "Open Market",
+  name: "Openmarket",
   domain: "openmarket.so",
   url: "https://openmarket.so",
-  title: "Open Market — local listings, with superpowers",
+  title: "Openmarket — local listings, with superpowers",
   description:
-    "Open Market is a fast, native iOS app for browsing local Marketplace listings: location filters that actually work, real distances and travel times on every listing, instant saves, and honest price data for sellers. No sponsored posts.",
+    "A better way to marketplace: filters that work, actually local listings with distance and travel time on every card, and price comparisons for sellers. Free on iOS.",
   // Placeholder until the App Store listing is live — swap for the real
   // https://apps.apple.com/... URL (or a TestFlight link in the interim).
   downloadUrl: "https://apps.apple.com/app/PLACEHOLDER",
@@ -12,4 +12,4 @@ export const SITE = {
 } as const;
 
 export const DISCLAIMER =
-  "Open Market is an independent app. It is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Marketplace are trademarks of Meta Platforms, Inc. Listings are viewed with your own account and messaging happens in the Facebook app.";
+  "Openmarket is an independent app. It is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Marketplace are trademarks of Meta Platforms, Inc. Listings are viewed with your own account and messaging happens in the Facebook app.";

@@ -1,4 +1,4 @@
-# Open Market
+# Openmarket
 
 A native iOS app for browsing local Facebook Marketplace listings. SwiftUI
 renders everything the user sees; a hidden `WKWebView` is the data layer. Any
@@ -876,6 +876,8 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/backend-platform.md` | The platform evaluation behind it: why Postgres, why Connect rather than gRPC, and the listing-schema questions still open |
 | `docs/data-model.md` | Proposed schema for storing listings across devices |
 | `docs/status.md` | What's built and verified, and the open gaps |
+| `docs/messaging.md` | The product language: the three pillars, taglines, and the observation-then-improvement pattern for talking about Marketplace |
+| `docs/app-store.md` | App Store listing copy, ready to paste, with the review-risk notes |
 | `docs/surface-strategy.md` | Mobile vs. web trade-off, options, and recommendation |
 | `docs/mobile-location-radius-notes.md` | Why mobile's location and radius don't behave as the URL implies |
 | `docs/filter-parameters.md` | Every sort/filter parameter, which surface honours it, and what's measured |

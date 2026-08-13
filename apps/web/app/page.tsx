@@ -17,12 +17,12 @@ import { SITE } from "@/lib/site";
 
 const FAQ: { q: string; a: string }[] = [
   {
-    q: "What is Open Market?",
-    a: "Open Market is a free, native iOS app for browsing local Marketplace listings. It adds the things power buyers and sellers wish they had: location filters that actually work, distance and travel time on every listing, instant saves and recently-viewed, a filter that hides listings you've already opened, and a price-check tool that tells sellers what similar items list and sell for nearby.",
+    q: "What is Openmarket?",
+    a: "Openmarket is a free iOS app — a better way to browse the local listings on Marketplace. It adds the things power buyers and sellers wish they had: filters that work, actually local listings with distance and travel time on every card, saves and recently-viewed, a filter that hides listings you've already opened, and price comparisons that tell sellers what similar items list and sell for nearby.",
   },
   {
-    q: "Is Open Market affiliated with Facebook or Meta?",
-    a: "No. Open Market is an independent app. You browse Facebook Marketplace listings with your own account, and when you want to message a seller or make an offer, the app hands you to the Facebook app — deals stay where sellers already are.",
+    q: "Is Openmarket affiliated with Facebook or Meta?",
+    a: "No. Openmarket is an independent app. You browse Facebook Marketplace listings with your own account, and when you want to message a seller or make an offer, the app hands you to the Facebook app — deals stay where sellers already are.",
   },
   {
     q: "Do I need a Facebook account?",
@@ -30,15 +30,11 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How do I message a seller?",
-    a: "Tap \"View on Facebook\" on any listing and it opens that exact listing in the Facebook app, where you can message, save, or make an offer with your own account. Open Market never sends messages for you.",
+    a: "Tap \"View on Facebook\" on any listing and it opens that exact listing in the Facebook app, where you can message, save, or make an offer with your own account. Openmarket never sends messages for you.",
   },
   {
-    q: "Where does my data live?",
-    a: "On your phone. Saves, recently viewed, and search history are stored on-device. Your Facebook session stays inside the app's browser and is never sent to Open Market's servers.",
-  },
-  {
-    q: "Is Open Market on Android or the web?",
-    a: "Not yet — Open Market is iOS-only for now.",
+    q: "Is Openmarket on Android or the web?",
+    a: "Not yet — Openmarket is iOS-only for now.",
   },
 ];
 
@@ -82,10 +78,10 @@ export default function HomePage() {
               <span className="text-accent">with superpowers.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-gray-300">
-              Open Market is a fast, native iOS app for browsing Marketplace
-              listings near you. Location filters that actually work. Distance
-              and travel time on every listing. Saves that load instantly. And
-              for sellers — prices backed by what actually sells nearby.
+              A better way to marketplace. Filters that work. Actually local
+              listings, with distance and travel time on every card. And for
+              sellers — price comparisons backed by what actually sells
+              nearby.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a
@@ -101,13 +97,11 @@ export default function HomePage() {
                 See what it does
               </Link>
             </div>
-            <p className="mt-5 text-sm text-gray-500">
-              Free · iOS · No sponsored posts, ever
-            </p>
+            <p className="mt-5 text-sm text-gray-500">Free · iOS</p>
           </div>
           <PhoneFrame
             src={searchShot}
-            alt="Open Market search results for “desk” showing prices, price drops, and the city and distance on every listing"
+            alt="Openmarket search results for “desk” showing prices, price drops, and the city and distance on every listing"
             priority
           />
         </div>
@@ -120,10 +114,10 @@ export default function HomePage() {
           takes to get there.
         </SectionHeading>
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature icon="📍" title="Location filters that actually work">
-            Pick a place and a radius, and results respect it. Every listing
-            card shows its city and real distance from you — no more mystery
-            items from two hours away.
+          <Feature icon="📍" title="Filters that work">
+            Facebook Marketplace frequently shows listings that are in
+            different cities. We filter them down to the ones you can actually
+            reach — every card shows its city and real distance from you.
           </Feature>
           <Feature icon="🚗" title="Travel time to every listing">
             Walking, driving, and transit estimates on the listing itself, so
@@ -133,13 +127,13 @@ export default function HomePage() {
             One toggle hides everything you&apos;ve already opened — a filter
             Marketplace doesn&apos;t have. Stop re-scrolling the same couches.
           </Feature>
-          <Feature icon="🔖" title="Saves that are really yours">
-            Saved listings live on your phone and load instantly — even offline,
-            even if you&apos;re signed out. Your home screen is what you kept.
+          <Feature icon="🔖" title="A shortlist that sticks">
+            Save from any listing and keep everything you&apos;re deciding
+            between in one place. Your home screen is what you kept.
           </Feature>
           <Feature icon="🕘" title="Recently viewed, always there">
-            Every listing you open is kept on-device. Go back to “that desk from
-            yesterday” in one tap, with zero loading.
+            Every listing you open is kept. Go back to “that desk from
+            yesterday” in one tap.
           </Feature>
           <Feature icon="🧹" title="No sponsored posts">
             Sponsored cards are filtered out of every feed. What you see is
@@ -153,11 +147,12 @@ export default function HomePage() {
               Filters you can trust
             </h3>
             <p className="mt-4 text-lg leading-8 text-gray-400">
-              Sort by newest, nearest, or price. Set the place and distance
-              together. And flip on{" "}
+              Marketplace&apos;s own distance setting doesn&apos;t limit
+              results — a search set to 5 miles can return listings 60 miles
+              away. Here, place and radius travel together and are enforced on
+              your device. Sort by newest, nearest, or price, and flip on{" "}
               <strong className="text-white">Only new listings</strong> to hide
-              anything you&apos;ve already seen — applied on your device, because
-              no marketplace offers it.
+              anything you&apos;ve already seen.
             </p>
             <p className="mt-4 text-lg leading-8 text-gray-400">
               Know before you go: every listing carries an honest approximate
@@ -169,7 +164,7 @@ export default function HomePage() {
             <div className="flex justify-center">
               <PhoneFrame
                 src={filtersShot}
-                alt="Open Market filter sheet with sort options, location with radius, an Only-new-listings toggle, and delivery options"
+                alt="Openmarket filter sheet with sort options, location with radius, an Only-new-listings toggle, and delivery options"
               />
             </div>
             <ShotCard
@@ -193,7 +188,7 @@ export default function HomePage() {
             <div className="flex justify-center gap-5">
               <PhoneFrame
                 src={priceCheckShot}
-                alt="Open Market Price Check asking “What are you selling?” with photo and text input"
+                alt="Openmarket Price Check asking “What are you selling?” with photo and text input"
                 className="translate-y-6"
               />
               <PhoneFrame
@@ -205,13 +200,15 @@ export default function HomePage() {
             <div>
               <ul className="space-y-6 text-lg leading-8 text-gray-400">
                 <li>
-                  <strong className="block text-white">Real comps, not guesses.</strong>
-                  Price Check reads similar listings near you — including ones
-                  that just sold — and tells you the number that moves.
+                  <strong className="block text-white">
+                    Real price comparisons, not guesses.
+                  </strong>
+                  Price Check compares similar listings near you — including
+                  ones that just sold — and tells you the number that moves.
                 </li>
                 <li>
                   <strong className="block text-white">A photo is enough.</strong>
-                  Point the camera at the thing. Open Market figures out what it
+                  Point the camera at the thing. Openmarket figures out what it
                   is and runs the search for you.
                 </li>
                 <li>
@@ -228,27 +225,23 @@ export default function HomePage() {
       {/* How it works / honesty section */}
       <section className="mx-auto max-w-6xl px-5 py-20">
         <SectionHeading eyebrow="How it works" title="Your account. Your phone. Your deals.">
-          Open Market is an independent app that works with the marketplace your
+          Openmarket is an independent app that works with the marketplace your
           neighborhood already uses.
         </SectionHeading>
-        <div className="mt-14 grid gap-5 sm:grid-cols-3">
+        <div className="mx-auto mt-14 grid max-w-3xl gap-5 sm:grid-cols-2">
           <Feature icon="🪪" title="Browse with your own account">
-            Sign in on Facebook&apos;s own page, inside the app. Open Market
+            Sign in on Facebook&apos;s own page, inside the app. Openmarket
             never sees your password and works signed-out too.
           </Feature>
           <Feature icon="💬" title="Message in the Facebook app">
             Tap through to the real listing to chat, offer, or pay. Sellers
             never have to leave the platform they already trust.
           </Feature>
-          <Feature icon="🔒" title="Everything stays on-device">
-            Saves, history, and your session live on your phone — not on our
-            servers. There&apos;s nothing to leak and nothing to sell.
-          </Feature>
         </div>
         <div className="mt-10 flex justify-center">
           <PhoneFrame
             src={homeShot}
-            alt="Open Market home screen with Recently viewed and a Discover feed of listings within 10 miles of San Francisco"
+            alt="Openmarket home screen with Recently viewed and a Discover feed of listings within 10 miles of San Francisco"
           />
         </div>
       </section>
