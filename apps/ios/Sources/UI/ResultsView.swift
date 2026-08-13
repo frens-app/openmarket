@@ -351,27 +351,24 @@ struct ResultsView: View {
     private static let recentSearchShortcutCount = 6
 
     private var recentSearchRail: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Recent searches")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(recentSearchShortcuts, id: \.self) { term in
-                        Button {
-                            replaySearch(term)
-                        } label: {
-                            Label(term, systemImage: "arrow.clockwise")
-                                .font(.subheadline)
-                                .lineLimit(1)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color(.secondarySystemFill), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.primary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(recentSearchShortcuts, id: \.self) { term in
+                    Button {
+                        replaySearch(term)
+                    } label: {
+                        Label(term, systemImage: "arrow.clockwise")
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(.secondarySystemFill), in: Capsule())
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
                 }
-                .padding(.horizontal, 12)
             }
+            .padding(.horizontal, 12)
         }
     }
 
