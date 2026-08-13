@@ -77,6 +77,12 @@ struct OpenMarketApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task {
+                    // A failed launch-time check keeps the local account signed
+                    // in. Foregrounding is the natural retry point once the
+                    // network or server has recovered.
+                    if case .signedInOffline = account.state {
+                        await account.restore()
+                    }
                     let connected = await SessionState.isSignedIn()
                     store.setSession(connected ? .authed : .unauthed)
                     // The same check, reported upward. This is the one place
@@ -151,7 +157,7 @@ struct RootView: View {
         // the session landed and tore the flow away mid-flight, straight past
         // the Facebook, location and notification steps to the home screen.
         .onChange(of: account.state) { _, state in
-            if case .signedIn(let viewer) = state {
+            if let viewer = state.viewer {
                 // A different account than the one this install last saw means
                 // a different person is holding the phone, and the answers that
                 // are install-shaped were the last person's. Signing back into
@@ -188,7 +194,7 @@ struct RootView: View {
             // signed out by an expired session — starts the flow rather than
             // dropping the user somewhere with no account.
             isOnboarding = true
-        case .signedIn:
+        case .signedIn, .signedInOffline:
             // First decision after launch settles it either way; after that this
             // can only open.
             if isOnboarding == nil {

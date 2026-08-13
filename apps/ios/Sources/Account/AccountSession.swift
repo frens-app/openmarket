@@ -1,6 +1,7 @@
 import Connect
 import Foundation
 import OpenMarketProtos
+import SwiftProtobuf
 import SwiftUI
 
 /// The signed-in account: tokens, the viewer, and the two calls that get you
@@ -18,6 +19,43 @@ final class AccountSession: ObservableObject {
         case unknown
         case signedOut
         case signedIn(Viewer)
+        /// Credentials still exist, but the server could not be reached to
+        /// validate them. This is signed in from the UI's point of view: an
+        /// outage must not turn into a logout. The optional viewer is absent
+        /// only for sessions created by an older app version, before the viewer
+        /// started being cached alongside the tokens.
+        case signedInOffline(Viewer?)
+
+        var isSignedIn: Bool {
+            switch self {
+            case .signedIn, .signedInOffline:
+                return true
+            case .unknown, .signedOut:
+                return false
+            }
+        }
+
+        var viewer: Viewer? {
+            switch self {
+            case .signedIn(let viewer):
+                return viewer
+            case .signedInOffline(let viewer):
+                return viewer
+            case .unknown, .signedOut:
+                return nil
+            }
+        }
+
+        /// Keeps the policy independently testable: only an authoritative
+        /// rejection ends a stored session. A transport/server failure merely
+        /// makes the session temporarily unverified.
+        static func afterFailedRestore(sessionIsInvalid: Bool, cachedViewer: Viewer?) -> State {
+            sessionIsInvalid ? .signedOut : .signedInOffline(cachedViewer)
+        }
+
+        static func restoreInvalidatesSession(for code: Code) -> Bool {
+            code == .unauthenticated || code == .notFound
+        }
     }
 
     static let shared = AccountSession()
@@ -40,6 +78,7 @@ final class AccountSession: ObservableObject {
         static let accessToken = "access_token"
         static let refreshToken = "refresh_token"
         static let accessExpiry = "access_token_expiry"
+        static let viewer = "viewer"
     }
 
     /// Refresh this far before the token actually expires, so a call that is
@@ -52,43 +91,57 @@ final class AccountSession: ObservableObject {
     private var refreshTask: Task<Void, Error>?
 
     var isSignedIn: Bool {
-        if case .signedIn = state { return true }
-        return false
+        state.isSignedIn
     }
 
     // MARK: - Lifecycle
 
     /// Decides which screen the app opens on.
     ///
-    /// A stored refresh token is not proof of a live session — it can have been
-    /// revoked from another device, or the account deleted — so this asks the
-    /// server rather than trusting the keychain.
+    /// A stored refresh token is checked with the server whenever possible: it
+    /// can have been revoked from another device, or the account deleted. When
+    /// the server cannot be reached, though, the local session remains signed
+    /// in and is checked again on a later foreground rather than presenting an
+    /// outage as a logout.
     func restore() async {
         guard Keychain.get(Key.refreshToken) != nil else {
             state = .signedOut
             return
         }
+        let cachedViewer = cachedViewer()
         do {
             let headers = try await authorizedHeaders()
             let response = await users.getViewer(request: GetViewerRequest(), headers: headers)
             switch response.result {
             case .success(let message):
+                cache(viewer: message.viewer)
                 state = .signedIn(message.viewer)
                 if message.hasDevice { device = message.device }
             case .failure(let error):
                 // Unauthenticated or a deleted account means the session is
-                // genuinely gone. A network failure does not, but there is
-                // nothing to show without a viewer either, so both land on the
-                // login screen — the difference is that only the first one
-                // clears the tokens.
-                if error.code == .unauthenticated || error.code == .notFound {
+                // genuinely gone. Every other error leaves the local session
+                // intact: the server being unavailable is not a logout event.
+                let sessionIsInvalid = State.restoreInvalidatesSession(for: error.code)
+                if sessionIsInvalid {
                     clearTokens()
                 }
-                state = .signedOut
+                state = State.afterFailedRestore(
+                    sessionIsInvalid: sessionIsInvalid,
+                    cachedViewer: cachedViewer
+                )
             }
         } catch {
-            if case APIError.unauthenticated = error { clearTokens() }
-            state = .signedOut
+            let sessionIsInvalid: Bool
+            if case APIError.unauthenticated = error {
+                sessionIsInvalid = true
+                clearTokens()
+            } else {
+                sessionIsInvalid = false
+            }
+            state = State.afterFailedRestore(
+                sessionIsInvalid: sessionIsInvalid,
+                cachedViewer: cachedViewer
+            )
         }
     }
 
@@ -142,6 +195,7 @@ final class AccountSession: ObservableObject {
                 refreshToken: message.refreshToken,
                 expiresIn: TimeInterval(message.accessTokenExpiresInSeconds)
             )
+            cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
             if message.hasDevice { device = message.device }
             return message.isNewUser
@@ -250,6 +304,7 @@ final class AccountSession: ObservableObject {
         guard let headers = try? await authorizedHeaders() else { return }
         let response = await users.updateViewer(request: request, headers: headers)
         if let message = response.message {
+            cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
         }
     }
@@ -322,9 +377,22 @@ final class AccountSession: ObservableObject {
         Keychain.set(String(Date().timeIntervalSince1970 + lifetime), for: Key.accessExpiry)
     }
 
+    private func cache(viewer: Viewer) {
+        guard let data = try? viewer.serializedData() else { return }
+        Keychain.set(data.base64EncodedString(), for: Key.viewer)
+    }
+
+    private func cachedViewer() -> Viewer? {
+        guard let encoded = Keychain.get(Key.viewer),
+              let data = Data(base64Encoded: encoded)
+        else { return nil }
+        return try? Viewer(serializedBytes: data)
+    }
+
     private func clearTokens() {
         Keychain.delete(Key.accessToken)
         Keychain.delete(Key.refreshToken)
         Keychain.delete(Key.accessExpiry)
+        Keychain.delete(Key.viewer)
     }
 }

@@ -140,3 +140,14 @@ targets:
         # simulator wants anyway.
         CODE_SIGNING_ALLOWED: "YES"
         SWIFT_VERSION: "5.0"
+
+  OpenMarketTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: OpenMarket
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: lol.frens.openmarket.tests
+        GENERATE_INFOPLIST_FILE: "YES"

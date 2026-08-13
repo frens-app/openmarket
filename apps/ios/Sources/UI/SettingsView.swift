@@ -171,11 +171,11 @@ struct SettingsView: View {
         }
     }
 
-    /// The signed-in number, formatted for reading. Falls back rather than
-    /// showing an empty row: `state` can only be `.signedIn` here, but a
-    /// crash-on-assumption in Settings would be a poor trade for one string.
+    /// The signed-in number, formatted for reading. A session from an older app
+    /// version may not have a cached viewer yet, so an offline launch has no
+    /// number to show even though the account remains signed in.
     private var accountPhoneNumber: String {
-        guard case .signedIn(let viewer) = account.state else { return "—" }
+        guard let viewer = account.state.viewer else { return "Unavailable offline" }
         return viewer.phoneNumber
     }
 
