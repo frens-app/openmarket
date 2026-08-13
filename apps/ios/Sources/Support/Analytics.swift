@@ -118,7 +118,6 @@ enum Analytics {
         case loginWallHit = "login_wall_hit"
 
         case filtersApplied = "filters_applied"
-        case filtersReset = "filters_reset"
         case distanceChanged = "distance_changed"
         case locationChanged = "location_changed"
 

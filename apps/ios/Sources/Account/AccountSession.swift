@@ -117,10 +117,9 @@ final class AccountSession: ObservableObject {
                 cache(viewer: message.viewer)
                 state = .signedIn(message.viewer)
                 if message.hasDevice { device = message.device }
-                // Identify but no event: nobody signed in, a stored session was
-                // confirmed. Without this every returning launch would file
-                // against a fresh anonymous id.
-                identifyToAnalytics(message.viewer)
+                // Link but no event and no properties: nobody signed in, a
+                // stored session was confirmed.
+                linkAnalyticsToAccount(message.viewer)
             case .failure(let error):
                 // Unauthenticated or a deleted account means the session is
                 // genuinely gone. Every other error leaves the local session
@@ -204,7 +203,7 @@ final class AccountSession: ObservableObject {
             if message.hasDevice { device = message.device }
             // Before the event, so the signup lands on the person's profile
             // rather than the anonymous one it replaces.
-            identifyToAnalytics(message.viewer)
+            updateAnalyticsProfile(message.viewer)
             Analytics.capture(message.isNewUser ? .accountCreated : .accountSignedIn)
             return message.isNewUser
         case .failure(let error):
@@ -324,16 +323,29 @@ final class AccountSession: ObservableObject {
             state = .signedIn(message.viewer)
             // So `onboarding_completed` follows the account. Once per account:
             // the flag only ever goes true.
-            identifyToAnalytics(message.viewer)
+            updateAnalyticsProfile(message.viewer)
         }
     }
 
     // MARK: - Analytics
 
+    /// Points this session's events at the account, and nothing else.
+    ///
+    /// **No person properties, deliberately.** PostHog dedupes repeated property
+    /// writes against an in-memory hash that a relaunch clears, so passing them
+    /// here would bill a `$set` on every cold launch to restate a flag that
+    /// hasn't changed since signup. With none, an already-identified call is
+    /// free.
+    private func linkAnalyticsToAccount(_ viewer: Viewer) {
+        Analytics.identify(userID: viewer.id)
+    }
+
+    /// The link plus the profile, for the two moments the properties change.
+    ///
     /// Keyed on the server's user id, not `InstallIdentity`, which a reinstall
     /// wipes. No phone number — the user id answers everything it could.
     /// `createdAt` is `setOnce` so a later sign-in can't move somebody's cohort.
-    private func identifyToAnalytics(_ viewer: Viewer) {
+    private func updateAnalyticsProfile(_ viewer: Viewer) {
         Analytics.identify(
             userID: viewer.id,
             properties: ["onboarding_completed": viewer.onboardingCompleted],

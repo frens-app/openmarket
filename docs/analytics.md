@@ -122,6 +122,12 @@ onboarding funnel intact across the step that creates the account.
 `reset()` on sign-out and delete, so the next person on a shared phone starts a
 new anonymous id rather than inheriting the last one's profile.
 
+**Person properties are only sent when they change** — at signup and when
+onboarding completes. A session restored at launch links the id and passes no
+properties, because PostHog dedupes repeated property writes against an
+in-memory hash that a relaunch clears: passing them there billed a `$set` on
+every cold launch to restate a flag that had not moved since signup.
+
 ### Super properties
 
 Stamped on every event, because almost every question wants to break down by
@@ -220,7 +226,6 @@ and the only one where a *sold* listing can be opened.
 | Event | Fired at | Properties |
 | --- | --- | --- |
 | `filters_applied` | filter-sheet dismissal, with a diff | `source`, `changed[]`, `sort`, `delivery`, `radius_km`, `has_min_price`, `has_max_price`, `condition_count`, `hide_viewed` |
-| `filters_reset` | the Reset button | — |
 | `distance_changed` | each distance pill | `radius_km`, `previous_radius_km`, `is_unlimited` |
 | `location_changed` | `Preferences.setResolvedPlace` | `source`, `segment_kind`, `is_verified`, `is_first`, `radius_km` |
 
@@ -234,6 +239,11 @@ one out-of-sheet instance is the "Show viewed" undo under an emptied grid, which
 sends `filters_applied` with `source: results_notice`; that is the most
 interesting instance of the event, because it is somebody reversing a filter that
 just took their screen away.
+
+Reset has no event of its own. It only moves filters, and the `filters_applied`
+that follows on dismissal names every one it moved — a reset reads as a diff
+whose result is all-default. `radius_km` is in the snapshot for exactly this
+reason: without it, resetting a radius and nothing else would have been silent.
 
 Distance is the exception to the batching rule: each pill is a complete decision
 applied immediately, and the sequence is the point — widening twice in a row is

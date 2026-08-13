@@ -76,6 +76,9 @@ struct FilterSheet: View {
         var conditions: [SearchQuery.Condition]
         var citySlug: String?
         var hideViewed: Bool
+        /// Tracked for the diff but absent from `requiresRerun`: distance is
+        /// applied on this device, and `ResultsView` already watches it.
+        var radiusKM: Int
 
         /// The subset that goes back to Facebook — compared separately from
         /// `==` so a local-only toggle records without costing a page load.
@@ -98,6 +101,7 @@ struct FilterSheet: View {
             if conditions != other.conditions { changed.append("condition") }
             if citySlug != other.citySlug { changed.append("location") }
             if hideViewed != other.hideViewed { changed.append("hide_viewed") }
+            if radiusKM != other.radiusKM { changed.append("distance") }
             return changed
         }
     }
@@ -105,7 +109,7 @@ struct FilterSheet: View {
     private var current: FilterSnapshot {
         FilterSnapshot(sort: prefs.sort, delivery: prefs.delivery,                        minPrice: prefs.minPrice, maxPrice: prefs.maxPrice,
                        conditions: prefs.conditions, citySlug: prefs.locationSlug,
-                       hideViewed: prefs.hideViewed)
+                       hideViewed: prefs.hideViewed, radiusKM: prefs.radiusKM)
     }
 
     var body: some View {
@@ -139,10 +143,11 @@ struct FilterSheet: View {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    // No event of its own: Reset only moves filters, and the
+                    // `filters_applied` on dismissal carries every one it moved.
                     Button("Reset") {
                         prefs.resetFilters()
                         syncPriceText()
-                        Analytics.capture(.filtersReset)
                     }
                     .disabled(!prefs.hasNonDefaultFilters)
                 }
