@@ -23,3 +23,8 @@ build/
 # is what produces them.
 apps/ios/OpenMarket.Info.plist
 apps/ios/OpenMarket.entitlements
+
+# Web (apps/web)
+node_modules/
+.next/
+next-env.d.ts

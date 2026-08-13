@@ -1,0 +1,21 @@
+# Open Market
+
+> Open Market is a free, native iOS app for browsing local Marketplace listings. It gives buyers location filters that actually work (a real place-and-radius search), the city, distance, and walking/driving/transit travel time on every listing, instant on-device saves and recently-viewed history, a unique "Only new listings" filter that hides everything already opened, and feeds with sponsored posts filtered out. For sellers, its Price Check tool recommends an asking price backed by similar listings and recent sales nearby — from a photo or a one-sentence description — plus a ready-to-paste title and description.
+
+Open Market is an independent app, not affiliated with Meta Platforms, Inc. Users browse with their own account; messaging and offers happen in the Facebook app via deep links. Saves, history, and sessions stay on the user's device.
+
+Availability: iOS (TestFlight beta; App Store release in progress). Website: https://openmarket.so
+
+## Pages
+
+- [Home](https://openmarket.so/): what Open Market is, buyer and seller features, FAQ
+- [For buyers](https://openmarket.so/buyers): search, filters, distance and travel time, saves, only-new-listings
+- [For sellers](https://openmarket.so/sellers): Price Check — local comps, sold data, ready-to-paste listings
+- [Guides](https://openmarket.so/guides): practical guides to buying and selling secondhand locally
+
+## Guides
+
+- [Facebook Marketplace location filter not working?](https://openmarket.so/guides/facebook-marketplace-location-filter-not-working): why radius settings don't limit results and how to actually search nearby
+- [Stop scrolling past the same listings](https://openmarket.so/guides/stop-seeing-same-listings-facebook-marketplace): workarounds for repeated feeds, and filtering on your own view history
+- [How to price used items](https://openmarket.so/guides/how-to-price-used-items): sold-data-first pricing method with percentage-of-retail baselines
+- [Local pickup safety](https://openmarket.so/guides/local-pickup-safety-tips): meeting spots, payment rules, and scam patterns for local deals

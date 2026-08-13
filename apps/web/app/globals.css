@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #0a84ff;
+  --color-ink: #05060a;
+  --color-panel: #0d0f15;
+  --color-card: #12151d;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink);
+  color: #f4f5f7;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(10, 132, 255, 0.35);
+}
+
+/* Prose styling for guide articles — no plugin needed. */
+.prose-guide h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  color: #fff;
+}
+
+.prose-guide h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.prose-guide p {
+  margin-bottom: 1rem;
+  line-height: 1.75;
+  color: rgb(212 214 220);
+}
+
+.prose-guide ul,
+.prose-guide ol {
+  margin: 0 0 1rem 1.25rem;
+  line-height: 1.75;
+  color: rgb(212 214 220);
+}
+
+.prose-guide ul {
+  list-style: disc;
+}
+
+.prose-guide ol {
+  list-style: decimal;
+}
+
+.prose-guide li {
+  margin-bottom: 0.35rem;
+}
+
+.prose-guide strong {
+  color: #fff;
+}
+
+.prose-guide a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
