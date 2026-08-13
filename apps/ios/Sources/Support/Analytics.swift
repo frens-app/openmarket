@@ -18,6 +18,23 @@ enum Analytics {
     /// posted to the EU host is rejected.
     private static let hostname = API.bundleString("POSTHOG_HOSTNAME") ?? "us.i.posthog.com"
 
+    /// Whether events are sent, separately from whether the SDK runs at all.
+    ///
+    /// Off in Debug. The SDK still starts, so feature flags and remote config
+    /// work — this suppresses capture only, which is the difference between it
+    /// and an empty key.
+    ///
+    /// Parsed from a string rather than read as a `Bool`: plist variable
+    /// substitution produces `"NO"`, not `false`, so `bool(forInfoDictionaryKey:)`
+    /// would see a non-empty string and call it true. Absent means yes, so a
+    /// setting somebody deletes can't silently kill production analytics.
+    static let capturesEvents: Bool = {
+        guard let raw = API.bundleString("POSTHOG_CAPTURE_EVENTS")?.uppercased() else { return true }
+        return !["NO", "FALSE", "0"].contains(raw)
+    }()
+
+    /// Whether the SDK is configured at all. Not the same question as
+    /// `capturesEvents` — a build can run PostHog for flags and send nothing.
     static var isEnabled: Bool { projectToken != nil }
 
     // MARK: - Lifecycle
@@ -39,12 +56,27 @@ enum Analytics {
         // so installs that never sign up aren't billable profiles.
         config.personProfiles = .identifiedOnly
 
+        // The SDK's own switch, rather than a guard of ours in `capture`. It
+        // suppresses every capture path including PostHog's own lifecycle
+        // events, and `PostHogRemoteConfig` does not consult it — so flags and
+        // remote config still load, which is the whole point of having this
+        // separately from an empty key.
+        //
+        // Set on the config and never through `optIn()`/`optOut()`: those
+        // persist to storage and would then win over this on every later
+        // launch, which is a setting that ignores the build it is in.
+        //
+        // One consequence worth knowing: `identify` is suppressed too, so flags
+        // in a non-capturing build evaluate against the anonymous id rather
+        // than the account.
+        config.optOut = !capturesEvents
+
         #if DEBUG
         config.debug = true
         #endif
 
         PostHogSDK.shared.setup(config)
-        log.info("analytics on → \(hostname, privacy: .public)")
+        log.info("analytics \(capturesEvents ? "on" : "flags only", privacy: .public) → \(hostname, privacy: .public)")
     }
 
     /// The server's user id, not the install id, so one person on two phones is

@@ -38,6 +38,23 @@ final class AnalyticsTests: XCTestCase {
         }
     }
 
+    // MARK: - Configuration
+
+    /// Tests run under Debug, which ships `POSTHOG_CAPTURE_EVENTS = NO`.
+    ///
+    /// Asserted rather than assumed, because the failure is silent in both
+    /// directions: a `YES` that reaches this file means every CI run and every
+    /// simulator session is writing events, and nothing else would say so.
+    func testDebugBuildsDoNotCaptureEvents() {
+        XCTAssertFalse(Analytics.capturesEvents)
+    }
+
+    /// And the SDK is still configured, which is the point of the split — a
+    /// non-capturing build can still evaluate feature flags.
+    func testAnalyticsIsStillConfiguredWhileNotCapturing() {
+        XCTAssertTrue(Analytics.isEnabled)
+    }
+
     // MARK: - Free text
 
     /// An empty property is a value in PostHog: it makes its own breakdown row

@@ -44,6 +44,12 @@ APNS_ENVIRONMENT = development
 POSTHOG_API_KEY = phc_qBzA8BujCc2emf9qgM8K8dgD9SX4ctdpGUTtm9qPjX2T
 POSTHOG_HOSTNAME = us.i.posthog.com
 
+// No events from dev builds. The SDK still starts against the key above, so
+// feature flags and remote config keep working — this suppresses capture only,
+// which is the difference between it and an empty key. Set YES in
+// Debug.local.xcconfig to watch events fire while working on them.
+POSTHOG_CAPTURE_EVENTS = NO
+
 // Optional per-machine overrides, gitignored. Missing is fine — the values
 // above stand. Copy Debug.example.xcconfig to get started.
 #include? "Debug.local.xcconfig"

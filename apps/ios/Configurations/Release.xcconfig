@@ -35,4 +35,7 @@ APNS_ENVIRONMENT = production
 POSTHOG_API_KEY = phc_mkBAGeZk2epfb9wbuTCeDcHrfeDAsNvjCXjxQuS8bJYV
 POSTHOG_HOSTNAME = us.i.posthog.com
 
+// The build that actually reports. Debug ships NO.
+POSTHOG_CAPTURE_EVENTS = YES
+
 #include? "Release.local.xcconfig"

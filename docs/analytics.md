@@ -80,17 +80,41 @@ read at launch.
 | --- | --- | --- |
 | `POSTHOG_API_KEY` | the **dev** project's `phc_…` key | the **production** project's key |
 | `POSTHOG_HOSTNAME` | `us.i.posthog.com` | `us.i.posthog.com` |
+| `POSTHOG_CAPTURE_EVENTS` | `NO` | `YES` |
 
-Two projects, and they must stay two. Debug builds send real events — a
-simulator running onboarding for the ninth time in an afternoon is a signup as
-far as PostHog is concerned, and the only thing keeping it out of the numbers
-everybody reads is that it lands somewhere else. A test run counts too: the host
-app launches, so `$application_opened` reaches the dev project on every
-`xcodebuild test`.
+**Two ways to be off, and they are not the same.**
 
-**An empty key means off.** No `setup` call, no queue, no disk, no network. Set
-`POSTHOG_API_KEY =` in `Debug.local.xcconfig` (gitignored) to silence your own
-builds without touching the committed file.
+*No key* is off completely: `start()` returns before `setup`, so there is no
+SDK, no queue, no disk and no network.
+
+*`POSTHOG_CAPTURE_EVENTS = NO`* keeps the SDK running and suppresses capture,
+via `config.optOut`. Feature flags and remote config still load —
+`PostHogRemoteConfig` never consults the opt-out state, and `reloadFeatureFlags`
+checks only whether the SDK is set up. That is the whole reason the setting
+exists separately from an empty key: a dev build can be a flag client without
+being an event source.
+
+Debug ships `NO`, so no simulator run and no `xcodebuild test` writes anything —
+the host app launches during a test, which would otherwise be an
+`Application Opened` per CI run. Set `POSTHOG_CAPTURE_EVENTS = YES` in
+`Debug.local.xcconfig` (gitignored) while working on an event.
+
+Two consequences worth knowing:
+
+* `identify` is suppressed too, so flags in a non-capturing build evaluate
+  against the anonymous id rather than the account.
+* The value is set on the config and never through `optIn()`/`optOut()`. Those
+  persist to storage and would then win over the build setting on every later
+  launch, which is a setting that ignores the build it is in.
+
+Two projects, and they must stay two anyway. If capture is ever turned on in
+Debug, the only thing keeping simulator runs out of the numbers everybody reads
+is that they land somewhere else.
+
+The setting is parsed from a string, not read as a `Bool`: plist variable
+substitution yields `"NO"`, and `bool(forInfoDictionaryKey:)` would see a
+non-empty string and call it true. Absent means yes, so deleting the line can't
+silently kill production analytics.
 
 The keys are committed rather than injected at build time. A `phc_…` project key
 is write-only ingestion and ships inside the binary either way, so treating it as
