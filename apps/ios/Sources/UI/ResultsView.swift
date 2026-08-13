@@ -411,6 +411,9 @@ struct ResultsView: View {
         let discovered = winnowed(discover.listings, hidingViewed: false)
 
         return VStack(alignment: .leading, spacing: 24) {
+            if !recentSearchShortcuts.isEmpty {
+                recentSearchRail
+            }
             if !recentItems.isEmpty {
                 strip("Recently viewed", items: recentItems)
             }
@@ -420,6 +423,49 @@ struct ResultsView: View {
             discoverSection(discovered)
         }
         .padding(.top, 4)
+    }
+
+    /// The last few searches, as one-tap shortcuts.
+    ///
+    /// The same terms are already in the search field's suggestion list, but
+    /// only once the field is focused — which makes re-running yesterday's
+    /// search a three-step act on a screen whose whole job is getting back to
+    /// something. As a rail it costs one tap, and it sits above the listing
+    /// strips because it is the least specific way back: a query rather than a
+    /// particular listing.
+    ///
+    /// Kept shorter than the suggestion list (which shows all twelve): a
+    /// horizontal rail is scanned, not read, and the tail of it is stale by the
+    /// time anyone scrolls that far.
+    private var recentSearchShortcuts: [String] {
+        Array(prefs.recentSearches.prefix(Self.recentSearchShortcutCount))
+    }
+
+    private static let recentSearchShortcutCount = 6
+
+    private var recentSearchRail: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle("Recent searches")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(recentSearchShortcuts, id: \.self) { term in
+                        Button {
+                            replaySearch(term)
+                        } label: {
+                            Label(term, systemImage: "arrow.clockwise")
+                                .font(.subheadline)
+                                .lineLimit(1)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color(.secondarySystemFill), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.primary)
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+        }
     }
 
     private func sectionTitle(_ text: String) -> some View {
@@ -742,6 +788,16 @@ struct ResultsView: View {
         guard !term.isEmpty else { return }
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                                         to: nil, from: nil, for: nil)
+        Task { await search(term) }
+    }
+
+    /// Runs a term from the recent-searches rail.
+    ///
+    /// The field is filled first so Search opens in the state it would be in
+    /// had the term been typed — Cancel and Clear then mean what they always
+    /// mean, and `recordSearch` moves the term back to the head of the list.
+    private func replaySearch(_ term: String) {
+        searchText = term
         Task { await search(term) }
     }
 
