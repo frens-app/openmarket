@@ -107,7 +107,6 @@ enum Analytics {
         case notificationPermissionAnswered = "notification_permission_answered"
 
         case searchSubmitted = "search_submitted"
-        case searchCompleted = "search_completed"
         case discoverLoaded = "discover_loaded"
         case listingOpened = "listing_opened"
         case listingSaved = "listing_saved"
@@ -151,20 +150,6 @@ enum Analytics {
         case resultsNotice = "results_notice"
         case priceCheckRun = "price_check_run"
         case priceCheckHistory = "price_check_history"
-    }
-
-    /// Why a search ran. `ListingStore.run` is reached from seven places and only
-    /// `newSearch` pairs with a `search_submitted`, so without this a funnel
-    /// between the two events reports conversion above 100%.
-    enum SearchTrigger: String {
-        case newSearch = "new_search"
-        case filters
-        case location
-        case refresh
-        /// The "search here" control on the pinned filter bar.
-        case rerun
-        case retry
-        case signIn = "sign_in"
     }
 
     /// Where a search term came from. Inferred by matching the recents and

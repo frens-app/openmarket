@@ -23,15 +23,6 @@ final class AnalyticsTests: XCTestCase {
         }
     }
 
-    func testEverySearchTriggerValueFollowsTheConvention() {
-        let triggers: [Analytics.SearchTrigger] = [
-            .newSearch, .filters, .location, .refresh, .rerun, .retry, .signIn
-        ]
-        for trigger in triggers {
-            assertSnakeCase(trigger.rawValue, what: "search trigger")
-        }
-    }
-
     /// PostHog groups events by prefix, so a stray `copied_price_check` would
     /// sort away from the funnel it belongs to.
     func testPriceCheckEventsShareTheirPrefix() {

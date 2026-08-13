@@ -84,7 +84,7 @@ struct ResultsView: View {
             if surface == .search {
                 ActiveFilterBar(
                     onLocation: { showLocationPicker = true },
-                    onRerun: { Task { await rerunCurrentQuery(trigger: .rerun) } }
+                    onRerun: { Task { await rerunCurrentQuery() } }
                 )
             }
         }
@@ -113,7 +113,7 @@ struct ResultsView: View {
                 Task {
                     store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
                     if surface == .search {
-                        await store.retry(trigger: .signIn)
+                        await store.retry()
                     }
                     await loadDiscover()
                 }
@@ -171,7 +171,7 @@ struct ResultsView: View {
                                                               deviceFix: location.coordinate))
             Task {
                 if surface == .search {
-                    await rerunCurrentQuery(trigger: .location)
+                    await rerunCurrentQuery()
                 }
                 discover.markStale()
                 await loadDiscover()
@@ -300,7 +300,7 @@ struct ResultsView: View {
                         store.noteScroll(hiddenAsViewed: hiddenAsViewed)
                     }
             )
-            .refreshable { await rerunCurrentQuery(trigger: .refresh) }
+            .refreshable { await rerunCurrentQuery() }
             // A new result set starts at the top; pagination does not.
             .onChange(of: store.resultsGeneration) {
                 proxy.scrollTo(Self.searchTopAnchor, anchor: .top)
@@ -832,7 +832,7 @@ struct ResultsView: View {
         // Lowercased so "Weber Grill" and "weber grill" are one breakdown row.
         properties["term"] = Analytics.text(trimmed.lowercased())
         Analytics.capture(.searchSubmitted, properties)
-        await run(.search(trimmed), trigger: .newSearch)
+        await run(.search(trimmed))
     }
 
     /// A guess: a tapped completion and a typed word reach `onSubmit`
@@ -849,9 +849,9 @@ struct ResultsView: View {
     /// Every search goes through here, which is what makes the "only new"
     /// snapshot honest: it is taken once, at the start of a search, and holds
     /// for as long as those results are on screen.
-    private func run(_ kind: SearchQuery.Kind, trigger: Analytics.SearchTrigger) async {
+    private func run(_ kind: SearchQuery.Kind) async {
         hiddenAsViewed = prefs.hideViewed ? viewed.allIDs : []
-        await store.run(makeQuery(kind), trigger: trigger)
+        await store.run(makeQuery(kind))
     }
 
     /// Currently unreachable: the category pills that called it are gone, and
@@ -862,18 +862,18 @@ struct ResultsView: View {
     /// check the payload parses there first.
     private func browse(category: String) async {
         prefs.recordLastQuery(.category(category))
-        await run(.category(category), trigger: .newSearch)
+        await run(.category(category))
     }
 
-    private func rerunCurrentQuery(trigger: Analytics.SearchTrigger) async {
+    private func rerunCurrentQuery() async {
         guard let existing = store.query else { return }
-        await run(existing.kind, trigger: trigger)
+        await run(existing.kind)
     }
 
     private func refreshVisibleSurfaceAfterFilters() {
         Task {
             if surface == .search {
-                await rerunCurrentQuery(trigger: .filters)
+                await rerunCurrentQuery()
             } else {
                 await loadDiscover()
             }

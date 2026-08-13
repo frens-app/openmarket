@@ -164,7 +164,7 @@ struct SettingsView: View {
                         // cookies just written live in this app container and
                         // will not be there on the user's next phone.
                         await account.reportFacebookConnection(connected)
-                        await store.retry(trigger: .signIn)
+                        await store.retry()
                     }
                 }
             }

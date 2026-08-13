@@ -168,7 +168,6 @@ keeps every visit to Settings out of the conversion numerator.
 | Event | Fired at | Properties |
 | --- | --- | --- |
 | `search_submitted` | `ResultsView.search`, before `recordSearch` | `term`, `source`, `term_length`, `word_count`, `has_active_filters`, `sort`, `radius_km` |
-| `search_completed` | `ListingStore.run`, once the engine is done — **every** run, not only submitted ones | `term`, `kind`, `trigger`, `outcome` (`ok`/`empty`/`login_wall`/`failed`), `result_count`, `duration_ms`, `from_cache`, `sort`, `radius_km` |
 | `discover_loaded` | `DiscoverFeed.loadIfNeeded` | `count`, `duration_ms`, `is_anonymous`, `reached_end`, `is_refresh`, `radius_km` |
 | `listing_opened` | every route in — `ResultsView.open`, plus the comparables under a price check | `surface`, `position`, `listing_id`, `title`, `price`, `price_text`, `place`, `has_price`, `is_saved`, `is_seen`, `distance_km`; `is_sold` and `search_term` on a comparable |
 | `listing_saved` / `listing_unsaved` | the detail screen's bookmark | `surface`, `listing_id`, `title`, `price`, `place`, `has_price`, `is_enriched` |
@@ -180,27 +179,6 @@ the field and submits it, so by `onSubmit` a tapped suggestion and a typed word
 are the same string. Matching against the recents and the interests errs towards
 crediting the suggestions, which is the right direction for the question being
 asked — whether that list earns its place.
-
-**The two search events do not pair one-to-one.** `search_submitted` fires when
-a person searches; `search_completed` fires on every execution of
-`ListingStore.run`, which is reached from seven places. Adjusting three filters
-after one search produces one submission and four completions, so a naive funnel
-between them reports a conversion above 100%. `trigger` is what makes that
-legible — filter on `new_search` for the population that matches a submission:
-
-| `trigger` | What it was |
-| --- | --- |
-| `new_search` | a term the user submitted; the only one paired with `search_submitted` |
-| `filters` | the filter sheet closed on a change that needs different listings |
-| `location` | the city changed underneath the results |
-| `refresh` | pull to refresh |
-| `rerun` | the "search here" control on the pinned filter bar |
-| `retry` | after a failure or a wall |
-| `sign_in` | a Facebook session appeared, and the result set differs by authentication |
-
-The other six are worth having on their own rather than being noise to filter
-out: a `refresh` rate is somebody distrusting the results, and a `retry` rate is
-the login wall measured from the user's side.
 
 The term is on **both** events rather than only the first. "Which searches come
 back with nothing" is the question `search_completed` exists for, and it should

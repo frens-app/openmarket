@@ -127,9 +127,7 @@ final class ListingStore: ObservableObject {
 
     // MARK: - Searching
 
-    /// `trigger` is for the analytics only and changes no behaviour — the caller
-    /// is the only thing that knows why this ran.
-    func run(_ query: SearchQuery, trigger: Analytics.SearchTrigger) async {
+    func run(_ query: SearchQuery) async {
         self.query = query
         resultsGeneration += 1
         listings = []
@@ -155,10 +153,6 @@ final class ListingStore: ObservableObject {
             isLoadingFirstPage = true
         }
 
-        let startedAt = Date()
-        // Read now: the flag is cleared the moment live cards replace the
-        // restored ones.
-        let openedOnCachedCards = isShowingCachedResults
         let payload = await desktop.load(query)
         await ingest(payload: payload)
         // The payload covers the first page only; anything else already
@@ -167,8 +161,6 @@ final class ListingStore: ObservableObject {
         isLoadingFirstPage = false
         isRefreshingSearch = false
         cache.saveResults(listings, for: query, session: session)
-        captureSearchCompleted(query, trigger: trigger, startedAt: startedAt,
-                               openedOnCachedCards: openedOnCachedCards)
     }
 
     /// What the search actually did, once it has stopped doing it.
@@ -179,42 +171,6 @@ final class ListingStore: ObservableObject {
     /// throttled session, and the only way to see the wall in aggregate is to
     /// count both ends.
     ///
-    /// `result_count` is what the engine returned, not what the screen shows —
-    /// the radius and "only new" filters run above this and can empty a grid
-    /// this reports as fifteen.
-    private func captureSearchCompleted(_ query: SearchQuery,
-                                        trigger: Analytics.SearchTrigger,
-                                        startedAt: Date,
-                                        openedOnCachedCards: Bool) {
-        let outcome: String
-        switch desktop.state {
-        case .loginWall: outcome = "login_wall"
-        case .failed: outcome = "failed"
-        default: outcome = listings.isEmpty ? "empty" : "ok"
-        }
-        var properties: [String: Any] = [
-            "outcome": outcome,
-            "trigger": trigger.rawValue,
-            "result_count": listings.count,
-            "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000),
-            "from_cache": openedOnCachedCards,
-            "sort": query.sort.rawValue,
-            "radius_km": query.radiusKM
-        ]
-        switch query.kind {
-        case .search(let term):
-            properties["kind"] = "search"
-            properties["term"] = Analytics.text(term.lowercased())
-        case .category(let name):
-            properties["kind"] = "category"
-            properties["term"] = Analytics.text(name.lowercased())
-        // Deliberately termless: an empty string here would be a row in the
-        // top-searches list that nobody typed.
-        case .browse:
-            properties["kind"] = "browse"
-        }
-        Analytics.capture(.searchCompleted, properties)
-    }
 
     /// How many cards from the end a page starts loading — about two screens of
     /// the two-column grid. A page is three webview scrolls with a settle after
@@ -375,9 +331,9 @@ final class ListingStore: ObservableObject {
         }
     }
 
-    func retry(trigger: Analytics.SearchTrigger = .retry) async {
+    func retry() async {
         guard let query else { return }
-        await run(query, trigger: trigger)
+        await run(query)
     }
 
     // MARK: - Ingestion
