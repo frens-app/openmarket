@@ -68,6 +68,34 @@ body {
   margin-bottom: 0.35rem;
 }
 
+.prose-guide .table-scroll {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.prose-guide table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.prose-guide th,
+.prose-guide td {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  color: rgb(212 214 220);
+}
+
+.prose-guide th {
+  color: #fff;
+  font-weight: 600;
+  background: rgb(255 255 255 / 0.04);
+}
+
 .prose-guide strong {
   color: #fff;
 }

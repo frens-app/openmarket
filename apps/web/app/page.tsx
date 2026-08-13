@@ -147,9 +147,9 @@ export default function HomePage() {
               Filters you can trust
             </h3>
             <p className="mt-4 text-lg leading-8 text-gray-400">
-              Marketplace&apos;s own distance setting doesn&apos;t limit
-              results — a search set to 5 miles can return listings 60 miles
-              away. Here, place and radius travel together and are enforced on
+              Marketplace&apos;s own distance setting often doesn&apos;t limit
+              results — in our testing, a search set to 5 miles can return
+              listings 60 miles away. Here, place and radius travel together and are enforced on
               your device. Sort by newest, nearest, or price, and flip on{" "}
               <strong className="text-white">Only new listings</strong> to hide
               anything you&apos;ve already seen.

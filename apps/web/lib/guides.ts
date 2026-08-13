@@ -10,6 +10,70 @@ export type Guide = {
 
 export const GUIDES: Guide[] = [
   {
+    slug: "facebook-marketplace-vs-offerup-vs-openmarket",
+    title:
+      "Facebook Marketplace vs OfferUp vs Openmarket: where should you buy and sell locally?",
+    description:
+      "An honest three-way comparison — inventory, fees, location filtering, shipping, and safety — between the two big local marketplaces and a companion app that changes how you browse one of them.",
+    date: "2026-08-13",
+    readingMinutes: 7,
+    html: `
+<p>Short answer: Marketplace has the most inventory in almost every city, OfferUp is the strongest standalone alternative — especially if you want shipping or verified profiles — and Openmarket isn't a marketplace at all: it's a free iOS app that fixes how you <em>browse</em> Marketplace. Most serious local buyers and sellers end up using two of the three.</p>
+
+<h2>At a glance</h2>
+<div class="table-scroll">
+<table>
+<thead>
+<tr><th></th><th>Marketplace</th><th>OfferUp</th><th>Openmarket</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>What it is</strong></td><td>The biggest local marketplace, inside Facebook</td><td>A standalone marketplace app (absorbed Letgo in 2020)</td><td>A free iOS companion app for browsing Marketplace listings</td></tr>
+<tr><td><strong>Inventory</strong></td><td>Largest in most areas</td><td>Strong in big metros, thinner elsewhere</td><td>The same listings as Marketplace</td></tr>
+<tr><td><strong>Local deals</strong></td><td>Free</td><td>Free</td><td>Free — it's a browser, not a middleman</td></tr>
+<tr><td><strong>Shipping</strong></td><td>On eligible items, with a seller fee</td><td>Nationwide; seller fee of 12.9% ($1.99 minimum)</td><td>No shipping — local focus</td></tr>
+<tr><td><strong>Location filtering</strong></td><td>Radius is loosely enforced in practice</td><td>Standard radius search</td><td>Place + radius enforced on your device; distance and travel time on every card</td></tr>
+<tr><td><strong>Repeat listings</strong></td><td>No way to hide what you've seen</td><td>No way to hide what you've seen</td><td>“Only new listings” filter hides anything you've opened</td></tr>
+<tr><td><strong>Messaging</strong></td><td>Messenger</td><td>In-app chat, TruYou profile verification</td><td>Hands you to the Facebook app — your account, their messenger</td></tr>
+<tr><td><strong>Platforms</strong></td><td>Web, iOS, Android</td><td>Web, iOS, Android</td><td>iOS</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Marketplace: unbeatable inventory, frustrating browsing</h2>
+<p>For sheer selection, nothing local touches Marketplace — a large share of casual sellers list there first and only there, because the audience is already in the app. Local deals cost nothing, and a seller's profile gives you years of history to judge.</p>
+<p>The weaknesses are all in the browsing. The <a href="/guides/facebook-marketplace-location-filter-not-working">distance filter is loosely enforced</a> — a 5-mile search can surface listings from other cities — the feed <a href="/guides/stop-seeing-same-listings-facebook-marketplace">re-shows you the same listings</a> every session, and sponsored posts are mixed into results.</p>
+
+<h2>OfferUp: the strongest standalone alternative</h2>
+<p>OfferUp is its own ecosystem with its own listings, so what you gain depends on your city — in big metros it's a genuine second market; elsewhere it can feel thin. Its real differentiators:</p>
+<ul>
+<li><strong>Shipping.</strong> Nationwide shipping on eligible items, with a 12.9% seller fee ($1.99 minimum) on shipped sales. Local pickup deals are free.</li>
+<li><strong>Verification.</strong> TruYou identity verification and community meetup spots give it a safety story Marketplace mostly lacks.</li>
+<li><strong>A cleaner buy flow</strong> for shipped items — closer to eBay than to a classifieds board.</li>
+</ul>
+<p>The trade-off is inventory: it's a separate pool of listings. Sellers who want full reach end up cross-posting to both.</p>
+
+<h2>Openmarket: not a third marketplace — a better window into the biggest one</h2>
+<p><a href="/">Openmarket</a> doesn't add another pool of listings to check. It's a free iOS app that shows you Marketplace's own inventory the way you wish the original did:</p>
+<ul>
+<li><strong>Filters that work.</strong> Set a place and radius and results respect them, with the city, real distance, and walking/driving/transit time on every card.</li>
+<li><strong>“Only new listings.”</strong> One toggle hides everything you've already opened — checking the feed twice a day stops meaning reading it twice.</li>
+<li><strong>No sponsored posts</strong> in any feed.</li>
+<li><strong>Price Check for sellers.</strong> Snap a photo and get an asking price backed by similar listings and recent sales nearby — <a href="/sellers">useful whichever marketplace you post on</a>.</li>
+</ul>
+<p>Deals still happen where they always did: tap through to the real listing and message the seller in the Facebook app with your own account.</p>
+
+<h2>So which should you use?</h2>
+<ul>
+<li><strong>Buying locally and want the most options:</strong> Marketplace's inventory — browsed through Openmarket if you're on iOS.</li>
+<li><strong>Want items shipped, or verified profiles:</strong> OfferUp.</li>
+<li><strong>Selling:</strong> list on both marketplaces — it costs nothing for local deals and doubles your audience. Run <a href="/sellers">Price Check</a> first so the number is grounded in what actually sells near you.</li>
+<li><strong>Checking the feed every day for deals:</strong> Openmarket's only-new filter is the difference between reading the feed and re-reading it.</li>
+</ul>
+
+<p><em>Fees and features above were checked in August 2026 and can change.</em></p>
+`,
+  },
+  {
     slug: "facebook-marketplace-location-filter-not-working",
     title:
       "Facebook Marketplace location filter not working? Here's what's actually happening",
@@ -21,10 +85,10 @@ export const GUIDES: Guide[] = [
 <p>You set the radius to 10 miles. The first row of results is 40 miles away. You set it again — same thing. You are not imagining it, and you are not doing it wrong.</p>
 
 <h2>The radius is a suggestion, not a rule</h2>
-<p>Marketplace's distance control influences ranking more than it limits results. The feed is assembled from what's popular and available in a broad region around the location it inferred for you, and the radius nudges that mix rather than fencing it. Two consequences follow:</p>
+<p>Marketplace's distance control appears to influence ranking more than it limits results. In practice, the feed behaves as if it's assembled from what's popular and available in a broad region around the location it inferred for you, with the radius nudging that mix rather than fencing it. Two consequences follow:</p>
 <ul>
-<li><strong>Faraway listings leak in.</strong> Especially for popular categories, results well outside your radius rank into the feed because they perform well regionally.</li>
-<li><strong>The location it uses may not be yours.</strong> Marketplace often keys off the rough location of your network connection, not your actual neighborhood — on a VPN or a corporate network it can be a different city entirely.</li>
+<li><strong>Faraway listings leak in.</strong> Especially for popular categories, results well outside your radius routinely rank into the feed.</li>
+<li><strong>The location it uses may not be yours.</strong> Marketplace can key off the rough location of your network connection, not your actual neighborhood — on a VPN or a corporate network it can be a different city entirely.</li>
 </ul>
 
 <h2>What actually helps</h2>
@@ -50,7 +114,7 @@ export const GUIDES: Guide[] = [
 <p>Serious buyers check the feed a few times a day, because good deals go in hours. The tax on that habit: every session starts by scrolling past everything you already saw this morning. The same sectional. The same Peloton. The same “vintage” coffee table.</p>
 
 <h2>Why the feed repeats itself</h2>
-<p>Marketplace ranks by what it thinks will get engagement, and things you've looked at are evidence of engagement. There is no “only show me new listings” switch, no “sort by newest since my last visit”, and hiding listings one by one is a per-item chore that teaches the ranking very little.</p>
+<p>Marketplace's feed appears to favor listings it expects you to engage with — and in practice, things you've already looked at keep resurfacing. There is no “only show me new listings” switch, no “sort by newest since my last visit”, and hiding listings one by one is a per-item chore that teaches the ranking very little.</p>
 
 <h2>Workarounds people use</h2>
 <ul>
