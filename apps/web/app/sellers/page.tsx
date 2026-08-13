@@ -6,21 +6,21 @@ import { PhoneFrame, Feature, SectionHeading, CtaBlock, JsonLd } from "@/compone
 export const metadata: Metadata = {
   title: "For sellers — price used items with real local data",
   description:
-    "Open Market's Price Check tells you what to ask for anything you're selling: describe it or photograph it, and get a price backed by similar listings and recent sales near you, plus a ready-to-paste title and description.",
+    "Openmarket's Price Check tells you what to ask for anything you're selling: describe it or photograph it, and get a price backed by real price comparisons — similar listings and recent sales near you — plus a ready-to-paste title and description.",
   alternates: { canonical: "/sellers" },
 };
 
 const FAQ = [
   {
     q: "How does Price Check decide a price?",
-    a: "It searches listings similar to yours near your location, weighs what's currently listed against what has recently sold, and recommends the asking price the local market supports. It shows its work — you see how many nearby and sold listings the number was read from.",
+    a: "It searches listings similar to yours near your location and compares prices across what's currently listed and what has recently sold, then recommends the asking price the local market supports. It shows its work — you see how many nearby and sold listings the number was read from.",
   },
   {
     q: "Can I price something from just a photo?",
-    a: "Yes. Take or choose a photo and Open Market identifies the item and runs the search. Adding a sentence about condition or model makes the answer sharper.",
+    a: "Yes. Take or choose a photo and Openmarket identifies the item and runs the search. Adding a sentence about condition or model makes the answer sharper.",
   },
   {
-    q: "Does Open Market post the listing for me?",
+    q: "Does Openmarket post the listing for me?",
     a: "No — you stay in control. It gives you the price, a ready-to-paste title, and a description; you post them with your own account wherever you sell.",
   },
 ];
@@ -46,7 +46,7 @@ export default function SellersPage() {
           </h1>
           <p className="mt-6 text-lg leading-8 text-gray-300">
             Price too high and it sits for weeks. Price too low and you gave
-            away fifty bucks. Open Market&apos;s Price Check reads the local
+            away fifty bucks. Openmarket&apos;s Price Check reads the local
             market for you — what similar things are listed for{" "}
             <em>and what actually sold</em> — and hands you a number you can
             defend when the lowballers arrive.

@@ -17,7 +17,7 @@ PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
 
 // The two builds install side by side, so this is the label that tells them
 // apart on the home screen, in the app switcher, and in Settings.
-DISPLAY_NAME = Open Market Dev
+DISPLAY_NAME = Openmarket Dev
 
 // Throwaway. Only Release tracks a build number that means anything.
 MARKETING_VERSION = 0.0.1

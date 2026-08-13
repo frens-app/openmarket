@@ -74,7 +74,7 @@ messages are retained:
 When enabled, iOS deletes a verification code from Messages or Mail after the
 code has been entered with AutoFill. Tapping the suggestion above the keyboard
 is the relevant AutoFill action. This is expected system behavior, not deletion
-performed by Open Market or Prelude. The app cannot enable, disable or observe
+performed by Openmarket or Prelude. The app cannot enable, disable or observe
 the preference and must not depend on the original message remaining available.
 
 Apple documents the current setting in

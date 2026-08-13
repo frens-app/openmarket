@@ -146,7 +146,7 @@ last-writer-wins update.
 
 ### Native listings
 
-Native listings are owned by an Open Market user and have neither Facebook key.
+Native listings are owned by an Openmarket user and have neither Facebook key.
 They share the canonical read shape but not the ingestion authority.
 
 ```sql

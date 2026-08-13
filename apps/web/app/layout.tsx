@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import Image from "next/image";
 import Link from "next/link";
+import logo from "@/public/logo.png";
 import { SITE, DISCLAIMER } from "@/lib/site";
 import "./globals.css";
 
@@ -17,6 +19,12 @@ export const metadata: Metadata = {
     "marketplace filters",
     "buy and sell locally",
     "price used items",
+    "facebook",
+    "marketplace",
+    "offerup",
+    "letgo",
+    "vinted",
+    "depop",
   ],
   openGraph: {
     type: "website",
@@ -56,13 +64,14 @@ function Nav() {
         className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5"
       >
         <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-white">
-          <span
+          <Image
+            src={logo}
+            alt=""
             aria-hidden
-            className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-[15px] font-bold text-white"
-          >
-            OM
-          </span>
-          Open Market
+            className="h-8 w-8 rounded-lg"
+            priority
+          />
+          Openmarket
         </Link>
         <div className="hidden items-center gap-7 text-[15px] text-gray-300 sm:flex">
           <Link href="/buyers" className="transition hover:text-white">
@@ -91,10 +100,10 @@ function Footer() {
     <footer className="border-t border-white/10 bg-panel">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:grid-cols-3">
         <div>
-          <p className="font-semibold text-white">Open Market</p>
+          <p className="font-semibold text-white">Openmarket</p>
           <p className="mt-2 max-w-xs text-sm leading-6 text-gray-400">
-            A fast, native iOS app for browsing local listings — built around
-            superpowers for buyers and sellers.
+            A better way to marketplace — filters that work, actually local
+            listings, and price comparisons for sellers.
           </p>
         </div>
         <nav aria-label="Footer" className="grid grid-cols-2 gap-8 text-sm sm:col-span-2 sm:grid-cols-3">
@@ -127,7 +136,7 @@ function Footer() {
         <div className="mx-auto max-w-6xl px-5 py-6">
           <p className="text-xs leading-5 text-gray-500">{DISCLAIMER}</p>
           <p className="mt-3 text-xs text-gray-600">
-            © {new Date().getFullYear()} Open Market
+            © {new Date().getFullYear()} Openmarket
           </p>
         </div>
       </div>

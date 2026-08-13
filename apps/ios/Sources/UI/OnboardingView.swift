@@ -224,7 +224,7 @@ private struct FacebookPage: View {
                     .font(.largeTitle.weight(.bold))
                 Text(isSignedIn
                      ? "Seller details, unlimited scrolling and Facebook's own picks are all switched on."
-                     : "Open Market works best with your account. You'll sign in on Facebook's own page.")
+                     : "Openmarket works best with your account. You'll sign in on Facebook's own page.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

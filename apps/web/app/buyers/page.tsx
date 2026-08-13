@@ -13,7 +13,7 @@ import {
 export const metadata: Metadata = {
   title: "For buyers — search local listings with filters that actually work",
   description:
-    "Open Market gives Marketplace buyers superpowers on iOS: a real place-and-radius filter, distance and travel time on every listing, instant saves and recently viewed, and a toggle that hides listings you've already seen.",
+    "Openmarket gives Marketplace buyers superpowers on iOS: a real place-and-radius filter, distance and travel time on every listing, saves and recently viewed, and a toggle that hides listings you've already seen.",
   alternates: { canonical: "/buyers" },
 };
 
@@ -27,10 +27,10 @@ export default function BuyersPage() {
           </h1>
           <p className="mt-6 text-lg leading-8 text-gray-300">
             The best deals go to whoever sees them first and shows up first.
-            Open Market is built around exactly that: search that respects your
-            location, listings that tell you how far away they really are, and a
-            feed that never wastes your scroll on things you&apos;ve already
-            seen.
+            Openmarket is built around exactly that: filters that work,
+            listings that are actually local — with how far away they really
+            are on every card — and a feed that never wastes your scroll on
+            things you&apos;ve already seen.
           </p>
         </div>
         <PhoneFrame
@@ -44,9 +44,10 @@ export default function BuyersPage() {
         <SectionHeading eyebrow="The buyer's toolkit" title="Six things buyers get here and nowhere else" />
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Feature icon="📍" title="A radius that means it">
-            Set “San Francisco · 10 mi” and that is what you get. Place and
-            distance travel together, and every card shows its city and real
-            distance from you.
+            Facebook Marketplace frequently shows listings that are in
+            different cities. We filter them down to the ones you can actually
+            reach: set “San Francisco · 10 mi” and that is what you get, with
+            city and real distance on every card.
           </Feature>
           <Feature icon="🚗" title="Travel time before you commit">
             Walking, driving, and transit time on every listing. A $50 desk 45
@@ -56,13 +57,13 @@ export default function BuyersPage() {
             The “Only new listings” toggle removes anything you&apos;ve already
             opened. Check back twice a day and only ever read what&apos;s new.
           </Feature>
-          <Feature icon="🔖" title="Instant saves">
-            Save from any listing. Saves live on your phone, load in a quarter
-            second, and survive sign-outs, dead batteries, and airplane mode.
+          <Feature icon="🔖" title="A shortlist that sticks">
+            Save from any listing and keep everything you&apos;re deciding
+            between in one place, ready to compare.
           </Feature>
           <Feature icon="🕘" title="Recently viewed">
             Every listing you open is kept. That lamp you saw at lunch is one
-            tap away at dinner — no re-searching, no loading.
+            tap away at dinner — no re-searching.
           </Feature>
           <Feature icon="⚡️" title="Native-app fast">
             Listings you&apos;ve opened before appear instantly. The next
@@ -92,7 +93,7 @@ export default function BuyersPage() {
               Honest maps, honest distances
             </h2>
             <p className="mt-5 text-lg leading-8 text-gray-400">
-              Sellers share an approximate area, so Open Market draws an
+              Sellers share an approximate area, so Openmarket draws an
               approximate area — a circle, not a fake-precise pin. What it adds
               is the number you actually need: how long it takes to get there,
               on foot, by car, or by transit, from where you are right now.

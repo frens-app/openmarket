@@ -18,7 +18,7 @@ private struct LocationSettingsAlert: ViewModifier {
     @Environment(\.openURL) private var openURL
 
     func body(content: Content) -> some View {
-        content.alert("Location is off for Open Market", isPresented: $isPresented) {
+        content.alert("Location is off for Openmarket", isPresented: $isPresented) {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             }
@@ -26,7 +26,7 @@ private struct LocationSettingsAlert: ViewModifier {
             // search, which needs no permission at all.
             Button("Not Now", role: .cancel) { }
         } message: {
-            Text("Open Market can't use your location because permission was turned off. "
+            Text("Openmarket can't use your location because permission was turned off. "
                  + "You can turn it back on in Settings under Privacy, or search for a city instead.")
         }
     }

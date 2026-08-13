@@ -36,7 +36,7 @@ export const GUIDES: Guide[] = [
 </ol>
 
 <h2>The shortcut</h2>
-<p><a href="/">Open Market</a>, a free iOS app for browsing local listings, was built around exactly this frustration. You set a place and a radius together, results respect them, and every card shows its city and its real distance from you — plus walking, driving, and transit time on the listing itself. If a result is outside your radius, it simply doesn't appear.</p>
+<p><a href="/">Openmarket</a>, a free iOS app for browsing local listings, was built around exactly this frustration. You set a place and a radius together, results respect them, and every card shows its city and its real distance from you — plus walking, driving, and transit time on the listing itself. If a result is outside your radius, it simply doesn't appear.</p>
 `,
   },
   {
@@ -61,7 +61,7 @@ export const GUIDES: Guide[] = [
 
 <h2>The real fix: filter on your own history</h2>
 <p>Your phone already knows which listings you've opened. A filter that hides them turns a stale feed into a pure stream of new inventory — Marketplace just doesn't offer one.</p>
-<p><a href="/">Open Market</a> does. It keeps your viewing history on-device and adds an <strong>“Only new listings”</strong> toggle to its filters: flip it on and anything you've already opened disappears from results. Checking the feed twice a day stops meaning reading it twice.</p>
+<p><a href="/">Openmarket</a> does. It keeps your viewing history on-device and adds an <strong>“Only new listings”</strong> toggle to its filters: flip it on and anything you've already opened disappears from results. Checking the feed twice a day stops meaning reading it twice.</p>
 `,
   },
   {
@@ -97,7 +97,7 @@ export const GUIDES: Guide[] = [
 </ul>
 
 <h2>Or let the data do it</h2>
-<p><a href="/sellers">Open Market's Price Check</a> runs this method automatically: describe the item or snap a photo, and it reads similar listings <em>and recent sales near you</em>, then recommends an asking price — with a ready-to-paste title and description. It shows how many nearby and sold listings the number came from, so you know it's grounded, not guessed.</p>
+<p><a href="/sellers">Openmarket's Price Check</a> runs this method automatically: describe the item or snap a photo, and it reads similar listings <em>and recent sales near you</em>, then recommends an asking price — with a ready-to-paste title and description. It shows how many nearby and sold listings the number came from, so you know it's grounded, not guessed.</p>
 `,
   },
   {
@@ -131,7 +131,7 @@ export const GUIDES: Guide[] = [
 </ul>
 
 <h2>Trust the messaging platform</h2>
-<p>Keep the conversation on the marketplace's own messenger until the deal is done — moving to text or another app early removes the record and the recourse. This is one reason <a href="/">Open Market</a> hands you to the Facebook app to message sellers instead of building its own chat: the conversation, the profile history, and any buyer protections stay where they already exist.</p>
+<p>Keep the conversation on the marketplace's own messenger until the deal is done — moving to text or another app early removes the record and the recourse. This is one reason <a href="/">Openmarket</a> hands you to the Facebook app to message sellers instead of building its own chat: the conversation, the profile history, and any buyer protections stay where they already exist.</p>
 `,
   },
 ];

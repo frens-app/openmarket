@@ -2,7 +2,7 @@
 
 APP_BUNDLE_IDENTIFIER = lol.frens.openmarket
 PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
-DISPLAY_NAME = Open Market
+DISPLAY_NAME = Openmarket
 
 // The build number for the NEXT archive, and the only one that ships — Debug
 // pins a throwaway 1. App Store Connect scopes build-number uniqueness to

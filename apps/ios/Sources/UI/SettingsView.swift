@@ -88,7 +88,7 @@ struct SettingsView: View {
                 #if DEBUG
                 // Which backend this build is talking to, in the app.
                 //
-                // The home-screen name says it ("Open Market Dev" vs "Open
+                // The home-screen name says it ("Openmarket Dev" vs "Open
                 // Market") but that is invisible once you are inside, and the
                 // two builds are otherwise identical on screen. The expensive
                 // version of guessing wrong is reading a laptop's database while
