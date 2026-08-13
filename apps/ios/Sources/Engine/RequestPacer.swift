@@ -1,22 +1,17 @@
 import Foundation
 
-/// §7.3 — fetch only what the user is looking at, back off hard when Facebook
+/// Fetch only what the user is looking at, back off hard when Facebook
 /// pushes back, and cap the session so a bug can't turn into a crawl.
 actor RequestPacer {
     /// The one pacer. Everything that talks to Facebook shares it.
     ///
-    /// Each engine used to construct its own, via a `= RequestPacer()` default
-    /// argument, which quietly defeated all three mechanisms below. The session
-    /// cap became per-engine rather than per-session, so the real ceiling was
-    /// some multiple of 300. The minimum gap stopped being a gap, because two
-    /// engines could fire simultaneously without seeing each other.
-    ///
-    /// And worst, **backoff stopped propagating**: Facebook blocking the feed
-    /// engine put that one engine on its ladder while the detail engine carried
-    /// on at full speed, unaware. Backoff only one code path observes isn't
-    /// backoff — §7.3 asks the *session* to go quiet, not one class. That
-    /// matters more now that everything shares one cookie jar, because every
-    /// request is attributable to the same account.
+    /// A pacer per engine defeats all three mechanisms below: the session cap
+    /// becomes per-engine, so the real ceiling is some multiple of 300; the
+    /// minimum gap stops being a gap, since two engines can fire without seeing
+    /// each other; and **backoff stops propagating**, leaving the detail engine
+    /// at full speed while Facebook is blocking the feed engine. Backoff only
+    /// one code path observes isn't backoff — the *session* has to go quiet,
+    /// which matters all the more now every request shares one cookie jar.
     static let shared = RequestPacer()
 
     private var consecutiveBlocks = 0

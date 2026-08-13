@@ -7,12 +7,10 @@ import UIKit
 /// Photos, a description, and a button. Running the check pushes
 /// `PriceCheckRunView`, which is where the working and the answer live.
 ///
-/// **A push rather than a swap**, and the back button is the whole reason. This
-/// screen used to replace itself with its own results, which left "start over"
-/// as the only way back to the inputs — a button that had to exist because the
-/// navigation stack no longer described where the user was. Pushing means Back
-/// already means "change what I asked", the inputs are still standing behind
-/// it, and a second run is an edit rather than a re-entry.
+/// **A push rather than a swap**, and the back button is the whole reason: Back
+/// already means "change what I asked", the inputs are still standing behind it,
+/// and a second run is an edit rather than a re-entry. Swapping in the results
+/// would need a "start over" button to say the same thing worse.
 ///
 /// Pushed from `ToolsView`, so it brings no `NavigationStack` of its own — the
 /// tab owns one, and a second would nest.
@@ -178,13 +176,9 @@ struct PriceCheckView: View {
     ///
     /// No spinner and no "checking…" state: the run is a screen, and this
     /// button's whole job is to get there. A button reporting on work happening
-    /// somewhere the user can already see would be describing it twice.
-    ///
-    /// The line of reassurance that used to sit under it — where the numbers
-    /// come from, how long it takes — is gone with the pinned bar. It was
-    /// answering "is this broken?" for a button that thought silently for ten
-    /// seconds, and the next screen answers that better by naming each step as
-    /// it happens.
+    /// somewhere the user can already see would be describing it twice. No line
+    /// of reassurance under it either — the next screen answers "is this broken?"
+    /// better, by naming each step as it happens.
     private var runButton: some View {
         Button(action: submit) {
             Text("Check the price")
@@ -370,17 +364,13 @@ struct PriceCheckView: View {
 
     /// The photos, at the top, sized to be the first thing on the screen.
     ///
-    /// It used to be a full-width button with the thumbnail hung off the end of
-    /// it and a caption underneath calling itself optional — which read as a
-    /// setting rather than as the main input. It is still optional; a run works
-    /// on the description alone. But a photo is what separates "dresser" from
-    /// "IKEA Malm 6-drawer", so it is drawn like the thing to do and left empty
-    /// without comment, rather than labelled as skippable.
+    /// Optional — a run works on the description alone — but drawn like the
+    /// thing to do rather than labelled skippable, because a photo is what
+    /// separates "dresser" from "IKEA Malm 6-drawer".
     ///
-    /// The tiles are all one size and sit in a row, so one photo and three are
-    /// the same layout rather than two designs. The add tile is the last of
-    /// them and disappears at `maxPhotos` — a full set needs no empty slot, and
-    /// a disabled one would be a control that says no.
+    /// The tiles are one size in a row, so one photo and three are the same
+    /// layout. The add tile is last and disappears at `maxPhotos`; a disabled
+    /// one would be a control that says no.
     private var photoStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {

@@ -1,6 +1,6 @@
 import UIKit
 
-/// §4 — universal links to the canonical web URL. iOS routes them to the
+/// Universal links to the canonical web URL. iOS routes them to the
 /// Facebook app when it's installed and to Safari when it isn't. The `fb://`
 /// custom scheme is undocumented and fails silently, so it's never used.
 enum Handoff {

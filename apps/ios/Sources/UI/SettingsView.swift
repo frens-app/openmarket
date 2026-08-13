@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// §5 — Settings has to carry real functionality, which also answers Apple's
+/// Settings has to carry real functionality, which also answers Apple's
 /// minimum-functionality concern about thin webview wrappers.
 struct SettingsView: View {
     @EnvironmentObject private var prefs: Preferences
@@ -42,21 +42,13 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                // "Search area" used to sit here — a default-radius picker and
-                // a read-only location row. Both moved to the location sheet,
-                // where the place and the distance are chosen together because
-                // they read as one fact ("San Francisco · 10 mi"), and both are
-                // one tap from the bar that displays them.
-                //
-                // The radius picker had also quietly become wrong: it offered
-                // only the standard rungs, so a radius set by "Try 6 mi" on the
-                // results screen couldn't be represented, and opening Settings
-                // would show some other value as selected.
+                // No "Search area" section: place and distance are chosen
+                // together in the location sheet, because they read as one fact
+                // ("San Francisco · 10 mi").
 
-                // The only place these are set — onboarding no longer asks.
-                // All they drive is the search field's suggestions, and they
-                // are optional: with none picked it falls back to a broad
-                // default set (`Preferences.chosenInterests`).
+                // The only place these are set. All they drive is the search
+                // field's suggestions, and they are optional — with none picked
+                // it falls back to `Preferences.chosenInterests`.
                 Section("Interests") {
                     NavigationLink {
                         InterestSettingsView()

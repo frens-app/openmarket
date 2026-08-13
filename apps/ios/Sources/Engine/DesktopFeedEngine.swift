@@ -9,34 +9,28 @@ extension Logger {
 /// Search on the desktop surface, reading the GraphQL payload Facebook embeds
 /// in the page it already serves.
 ///
-/// This is the primary search path (`docs/decision-desktop-primary.md`). It
-/// exists rather than extending `FeedEngine` because almost nothing is shared:
-/// desktop has real listing anchors, an embedded payload, working filters and a
-/// hard result cap, where WebLite has none of those and paginates forever. One
-/// engine pretending to be both would be a pile of branches.
+/// The primary search path (`docs/decision-desktop-primary.md`). Separate from
+/// `FeedEngine` because almost nothing is shared: desktop has real listing
+/// anchors, an embedded payload, working filters and a hard result cap, where
+/// WebLite has none of those and paginates forever.
 ///
 /// Three properties of this surface shape the design:
 ///
 /// * **The payload covers only the first ~15 cards.** Everything past the first
-///   server-rendered page is markup, signed in or out. Cards therefore come back
-///   in two grades and callers must handle both — see `PayloadCoverage`.
+///   server-rendered page is markup, signed in or out — see `PayloadCoverage`.
 /// * **Results are capped without a session** at 15, behind a login overlay that
 ///   allows exactly one dismissal. Signed in, the feed scrolls indefinitely.
 /// * **The feed virtualises.** Cards are recycled out of the DOM as they leave
-///   the viewport, so pagination has to harvest as it goes rather than scroll to
-///   the end and read once.
+///   the viewport, so pagination has to harvest as it goes.
 @MainActor
 final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate {
     enum LoadState: Equatable {
         case idle, loading, ready, loginWall, failed(String)
     }
 
-    /// What one pagination step proved.
-    ///
-    /// Keeping `exhausted` separate from `indeterminate` is important. A script
-    /// failure, a recycler clamp, and a feed that is genuinely at its bottom all
-    /// used to return the same `false`, which let callers put a confident end
-    /// message under a feed they had not actually exhausted.
+    /// What one pagination step proved. `exhausted` is kept apart from
+    /// `indeterminate` so a script failure or a recycler clamp can't put a
+    /// confident end message under a feed that has more to give.
     enum ScrollOutcome: Equatable {
         case advanced
         case exhausted
@@ -44,10 +38,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     }
 
     /// How much of the result set arrived with structured data behind it.
-    ///
-    /// Reported rather than inferred because "this card has no payload" and
-    /// "extraction failed" look identical downstream and are not the same
-    /// problem — the first is expected past card 15, the second is a bug.
+    /// Reported rather than inferred: "no payload on this card" is expected past
+    /// card 15, "extraction failed" is a bug, and they look identical downstream.
     struct PayloadCoverage: Equatable {
         var rendered: Int
         var withPayload: Int
@@ -59,18 +51,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     let webView: WKWebView
 
-    /// Which session this engine is running under.
-    ///
-    /// **A `var`, and it must be kept current** — `ListingStore.setSession`
-    /// owns that. It used to be a `let` fixed at init, which quietly disabled
-    /// the only thing it is read for: the engine is constructed with the
-    /// `.authed` default before anyone has asked whether there is a session, so
-    /// `canLoadMore` below was permanently true and a signed-out grid
-    /// paginated into the login overlay on every scroll.
-    ///
-    /// It selects nothing — `BrowserSession.dataStore` is one process-wide
-    /// store either way — so this is a label describing the world, and a label
-    /// that never updates is just a wrong one.
+    /// Which session this engine is running under. Must be kept current by
+    /// `ListingStore.setSession` — `canLoadMore` is the only reader, and a stale
+    /// value has a signed-out grid paginating into the login overlay. It selects
+    /// nothing: `BrowserSession.dataStore` is one process-wide store either way.
     var session: BrowserSession
     private let pacer: RequestPacer
     /// Resumed when WebKit commits the new document, not when every image and
@@ -82,14 +66,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// See `resumeCommittedNavigation(for:)`.
     private var pendingNavigation: WKNavigation?
 
-    /// Defaults to `.unauthed`, deliberately.
-    ///
-    /// This is the value in force between construction and the first
-    /// `setSession`, i.e. before anything has read the cookie jar, and the two
-    /// wrong guesses are not equally wrong. Guessing signed-in paginates
-    /// against a wall; guessing signed-out declines to paginate for a few
-    /// hundred milliseconds and then corrects itself. Only one of those is
-    /// visible to the user.
+    /// Defaults to `.unauthed`: this holds between construction and the first
+    /// `setSession`, and the two wrong guesses are not equally wrong. Guessing
+    /// signed-in paginates against a wall; guessing signed-out declines to
+    /// paginate for a few hundred milliseconds and then corrects itself.
     init(session: BrowserSession = .unauthed, pacer: RequestPacer = .shared) {
         self.session = session
         self.pacer = pacer
@@ -118,9 +98,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         async let payloadRead = harvest()
         async let locationRead = readLocation()
         let (payload, located) = await (payloadRead, locationRead)
-        // Logged on every search, because a refused place is otherwise
-        // invisible: the grid fills with a healthy-looking set of listings for
-        // a city nobody asked for.
+        // Logged every search: a refused place is otherwise invisible, since the
+        // grid fills with healthy-looking listings for a city nobody asked for.
         Logger.desktop.info("location: \(located.summary, privacy: .public)")
         return payload
     }
@@ -130,14 +109,13 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     ///
     /// The browse feed is that page: `/marketplace/<place>/` embeds no usable
     /// listing payload — 6 `"listing"` blocks against 20 rendered cards, none
-    /// of them carrying a title, price or photo (`docs/embedded-payload.md`
-    /// §8). Putting it through `load` would spend the full 20-second harvest
-    /// timeout waiting for something that is never coming, on the screen the
-    /// app opens with.
+    /// carrying a title, price or photo (`docs/embedded-payload.md` §8). Through
+    /// `load` it would spend the full 20-second harvest timeout on the screen
+    /// the app opens with.
     ///
-    /// So this polls the DOM instead of the payload, and everything it returns
-    /// is markup-grade by construction — no exact timestamps, no delivery
-    /// types, no sold state. Cards are enriched when one is opened.
+    /// So this polls the DOM, and everything it returns is markup-grade: no
+    /// exact timestamps, delivery types or sold state. Cards are enriched when
+    /// one is opened.
     func loadCards(_ url: URL, timeout: Duration = .seconds(20)) async -> [DesktopRawCard] {
         guard await pacer.waitForSlot() else {
             state = .failed("Paused — too many requests. Try again shortly.")
@@ -157,9 +135,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
                 Logger.desktop.info("\(cards.count, privacy: .public) markup cards")
                 return cards
             }
-            // Only once nothing has rendered — a wall is the one explanation
-            // for an empty feed that isn't "still loading", and it needs a
-            // different answer from the caller.
+            // Only once nothing has rendered: a wall is the one explanation for
+            // an empty feed that isn't "still loading".
             if await evaluate(DesktopScripts.detectLoginWall) == "wall" {
                 state = .loginWall
                 Logger.desktop.info("login wall on browse")
@@ -168,9 +145,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
             try? await Task.sleep(for: .milliseconds(200))
         }
 
-        // Empty is not a failure here. A browse feed with nothing in it is a
-        // real answer — see `DiscoverFeed`, which says so rather than drawing
-        // an error over a screen that simply has nothing nearby.
+        // Empty is not a failure: a browse feed with nothing in it is a real
+        // answer, and `DiscoverFeed` says so rather than drawing an error.
         state = .ready
         Logger.desktop.info("no markup cards before timeout")
         return []
@@ -215,24 +191,12 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
             try? await Task.sleep(for: .milliseconds(150))
         }
 
-        // Cards on screen but no payload parsed used to be reported to the user
-        // as "Couldn't read these results." That was wrong twice over.
-        //
-        // It isn't a failure: the caller reads the rendered cards from the DOM
-        // straight afterwards (`ListingStore.search` → `renderedCards()`), and
-        // those parse fine from their aria-labels. The listings arrive; only
-        // the richer fields — timestamps, delivery types, price drops — don't.
-        // Declaring `.failed` meant `ResultsView` drew an error over a result
-        // set the app had successfully collected.
-        //
-        // And it isn't necessarily *suspicious*. Facebook does not always embed
-        // the payload; a page served entirely client-side renders cards with no
-        // `"listing":{` block anywhere in the document. Same signature as a
-        // broken extractor, different cause, and only one of them is a bug.
-        //
-        // So it degrades rather than fails, and says so in the log where the
-        // coverage numbers are — a real extractor break shows up there as this
-        // line on *every* search rather than an occasional one.
+        // Cards on screen but no payload degrades rather than fails: the caller
+        // reads the rendered cards from the DOM straight afterwards and those
+        // parse fine from their aria-labels — only the richer fields are
+        // missing. Facebook also doesn't always embed the payload, so this has
+        // the same signature as a broken extractor with a different cause. The
+        // log is what tells them apart: a real break appears on *every* search.
         if coverage.isSuspicious {
             Logger.desktop.error("degraded: \(self.coverage.rendered) cards rendered, no payload — falling back to markup")
         }
@@ -264,12 +228,9 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// better than the mobile feed's and not worth the traffic.
     var canLoadMore: Bool { session == .authed }
 
-    /// Every card currently rendered, payload or not.
-    ///
-    /// Called repeatedly *during* a scroll rather than once at the end, because
-    /// the desktop feed virtualises: cards are recycled out of the DOM as they
-    /// leave the viewport, so a single read at the bottom returns the last
-    /// window rather than the feed.
+    /// Every card currently rendered, payload or not. Call it repeatedly
+    /// *during* a scroll: the feed virtualises, so a single read at the bottom
+    /// returns the last window rather than the feed.
     func renderedCards() async -> [DesktopRawCard] {
         guard let json = await evaluate(DesktopScripts.extractRenderedCards),
               let data = json.data(using: .utf8),
@@ -284,12 +245,9 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     }
 
     /// Where this page actually is, from both instruments: the place segment in
-    /// the URL and the pill the page rendered.
-    ///
-    /// Cheap enough to call after every load, and worth it — an unrecognised
-    /// place is not an error, it is a full page of the wrong city's listings
-    /// (`docs/location-targeting.md` §2), and this is the only thing that
-    /// distinguishes it.
+    /// the URL and the pill the page rendered. Worth calling after every load —
+    /// an unrecognised place is not an error but a full page of the wrong city's
+    /// listings (`docs/location-targeting.md` §2), and this is the only signal.
     /// - Parameter pillTimeout: how long to wait for the pill to appear. The
     ///   URL half is available immediately; the pill is rendered by the page's
     ///   own scripts and lands *after* the payload this engine harvests, so a
@@ -333,46 +291,24 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     }
 
     /// Scrolls one screen and reports whether there is any point scrolling
-    /// again.
+    /// again. One screen at a time with a harvest between: the caller has to
+    /// read the DOM before the cards it just loaded are recycled back out.
     ///
-    /// Deliberately one screen at a time with a harvest between: the caller has
-    /// to read the DOM before the cards it just loaded are recycled back out.
+    /// **This drives an element, not the webview.** Desktop Marketplace lays the
+    /// feed out inside an `overflow-y: auto` div and leaves the document exactly
+    /// one viewport tall, so `webView.scrollView` has nothing to scroll — at
+    /// 1280x900, `documentElement.scrollHeight` 900 over a feed container of
+    /// 3102.
     ///
-    /// **This drives an element, not the webview.** It used to move
-    /// `webView.scrollView.contentOffset`, which on this surface does nothing at
-    /// all: desktop Marketplace lays its feed out inside an `overflow-y: auto`
-    /// div and leaves the document exactly one viewport tall, so
-    /// `contentSize.height - bounds.height` is zero and the old implementation
-    /// returned `false` on its very first call — every time, on both the browse
-    /// feed and search results.
+    /// **The test is whether we advanced, not whether the document grew.** The
+    /// recycler collapses content above the viewport as well as below, so
+    /// `scrollHeight` oscillates while paging forward — 8515, 4711, 5043, 6330,
+    /// 6854, 7954, 6748, 4247 measured signed in, all while cards kept arriving.
+    /// A shrink can also clamp the scroll position backwards (3800 → 3469),
+    /// which reads as the end of a feed that has plenty left. So a clamp gets
+    /// one retry: the recycler re-expands and the second attempt goes through.
     ///
-    /// That made pagination a no-op wherever it ran. It went unnoticed for a
-    /// long time because `canLoadMore` is false without a session, so the only
-    /// code paths that ever called this were signed-in ones, and the app has
-    /// been developed signed out. Measured logged out at 1280x900:
-    /// `document.documentElement.scrollHeight` 900, `window.innerHeight` 900,
-    /// feed container 900 over 3102.
-    /// **The test is whether we advanced, not whether the document grew.**
-    ///
-    /// Document height is not a usable signal on this feed. The recycler
-    /// collapses content above the viewport as well as below it, so
-    /// `scrollHeight` oscillates while paging *forward* — measured signed in:
-    /// 8515, 4711, 5043, 6330, 6854, 7954, 6748, 4247, all while scrolling down
-    /// through cards that kept arriving. Worse, a shrink can clamp the scroll
-    /// position *backwards* (3800 → 3469), which an earlier version of this read
-    /// as the end of the feed and reported to the user as an exhausted
-    /// neighbourhood.
-    ///
-    /// Advancing is unambiguous: either the scroll position ended higher than it
-    /// started, or new cards appeared. A clamp gets one retry, because the
-    /// recycler re-expands a moment later and the second attempt goes through.
-    ///
-    /// Settling is adaptive. The old implementation slept 900 ms after every
-    /// screen whether React had recycled the card window in 150 ms or 850 ms.
-    /// Two unchanged readings are enough once the rendered listing ids change,
-    /// or while the new viewport is still inside content already rendered by
-    /// the page. 900 ms remains the ceiling at the end of that runway, where a
-    /// network-backed scroll really can take that long.
+    /// Settling is adaptive — see `waitForScrollToSettle`.
     @discardableResult
     func scrollOnce() async -> ScrollOutcome {
         var stalledReading: FeedScroll?
@@ -512,13 +448,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         }
     }
 
-    /// One reading, or nil with a reason in the log.
-    ///
-    /// The reason is the point. This returned a bare `nil` on any failure, and
-    /// `scrollOnce` reads nil as "can't scroll" — which is indistinguishable
-    /// from the end of the feed and produced exactly that message to the user.
-    /// A fractional `moved` value failing to decode into an `Int` cost an
-    /// afternoon precisely because it looked like a feed that had run out.
+    /// One reading, or nil with a reason in the log. The reason matters:
+    /// `scrollOnce` reads nil as "can't scroll", which is indistinguishable from
+    /// the end of the feed, so a decode failure otherwise reaches the user as an
+    /// exhausted neighbourhood.
     private func feedScroll(_ script: String) async -> FeedScroll? {
         guard let json = await evaluate(script), let data = json.data(using: .utf8) else {
             Logger.desktop.error("scroll: script returned nothing")
@@ -536,14 +469,11 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     /// Dismisses the "See more on Facebook" overlay if it offers a way out.
     ///
-    /// Logged out there is exactly **one** free dismissal per page load: it
-    /// unlocks the document (600px → 2340px) and scrolling then paginates
-    /// 15 → 39, after which the overlay returns as a different modal with no
-    /// close control at all — Escape and backdrop clicks are both no-ops.
-    ///
-    /// Not worth using for depth, because cards 16–39 carry no payload and are
-    /// therefore no better than mobile's. Kept for the case where the overlay
-    /// is merely covering the first 15.
+    /// Logged out there is exactly one free dismissal per page load: it unlocks
+    /// the document (600px → 2340px) and scrolling paginates 15 → 39, after
+    /// which the overlay returns with no close control at all. Not worth using
+    /// for depth — cards 16–39 carry no payload — but kept for the case where
+    /// the overlay is merely covering the first 15.
     @discardableResult
     func dismissOverlayIfPresent() async -> Bool {
         let result = await evaluate(Self.dismissOverlayJS)
@@ -578,22 +508,13 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     /// Resumes `navigate`, but only for the load it is actually waiting on.
     ///
-    /// **The callback that arrives is not always for the navigation in hand.**
-    /// Since `navigate` returns at `didCommit`, a caller can harvest and start
-    /// its next load while the previous page is still pulling images and
-    /// third-party chrome. `webView.load` cancels that one, and its terminal
-    /// callback — a cancelled `didFail`, or a `didFinish` that beat it — lands
-    /// *after* the next continuation is installed. Resuming on it returned
-    /// `navigate` before the new document had committed, so the caller then
-    /// harvested the page still on screen: the previous search's payload,
-    /// complete and plausible and about the wrong query.
-    ///
-    /// Two consecutive searches in one engine is exactly the seller flow —
-    /// active comparables, then sold ones — and it is where this showed. The
-    /// sold pass came back holding the active search's cards, every one of them
-    /// still for sale, so filtering to `is_sold` emptied it and the "Recently
-    /// sold nearby" strip vanished. Everywhere else the stale payload is a set
-    /// of listings that look fine, which is why nothing else caught it.
+    /// The callback that arrives is not always for the navigation in hand. Since
+    /// `navigate` returns at `didCommit`, a caller can start its next load while
+    /// the previous page is still pulling images; `webView.load` cancels that
+    /// one, and its terminal callback lands *after* the next continuation is
+    /// installed. Resuming on it returns `navigate` before the new document has
+    /// committed, and the caller harvests the previous search's payload —
+    /// complete, plausible, and about the wrong query.
     ///
     /// A nil navigation is accepted rather than ignored: WebKit omits it on
     /// some paths, and a continuation nobody resumes hangs the caller forever.
@@ -647,9 +568,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     }
 
     /// A superseded load fails by definition — `webView.load` cancels whatever
-    /// was in flight — so its error describes the load we walked away from, not
-    /// the one we are waiting on. Recording it put the engine in `.failed` on
-    /// the strength of a navigation nobody was reading any more.
+    /// was in flight — so its error describes the load we walked away from, and
+    /// recording it would put the engine in `.failed` over nothing.
     private func fail(_ navigation: WKNavigation?, _ error: Error) {
         guard isCurrent(navigation) else { return }
         state = .failed(error.localizedDescription)

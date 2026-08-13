@@ -115,8 +115,8 @@ func TestIdentifyCapsSearchQueriesAtTwo(t *testing.T) {
 }
 
 // No price is ever asked for or parsed here, and this is the test that says so.
-// The prompt used to carry a page of figures; if one ever comes back, somebody
-// has reintroduced the call whose arithmetic this feature does not trust.
+// A figure appearing in this prompt means somebody has reintroduced the call
+// whose arithmetic this feature does not trust.
 func TestIdentifyPromptCarriesNoMarketNumbers(t *testing.T) {
 	provider, request, _ := serveGemini(t, http.StatusOK, identifyOK)
 
@@ -196,8 +196,3 @@ func TestNewGeminiProviderRequiresKeyAndModel(t *testing.T) {
 		t.Error("want an error with no model")
 	}
 }
-
-// TestComparableLineMarksSoldAndFree stood here. It pinned down how a listing
-// was rendered into the pricing prompt — free items as "free", sold ones with
-// the days they sat — and it went with the prompt. No comparable is rendered
-// for a model any more; they are counted, and the counting is Swift's.

@@ -70,17 +70,11 @@ struct InterestPicker: View {
 
 /// The only place interests are chosen.
 ///
-/// The only place these are chosen now — onboarding stopped asking.
-///
-/// It used to require three before it would let go of the screen, which was
-/// already the weakest of its questions: a required answer about taste, asked
-/// before the person had seen a single listing. Then Discover stopped reading
-/// interests altogether, leaving them to drive the search field's suggestions
-/// and nothing else — far too little to charge a required question for.
-///
-/// They stay editable here for the reason they always were: a standing statement
-/// about what someone shops for shouldn't be frozen at whatever they tapped in
-/// their first thirty seconds with the app.
+/// The only place these are chosen — onboarding does not ask, since they drive
+/// the search field's suggestions and nothing else, which is too little to
+/// charge a required question about taste for. Editable because a standing
+/// statement about what someone shops for shouldn't be frozen at whatever they
+/// tapped in their first thirty seconds with the app.
 struct InterestSettingsView: View {
     @EnvironmentObject private var prefs: Preferences
 

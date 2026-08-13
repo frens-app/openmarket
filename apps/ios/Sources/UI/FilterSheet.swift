@@ -26,7 +26,7 @@ struct MarketplaceCity: Identifiable, Hashable {
     /// This whole list is a stopgap. Slugs are a guess at a name in a global
     /// namespace — `richmond` resolves to Richmond *Virginia* — so the real fix
     /// is resolving the user's own location to a numeric place id, which every
-    /// search payload already carries (§6, §7).
+    /// search payload already carries.
     static let common: [MarketplaceCity] = [
         MarketplaceCity(name: "San Francisco", slug: "sanfrancisco"),
         MarketplaceCity(name: "Oakland", slug: "oakland"),

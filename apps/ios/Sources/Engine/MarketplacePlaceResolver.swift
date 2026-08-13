@@ -200,12 +200,10 @@ struct UnauthenticatedMarketplacePlaceResolver {
 /// Runs on the app's shared store, **deliberately**, and this is the whole
 /// reason it works.
 ///
-/// It used to use a throwaway non-persistent store so the resolution touched
-/// nothing. That looked tidy and quietly threw away most of what the ten-second
-/// round-trip bought: Facebook keeps the fed coordinate in *session state* and
-/// ranks results by proximity to it, so a resolution performed in a store that
-/// is then discarded leaves the searches with a city slug and nothing else
-/// (`docs/location.md` §5).
+/// Deliberately not a throwaway non-persistent store. Facebook keeps the fed
+/// coordinate in *session state* and ranks results by proximity to it, so a
+/// resolution performed in a store that is then discarded leaves the searches
+/// with a city slug and nothing else (`docs/location.md` §5).
 ///
 /// The cost is real and was accepted knowingly: for a signed-in user, the
 /// coordinate is now associated with their Facebook session rather than an
@@ -420,13 +418,10 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         await js(script).contains("\"\(key)\":true")
     }
 
-    /// Polls a script until it reports `ready`, or gives up.
-    ///
-    /// Every wait in this file used to be a fixed sleep, which is the wrong
-    /// instrument twice over: it costs the full duration on a fast run, and on
-    /// a slow one it isn't enough — a measured run loaded the page in 4.2 s and
-    /// still had no pill 4 s later, failing the whole resolution. Waiting for
-    /// the actual condition is both quicker and steadier.
+    /// Polls a script until it reports `ready`, or gives up. A fixed sleep is
+    /// the wrong instrument twice over: it costs the full duration on a fast run
+    /// and isn't enough on a slow one — a measured run loaded the page in 4.2 s
+    /// and still had no pill 4 s later, failing the whole resolution.
     private func waitFor(_ script: String,
                          timeout: Duration = .seconds(12),
                          every: Duration = .milliseconds(200)) async -> Bool {
@@ -456,12 +451,9 @@ final class MarketplacePlaceResolver: NSObject, WKNavigationDelegate {
         return (result as? String) ?? ""
     }
 
-    /// Paced like every other request the app makes.
-    ///
-    /// A resolution is two page loads, and they used to go out entirely outside
-    /// the pacer — invisible to the session cap and, worse, to the backoff
-    /// ladder. Now that these requests carry the user's session they are the
-    /// last ones that should be exempt.
+    /// Paced like every other request the app makes. A resolution is two page
+    /// loads carrying the user's session, so they are the last ones that should
+    /// be invisible to the session cap or the backoff ladder.
     ///
     /// Returns false when the pacer refuses, which surfaces as a resolution
     /// failure rather than a silent partial run.

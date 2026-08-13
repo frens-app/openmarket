@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreLocation
 
-/// §3.2 — the progressive preview. The transition never waits on the network:
+/// The progressive preview. The transition never waits on the network:
 /// everything the grid already knows renders on the first frame, and detail
 /// fades in behind it.
 struct DetailView: View {
@@ -76,8 +76,6 @@ struct DetailView: View {
         .safeAreaInset(edge: .bottom) { primaryAction }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { saveButton }
-            // Sharing was the only other entry in what used to be an overflow
-            // menu, so it goes straight in the toolbar rather than behind one.
             if let url = current.itemURL {
                 ToolbarItem(placement: .topBarTrailing) {
                     ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }
@@ -262,11 +260,9 @@ struct DetailView: View {
             if let title = current.title {
                 Text(title).font(.title3)
             }
-            // Unconditional. This used to be hidden once the map could render,
-            // which meant a line appearing and then vanishing under the title
-            // as a geocode or an item coordinate landed — a second, smaller
-            // version of the hero's jump. The map card no longer repeats the
-            // place, so there's nothing to de-duplicate against.
+            // Unconditional: hiding it once the map can render makes a line
+            // appear and then vanish under the title as a geocode lands. The map
+            // card doesn't repeat the place, so there's nothing to duplicate.
             if let location = placeName {
                 HStack(spacing: 5) {
                     Text(location)
@@ -587,7 +583,7 @@ struct DetailView: View {
         }
     }
 
-    /// §3.2 — a quiet inline row, never a dialog. The preview above it still
+    /// A quiet inline row, never a dialog. The preview above it still
     /// has the price, title, location and photo, which is most of what anyone
     /// needs to decide.
     private var unavailableNotice: some View {
@@ -616,7 +612,7 @@ struct DetailView: View {
         }
     }
 
-    /// §4 — every route out is a link. When the canonical URL never resolved,
+    /// Every route out is a link. When the canonical URL never resolved,
     /// fall back to a Marketplace search for the title rather than a dead end.
     private func openInFacebook() {
         if let url = current.itemURL {
@@ -626,7 +622,7 @@ struct DetailView: View {
         }
     }
 
-    /// §4 — every action is a link-out, never an in-app flow.
+    /// Every action is a link-out, never an in-app flow.
     private var primaryAction: some View {
         VStack(spacing: 0) {
             Divider()

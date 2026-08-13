@@ -31,12 +31,9 @@ struct LocationPickerSheet: View {
     /// is on the screen behind it.
     @State private var isSearchActive = false
 
-    /// Typing takes the screen over.
-    ///
-    /// The suggestions used to be a third section, below the map and the
-    /// distance pills — so results for what you had just typed appeared off the
-    /// bottom of the screen and had to be scrolled to. A search field whose
-    /// results aren't where you are looking isn't a search field.
+    /// Typing takes the screen over. As a third section below the map and the
+    /// distance pills, results for what you just typed land off the bottom of
+    /// the screen — a search field whose results aren't where you are looking.
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -99,13 +96,9 @@ struct LocationPickerSheet: View {
     @ViewBuilder
     private var currentSection: some View {
         Section {
-            // Always drawn, chosen place or not.
-            //
-            // The screen used to be a bare button until something had been
-            // picked, which is backwards: the map is most useful *before* the
-            // decision, when it can show where you are and therefore what
-            // "here" would mean. With nothing set it makes no claim — no
-            // circle — and simply orients.
+            // Always drawn, chosen place or not: the map is most useful
+            // *before* the decision, when it shows what "here" would mean. With
+            // nothing set it makes no claim — no circle — and simply orients.
             LocationMapCard(place: mapPlace ?? "no location",
                             coordinate: mapCentre,
                             precision: mapPlace == nil ? .unset : .city,
@@ -123,15 +116,9 @@ struct LocationPickerSheet: View {
                         .font(.subheadline.weight(.semibold))
                 }
             } else if let place = prefs.resolvedPlace {
-                // Just the name.
-                //
-                // This used to also print the URL segment and a "confirmed on
-                // Facebook" badge. Both were really notes to ourselves: the
-                // segment is an implementation detail, and the badge reassured
-                // the reader about something that is now an invariant — an
-                // unconfirmed place is never stored at all, so anything on this
-                // screen has already been checked. Saying so added a line
-                // without adding a fact.
+                // Just the name. No URL segment (an implementation detail) and
+                // no "confirmed on Facebook" badge — an unconfirmed place is
+                // never stored, so it would state an invariant, not a fact.
                 HStack {
                     Image(systemName: place.isUserLocation ? "location.fill" : "mappin.and.ellipse")
                         .foregroundStyle(.tint)

@@ -118,15 +118,11 @@ func (s *pricingServer) IdentifyItem(
 
 // CompletePriceCheck writes down what the device found. It calls no model.
 //
-// The clamp that used to live here is gone with the call it guarded: it existed
-// because a model picked the price and a model can pick a number outside its own
-// evidence. `PriceGuide` picks the median of the prices it was given, which is
-// inside the range by construction. Clamping a median to the range it came from
-// would be theatre.
-//
-// What is checked instead is that there was a market at all. A zero `stats`
-// message deserializes into a market of nothing, and a "median of no prices"
-// is the shape of a number with nothing behind it.
+// The price needs no clamping to its evidence — `PriceGuide` takes the median of
+// the prices it was given, so it is inside the range by construction. What is
+// checked is that there was a market at all: a zero `stats` message
+// deserializes into a market of nothing, and a "median of no prices" is a number
+// with nothing behind it.
 func (s *pricingServer) CompletePriceCheck(
 	ctx context.Context,
 	req *connect.Request[v1.CompletePriceCheckRequest],
@@ -439,15 +435,3 @@ func decodePhotos(raw [][]byte) ([]llm.Photo, []photoMeta, error) {
 	}
 	return photos, meta, nil
 }
-
-// Four helpers stood here, and all four went with the pricing call:
-//
-//   statsFromProto        translated the market for a prompt to read
-//   comparablesFromProto  translated the listings for the same prompt
-//   conditionProto        mapped a guess nothing consumed
-//   clamp                 held a model's number inside its own evidence
-//
-// None of them were wrong. They were the cost of having a model produce a
-// figure, and that cost is only visible once the figure comes from somewhere
-// else. `CompletePriceCheck` reads the four values it records straight off the
-// request.

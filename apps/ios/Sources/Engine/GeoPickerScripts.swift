@@ -6,8 +6,8 @@ import Foundation
 /// silently serves the IP city instead (`docs/location-targeting.md` §4). But
 /// the "Change location" dialog has a centring arrow that asks the *browser*
 /// where it is, and it accepts whatever answer it gets: fed London from a
-/// Toronto session behind a San Francisco IP, it resolved to London (§5a, and
-/// §5b for the same result inside `WKWebView`).
+/// Toronto session behind a San Francisco IP, it resolved to London — the same
+/// result inside `WKWebView` (`docs/location.md`).
 ///
 /// So Facebook does the place resolution, and the app never guesses a slug.
 enum GeoPickerScripts {
@@ -76,15 +76,12 @@ enum GeoPickerScripts {
 
     /// Finding the header pill, by what it *is* rather than what it says.
     ///
-    /// **The aria-label is the target; the text is the fallback.** This used to
-    /// be a text match alone — the first `div[role="button"]` whose text looked
-    /// like "San Francisco · 40 mi" — and that is a description of the pill's
-    /// current typography, not of the pill. Logged out it matched exactly one
-    /// element and worked for months. Signed in, the logged-in chrome puts more
-    /// buttons on the page, the first match was **the notifications button**,
-    /// and clicking it opened the notifications flyout: the dialog we then
-    /// searched for a centring arrow contained "Notification Actions |
-    /// Notifications filters | 3 days ago".
+    /// **The aria-label is the target; the text is the fallback.** Matching on
+    /// text alone — the first `div[role="button"]` reading like "San Francisco ·
+    /// 40 mi" — describes the pill's current typography rather than the pill.
+    /// Logged out it matches exactly one element; signed in, the extra chrome
+    /// puts **the notifications button** first, and clicking it opens a flyout
+    /// whose dialog reads "Notification Actions | Notifications filters".
     ///
     /// The label is written for a screen reader, so it spells the place out in
     /// full — "Location: San Francisco, California" — no matter how the visible
@@ -331,7 +328,7 @@ enum GeoPickerScripts {
       var name = pill ? pill.split('·')[0].trim() : null;
       // The raw pill goes back untouched as well as parsed — `DesktopLocationPill`
       // reads the radius out of it, and an unexpected format is only
-      // debuggable if the original text survives (probe checklist §2).
+      // debuggable if the original text survives (`docs/probe-checklist.md` §2).
       return JSON.stringify({ name: name, pill: pill, url: location.href });
     })()
     """

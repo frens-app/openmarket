@@ -6,7 +6,7 @@ import Foundation
 /// `data-mcomponent` containers keyed by an opaque `data-action-id`. There are
 /// no listing anchors and no ids anywhere in the DOM, so:
 ///   • cards are found structurally (a container holding an fbcdn image and an h3),
-///   • the scripts return *raw* text runs and let Swift classify them (§6 keeps
+///   • the scripts return *raw* text runs and let Swift classify them (which keeps
 ///     interpretation testable outside a webview),
 ///   • the canonical item URL is resolved by clicking a card and catching the
 ///     navigation, which the feed cancels (see FeedEngine).

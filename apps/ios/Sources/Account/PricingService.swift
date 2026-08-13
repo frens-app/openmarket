@@ -165,12 +165,10 @@ final class PricingService {
 
     /// The market, as this device measured it.
     ///
-    /// These used to be sent so a model could pick a point inside them without
-    /// having to derive them — it cannot: asked to justify its own figure
-    /// against fourteen prices, the previous one wrote "you are asking CA$20
-    /// more than the median price of CA$80" when the median was CA$77 and the
-    /// gap was CA$33. Now `PriceGuide` picks the point too, and these travel
-    /// only so the row can say what the market looked like on the day.
+    /// Sent only so the row can say what the market looked like on the day —
+    /// `PriceGuide` picks the point. A model asked to justify its own figure
+    /// against fourteen prices wrote "you are asking CA$20 more than the median
+    /// price of CA$80" when the median was CA$77 and the gap was CA$33.
     private static func stats(guide: PriceGuide, sold: SoldSignal) -> MarketStats {
         var stats = MarketStats()
         stats.pricedCount = Int32(guide.count)

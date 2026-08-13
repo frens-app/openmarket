@@ -3,25 +3,18 @@ import SwiftUI
 /// The card-to-detail transition, expressed as a *navigation* transition rather
 /// than as a geometry match.
 ///
-/// This used to be a `matchedGeometryEffect` with one id shared between the
-/// grid card's thumbnail and the detail screen's photo deck. That is not what
-/// the effect is for. It matches two views **within a single hierarchy** by
-/// electing one the geometry source and forcing the other into its frame — but
-/// a `navigationDestination` push leaves both on screen at once, each declaring
-/// itself a source for the same id, and what happens then is undefined.
+/// **Not** a `matchedGeometryEffect` sharing one id between the grid card's
+/// thumbnail and the detail's photo deck. That effect matches two views within a
+/// single hierarchy by electing one the geometry source, but a
+/// `navigationDestination` push leaves both on screen at once, each declaring
+/// itself the source for the same id, and the result is undefined — visibly so
+/// on the interactive back swipe (FRE-6481), where the detail's photo snapped
+/// into the card's 180pt frame while the page dots stayed put.
 ///
-/// The visible symptom (FRE-6481) was the interactive back swipe: part-way
-/// through the pop, with the grid and the detail both mounted, the detail's
-/// photo snapped into the card's 180pt frame at the left edge while the page
-/// dots stayed where they were — a sliver of photo down the side of an empty
-/// black box.
-///
-/// `.zoom` is the supported spelling of the same intent. The source is only a
-/// marker; the animation is driven by the navigation stack itself, so it knows
-/// about the interactive pop and can run backwards with the user's thumb. It
-/// arrived in iOS 18, and on 17 both modifiers below do nothing and the push is
-/// the system's standard slide — the right fallback, given the choice is
-/// between a transition that is merely plain and one that was visibly broken.
+/// `.zoom` is the supported spelling of the same intent: the source is only a
+/// marker, and the navigation stack drives the animation, so it knows about the
+/// interactive pop and can run backwards with the user's thumb. iOS 18+; on 17
+/// both modifiers below do nothing and the push is the standard slide.
 extension View {
     /// Marks the card a push should zoom out of.
     @ViewBuilder

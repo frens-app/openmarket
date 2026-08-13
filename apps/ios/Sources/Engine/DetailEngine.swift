@@ -8,12 +8,11 @@ extension Logger {
 
 /// Webview B — the fallback path to an item page, plus the session cache.
 ///
-/// This used to be how every listing was opened. It no longer is: tapping a
-/// card lands `FeedEngine` on the item page with the full document already in
-/// its DOM, so loading the same page a second time here cost ~4.4s of a ~6.5s
-/// tap for nothing. What remains is the route for cards the tap can't reach —
-/// resolve the id by searching the desktop surface, then load the page — and
-/// the cache both paths write into.
+/// Not the usual path: tapping a card lands `FeedEngine` on the item page with
+/// the full document already in its DOM, and loading it a second time here costs
+/// ~4.4s of a ~6.5s tap for nothing. What remains is the route for cards the tap
+/// can't reach — resolve the id by searching the desktop surface, then load the
+/// page — and the cache both paths write into.
 ///
 /// Detail pages are ordinary documents: description, condition, posted date,
 /// photos and location all render logged out (seller identity does not).
@@ -30,10 +29,8 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
     /// only reliable way to learn a listing's canonical URL. Its detail pages
     /// are also the richer ones.
     /// Item pages are loaded with the *mobile* UA: it is the only surface that
-    /// publishes the seller's name, join date and rating. Condition used to be
-    /// the reason for preferring desktop here, and that reason is gone — it now
-    /// arrives on the card's own aria-label. The desktop UA is still needed for
-    /// `resolveItemURL`, which is why the agent is set per load rather than once.
+    /// publishes the seller's name, join date and rating. `resolveItemURL` still
+    /// needs the desktop UA, which is why the agent is set per load, not once.
     static let mobileUserAgent =
         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 " +
         "(KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1"
@@ -44,14 +41,10 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
 
     let session: BrowserSession
 
-    /// Shares a store with the feed engine rather than getting its own.
-    ///
-    /// It used to be `.nonPersistent()`, which meant every listing opened
-    /// against an empty cache: Facebook's scripts, stylesheets and fonts were
-    /// refetched for each one even though the search page in the next webview
-    /// had just downloaded them. Sharing the store lets a detail load reuse all
-    /// of it — and, when signed in, the session cookies too, without which the
-    /// page has no seller data to render.
+    /// Shares a store with the feed engine rather than getting its own, so a
+    /// detail load reuses the scripts, stylesheets and fonts the search page in
+    /// the next webview just downloaded — and, signed in, the session cookies,
+    /// without which the page has no seller data to render.
     init(session: BrowserSession = .authed,
          metrics: MetricsReporter = LocalMetrics.shared,
          pacer: RequestPacer = .shared) {
@@ -232,7 +225,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         return latest
     }
 
-    /// §3.2 — the preview is the screen; this only ever enhances it. Failure is
+    /// The preview is the screen; this only ever enhances it. Failure is
     /// quiet and the caller keeps showing what it already had.
     ///
     /// Deliberately uncached. Caching moved to `ListingCache`, which persists

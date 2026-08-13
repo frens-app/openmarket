@@ -4,18 +4,11 @@ import SwiftUI
 /// to Browse, which is the things other people are selling.
 ///
 /// A menu rather than the tool itself, even though there is exactly one tool
-/// today. The tab used to open straight into what is now Price Check, which made
-/// "Seller" and "the pricing screen" the same thing — and every second tool
-/// would then have had to displace it. A list costs one tap and makes the shape
-/// of the tab honest: these are separate jobs that happen to share a location, a
-/// session and a webview.
-///
-/// **The two "coming soon" rows are gone.** They were listed rather than hidden
-/// on the argument that a one-item menu reads as a mistake — which was a worry
-/// about how the screen looks, weighed against two rows that promise things
-/// nobody is building. One real row is honest; three rows where two do nothing
-/// is a menu that mostly does nothing. If either gets built it comes back as a
-/// `NavigationLink`, which is a smaller change than the placeholder was.
+/// today: opening straight into Price Check would make "Seller" and "the pricing
+/// screen" the same thing, and every second tool would have to displace it.
+/// These are separate jobs that happen to share a location, a session and a
+/// webview. No placeholder rows for unbuilt tools — a menu where most entries do
+/// nothing is worse than a short one.
 struct ToolsView: View {
     var body: some View {
         NavigationStack {
@@ -50,11 +43,8 @@ private struct ToolRow: View {
     let summary: String
 
     var body: some View {
-        // Centred rather than top-aligned. The chevron used to hang off the
-        // first line with a nudge of padding to fake it, which only looks right
-        // while the summary is exactly two lines — it is a two-line summary
-        // today and a three-line one after any edit. Centring the row means the
-        // marker sits against the block it belongs to whatever length it is.
+        // Centred, not top-aligned: the chevron then sits against the block it
+        // belongs to whatever length the summary turns out to be.
         HStack(alignment: .center, spacing: 14) {
             Image(systemName: icon)
                 .font(.title3)

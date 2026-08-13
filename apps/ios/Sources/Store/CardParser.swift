@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Cards carry no labels — just an image and a couple of text blocks — so
 /// fields are identified by pattern rather than position, and every one of them
-/// is optional (§2.2: a card missing a field still renders).
+/// is optional — a card missing a field still renders.
 enum CardParser {
     /// Badges Facebook overlays on the thumbnail. They arrive mixed into the
     /// card text and would otherwise be mistaken for a title.
@@ -77,7 +77,7 @@ enum CardParser {
             .filter { !$0.isEmpty }
     }
 
-    /// "Free", "$1,200", "£40", "€15", "Please contact" — all stay strings (§2.3).
+    /// "Free", "$1,200", "£40", "€15", "Please contact" — all stay strings.
     static func isPrice(_ text: String) -> Bool {
         let lowered = text.lowercased()
         if lowered == "free" { return true }

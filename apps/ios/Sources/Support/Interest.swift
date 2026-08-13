@@ -7,18 +7,10 @@ import Foundation
 /// these under "Try", where a new install would otherwise get a fixed list of
 /// categories that had nothing to do with anybody.
 ///
-/// **It used to be load-bearing and no longer is.** Discover was assembled out
-/// of the user's own recent searches, topped up from these when there was no
-/// history, so on a new install this list was literally what the home screen
-/// was made of. Discover is now Facebook's own browse feed for everybody
-/// (`DiscoverFeed`), which leaves the search suggestions as the whole of the
-/// job (`docs/discover.md` §6.1).
-///
-/// Onboarding stopped asking for these in the same week, and the minimum of
-/// three went with it — it was `DiscoverFeed.searchCount` wearing a different
-/// name, and there is nothing left for it to protect. Settings is where they
-/// are chosen now, and picking none is allowed: `Interest.defaults` fills the
-/// "Try" row for anyone who never goes looking.
+/// The search suggestions are the whole of the job (`docs/discover.md` §6.1) —
+/// Discover is Facebook's own browse feed for everybody. Chosen in Settings, and
+/// picking none is allowed: `Interest.defaults` fills the "Try" row for anyone
+/// who never goes looking.
 ///
 /// Stored as `id` strings in `Preferences.interests`, never as labels or search
 /// terms. Both of those are presentation decisions that should be changeable —

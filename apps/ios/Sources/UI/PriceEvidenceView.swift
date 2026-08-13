@@ -2,19 +2,12 @@ import SwiftUI
 
 /// Everything the price was built from, one screen behind a tap.
 ///
-/// The comparables used to be on the main screen, above the answer, on the
-/// argument that they are the working rather than an illustration. They still
-/// are — but two horizontal strips and a paragraph of arithmetic is most of a
-/// screen, and it sat between a person and the number they came for.
-///
-/// So the claim moved rather than the evidence: the main screen says what the
-/// price is and where it sits, and says out loud how many listings are behind
-/// it. This is where somebody who wants to check goes, and it holds the things
-/// that screen can no longer afford — the full arithmetic, and every card.
-///
-/// **The two caveats live here now, in full.** They are the ones nothing else
-/// on either screen can say: these are asking prices rather than sale prices,
-/// and a list filtered on having sold cannot contain the things that didn't.
+/// The main screen states the price, where it sits, and how many listings are
+/// behind it; two horizontal strips and a paragraph of arithmetic would sit
+/// between a person and the number they came for. This is where somebody who
+/// wants to check the working goes, and it carries the two caveats in full:
+/// these are asking prices rather than sale prices, and a list filtered on
+/// having sold cannot contain the things that didn't.
 struct PriceEvidenceView: View {
     let comps: [MarketComp]
     let sold: SoldSignal

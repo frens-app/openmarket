@@ -10,7 +10,7 @@ struct ListingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             thumbnail
-            // §3.1 — price carries the heaviest weight in the cell.
+            // Price carries the heaviest weight in the cell.
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(listing.priceText ?? "—")
                     .font(.headline)
@@ -26,7 +26,7 @@ struct ListingCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(2, reservesSpace: true)
                 .multilineTextAlignment(.leading)
-            // §3.1 — location and distance are the point of a *local* browser,
+            // Location and distance are the point of a *local* browser,
             // so they get their own line whenever the surface provides them.
             HStack(spacing: 4) {
                 Text(listing.locationText ?? " ")
