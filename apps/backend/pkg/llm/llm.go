@@ -21,17 +21,12 @@ import (
 
 // Stage is which call a run belongs to. The values match the `llm_run_stage`
 // enum in migration 00004.
-//
-// There is only one stage now. `StagePrice` stays defined because rows carrying
-// it are already in the table and a reader that does not know the value cannot
-// interpret them — the constant is how those rows stay legible, not a hint that
-// something still writes them. Dropping the value from the Postgres enum would
-// be worse still: it would fail against the existing data.
 type Stage string
 
 const (
 	StageIdentify Stage = "IDENTIFY"
-	// Written by the pricing call, which was removed. Historical only.
+	// Nothing writes this. Defined so the rows already carrying it stay
+	// legible; dropping it from the Postgres enum would fail against them.
 	StagePrice Stage = "PRICE"
 )
 
@@ -54,12 +49,11 @@ type IdentifyInput struct {
 // IdentifiedItem is everything the model produces: what the thing is, what to
 // search for, and the listing to paste.
 //
-// All of it from the photo and the seller's words, and none of it from the
-// market — because the model never sees the market. The on-device version this
-// replaces did, and took the item's identity from it, titling a stroller "IKEA
-// Malm 4 Drawer Dresser White" on three runs out of three. Writing the copy
-// here rather than after the search is what makes that unreachable instead of
-// prompted against.
+// All from the photo and the seller's words, none from the market, because the
+// model never sees the market. A version that did took the item's identity from
+// the comparables, titling a stroller "IKEA Malm 4 Drawer Dresser White" on
+// three runs out of three. Writing the copy before the search makes that
+// unreachable rather than prompted against.
 type IdentifiedItem struct {
 	Name string
 	// One or two. The second is a fallback phrasing of the same item, never a
@@ -98,12 +92,9 @@ type Usage struct {
 	Model string
 }
 
-// Provider is one vendor's implementation of the one call.
-//
-// Narrow on purpose, and narrower than it was: everything a caller needs to
-// swap Gemini for GPT or for a gateway is behind these two methods, and nothing
-// above this line knows which one is configured. `Price` used to sit here. The
-// price is a median now, so it is Swift's, not a vendor's.
+// Provider is one vendor's implementation of the one call. Narrow on purpose:
+// everything needed to swap Gemini for GPT or for a gateway is behind these two
+// methods, and nothing above this line knows which is configured.
 type Provider interface {
 	// Name is the vendor, recorded on every run: "google", "openai", "stub".
 	Name() string
@@ -129,16 +120,12 @@ const (
 	// spaces.
 	ErrorCodeRefused ErrorCode = "refused"
 	// We sent something the provider would not accept — a schema it rejects, a
-	// key it does not recognise, a model id it cannot route. Separate from
-	// `refused` because the two are indistinguishable in the column and opposite
-	// in meaning: `refused` is a judgement about the user's item and the honest
-	// advice is to reword it, while this is a bug in our request that no wording
-	// will fix and every user hits at once.
-	//
-	// Earned: an empty string in the `condition` enum is legal JSON Schema and
-	// illegal to Vertex, which 400s. Filed as `refused`, that read as "the model
-	// declined this photo" — advice that would have sent every user rewording a
-	// description while the real fault sat in a Go map.
+	// key it does not recognise, a model id it cannot route. Kept apart from
+	// `refused` because the two are opposite in meaning: `refused` is a
+	// judgement about the user's item and rewording it helps, while this is a
+	// bug in our request that every user hits at once. An empty string in the
+	// `condition` enum is legal JSON Schema and a 400 from Vertex; filed as
+	// `refused` it would send every user rewording their description.
 	ErrorCodeBadRequest ErrorCode = "bad_request"
 	ErrorCodeUnknown    ErrorCode = "unknown"
 )

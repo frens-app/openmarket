@@ -14,9 +14,8 @@ import SwiftUI
 /// on the first frame and then shoves the whole page down when a photo decodes.
 struct PhotoGallery: View {
     let photos: [URL]
-    /// Drawn over the deck when the listing is gone — the deck owns the hero
-    /// slot now, so it also owns the dimming and the stamp that used to sit on
-    /// the hero.
+    /// Drawn over the deck when the listing is gone. The deck owns the hero
+    /// slot, so it owns the dimming and the stamp too.
     let overlay: AnyView?
 
     static let height: CGFloat = 360

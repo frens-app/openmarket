@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// §8. Counters and rates only — no listing content and no search terms pass
+/// Counters and rates only — no listing content and no search terms pass
 /// through here. (That describes this file, not the app: `Analytics` sends
 /// content deliberately.)
 ///
@@ -28,7 +28,7 @@ struct ParseHealth: Equatable {
         return Double(fieldCounts[field] ?? 0) / Double(extracted)
     }
 
-    /// §3.4 flags any field below this.
+    /// Any field below this is flagged.
     static let coverageThreshold = 0.90
 
     var failingFields: [String] {
@@ -66,7 +66,7 @@ final class LocalMetrics: MetricsReporter {
         log.info("detail \(succeeded ? "ok" : "failed") in \(String(format: "%.2f", seconds))s")
     }
 
-    /// §4 makes every route out of a listing a link, so this is the last thing
+    /// Every route out of a listing is a link, so this is the last thing
     /// the app can observe about somebody who went on to buy something.
     func handoff(kind: String) {
         log.info("handoff: \(kind, privacy: .public)")

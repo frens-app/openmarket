@@ -53,7 +53,7 @@ final class FeedEngine: NSObject, ObservableObject, WKNavigationDelegate {
         self.pacer = pacer
 
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .nonPersistent()   // §7.1 — never share Safari's or the FB app's session
+        config.websiteDataStore = .nonPersistent()   // never share Safari's or the FB app's session
         config.allowsInlineMediaPlayback = true
         config.suppressesIncrementalRendering = false
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 402, height: 874), configuration: config)
@@ -240,10 +240,9 @@ final class FeedEngine: NSObject, ObservableObject, WKNavigationDelegate {
     /// appears, the entire item page is already in this webview's DOM. Measured
     /// at **3ms** — description, all twelve photos, seller and coordinate.
     ///
-    /// This used to wind history back at that exact moment and hand the bare
-    /// URL to `DetailEngine`, which loaded the identical page a second time.
-    /// That round trip was ~4.4s of the ~6.5s a tap cost: 830ms of settling
-    /// plus a 3.5s cold load of a page we were standing on.
+    /// Read in place rather than handing the URL to `DetailEngine`, which would
+    /// load the identical page a second time — ~4.4s of the ~6.5s a tap cost:
+    /// 830ms of settling plus a 3.5s cold load of a page we were standing on.
     ///
     /// `onPartial` fires as soon as there is text to show, seconds before the
     /// gallery resolves. The return value is the most complete read.
@@ -306,9 +305,8 @@ final class FeedEngine: NSObject, ObservableObject, WKNavigationDelegate {
     }
 
     /// Winds the feed back to the results page — *after* the caller has its
-    /// data — then releases the gate. Restoring used to sit on the user's
-    /// critical path for 800ms; nothing about it needs to. Verified to restore
-    /// all 26 cards.
+    /// data — then releases the gate, so its 800ms stays off the user's critical
+    /// path. Verified to restore all 26 cards.
     private func scheduleFeedRestore() {
         Task { @MainActor [weak self] in
             guard let self else { return }

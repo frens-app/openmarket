@@ -53,9 +53,8 @@ struct PhoneLoginView: View {
                 devSkip
                 #endif
             }
-            // Keep the form anchored while the keyboard's AutoFill row appears
-            // and disappears. Flexible spacers above and below used to recenter
-            // the whole screen every time the keyboard changed height.
+            // Anchored, not centred with flexible spacers: those recenter the
+            // whole screen every time the keyboard's AutoFill row appears.
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 28)
             .padding(.top, 48)

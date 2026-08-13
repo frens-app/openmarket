@@ -7,15 +7,10 @@ import CoreLocation
 /// they're easiest to ask:
 ///
 /// 1. **Phone** — required. The account is the app; there is no signed-out
-///    version of a product whose listings belong to accounts. This used to be a
-///    separate gate *outside* onboarding, which meant a first run was a login
-///    screen followed by a flow that started over with "welcome". It is the
-///    first step of one flow now.
+///    version of a product whose listings belong to accounts.
 /// 2. **Facebook** — skippable, and pressed anyway. Everything measured about a
 ///    signed-in session says it is the version worth having
-///    (`docs/logged-in-findings.md`), and the reduced version is described
-///    honestly next to the decline so nobody discovers it as a series of small
-///    absences later.
+///    (`docs/logged-in-findings.md`).
 /// 3. **Location** — required. Every search is centred on a place and distance
 ///    is applied on this device (`docs/filter-parameters.md` §3), so without one
 ///    the app measures from a hardcoded city and pretends that's the user's.
@@ -23,30 +18,14 @@ import CoreLocation
 ///    permission prompt with no stated purpose is the one people decline by
 ///    reflex, and iOS only ever shows it once.
 ///
-/// The welcome carousel that used to open this is gone. It was three screens of
-/// explanation before a single question, and each step now carries its own
-/// reason at the moment the question is asked, which is where an explanation is
-/// worth reading.
-///
-/// **The sequence is fixed, and it is a cursor.** Once this view is on screen it
-/// runs `phone → facebook → location → notifications` in that order, every time,
-/// and each step advances it by being *completed* — not by some persisted flag
-/// going true.
-///
-/// This replaced a derived order, which read the session, the saved flags and the
-/// resolved place on every change and showed whichever step was still
-/// outstanding. It was resumable and it was wrong three separate ways, all the
-/// same shape: an answer that landed early moved the flow. A place resolving in
-/// the background skipped the rest of the run; a second account inherited the
-/// first one's answers and opened on the last screen; a returning account's
-/// server-side `onboardingCompleted` dismissed the flow mid-step. Each was a real
-/// bug, each was fixed by pinning one more thing down, and the pattern was the
-/// argument: a flow whose position is computed from state has as many ways to
-/// jump as it has inputs.
-///
-/// What it costs is resumability. Quitting halfway starts the four screens over
-/// rather than resuming — two of which are one tap to pass — and that is the
-/// trade being made deliberately.
+/// **The sequence is fixed, and it is a cursor.** It runs in that order every
+/// time, and each step advances it by being *completed* — never by a persisted
+/// flag going true. A position derived from state has as many ways to jump as it
+/// has inputs: a place resolving in the background skipped the rest of the run,
+/// a second account inherited the first's answers, a returning account's
+/// server-side `onboardingCompleted` dismissed the flow mid-step. The cost is
+/// resumability — quitting halfway starts the four screens over, two of which
+/// are one tap to pass.
 struct OnboardingView: View {
     /// Called once every step has been answered or passed. Sets
     /// `hasCompletedOnboarding`, which is what dismisses this.
@@ -128,15 +107,10 @@ struct OnboardingView: View {
         current = current.next
     }
 
-    /// A dot per step, and no back button.
-    ///
-    /// Back was removed with the welcome screen: three of these four steps are
-    /// answered somewhere other than this flow — a verified phone number, a
-    /// Facebook cookie jar, a system permission — so a chevron would offer to
-    /// return to questions that are no longer askable. The two answers that
-    /// *are* changeable from here (the place, and whether to connect Facebook)
-    /// are both changeable again from Settings, which is where a second thought
-    /// belongs.
+    /// A dot per step, and no back button: three of the four steps are answered
+    /// outside this flow — a verified phone number, a Facebook cookie jar, a
+    /// system permission — so a chevron would offer to return to questions that
+    /// are no longer askable. Settings is where a second thought belongs.
     private var header: some View {
         HStack(spacing: 6) {
             ForEach(Step.allCases, id: \.rawValue) { dot in
@@ -153,13 +127,10 @@ struct OnboardingView: View {
 
     /// The one place in the app that waits for a location to be agreed.
     ///
-    /// Everything the location step does is optimistic, which is what keeps a
-    /// first run moving — the ten-second round trip to name the place runs while
-    /// the user reads the notifications screen. But a place that never landed
-    /// must not reach the app: `Preferences.needsOnboarding` re-checks it on
-    /// every launch, so letting it through would show onboarding again on the
-    /// next start. So the last step settles first, and a failure sends the user
-    /// back to the step that asks, where the error is already on screen.
+    /// The location step is optimistic — its ten-second round trip runs while
+    /// the user reads the notifications screen — but a place that never landed
+    /// must not reach the app: `Preferences.needsOnboarding` re-checks it every
+    /// launch, so letting it through would just show onboarding again.
     private func finish() {
         // The last step finishes rather than advances, so it is counted here.
         Analytics.capture(.onboardingStepCompleted, [
@@ -189,19 +160,11 @@ struct OnboardingView: View {
 /// answer the app stores.
 ///
 /// Everything measured about a signed-in session says this is the version of the
-/// app worth having (`docs/logged-in-findings.md`): a stable seller id, so a
-/// listing can be attributed rather than shrugged at; results that keep loading
-/// instead of stopping at the first batch; and ranking done against a real
-/// account rather than against nobody. Handing off to message a seller lands in
-/// an app that already knows who you are.
-///
-/// So the primary action is signing in and "not now" is a text button underneath
-/// it. The three lines above the buttons are the whole argument — a caption
-/// under the decline used to list what still works without an account, and it
-/// was answering a question nobody had yet while making the cheaper option look
-/// like the considered one. The reduced app is genuinely usable, which is why
-/// this isn't a gate; Settings is where somebody who declines can change their
-/// mind.
+/// app worth having (`docs/logged-in-findings.md`): a stable seller id, results
+/// that keep loading, and ranking against a real account. So signing in is the
+/// primary action and "not now" is a text button underneath. The reduced app is
+/// genuinely usable, which is why this isn't a gate; Settings is where somebody
+/// who declines can change their mind.
 private struct FacebookPage: View {
     let done: () -> Void
 
@@ -220,15 +183,9 @@ private struct FacebookPage: View {
         let body: String
     }
 
-    /// Benefits, stated as benefits.
-    ///
-    /// Every line here used to name the thing you lose without an account —
-    /// "none of which a signed-out page carries", "a search stops after the
-    /// first couple of dozen". Accurate, and the wrong shape for a screen
-    /// asking somebody to say yes: half of each sentence described the option
-    /// they were being talked out of, which is how a pitch ends up arguing with
-    /// itself. The comparison also only lands for someone who already knows
-    /// what the reduced version looks like, and nobody on their first run does.
+    /// Benefits stated as benefits, never as what you lose by declining — the
+    /// comparison only lands for someone who already knows what the reduced
+    /// version looks like, and nobody on their first run does.
     private let perks = [
         Perk(symbol: "person.text.rectangle",
              title: "Know who you're buying from",
@@ -534,16 +491,11 @@ private struct CitySearchSheet: View {
 
 /// Skippable, and asked for one specific thing: price drops on saved listings.
 ///
-/// The reason this is a screen of our own rather than the system prompt fired
-/// straight at the user is that **iOS shows that prompt exactly once**. A "don't
-/// allow" is close to permanent — recoverable only by a trip to Settings that
-/// almost nobody makes — so a prompt with no stated purpose spends the single
-/// ask on a reflex. Naming the payoff first is what turns it into a decision.
-///
-/// Price alerts specifically, and not "news and updates", because that is the
-/// notification this app can actually send well: it already tracks saved
-/// listings and it already parses price runs (`PriceRun`), so a drop is a fact
-/// it can notice without asking anybody anything.
+/// A screen of our own rather than the system prompt fired straight at the user,
+/// because iOS shows that prompt exactly once and "don't allow" is recoverable
+/// only through Settings. A prompt with no stated purpose spends the single ask
+/// on a reflex. Price alerts specifically, since that is the notification this
+/// app can send well — it already tracks saved listings and parses price runs.
 ///
 /// Declining still reports upward — see `AccountSession.registerPushToken`. An
 /// install that said no is a different thing from one that was never asked.

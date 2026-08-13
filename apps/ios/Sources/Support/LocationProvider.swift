@@ -1,8 +1,8 @@
 import Foundation
 import CoreLocation
 
-/// §6 radius pinning needs a coordinate. When-in-use, requested on first
-/// search, cached afterwards — never continuous tracking (§7.3 has no
+/// Radius pinning needs a coordinate. When-in-use, requested on first
+/// search, cached afterwards — never continuous tracking (there is no
 /// background activity of any kind).
 @MainActor
 final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -51,17 +51,11 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
 
     /// Whether a call may summon the system permission dialog.
     ///
-    /// The dialog is a once-per-install event, and iOS gives it to whichever
-    /// call happens to arrive first. That used to be an ordinary search: a user
-    /// who skipped location during onboarding and typed a query got the system
-    /// prompt in the middle of a screen that never mentioned location, with no
-    /// visible reason for the app to be asking.
-    ///
-    /// So asking is opt-in, and the opt-in belongs only to a control the user
-    /// pressed *to enable location* — "Use my location" in onboarding or the
+    /// The dialog is a once-per-install event and iOS gives it to whichever call
+    /// arrives first, so asking is opt-in: only a control the user pressed *to
+    /// enable location* may raise it — "Use my location" in onboarding or the
     /// location sheet, and the enable card under a listing. Everything else
-    /// takes a fix if one is already authorised and quietly does without
-    /// otherwise.
+    /// takes a fix if one is already authorised and quietly does without.
     enum Prompt {
         /// The caller is a deliberate tap on an enable-location control.
         case ifNeeded
@@ -119,15 +113,10 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         }
     }
 
-    /// Asks for the fix and starts the clock in the same breath.
-    ///
-    /// The two used to be separate, and the gap between them was the first
-    /// thing a new user hit: the six seconds began the moment the permission
-    /// dialog appeared, so anyone who read it before tapping Allow granted
-    /// permission and was told "Couldn't get a location fix. Try again" — with
-    /// the fix arriving moments later, into a request that had already given
-    /// up. Timing the wait from the request means it measures the thing it is
-    /// supposed to be measuring.
+    /// Asks for the fix and starts the clock in the same breath. Starting it
+    /// when the permission dialog appears instead means anyone who reads the
+    /// dialog before tapping Allow burns the six seconds on reading, and is told
+    /// "Couldn't get a location fix" as the fix arrives.
     private func askForFix() {
         manager.requestLocation()
         // The authorisation callback also fires at launch for an app that was
@@ -188,17 +177,11 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         }
         let name = [city, place.administrativeArea].compactMap { $0 }.joined(separator: ", ")
         state = .resolved(name)
-        // Deliberately writes **no slug**.
-        //
-        // It used to write `city.lowercased()` with spaces stripped, which is
-        // precisely the guessing that doesn't work — "Daly City" → `dalycity`
-        // is not a place Facebook knows, and the search silently ran against
-        // the IP-inferred city instead. Worse, it fired on every fix, so it
-        // also overwrote whichever city the user had deliberately chosen.
-        //
-        // Targeting is now `MarketplacePlaceResolver`'s job and nothing else's:
-        // the user asks for their location, Facebook names the place, and the
-        // slug that comes back is one Facebook recognises. This is only a
-        // display name.
+        // Deliberately writes **no slug** — a display name only. Deriving one
+        // here is the guessing that doesn't work ("Daly City" → `dalycity` is
+        // not a place Facebook knows, and the search silently runs against the
+        // IP-inferred city), and it would fire on every fix, overwriting
+        // whichever city the user chose. Targeting is
+        // `MarketplacePlaceResolver`'s job and nothing else's.
     }
 }

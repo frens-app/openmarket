@@ -303,12 +303,8 @@ func TestStubPhotoOnlyRunReturnsAQueryAndAdmitsItGuessed(t *testing.T) {
 	}
 }
 
-// TestStubPricesAtTheMedian stood here, asserting that the stub answered with
-// the median rather than a number from nowhere. `PriceGuide` does that now, for
-// every provider and for none — which is what removing the pricing call means.
-//
-// What is still worth asserting is that the stub's listing is visibly a stub.
-// Plausible copy is copy somebody screenshots into a bug report.
+// The stub's listing has to be visibly a stub: plausible copy is copy somebody
+// screenshots into a bug report.
 func TestStubListingSaysItIsAStub(t *testing.T) {
 	item, _, err := StubProvider{}.Identify(context.Background(),
 		IdentifyInput{Description: "a white IKEA Malm dresser"})

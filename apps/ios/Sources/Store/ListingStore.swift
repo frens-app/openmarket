@@ -7,7 +7,7 @@ extension Logger {
 }
 
 /// Owns what the grid shows: dedupe, filtering, paging, and the parse-health
-/// counters that back §8's telemetry and the debug parity report.
+/// counters behind the telemetry and the debug parity report.
 @MainActor
 final class ListingStore: ObservableObject {
     @Published private(set) var listings: [Listing] = []
@@ -24,13 +24,11 @@ final class ListingStore: ObservableObject {
     /// Bumped every time the search grid's contents are *replaced* rather than
     /// extended — a new search or a re-run.
     ///
-    /// Exists for one reason: the scroll offset survives the swap. Someone five
-    /// pages into "desk" who searches for "lamp" keeps their offset over a grid
-    /// that has just been emptied and refilled with twelve cards, so the screen
-    /// goes blank and the only way back to the results is to scroll up through
-    /// the space where the old ones were. Appending never does this, which is
-    /// why this is a counter on replacement rather than something watching
-    /// `listings`. `ResultsView` scrolls back to the top on each change.
+    /// The scroll offset survives the swap: someone five pages into "desk" who
+    /// searches for "lamp" keeps their offset over a grid of twelve cards, so
+    /// the screen goes blank. `ResultsView` scrolls back to the top on each
+    /// change. Appending never has this problem, hence a counter on replacement
+    /// rather than an observer on `listings`.
     @Published private(set) var resultsGeneration = 0
 
     /// The primary search path. Desktop is the only surface with working
@@ -60,24 +58,19 @@ final class ListingStore: ObservableObject {
 
     /// Which context the current results were fetched under.
     ///
-    /// Not cosmetic: the result *set* differs by authentication, not just the
-    /// fields on it — signed in, a San Francisco query returned 15 San
-    /// Francisco listings where signed out it spread to Martinez, Vallejo and
-    /// Oakland. So this keys the results cache, and tags every profile stored
-    /// from these cards.
+    /// The result *set* differs by authentication, not just the fields on it:
+    /// signed in, a San Francisco query returned 15 San Francisco listings where
+    /// signed out it spread to Martinez, Vallejo and Oakland. So this keys the
+    /// results cache and tags every profile stored from these cards.
     @Published private(set) var session: BrowserSession = .unauthed
 
-    /// Records the session the engines are currently running under. Called
-    /// after a sign-in or sign-out, since it changes what a fetch will return.
-    /// **Propagates to the engines, not just this object.** `canLoadMore` is
-    /// the desktop engine's answer, and for a long time it was answering from
-    /// an init-time constant nobody ever updated — so a signed-out grid kept
-    /// trying to paginate against a page Facebook had already pinned shut.
+    /// Records the session the engines are running under, after a sign-in or
+    /// sign-out. Propagates to the engines, not just this object: `canLoadMore`
+    /// is the desktop engine's answer, and a stale one has a signed-out grid
+    /// paginating against a page Facebook already pinned shut.
     func setSession(_ session: BrowserSession) {
-        // Before the guard, not after. The guard exists to keep an unchanged
-        // session from republishing and redrawing the grid — but an injected
-        // engine can start out of step with this object, and then the one call
-        // that would have corrected it is the one that returns early.
+        // Before the guard: an injected engine can start out of step with this
+        // object, and the call that would correct it is the one returning early.
         desktop.session = session
         guard session != self.session else { return }
         self.session = session
@@ -117,12 +110,9 @@ final class ListingStore: ObservableObject {
 
     var canLoadMore: Bool { desktop.canLoadMore && !reachedEnd }
 
-    /// How much of the current grid has structured data behind it.
-    ///
-    /// Surfaced because it is a real property of the results rather than an
-    /// implementation detail: the first ~15 cards carry exact timestamps,
-    /// delivery types and sold state, and everything past them does not, no
-    /// matter how far the feed is scrolled or whether the user is signed in.
+    /// How much of the current grid has structured data behind it. The first
+    /// ~15 cards carry exact timestamps, delivery types and sold state; nothing
+    /// past them does, however far the feed is scrolled.
     var payloadCoverage: DesktopFeedEngine.PayloadCoverage { desktop.coverage }
 
     // MARK: - Searching
@@ -178,12 +168,10 @@ final class ListingStore: ObservableObject {
     /// for too long. This buys enough runway for the cards to arrive first.
     static let prefetchMargin = 10
 
-    /// Enough cards for the next visible screen. A top-up used to drive the
-    /// hidden Facebook page exactly three screens every time, even when its
-    /// first scroll had already produced everything the user was approaching.
-    /// Keep three as the recovery ceiling for sparse/duplicate windows, but stop
-    /// as soon as one screen of genuinely new cards is in the grid. Reaching
-    /// the ceiling pauses this attempt; it does not prove the result set ended.
+    /// Enough cards for the next visible screen. A top-up stops as soon as one
+    /// screen of genuinely new cards is in the grid; `maxScrollsPerTopUp` is the
+    /// recovery ceiling for sparse or duplicate windows. Reaching the ceiling
+    /// pauses this attempt, and does not prove the result set ended.
     private static let paginationTarget = 6
     private static let maxScrollsPerTopUp = 3
     private static let loadingReservation = 2
@@ -199,14 +187,10 @@ final class ListingStore: ObservableObject {
 
     /// How far down the visible grid the user has been.
     ///
-    /// Tracked because a card announces itself exactly once. `.task` fires when
-    /// the lazy stack *creates* a cell and never again, so "are we near the end"
-    /// cannot be asked at the moment the answer changes — only at the moment a
-    /// cell happens to be built. Remembering the depth makes the question
-    /// answerable at any time, which is what lets a drag re-check it.
-    ///
-    /// Reset with the list, never on append: appending visible cards doesn't
-    /// move anything the user has already scrolled past, so the index stays true.
+    /// Tracked because `.task` fires when the lazy stack *creates* a cell and
+    /// never again, so "are we near the end" could otherwise only be asked at
+    /// the moment a cell happens to be built. Reset with the list, never on
+    /// append. See `DiscoverFeed.deepestIndexSeen` — same problem.
     private var deepestVisibleIndexSeen = -1
     /// The view's stable "Only new" snapshot for the current result set.
     private var paginationHiddenAsViewed = Set<String>()
@@ -215,28 +199,22 @@ final class ListingStore: ObservableObject {
 
     /// Called when the user drags the grid. See `scrolledSinceLastPage`.
     ///
-    /// Arming has to re-check the margin itself, and this is the whole of the
-    /// bug that made the gate look broken. The trigger card for page N+1 is
-    /// created *the instant page N lands* — it is inside the lazy stack's
-    /// build-ahead — and at that instant
-    /// the gate has just closed. So it announced itself to a closed gate, and
-    /// since a cell is only ever built once, it never announced itself again:
-    /// the grid stopped paging for good, no matter how far it was scrolled.
-    ///
-    /// Re-arming while already armed is a no-op, so a drag that fires this sixty
-    /// times a second still costs one check.
+    /// Arming must re-check the margin itself: the trigger card for page N+1 is
+    /// created the instant page N lands, inside the lazy stack's build-ahead,
+    /// when the gate has just closed. Without the re-check it announces itself
+    /// once to a closed gate and the grid stops paging for good. Re-arming while
+    /// already armed is a no-op.
     func noteScroll(hiddenAsViewed: Set<String>) {
-        // ResultsView observes one outer ScrollView for both home and search.
-        // A Discover drag therefore reaches this method too; without the query
-        // gate it used to drive three empty screens through the search webview
-        // alongside every Discover top-up (`prefetch: at -1 of 0`).
+        // ResultsView observes one outer ScrollView for both home and search, so
+        // a Discover drag reaches here too. The query gate keeps it from driving
+        // empty screens through the search webview (`prefetch: at -1 of 0`).
         paginationHiddenAsViewed = hiddenAsViewed
         guard query != nil, !scrolledSinceLastPage else { return }
         scrolledSinceLastPage = true
         Task { await topUpIfAtMargin() }
     }
 
-    /// §3.1 — records how far the user has reached, then asks whether that is
+    /// Records how far the user has reached, then asks whether that is
     /// far enough. Called from each cell as it is built.
     func loadMoreIfNeeded(
         currentItem: Listing,
@@ -250,7 +228,7 @@ final class ListingStore: ObservableObject {
     }
 
     /// One page, about two screens from the end, for a user who has scrolled
-    /// since the last one; never speculatively. One batch at a time (§7.3: one
+    /// since the last one; never speculatively. One batch at a time — one
     /// page ahead, maximum).
     private func topUpIfAtMargin() async {
         let visibleCount = visibleListings(in: listings).count
@@ -271,13 +249,10 @@ final class ListingStore: ObservableObject {
     /// until the next visible screen is full or three sparse windows have been
     /// tried.
     ///
-    /// Harvesting *between* scrolls rather than once at the end is not
-    /// defensive: the desktop feed virtualises, recycling cards out of the DOM
-    /// as they leave the viewport, so a single read at the bottom returns the
-    /// last window rather than everything loaded on the way there.
-    ///
-    /// Everything gathered here is markup-only — no timestamps, no delivery
-    /// types, no sold state. Those exist for the first page and nowhere else.
+    /// Harvests *between* scrolls because the desktop feed virtualises: a single
+    /// read at the bottom returns the last window, not everything loaded on the
+    /// way there. Everything gathered here is markup-only — timestamps, delivery
+    /// types and sold state exist for the first page and nowhere else.
     func loadMore() async {
         guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
         isLoadingMore = true
@@ -308,10 +283,9 @@ final class ListingStore: ObservableObject {
         let addedStored = listings.count - beforeStored
         let addedVisible = visibleListings(in: listings).count - beforeVisible
         if addedStored == 0 {
-            // A virtualised Facebook window full of duplicates, a transient
-            // network boundary, and a genuinely exhausted result set all look
-            // identical here. End this attempt without turning that ambiguity
-            // into a permanent claim about the user's area.
+            // A window full of duplicates, a transient network boundary and a
+            // genuinely exhausted result set are indistinguishable here, so end
+            // the attempt without setting `reachedEnd`.
             Logger.store.info("loadMore: no new cards over \(scrolls, privacy: .public) screens, retryable")
         } else {
             Logger.store.info("loadMore: \(addedVisible, privacy: .public) visible, \(addedStored, privacy: .public) stored over \(scrolls, privacy: .public) screens")
@@ -373,23 +347,19 @@ final class ListingStore: ObservableObject {
 
     /// Merges a batch into the grid: new listings append, known ones fill gaps.
     ///
-    /// Async only for the last thing it does before publishing: geocoding every
-    /// place name in the batch, so the grid arrives at its final size instead of
-    /// shrinking for the next several seconds as distances land
-    /// (`DistanceResolver.resolveAll`). This is the right place for it because
-    /// it is the *only* place listings become visible — the payload pass, the
-    /// markup pass, pagination and the WebLite path all funnel through here.
+    /// Async for `DistanceResolver.resolveAll`, so the grid arrives at its final
+    /// size instead of shrinking for seconds as distances land. It belongs here
+    /// because this is the only place listings become visible — the payload
+    /// pass, the markup pass, pagination and WebLite all funnel through.
     private func absorb(
         _ incoming: [Listing],
         replacingCache: Bool,
         stageForPagination: Bool = false
     ) async {
-        // The first live cards replace the restored ones outright rather than
-        // merging into them, and the replacement is one assignment at the end —
-        // never a clear followed by a refill. `listings` is `@Published` and the
-        // grid renders "Nothing found nearby" on an empty array, so emptying it
-        // even for an instant tears down the grid and pops any listing the user
-        // has open.
+        // Live cards replace restored ones outright, in one assignment at the
+        // end. `listings` is `@Published` and the grid renders "Nothing found
+        // nearby" on an empty array, so a clear-then-refill would tear down the
+        // grid and pop any listing the user has open.
         var seen = replacingCache ? Set<String>() : seenIDs
 
         var counts = ParseHealth()
@@ -425,10 +395,8 @@ final class ListingStore: ObservableObject {
 
         guard !fresh.isEmpty else { return }       // keep whatever is on screen
 
-        // Before anything is published, never after. Everything below this line
-        // is an assignment to `@Published` state and therefore a frame the user
-        // sees, and the point of the batch is that the distance filter has
-        // already run by the time they see it.
+        // Before anything is published: everything below is an assignment to
+        // `@Published` state, and so a frame the user sees.
         await distances.resolveAll(fresh.map(\.locationText))
 
         if replacingCache {
@@ -515,20 +483,12 @@ final class ListingStore: ObservableObject {
     /// Extraction returns every card in the DOM each time, so this is
     /// idempotent: known ids are skipped and only genuinely new cards append.
     private func ingest(_ raw: [FeedEngine.RawCard]) async {
-        // The first live cards replace the restored ones outright rather than
-        // merging into them. Merging would keep last session's `cardIndex`,
-        // which now points at a different card — or at nothing — and a tap
-        // would open the wrong listing. Detail already fetched isn't lost: it
-        // comes back out of the profile cache below.
-        //
-        // The replacement is one assignment at the end, never a clear followed
-        // by a refill. `listings` is `@Published` and the grid renders "Nothing
-        // found nearby" on an empty array — so emptying it, even for an instant,
-        // tears down the grid and pops any listing the user has open.
+        // Replace rather than merge: merging keeps last session's `cardIndex`,
+        // which now points at a different card, and a tap opens the wrong
+        // listing. Detail already fetched comes back from the profile cache.
         let isReplacingCached = isShowingCachedResults && !raw.isEmpty
-        // Worked out on a copy, so a replacement that turns out to yield nothing
-        // (every card filtered, say) leaves the restored grid exactly as it was
-        // rather than half-dismantling it.
+        // A copy, so a replacement that yields nothing leaves the restored grid
+        // intact rather than half-dismantled.
         var seen = isReplacingCached ? Set<String>() : seenIDs
 
         var counts = ParseHealth()
@@ -582,7 +542,7 @@ final class ListingStore: ObservableObject {
         metrics.parseHealth(counts)
     }
 
-    /// §6.2 — filtering happens in Swift, after extraction, so the page's own
+    /// Filtering happens in Swift, after extraction, so the page's own
     /// scripts stay undisturbed and the rules are unit-testable.
     private func shouldFilter(_ listing: Listing) -> Bool {
         listing.badgeText?.lowercased() == "sponsored"
@@ -590,23 +550,10 @@ final class ListingStore: ObservableObject {
 
     // MARK: - Detail
 
-    // MARK: - Prefetch: deliberately absent
-    //
-    // There was a `startPrefetch` here that opened the top 8 cards before the
-    // user tapped anything, to hide the ~5s resolve plus ~1.9s tap that opening
-    // a listing used to cost. It is gone, for two reasons.
-    //
-    // It stopped paying: on the desktop surface the item URL is already in the
-    // card's href, and the payload is readable ~0.9s into a ~1.85s load, so a
-    // user-initiated open now lands about where the prefetch was getting us.
-    //
-    // And it was the most automation-shaped thing the app did — eight item-page
-    // fetches nobody asked for, per search. The login wall is the largest
-    // remaining risk to this design and its frequency under sustained use is
-    // still unmeasured, so removing the traffic is close to free insurance.
-    //
-    // **Listings are opened only when a user taps them.** See
-    // docs/decision-desktop-primary.md.
+    // Listings are opened only when a user taps them — no prefetch. The desktop
+    // card carries its own item URL, so a tap costs about what a prefetch saved,
+    // and speculative item-page fetches are the most automation-shaped traffic
+    // the app could generate. See docs/decision-desktop-primary.md.
 
     /// Opens a listing, in three steps:
     ///
@@ -615,13 +562,12 @@ final class ListingStore: ObservableObject {
     ///  2. If we've fully read this listing before, that profile paints now,
     ///     from disk, on the first frame.
     ///  3. Either way we refetch it live. A cached profile is a head start, not
-    ///     an answer: price drops and sold status are exactly the things that
-    ///     change while a listing sits in a cache, and they're the things
-    ///     someone opening a listing most needs to be right.
+    ///     an answer — price drops and sold status are exactly what changes
+    ///     while a listing sits in a cache.
     ///
     /// `onStage` therefore fires up to three times. Every stage is built from
     /// the original card rather than accumulated, so a late partial can't
-    /// interleave with an earlier one into a state neither of them described.
+    /// interleave with an earlier one into a state neither described.
     func enrich(_ listing: Listing, onStage: @escaping @MainActor (Listing) -> Void = { _ in }) async -> Listing {
         let started = Date()
         var best = listing
@@ -646,13 +592,9 @@ final class ListingStore: ObservableObject {
     /// The live read.
     ///
     /// On the desktop surface this is almost always the first branch: every card
-    /// carries its canonical URL — from the payload or from its own `href` — so
-    /// opening a listing is a single page load with no resolve step. That is
-    /// what made the 8-listing prefetch redundant, and what makes a tap cost
-    /// ~0.9s to usable data rather than the ~6.5s it once did.
-    ///
-    /// The two fallbacks below belong to the demoted WebLite path, where cards
-    /// carry no id at all. They stay because mobile stays.
+    /// carries its canonical URL, so opening a listing is a single page load
+    /// with no resolve step — ~0.9s to usable data. The two fallbacks below
+    /// belong to the demoted WebLite path, where cards carry no id at all.
     private func fetchLive(_ listing: Listing,
                            startedAt started: Date,
                            onStage: @escaping @MainActor (Listing) -> Void) async -> Listing? {
@@ -696,10 +638,9 @@ final class ListingStore: ObservableObject {
             return updated
         }
 
-        // The tap didn't land. Fall back to searching the desktop surface for
-        // the title and loading the item page separately — slower, needs a
-        // 6-character title, and can pick wrong among ties, which is why it is
-        // no longer the path anyone takes on purpose.
+        // The tap didn't land. Search the desktop surface for the title and load
+        // the item page separately — slower, needs a 6-character title, and can
+        // pick wrong among ties.
         var updated = listing
         updated.itemURL = await detail.resolveItemURL(for: listing, citySlug: prefs.locationSlug)
         guard let url = updated.itemURL else { return nil }
@@ -720,14 +661,10 @@ final class ListingStore: ObservableObject {
         apply(listing)
     }
 
-    /// Guarantees a saved listing has something behind it.
-    ///
-    /// The save control is live on the detail screen's first frame, which is
-    /// seconds before a cold listing's enrichment lands — so a save made in
-    /// that window would otherwise point at a profile that doesn't exist, and
-    /// the saved-items screen would have nothing to draw. Writing the card now
-    /// makes the row real immediately; the enrichment already in flight fills
-    /// in the detail a moment later.
+    /// Guarantees a saved listing has something behind it. The save control is
+    /// live on the detail screen's first frame, seconds before a cold listing's
+    /// enrichment lands, so a save in that window would otherwise leave the
+    /// saved-items screen nothing to draw.
     func remember(_ listing: Listing) {
         cache.store(listing, capture: capture)
     }
@@ -751,7 +688,7 @@ final class ListingStore: ObservableObject {
         return updated
     }
 
-    /// §3.2's rule applied to the grid: never replace text that's already
+    /// The preview rule applied to the grid: never replace text that's already
     /// correct, only fill in what was missing when the card was first read.
     private func fillGaps(from parsed: Listing) {
         guard let index = listings.firstIndex(where: { $0.id == parsed.id }) else { return }

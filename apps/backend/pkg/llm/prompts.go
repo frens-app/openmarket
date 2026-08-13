@@ -4,23 +4,16 @@ import "strings"
 
 // The prompt, and the schema that constrains what comes back.
 //
-// Almost every rule below is here because it was measured failing, against a
-// much smaller model, and written up in the README under "The on-device
-// writer". They are kept because a frontier model failing less often is not the
-// same as a frontier model not failing — and because the cost of each rule is a
-// sentence, where the cost of the failure is a confidently wrong number under
-// somebody's listing.
+// Almost every rule below is here because it was measured failing against a much
+// smaller model, written up in the README under "The on-device writer". They are
+// kept because a frontier model failing less often is not the same as one not
+// failing, and the cost of a rule is a sentence where the cost of the failure is
+// a confidently wrong number under somebody's listing.
 //
-// The rules that are *not* here are the ones this design made unnecessary, and
-// there are more of them than there are rules. Nothing asks the model to do
-// arithmetic about a sample, because it is never shown one. Nothing asks it to
-// justify a price, because it never picks one. Nothing tells it to ignore the
-// comparables when naming the item, because it never sees a comparable. Each of
-// those was a rule in a prompt that no longer exists, arguing with a failure
-// that can no longer happen.
-//
-// What is left is the thing a language model is actually good at: look at a
-// photograph, say what the object is, and write two paragraphs about it.
+// Nothing here asks the model to do arithmetic about a sample, justify a price,
+// or ignore the comparables when naming the item — it is never shown a
+// comparable and never picks a price. What is left is what a language model is
+// good at: look at a photograph, say what the object is, write about it.
 
 // identifySchema constrains the one call.
 var identifySchema = map[string]any{
@@ -62,11 +55,10 @@ var identifySchema = map[string]any{
 
 // identifyPrompt asks for the identification and the listing together.
 //
-// Together, rather than in two calls, because they draw on exactly the same
-// evidence: a photograph and whatever the seller typed. The second call used to
-// write the listing *after* the market search, which added nothing — the market
-// says what similar things cost, not what this thing is — while adding the one
-// input that has ever poisoned this feature.
+// One call rather than two, because both draw on exactly the same evidence: a
+// photograph and whatever the seller typed. Writing the listing after the market
+// search would add nothing — the market says what similar things cost, not what
+// this thing is — while adding the one input that has ever poisoned this feature.
 func identifyPrompt(description string) string {
 	var b strings.Builder
 

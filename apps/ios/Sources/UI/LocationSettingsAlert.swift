@@ -10,9 +10,8 @@ import UIKit
 /// and offer to open it, because the app genuinely cannot ask again itself.
 ///
 /// An alert rather than inline text: this is the direct answer to a button the
-/// user just pressed, and it carries the one action that can undo the state.
-/// The refusal used to surface as a grey footnote under the button, which
-/// mentioned Settings but left the user to go and find it.
+/// user just pressed, and it carries the one action that can undo the state
+/// rather than leaving them to find Settings themselves.
 private struct LocationSettingsAlert: ViewModifier {
     @Binding var isPresented: Bool
     @Environment(\.openURL) private var openURL

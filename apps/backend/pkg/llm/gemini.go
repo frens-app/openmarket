@@ -137,16 +137,6 @@ func (g *GeminiProvider) Identify(ctx context.Context, in IdentifyInput) (Identi
 	}, usage, nil
 }
 
-// There was a Price method here, and the note it carried is worth keeping even
-// though the code is gone: it asked the model for **whole units** and did the
-// ×100 in Go, because asking a model for minor units invites the single worst
-// bug this feature can have — a hundredfold error in a price, printed under the
-// one figure a person acts on.
-//
-// The price is a median now, computed by `PriceGuide` in minor units from
-// minor units. The conversion the note was guarding no longer exists, which is
-// a better outcome than guarding it well.
-
 // MARK: - Wire
 
 type geminiPart struct {

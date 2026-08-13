@@ -15,7 +15,7 @@ import Foundation
 /// It is a claim, not a measurement. The radius shown here does not filter
 /// anything — `radius=8` and `radius=161` return the same listings, and a page
 /// labelled "Within 5 mi" carries listings 60 mi out (`docs/filter-parameters.md`
-/// §3). Read it to know what Facebook believes, never to conclude what it did.
+/// Read it to know what Facebook believes, never to conclude what it did.
 struct DesktopLocationPill: Equatable {
     /// "San Francisco, California", as rendered.
     var placeName: String?

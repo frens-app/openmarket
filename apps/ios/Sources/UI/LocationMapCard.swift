@@ -97,7 +97,7 @@ struct LocationMapCard: View {
                 if let userLocation {
                     // Drawn from the fix the app already holds rather than with
                     // `UserAnnotation`, which would start MapKit tracking the
-                    // device continuously — §7.3 takes one fix on demand and
+                    // device continuously — one fix on demand and
                     // nothing else, and that principle outranks getting the
                     // system dot for free.
                     Annotation("Your location", coordinate: userLocation) {

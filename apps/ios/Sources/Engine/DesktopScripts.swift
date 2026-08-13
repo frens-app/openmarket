@@ -244,8 +244,7 @@ enum DesktopScripts {
     /// `document.documentElement.scrollHeight` equals `window.innerHeight`
     /// exactly, and every card sits inside an `overflow-y: auto` div — 900px of
     /// viewport over 3102px of content on the browse feed. `window.scrollTo` is
-    /// a no-op there, and so is moving `webView.scrollView.contentOffset`, which
-    /// is what this engine used to do.
+    /// a no-op there, and so is moving `webView.scrollView.contentOffset`.
     ///
     /// So the scroller is found by walking *up* from a card rather than assumed.
     /// Walking up from the thing we want to page is the only definition that
@@ -333,12 +332,10 @@ enum DesktopScripts {
     })()
     """
 
-    // A `scrollToBottom` lived here, to force a below-the-fold seller block to
-    // render. It never did anything — `moved: nothing` on the very page that
-    // produced a seller 33 ms later — and it was not harmless: this surface
-    // keeps its data in the rendered markup, so scrolling can unmount the nodes
-    // the description and the "Listed ..." line are read from. Re-polling is the
-    // fix (`DetailEngine.loadDetail`).
+    // No scroll-to-bottom to force a below-the-fold seller block to render: this
+    // surface keeps its data in the rendered markup, so scrolling can unmount
+    // the nodes the description and "Listed ..." line are read from. Re-polling
+    // is the fix (`DetailEngine.loadDetail`).
 
     /// The login wall, on its own.
     ///
@@ -573,24 +570,16 @@ enum DesktopScripts {
               }
             }
             if (section) {
-              // **Flattened first, then matched by shape.**
-              //
-              // This used to split on newlines and treat each line as a field.
-              // That works only when the block renders with line breaks between
-              // its parts, and it does not always: observed signed in, the whole
-              // section arrived as one run with no separators at all —
+              // **Flattened first, then matched by shape**, rather than split on
+              // newlines and treated a line at a time. Signed in, the whole
+              // section can arrive as one run with no separators at all —
               //
               //   "Seller information Seller detailsDana Whitfield(17)Highly
               //    rated on MarketplaceJoined Facebook in 2009"
               //
-              // note "detailsKatrina" and "MarketplaceJoined" with no space, so
-              // even a space-split would not have recovered the boundaries.
-              // With one "line", every skip test missed and the entire block
-              // became the seller's name, which the detail screen then rendered
-              // as a three-line heading beside the stars.
-              //
-              // The fields have reliable shapes, so match those instead and let
-              // the name be what is left in front of them.
+              // note "detailsDana" and "MarketplaceJoined" with no space, so a
+              // space-split would not recover the boundaries either. The fields
+              // have reliable shapes; the name is what is left in front of them.
               //
               // Named `flatSection`, not `flat`. `var` is function-scoped, so
               // a second `var flat` in here is not a local — it overwrites the

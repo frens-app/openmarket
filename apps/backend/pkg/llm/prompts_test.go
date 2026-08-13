@@ -101,9 +101,9 @@ func TestPromptWithADescriptionQuotesIt(t *testing.T) {
 	}
 }
 
-// The whole point of one call is that the model never sees the market. If a
-// figure ever appears in this prompt, the failure it was removed to prevent —
-// arithmetic about a sample it was just shown — is reachable again.
+// The whole point of one call is that the model never sees the market. A figure
+// appearing in this prompt makes arithmetic about a sample it was just shown
+// reachable again.
 func TestPromptNeverCarriesMarketNumbers(t *testing.T) {
 	for _, description := range []string{"", "a dresser, $80 on Craigslist"} {
 		prompt := strings.ToLower(identifyPrompt(description))

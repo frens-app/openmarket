@@ -23,7 +23,7 @@ struct DesktopRawCard: Decodable {
 ///     "Office desk, $80, , listing 2508057202946956"          <- shipping: city segment empty
 ///
 /// Parsing is in Swift rather than JavaScript so the rules are testable outside
-/// a webview (§6.2), and it works from the *end* backwards because the title is
+/// a webview, and it works from the *end* backwards because the title is
 /// the only field that can itself contain commas.
 enum DesktopCardParser {
 

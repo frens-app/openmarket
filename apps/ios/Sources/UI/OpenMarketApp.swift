@@ -110,23 +110,20 @@ struct OpenMarketApp: App {
 /// onboarding, or the app.
 ///
 /// Signing in is the *first step of onboarding* rather than a gate in front of
-/// it. It used to be a gate, which made a first run a login screen followed by a
-/// flow that started over with a welcome carousel — two beginnings for one
-/// arrival. `OnboardingView` owns all four questions now and works out which one
-/// is outstanding, so this view only has to decide whether any of them are.
+/// it, so a first run is one flow with one beginning. `OnboardingView` owns all
+/// four questions; this view only decides whether any are outstanding.
 struct RootView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
 
     /// Whether the flow is on screen. `nil` until the session check comes back.
     ///
-    /// **A latch, not a derivation, and that is the whole point.** It used to be
-    /// `!account.isSignedIn || prefs.needsOnboarding` recomputed on every change,
-    /// which meant any answer landing early could dismiss the flow out from under
-    /// the person still using it — the location step resolves a place in the
-    /// background, and the moment it landed `needsOnboarding` went false and the
-    /// notifications step was never shown. `openIfNeeded` can only *open* this;
-    /// only `finish` closes it.
+    /// **A latch, not a derivation.** Recomputing
+    /// `!account.isSignedIn || prefs.needsOnboarding` on every change lets an
+    /// answer landing early dismiss the flow out from under the person still
+    /// using it: the location step resolves in the background, and the moment it
+    /// lands the notifications step would never be shown. `openIfNeeded` can
+    /// only *open* this; only `finish` closes it.
     @State private var isOnboarding: Bool?
 
     var body: some View {
@@ -154,14 +151,10 @@ struct RootView: View {
         // place, a Facebook cookie jar, a notification permission — are still
         // asked, because a new install genuinely has none of them.
         //
-        // **Both directions, and that is a bug fix.** This used to only ever
-        // set the flag true, which meant the answer belonged to whichever
-        // account had last set it rather than to the account signing in. Sign a
-        // brand-new user in on an install that had already onboarded — delete
-        // your account and sign up again, or hand someone your phone — and the
-        // server's `false` was ignored: `needsOnboarding` went false the instant
-        // the session landed and tore the flow away mid-flight, straight past
-        // the Facebook, location and notification steps to the home screen.
+        // **Both directions.** Only ever setting the flag true makes the answer
+        // belong to whichever account last set it: a brand-new user signing in
+        // on an install that had already onboarded would have the server's
+        // `false` ignored, and the flow torn away mid-flight.
         .onChange(of: account.state) { _, state in
             if let viewer = state.viewer {
                 // A different account than the one this install last saw means
@@ -254,7 +247,7 @@ struct SignedInView: View {
                     .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
             }
 
-            // §2.1 — the engines' webviews must be in the hierarchy or WebKit
+            // The engines' webviews must be in the hierarchy or WebKit
             // throttles them. But *covering* them isn't good enough either:
             // behind an opaque view, WebKit takes a reduced rendering path and
             // parts of each card (notably the location line) never render at

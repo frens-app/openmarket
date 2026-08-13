@@ -38,9 +38,7 @@ public typealias MarketStats = Openmarket_Api_V1_MarketStats
 public typealias ListPriceChecksRequest = Openmarket_Api_V1_ListPriceChecksRequest
 public typealias PriceCheckSummary = Openmarket_Api_V1_PriceCheckSummary
 
-// `ProtoComparable` was aliased here, for a `Comparable` message that carried
-// each listing to the pricing model. Both are gone: no model sees a listing
-// now, so the wire carries a count instead. The reason for the awkward name is
-// worth keeping in case anything like it comes back — a plain `Comparable`
-// alias shadows the Swift standard library protocol across every file importing
-// this module, including the `<` operators the app's own sorts rely on.
+// Any alias for a generated `Comparable` message needs an awkward name such as
+// `ProtoComparable`: a plain `Comparable` alias shadows the Swift standard
+// library protocol across every file importing this module, including the `<`
+// operators the app's own sorts rely on.
