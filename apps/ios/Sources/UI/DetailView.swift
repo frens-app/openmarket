@@ -63,6 +63,7 @@ struct DetailView: View {
                 gallery
                 priceBlock
                 fulfillmentBlock
+                marketCheckBlock
                 descriptionBlock
                 factsBlock
                 sellerBlock
@@ -324,6 +325,19 @@ struct DetailView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(fulfillment.accessibilityDescription)
+        }
+    }
+
+    /// Directly under the price, because that is where the question occurs to
+    /// somebody, and above the description so it can't be missed by anyone who
+    /// doesn't scroll.
+    ///
+    /// Absent for anything with no readable price or no title: there is nothing
+    /// to place, and nothing to search for.
+    @ViewBuilder
+    private var marketCheckBlock: some View {
+        if MarketCheckModel.canCheck(current) {
+            MarketCheckBlock(listing: current, canAsk: !availability.isGone)
         }
     }
 

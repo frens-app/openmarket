@@ -15,6 +15,10 @@ struct PriceEvidenceView: View {
     let price: Int
     let marketName: String
     let searchTerm: String?
+    /// Which screen sent the user here — the seller's own run, or the check
+    /// under somebody else's listing. Both open comparables from the same
+    /// strips, and one `surface` value for two funnels would merge them.
+    var surface: Analytics.Surface = .priceCheckEvidence
 
     @State private var selected: Listing?
     @Namespace private var heroNamespace
@@ -81,7 +85,7 @@ struct PriceEvidenceView: View {
     private func open(_ comp: MarketComp, at position: Int) {
         selected = comp.listing
         var properties: [String: Any] = [
-            "surface": Analytics.Surface.priceCheckEvidence.rawValue,
+            "surface": surface.rawValue,
             "position": position,
             "listing_id": comp.listing.id,
             "has_price": comp.listing.priceText != nil,
