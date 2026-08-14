@@ -90,7 +90,7 @@ free.)
   https://openmarket.so · **Privacy policy:** https://openmarket.so/privacy
 - **What's New (1.0):** "Filters that work, actually local listings, and
   price comparisons for sellers. This is 1.0 — tell us what to build next at
-  hello@openmarket.so."
+  support@frens.lol."
 - **Screenshots:** reuse the site's staged set (`apps/web/public/screens/`),
   but see `docs/website-strategy.md` §5 first — the real-third-party-listings
   decision applies doubly here. Caption each shot with a pillar phrase.

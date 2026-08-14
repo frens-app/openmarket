@@ -74,15 +74,14 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-16 sm:pt-24 lg:grid-cols-2">
           <div>
             <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
-              Local listings,{" "}
-              <span className="text-accent">with superpowers.</span>
+              Actually{" "}
+              <span className="text-accent">local listings.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-gray-300">
-              A better way to marketplace. Filters that work. Actually local
-              listings, with distance and travel time on every card. And for
-              sellers — price comparisons backed by what actually sells
-              nearby.
-            </p>
+            <ul className="mt-6 max-w-xl space-y-2 text-lg leading-8 text-gray-300">
+              <li>Filters that work.</li>
+              <li>Distance and travel time on every card.</li>
+              <li>Price comparisons backed by what actually sells nearby.</li>
+            </ul>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a
                 href={SITE.downloadUrl}
@@ -97,7 +96,9 @@ export default function HomePage() {
                 See what it does
               </Link>
             </div>
-            <p className="mt-5 text-sm text-gray-500">Free · iOS</p>
+            <p className="mt-5 text-sm text-gray-500">
+              A better way to marketplace.
+            </p>
           </div>
           <PhoneFrame
             src={searchShot}

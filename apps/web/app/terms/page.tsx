@@ -11,7 +11,7 @@ export default function TermsPage() {
   return (
     <article className="prose-guide mx-auto max-w-3xl px-5 py-16">
       <h1 className="text-3xl font-bold tracking-tight text-white">Terms of Use</h1>
-      <p className="mt-2 text-sm text-gray-500">Last updated August 12, 2026</p>
+      <p className="mt-2 text-sm text-gray-500">Last updated August 14, 2026</p>
       <h2>The service</h2>
       <p>
         Openmarket is a browsing tool. Listings, seller profiles, messaging,
@@ -23,8 +23,7 @@ export default function TermsPage() {
       <h2>Your account and conduct</h2>
       <p>
         You sign in with a phone number you control. You agree to use the app
-        with your own accounts, for personal, non-commercial browsing, and in
-        compliance with the terms of any platform you access through it.
+        with your own accounts, for personal, non-commercial browsing.
       </p>
       <h2>No warranty</h2>
       <p>
@@ -36,7 +35,7 @@ export default function TermsPage() {
       <p>{DISCLAIMER}</p>
       <h2>Contact</h2>
       <p>
-        Email <a href="mailto:hello@openmarket.so">hello@openmarket.so</a>.
+        Email <a href="mailto:support@frens.lol">support@frens.lol</a>.
       </p>
     </article>
   );
