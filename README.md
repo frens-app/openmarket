@@ -27,7 +27,7 @@ you are, the other is how the browsing engines see listings.
 protos/         the API schema; one `make generate` writes both Go and Swift
 apps/ios/       the app (xcodegen: `xcodegen generate`, then build the OpenMarket scheme)
 apps/backend/   Go + Connect + Postgres. Accounts and phone login; `make dev` runs it
-apps/web/       openmarket.so marketing + SEO site (Next.js; strategy in docs/website-strategy.md)
+apps/web/       openmarket.io marketing + SEO site (Next.js; strategy in docs/website-strategy.md)
 tools/probe/    harness for measuring the live site; every finding below came from it
 docs/           findings and decisions, listed at the bottom
 ```

@@ -1,4 +1,4 @@
-# openmarket.so — positioning, messaging, and search strategy
+# openmarket.io — positioning, messaging, and search strategy
 
 **Date:** 2026-08-12
 **Code:** `apps/web/` (Next.js 15, App Router, Tailwind 4, fully static build)
@@ -129,7 +129,7 @@ ChatGPT learn the site exists.
 
 ### Launch checklist (manual, post-deploy)
 
-1. Deploy to Vercel, point `openmarket.so` (A/CNAME per Vercel dashboard).
+1. Deploy to Vercel, point `openmarket.io` (A/CNAME per Vercel dashboard).
 2. **Google Search Console**: verify domain, submit sitemap.
 3. **Bing Webmaster Tools**: verify (can import from GSC), submit sitemap —
    this is the DDG + ChatGPT path. Consider IndexNow (Bing's instant-index

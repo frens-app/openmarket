@@ -8,7 +8,7 @@ don't apply to a consumer iOS app (B2B/Copilot, X) and minus the deceptive ones
 
 ## Deploy blockers
 
-- [ ] Attach `openmarket.so` to the Vercel project. Every canonical URL, the sitemap,
+- [ ] Attach `openmarket.io` to the Vercel project. Every canonical URL, the sitemap,
       and llms.txt point at this domain. Nothing can be indexed until it serves.
 - [ ] Replace the TestFlight URL in `lib/site.ts` with the real
       `https://apps.apple.com/...` link once the App Store listing is approved.
@@ -18,7 +18,7 @@ don't apply to a consumer iOS app (B2B/Copilot, X) and minus the deceptive ones
 - [ ] Register the site in Bing Webmaster Tools and submit the sitemap.
       ChatGPT search runs on Bing, so Bing indexing is the direct path into ChatGPT answers.
 - [ ] Register the site in Google Search Console and submit the sitemap.
-- [ ] Confirm `https://openmarket.so/llms.txt`, `/robots.txt`, and `/sitemap.xml` serve
+- [ ] Confirm `https://openmarket.io/llms.txt`, `/robots.txt`, and `/sitemap.xml` serve
       correctly on the live domain.
 
 ## First month after launch
