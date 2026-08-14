@@ -86,8 +86,8 @@ free.)
 - **Price:** Free, no in-app purchases at launch.
 - **Age rating:** the questionnaire yields 4+ (user-generated content is
   browsed, not hosted — answer the UGC questions as a browser, not a host).
-- **Support URL:** https://openmarket.so · **Marketing URL:**
-  https://openmarket.so · **Privacy policy:** https://openmarket.so/privacy
+- **Support URL:** https://openmarket.io · **Marketing URL:**
+  https://openmarket.io · **Privacy policy:** https://openmarket.io/privacy
 - **What's New (1.0):** "Filters that work, actually local listings, and
   price comparisons for sellers. This is 1.0 — tell us what to build next at
   support@frens.lol."

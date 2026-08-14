@@ -1,7 +1,7 @@
 export const SITE = {
   name: "Openmarket",
-  domain: "openmarket.so",
-  url: "https://openmarket.so",
+  domain: "openmarket.io",
+  url: "https://openmarket.io",
   title: "Openmarket — actually local listings",
   description:
     "A better way to marketplace: filters that work, actually local listings with distance and travel time on every card, and price comparisons backed by what actually sells nearby.",
