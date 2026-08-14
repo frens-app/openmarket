@@ -162,6 +162,14 @@ enum Analytics {
         case priceCheckFeedbackSubmitted = "price_check_feedback_submitted"
         case priceCheckEvidenceOpened = "price_check_evidence_opened"
         case priceCheckHistoryOpened = "price_check_history_opened"
+
+        /// Asking what somebody else's listing is worth. Its own prefix rather
+        /// than a `source` on the price-check funnel: that one ends in a price
+        /// being copied into a listing, and this one has no such step.
+        case marketCheckStarted = "market_check_started"
+        case marketCheckCompleted = "market_check_completed"
+        case marketCheckFailed = "market_check_failed"
+        case marketCheckEvidenceOpened = "market_check_evidence_opened"
     }
 
     // MARK: - Shared property values
@@ -182,6 +190,7 @@ enum Analytics {
         case resultsNotice = "results_notice"
         case priceCheckRun = "price_check_run"
         case priceCheckHistory = "price_check_history"
+        case marketCheck = "market_check"
     }
 
     /// Where a search term came from. Inferred by matching the recents and

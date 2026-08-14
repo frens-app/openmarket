@@ -46,6 +46,10 @@ struct OpenMarketApp: App {
     @StateObject private var viewed = ViewedListings.shared
     @StateObject private var seller = SellerToolsModel()
     @StateObject private var discover = DiscoverFeed()
+    /// App-level so a check outlives the listing screen that started it: the
+    /// user can back out to a feed they have scrolled a long way down and come
+    /// back to a finished answer.
+    @StateObject private var marketChecks = MarketCheckModel()
     /// App-level because a location switch outlives the sheet that starts it:
     /// the sheet dismisses on the tap and the results screen behind it shows
     /// the change landing (`PlaceChooser`).
@@ -67,6 +71,7 @@ struct OpenMarketApp: App {
                 .environmentObject(viewed)
                 .environmentObject(seller)
                 .environmentObject(discover)
+                .environmentObject(marketChecks)
                 .environmentObject(chooser)
         }
         // Cache writes are coalesced on a 2s debounce, which is right for a
@@ -232,6 +237,7 @@ struct SignedInView: View {
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var seller: SellerToolsModel
     @EnvironmentObject private var discover: DiscoverFeed
+    @EnvironmentObject private var marketChecks: MarketCheckModel
     @EnvironmentObject private var account: AccountSession
 
     var body: some View {
@@ -269,6 +275,12 @@ struct SignedInView: View {
             // One per Discover search — they run at the same time, and an
             // engine is one webview with one in-flight navigation.
             ForEach(discover.webViews, id: \.self) { webView in
+                HiddenWebViewHost(webView: webView)
+                    .offset(x: 3000)
+            }
+            // The pool behind "is this a good price?" — several checks can be
+            // in flight at once, all of them queued behind the same pacer.
+            ForEach(marketChecks.webViews, id: \.self) { webView in
                 HiddenWebViewHost(webView: webView)
                     .offset(x: 3000)
             }

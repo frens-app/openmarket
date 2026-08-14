@@ -38,6 +38,19 @@ final class AnalyticsTests: XCTestCase {
         }
     }
 
+    /// And the buyer-side check keeps its own prefix, so the two never merge
+    /// into one funnel — they answer different questions and end differently.
+    func testMarketCheckEventsShareTheirPrefix() {
+        let marketCheck: [Analytics.Event] = [
+            .marketCheckStarted, .marketCheckCompleted, .marketCheckFailed,
+            .marketCheckEvidenceOpened
+        ]
+        for event in marketCheck {
+            XCTAssertTrue(event.rawValue.hasPrefix("market_check_"),
+                          "\(event.rawValue) is a market check event and should say so first")
+        }
+    }
+
     // MARK: - Configuration
 
     /// Tests run under Debug, which ships `POSTHOG_CAPTURE_EVENTS = NO`.
