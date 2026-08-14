@@ -12,7 +12,7 @@ DISPLAY_NAME = Openmarket
 // To keep a TestFlight build traceable: bump this, commit it, then archive that
 // exact commit from a clean tree. An archive built from anything else is not
 // the build this number describes.
-MARKETING_VERSION = 0.0.1
+MARKETING_VERSION = 0.0.2
 CURRENT_PROJECT_VERSION = 1
 
 // See Debug.xcconfig for why this is two settings and not a URL.
