@@ -10,8 +10,8 @@ don't apply to a consumer iOS app (B2B/Copilot, X) and minus the deceptive ones
 
 - [ ] Attach `openmarket.so` to the Vercel project. Every canonical URL, the sitemap,
       and llms.txt point at this domain. Nothing can be indexed until it serves.
-- [ ] Replace the placeholder App Store URL in `lib/site.ts` with the real
-      `https://apps.apple.com/...` link (or a TestFlight link in the interim).
+- [ ] Replace the TestFlight URL in `lib/site.ts` with the real
+      `https://apps.apple.com/...` link once the App Store listing is approved.
 
 ## At deploy
 

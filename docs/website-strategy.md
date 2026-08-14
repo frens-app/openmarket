@@ -139,7 +139,7 @@ ChatGPT learn the site exists.
 5. When the App Store release lands: replace TestFlight CTAs with the App
    Store badge + link, and add the App Store URL to the SoftwareApplication
    schema (`installUrl` / `downloadUrl`).
-6. Set up `hello@openmarket.so` (referenced from /privacy and /terms).
+6. Set up `support@frens.lol` (referenced from /privacy and /terms).
 
 ### Content roadmap (after launch, in priority order)
 

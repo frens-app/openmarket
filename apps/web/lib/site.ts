@@ -2,12 +2,12 @@ export const SITE = {
   name: "Openmarket",
   domain: "openmarket.so",
   url: "https://openmarket.so",
-  title: "Openmarket — local listings, with superpowers",
+  title: "Openmarket — actually local listings",
   description:
-    "A better way to marketplace: filters that work, actually local listings with distance and travel time on every card, and price comparisons for sellers. Free on iOS.",
-  // Placeholder until the App Store listing is live — swap for the real
-  // https://apps.apple.com/... URL (or a TestFlight link in the interim).
-  downloadUrl: "https://apps.apple.com/app/PLACEHOLDER",
+    "A better way to marketplace: filters that work, actually local listings with distance and travel time on every card, and price comparisons backed by what actually sells nearby.",
+  // TestFlight until the App Store listing is live — swap for the real
+  // https://apps.apple.com/... URL then.
+  downloadUrl: "https://testflight.apple.com/join/qcB76WmM",
   twitter: undefined as string | undefined,
 } as const;
 
