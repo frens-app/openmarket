@@ -79,7 +79,13 @@ final class AccountSession: ObservableObject {
         static let refreshToken = "refresh_token"
         static let accessExpiry = "access_token_expiry"
         static let viewer = "viewer"
+        /// UserDefaults, unlike the four above: a list of country calling codes
+        /// is public API configuration, not a secret, and it has to survive a
+        /// sign-out — the signed-out screen is the one that needs it.
+        static let signInCallingCodes = "sign_in_calling_codes"
     }
+
+    private let defaults = UserDefaults.standard
 
     /// Refresh this far before the token actually expires, so a call that is
     /// about to be made doesn't race the expiry it just checked.
@@ -149,6 +155,24 @@ final class AccountSession: ObservableObject {
     }
 
     // MARK: - Signing in
+
+    /// The country calling codes sign-in accepts, which is what the country
+    /// picker is built from.
+    ///
+    /// The last answer is remembered, because this runs as the sign-in screen
+    /// appears and a picker that is empty until a round trip lands is a screen
+    /// nobody can start typing on. A first launch with no network falls back to
+    /// the codes the API shipped with — wrong only if the served set has
+    /// changed since this build, which is the case the cache then repairs.
+    func signInCallingCodes() async -> [String] {
+        let response = await auth.getSignInOptions(request: GetSignInOptionsRequest())
+        if let codes = response.message?.phoneCountryCallingCodes, !codes.isEmpty {
+            defaults.set(codes, forKey: Key.signInCallingCodes)
+            return codes
+        }
+        return defaults.stringArray(forKey: Key.signInCallingCodes)
+            ?? PhoneCountry.fallbackCallingCodes
+    }
 
     /// Sends a code. Returns how many digits to expect and how long until a
     /// resend is allowed, both decided by the server.

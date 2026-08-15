@@ -15,6 +15,8 @@ public typealias Device = Openmarket_Api_V1_Device
 public typealias DevicePlatform = Openmarket_Api_V1_DevicePlatform
 public typealias NotificationPermissionStatus = Openmarket_Api_V1_NotificationPermissionStatus
 
+public typealias GetSignInOptionsRequest = Openmarket_Api_V1_GetSignInOptionsRequest
+public typealias GetSignInOptionsResponse = Openmarket_Api_V1_GetSignInOptionsResponse
 public typealias StartPhoneVerificationRequest = Openmarket_Api_V1_StartPhoneVerificationRequest
 public typealias StartPhoneVerificationResponse = Openmarket_Api_V1_StartPhoneVerificationResponse
 public typealias VerifyPhoneRequest = Openmarket_Api_V1_VerifyPhoneRequest

@@ -49,7 +49,7 @@ func init() {
 	// see migration 00002. What is left here is the country allowlist (which
 	// fails closed at boot; see pkg/phone) and a ceiling on total spend, which
 	// is the one thing a per-entity limit cannot give you.
-	pflag.String("allowed_country_codes", "1", "comma-separated country calling codes allowed to receive codes")
+	pflag.String("allowed_country_codes", "1,44,353,61,64", "comma-separated country calling codes allowed to receive codes")
 	pflag.Int("verification_max_sends", 500, "total verification sends allowed per window, across all numbers")
 	pflag.Duration("verification_send_window", time.Hour, "window the send ceiling is counted over")
 	// Reported to the client to drive its resend countdown. A hint, not an

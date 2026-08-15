@@ -62,6 +62,36 @@ public nonisolated enum Openmarket_Api_V1_DevicePlatform: SwiftProtobuf.Enum, Sw
 
 }
 
+/// GetSignInOptions reports what the sign-in screen needs to know before it can
+/// ask for a number. Unauthenticated, and called before any account exists.
+public nonisolated struct Openmarket_Api_V1_GetSignInOptionsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Openmarket_Api_V1_GetSignInOptionsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Country calling codes without the '+', e.g. "1", "44", longest first.
+  ///
+  /// The server refuses to send a code anywhere else, so a picker built from
+  /// anything but this list offers countries whose sends get rejected. Serving
+  /// it from the same allowlist that enforces it is what keeps opening a market
+  /// an env var rather than an app release.
+  public var phoneCountryCallingCodes: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 /// StartPhoneVerification asks the SMS provider to deliver a code. It is
 /// unauthenticated and it costs money on every call — see docs/backend.md §5 for
 /// what guards it, and for why almost all of that is the provider's job rather
@@ -257,6 +287,55 @@ fileprivate nonisolated let _protobuf_package = "openmarket.api.v1"
 
 nonisolated extension Openmarket_Api_V1_DevicePlatform: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DEVICE_PLATFORM_UNSPECIFIED\0\u{1}DEVICE_PLATFORM_IOS\0\u{1}DEVICE_PLATFORM_ANDROID\0\u{1}DEVICE_PLATFORM_WEB\0")
+}
+
+nonisolated extension Openmarket_Api_V1_GetSignInOptionsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetSignInOptionsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_GetSignInOptionsRequest, rhs: Openmarket_Api_V1_GetSignInOptionsRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_GetSignInOptionsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetSignInOptionsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}phone_country_calling_codes\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedStringField(value: &self.phoneCountryCallingCodes) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.phoneCountryCallingCodes.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.phoneCountryCallingCodes, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_GetSignInOptionsResponse, rhs: Openmarket_Api_V1_GetSignInOptionsResponse) -> Bool {
+    if lhs.phoneCountryCallingCodes != rhs.phoneCountryCallingCodes {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
 }
 
 nonisolated extension Openmarket_Api_V1_StartPhoneVerificationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

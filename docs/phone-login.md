@@ -2,14 +2,16 @@
 
 **Date:** 2026-08-11
 **Code:** `apps/ios/Sources/UI/PhoneLoginView.swift`,
+`apps/ios/Sources/Account/PhoneCountry.swift`,
 `apps/ios/Sources/Account/AccountSession.swift`,
-`apps/backend/cmd/api/auth.go`, `apps/backend/pkg/verify/prelude.go`
+`apps/backend/cmd/api/auth.go`, `apps/backend/pkg/phone/phone.go`,
+`apps/backend/pkg/verify/prelude.go`
 **Related:** `onboarding.md`, `backend.md` §3
 
-Phone login is the first required step of onboarding. The app asks for a US
-phone number, Prelude sends a one-time code, and the backend exchanges an
-approved code for the app's own session. Facebook sign-in is a separate session
-for Marketplace browsing and is not part of this flow.
+Phone login is the first required step of onboarding. The app asks for a phone
+number in one of the served countries, Prelude sends a one-time code, and the
+backend exchanges an approved code for the app's own session. Facebook sign-in
+is a separate session for Marketplace browsing and is not part of this flow.
 
 This document records the client behavior that works on a physical iPhone, the
 iOS setting that can remove used codes from Messages or Mail, and the AutoFill
@@ -17,9 +19,9 @@ failure modes found while building the flow.
 
 ## The user flow
 
-1. The phone field accepts ten national digits. Contact AutoFill may provide a
-   complete `+1` number, so the model removes one leading US country code before
-   creating E.164.
+1. A country button sits beside the phone field, which accepts national digits.
+   Contact AutoFill may provide a complete international number, so the model
+   removes a leading country code before creating E.164.
 2. `StartPhoneVerification` asks Prelude to deliver a code and returns the code
    length and resend cooldown.
 3. The code field becomes focused after it has appeared. iOS detects the code in
@@ -34,6 +36,42 @@ failure modes found while building the flow.
 The deliberate extra Continue tap makes text entry and server verification two
 observable events. A delivery, network or provider error can no longer erase the
 field quickly enough to look like AutoFill failed.
+
+## Which countries the picker offers
+
+The server decides. `ALLOWED_COUNTRY_CODES` is the list `pkg/phone` screens
+every number against, `GetSignInOptions` serves that same list unauthenticated,
+and the picker is built from the response. A market therefore opens with one
+environment variable and a restart: an app release is only needed to give a new
+calling code a name, a flag and a length rule.
+
+`PhoneCountry` supplies those three, for the served countries and no more: a
+market opened on the API renders as its calling code until a release names it.
+It is not an authority on what exists —
+where a length is unknown the check falls back to what E.164 itself guarantees,
+and a served code with no entry at all still appears in the picker, labelled
+with the code. That fallback is what keeps the server-side list ahead of the
+app.
+
+Two entry rules are worth knowing before changing that file:
+
+- **A leading zero is stripped by default.** The trunk `0` a UK, Irish,
+  Australian or New Zealand number is written with at home is a dialling
+  convention; an E.164 national number does not carry one. Countries whose
+  numbers keep the zero — Italy — set `keepsLeadingZero`.
+- **A leading country code is only removed when the entry cannot be national.**
+  The user wrote a `+`, or typed more digits than the country's numbers have.
+  Without that second condition a NANP number whose area code starts with 1
+  would lose its first digit to a country code that was never there.
+
+The cached answer in `UserDefaults` is what the picker shows before the call
+returns, and a first launch with no network falls back to the codes compiled
+into `PhoneCountry.fallbackCallingCodes`. Keep that constant in step with the
+API's shipped default.
+
+`ALLOWED_COUNTRY_CODES` screens by calling code, so allowing `1` allows every
+NANP territory, the Caribbean premium ranges included. Screening those out
+needs area-code-level rules, which nothing here has.
 
 ## The native iOS contract
 
@@ -149,9 +187,10 @@ Simulator and dev-bypass testing can verify the screen and RPCs, but not the
 complete SMS handoff. Before shipping a login change, use a physical iPhone and
 confirm:
 
-1. Manual ten-digit phone entry can request a code.
-2. Contact AutoFill containing `+1` also enables Send code and sends the same
-   E.164 value.
+1. Manual national entry can request a code, in the phone's own country and in
+   one other served country picked by hand.
+2. Contact AutoFill containing the country code also enables Send code and sends
+   the same E.164 value.
 3. The code suggestion appears above the number pad.
 4. Tapping it leaves the complete code visible and enables Continue without
    submitting.

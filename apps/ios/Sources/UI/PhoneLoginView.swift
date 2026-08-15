@@ -8,6 +8,7 @@ import SwiftUI
 struct PhoneLoginView: View {
     @StateObject private var model = PhoneLoginModel()
     @FocusState private var focused: Field?
+    @State private var isChoosingCountry = false
 
     private enum Field { case phone, code }
 
@@ -62,7 +63,11 @@ struct PhoneLoginView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(isPresented: $isChoosingCountry) {
+            CountryPicker(countries: model.countries, selection: $model.country)
+        }
         .onAppear { focused = .phone }
+        .task { await model.loadCountries() }
         .onChange(of: model.step) { _, step in
             // The new field is created by this same state change. Waiting one
             // run-loop turn avoids assigning focus to a field that does not yet
@@ -80,15 +85,27 @@ struct PhoneLoginView: View {
 
     private var phoneField: some View {
         HStack(spacing: 10) {
-            // Fixed rather than a country picker, and it matches the server:
-            // ALLOWED_COUNTRY_CODES gates which codes will be sent to at all,
-            // and it ships as "1". A picker here without the matching server
-            // config would offer countries whose sends get rejected.
-            Text("+1")
-                .font(.title2.monospacedDigit())
+            // The countries offered are the server's answer, never this
+            // screen's guess: ALLOWED_COUNTRY_CODES decides which codes get
+            // sent to at all, and a picker built from anything else offers
+            // countries whose sends come back rejected.
+            Button {
+                isChoosingCountry = true
+            } label: {
+                HStack(spacing: 4) {
+                    Text(model.country.shortLabel)
+                        .font(.title3.monospacedDigit())
+                    if model.countries.count > 1 {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                }
                 .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.countries.count < 2)
 
-            TextField("(415) 555-0123", text: $model.nationalNumber)
+            TextField(model.country.placeholder, text: $model.nationalNumber)
                 .font(.title2.monospacedDigit())
                 .keyboardType(.phonePad)
                 .textContentType(.telephoneNumber)
@@ -195,11 +212,53 @@ struct PhoneLoginView: View {
     #endif
 }
 
+private struct CountryPicker: View {
+    let countries: [PhoneCountry]
+    @Binding var selection: PhoneCountry
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(countries) { country in
+                Button {
+                    selection = country
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(country.name)
+                        Spacer()
+                        Text("+" + country.callingCode)
+                            .font(.body.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        if country == selection {
+                            Image(systemName: "checkmark")
+                                .font(.footnote.weight(.semibold))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .navigationTitle("Country")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
 @MainActor
 final class PhoneLoginModel: ObservableObject {
     enum Step { case phone, code }
 
     @Published var step: Step = .phone
+    @Published var country = PhoneLoginModel.startingCountry
+    @Published private(set) var countries = PhoneCountry.served(callingCodes: PhoneCountry.fallbackCallingCodes)
     @Published var nationalNumber = ""
     @Published var code = ""
     @Published private(set) var isBusy = false
@@ -214,6 +273,25 @@ final class PhoneLoginModel: ObservableObject {
     private let session = AccountSession.shared
     private var countdownTask: Task<Void, Never>?
 
+    private static var startingCountry: PhoneCountry {
+        let offered = PhoneCountry.served(callingCodes: PhoneCountry.fallbackCallingCodes)
+        return PhoneCountry.preferred(in: offered) ?? .unitedStates
+    }
+
+    /// Replaces the compiled-in guess with what the server actually serves.
+    ///
+    /// The selection only moves if it has to. Re-deriving it unconditionally
+    /// would reset a country the user had already picked, since this runs again
+    /// on every appearance of the screen.
+    func loadCountries() async {
+        let offered = PhoneCountry.served(callingCodes: await session.signInCallingCodes())
+        guard !offered.isEmpty else { return }
+        countries = offered
+        if !offered.contains(country) {
+            country = PhoneCountry.preferred(in: offered) ?? offered[0]
+        }
+    }
+
     #if DEBUG
     /// The fallback number, used only when the field is empty.
     ///
@@ -223,7 +301,7 @@ final class PhoneLoginModel: ObservableObject {
     static let testNumber = "5005550100"
     /// Must match the server's `DEV_VERIFICATION_CODE`.
     static let testCode = "123456"
-    static var testNumberDisplay: String { format(testNumber) }
+    static var testNumberDisplay: String { format(testNumber, in: .unitedStates) }
 
     /// Takes one ordinary step with the tedious part filled in.
     ///
@@ -237,7 +315,13 @@ final class PhoneLoginModel: ObservableObject {
     func devAdvance() async {
         switch step {
         case .phone:
-            if digits.count != 10 { nationalNumber = Self.testNumber }
+            if !country.accepts(nationalDigitCount: digits.count) {
+                // The bypass list is E.164, so the country has to move with the
+                // number — the server screens it against the allowlist before
+                // it ever looks at the bypass.
+                country = .unitedStates
+                nationalNumber = Self.testNumber
+            }
             await sendCode()
         case .code:
             code = Self.testCode
@@ -247,10 +331,26 @@ final class PhoneLoginModel: ObservableObject {
     #endif
 
     private var digits: String {
-        let raw = nationalNumber.filter(\.isNumber)
-        // Contact AutoFill usually includes the country code, whereas the field
-        // itself asks for the ten national digits beside a fixed "+1" label.
-        if raw.count == 11, raw.first == "1" { return String(raw.dropFirst()) }
+        let trimmed = nationalNumber.trimmingCharacters(in: .whitespaces)
+        var raw = trimmed.filter(\.isNumber)
+
+        // Contact AutoFill hands over a complete international number, whereas
+        // the field asks for the national part beside the country button. The
+        // written '+' or a length no national number could have is what tells
+        // the two apart — a US area code of 415 must not lose its leading "1"
+        // to a country code that isn't there.
+        let code = country.callingCode
+        let isInternational = trimmed.hasPrefix("+") || raw.count > country.digitRange.upperBound
+        if isInternational, raw.hasPrefix(code), raw.count > code.count {
+            raw.removeFirst(code.count)
+        }
+
+        // The trunk '0' a UK or Australian number is written with at home is a
+        // dialling convention, not part of the number: E.164 national numbers
+        // don't carry one, bar the countries flagged in PhoneCountry.
+        if !country.keepsLeadingZero {
+            raw = String(raw.drop(while: { $0 == "0" }))
+        }
         return raw
     }
 
@@ -258,15 +358,15 @@ final class PhoneLoginModel: ObservableObject {
         String(code.filter(\.isNumber).prefix(codeLength))
     }
 
-    /// E.164 for the server. The "+1" the UI shows is not part of the text
-    /// field, so it is added here rather than parsed back out.
-    var e164: String { "+1" + digits }
+    /// E.164 for the server. The calling code the UI shows is not part of the
+    /// text field, so it is added here rather than parsed back out.
+    var e164: String { "+" + country.callingCode + digits }
 
-    var formattedPhoneNumber: String { Self.format(digits) }
+    var formattedPhoneNumber: String { Self.format(digits, in: country) }
 
     var canAdvance: Bool {
         switch step {
-        case .phone: return digits.count == 10
+        case .phone: return country.accepts(nationalDigitCount: digits.count)
         case .code: return cleanedCode.count == codeLength
         }
     }
@@ -339,14 +439,19 @@ final class PhoneLoginModel: ObservableObject {
         }
     }
 
-    /// Display-only NANP grouping. Deliberately not a parser — the digits are
-    /// what gets sent, and the server does the real validation.
-    private static func format(_ digits: String) -> String {
-        guard digits.count == 10 else { return "+1 " + digits }
+    /// Display only, and grouped for the one plan worth grouping — every other
+    /// country would need its own formatter to beat a space after the code.
+    /// Deliberately not a parser: the digits are what gets sent, and the server
+    /// validates.
+    private static func format(_ digits: String, in country: PhoneCountry) -> String {
+        let code = "+" + country.callingCode
+        guard country.callingCode == "1", digits.count == 10 else {
+            return code + " " + digits
+        }
         let area = digits.prefix(3)
         let exchange = digits.dropFirst(3).prefix(3)
         let line = digits.suffix(4)
-        return "+1 (\(area)) \(exchange)-\(line)"
+        return "\(code) (\(area)) \(exchange)-\(line)"
     }
 
     deinit { countdownTask?.cancel() }

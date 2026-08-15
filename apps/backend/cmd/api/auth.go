@@ -33,6 +33,18 @@ type authServer struct {
 	resendCooldown      time.Duration
 }
 
+// GetSignInOptions hands the client the country allowlist it is about to be
+// screened against, so its picker cannot offer a country whose sends would be
+// refused.
+func (s *authServer) GetSignInOptions(
+	_ context.Context,
+	_ *connect.Request[v1.GetSignInOptionsRequest],
+) (*connect.Response[v1.GetSignInOptionsResponse], error) {
+	return connect.NewResponse(&v1.GetSignInOptionsResponse{
+		PhoneCountryCallingCodes: s.allowlist.Codes(),
+	}), nil
+}
+
 // StartPhoneVerification asks the provider to deliver a code.
 func (s *authServer) StartPhoneVerification(
 	ctx context.Context,
