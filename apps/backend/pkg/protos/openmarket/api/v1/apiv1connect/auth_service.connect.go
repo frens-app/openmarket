@@ -33,6 +33,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// AuthServiceGetSignInOptionsProcedure is the fully-qualified name of the AuthService's
+	// GetSignInOptions RPC.
+	AuthServiceGetSignInOptionsProcedure = "/openmarket.api.v1.AuthService/GetSignInOptions"
 	// AuthServiceStartPhoneVerificationProcedure is the fully-qualified name of the AuthService's
 	// StartPhoneVerification RPC.
 	AuthServiceStartPhoneVerificationProcedure = "/openmarket.api.v1.AuthService/StartPhoneVerification"
@@ -47,6 +50,7 @@ const (
 
 // AuthServiceClient is a client for the openmarket.api.v1.AuthService service.
 type AuthServiceClient interface {
+	GetSignInOptions(context.Context, *connect.Request[v1.GetSignInOptionsRequest]) (*connect.Response[v1.GetSignInOptionsResponse], error)
 	StartPhoneVerification(context.Context, *connect.Request[v1.StartPhoneVerificationRequest]) (*connect.Response[v1.StartPhoneVerificationResponse], error)
 	VerifyPhone(context.Context, *connect.Request[v1.VerifyPhoneRequest]) (*connect.Response[v1.VerifyPhoneResponse], error)
 	RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.RefreshTokenResponse], error)
@@ -64,6 +68,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 	baseURL = strings.TrimRight(baseURL, "/")
 	authServiceMethods := v1.File_openmarket_api_v1_auth_service_proto.Services().ByName("AuthService").Methods()
 	return &authServiceClient{
+		getSignInOptions: connect.NewClient[v1.GetSignInOptionsRequest, v1.GetSignInOptionsResponse](
+			httpClient,
+			baseURL+AuthServiceGetSignInOptionsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetSignInOptions")),
+			connect.WithClientOptions(opts...),
+		),
 		startPhoneVerification: connect.NewClient[v1.StartPhoneVerificationRequest, v1.StartPhoneVerificationResponse](
 			httpClient,
 			baseURL+AuthServiceStartPhoneVerificationProcedure,
@@ -93,10 +103,16 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
+	getSignInOptions       *connect.Client[v1.GetSignInOptionsRequest, v1.GetSignInOptionsResponse]
 	startPhoneVerification *connect.Client[v1.StartPhoneVerificationRequest, v1.StartPhoneVerificationResponse]
 	verifyPhone            *connect.Client[v1.VerifyPhoneRequest, v1.VerifyPhoneResponse]
 	refreshToken           *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
 	logout                 *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
+}
+
+// GetSignInOptions calls openmarket.api.v1.AuthService.GetSignInOptions.
+func (c *authServiceClient) GetSignInOptions(ctx context.Context, req *connect.Request[v1.GetSignInOptionsRequest]) (*connect.Response[v1.GetSignInOptionsResponse], error) {
+	return c.getSignInOptions.CallUnary(ctx, req)
 }
 
 // StartPhoneVerification calls openmarket.api.v1.AuthService.StartPhoneVerification.
@@ -121,6 +137,7 @@ func (c *authServiceClient) Logout(ctx context.Context, req *connect.Request[v1.
 
 // AuthServiceHandler is an implementation of the openmarket.api.v1.AuthService service.
 type AuthServiceHandler interface {
+	GetSignInOptions(context.Context, *connect.Request[v1.GetSignInOptionsRequest]) (*connect.Response[v1.GetSignInOptionsResponse], error)
 	StartPhoneVerification(context.Context, *connect.Request[v1.StartPhoneVerificationRequest]) (*connect.Response[v1.StartPhoneVerificationResponse], error)
 	VerifyPhone(context.Context, *connect.Request[v1.VerifyPhoneRequest]) (*connect.Response[v1.VerifyPhoneResponse], error)
 	RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.RefreshTokenResponse], error)
@@ -134,6 +151,12 @@ type AuthServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	authServiceMethods := v1.File_openmarket_api_v1_auth_service_proto.Services().ByName("AuthService").Methods()
+	authServiceGetSignInOptionsHandler := connect.NewUnaryHandler(
+		AuthServiceGetSignInOptionsProcedure,
+		svc.GetSignInOptions,
+		connect.WithSchema(authServiceMethods.ByName("GetSignInOptions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	authServiceStartPhoneVerificationHandler := connect.NewUnaryHandler(
 		AuthServiceStartPhoneVerificationProcedure,
 		svc.StartPhoneVerification,
@@ -160,6 +183,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 	)
 	return "/openmarket.api.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case AuthServiceGetSignInOptionsProcedure:
+			authServiceGetSignInOptionsHandler.ServeHTTP(w, r)
 		case AuthServiceStartPhoneVerificationProcedure:
 			authServiceStartPhoneVerificationHandler.ServeHTTP(w, r)
 		case AuthServiceVerifyPhoneProcedure:
@@ -176,6 +201,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 
 // UnimplementedAuthServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAuthServiceHandler struct{}
+
+func (UnimplementedAuthServiceHandler) GetSignInOptions(context.Context, *connect.Request[v1.GetSignInOptionsRequest]) (*connect.Response[v1.GetSignInOptionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.AuthService.GetSignInOptions is not implemented"))
+}
 
 func (UnimplementedAuthServiceHandler) StartPhoneVerification(context.Context, *connect.Request[v1.StartPhoneVerificationRequest]) (*connect.Response[v1.StartPhoneVerificationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.AuthService.StartPhoneVerification is not implemented"))

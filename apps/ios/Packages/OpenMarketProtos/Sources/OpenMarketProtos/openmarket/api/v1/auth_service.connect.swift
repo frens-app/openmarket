@@ -12,6 +12,9 @@ import SwiftProtobuf
 public protocol Openmarket_Api_V1_AuthServiceClientInterface: Sendable {
 
     @available(iOS 13, *)
+    func `getSignInOptions`(request: Openmarket_Api_V1_GetSignInOptionsRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_GetSignInOptionsResponse>
+
+    @available(iOS 13, *)
     func `startPhoneVerification`(request: Openmarket_Api_V1_StartPhoneVerificationRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_StartPhoneVerificationResponse>
 
     @available(iOS 13, *)
@@ -30,6 +33,11 @@ public final class Openmarket_Api_V1_AuthServiceClient: Openmarket_Api_V1_AuthSe
 
     public init(client: Connect.ProtocolClientInterface) {
         self.client = client
+    }
+
+    @available(iOS 13, *)
+    public func `getSignInOptions`(request: Openmarket_Api_V1_GetSignInOptionsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_GetSignInOptionsResponse> {
+        return await self.client.unary(path: "/openmarket.api.v1.AuthService/GetSignInOptions", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
     @available(iOS 13, *)
@@ -54,6 +62,7 @@ public final class Openmarket_Api_V1_AuthServiceClient: Openmarket_Api_V1_AuthSe
 
     public enum Metadata {
         public enum Methods {
+            public static let getSignInOptions = Connect.MethodSpec(name: "GetSignInOptions", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let startPhoneVerification = Connect.MethodSpec(name: "StartPhoneVerification", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let verifyPhone = Connect.MethodSpec(name: "VerifyPhone", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let refreshToken = Connect.MethodSpec(name: "RefreshToken", service: "openmarket.api.v1.AuthService", type: .unary)

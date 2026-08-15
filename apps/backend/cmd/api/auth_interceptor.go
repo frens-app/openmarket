@@ -21,6 +21,7 @@ import (
 // it up is a visible edit to this map. The reverse ordering is how endpoints
 // end up public by accident.
 var skipAuth = map[string]bool{
+	apiv1connect.AuthServiceGetSignInOptionsProcedure:       true,
 	apiv1connect.AuthServiceStartPhoneVerificationProcedure: true,
 	apiv1connect.AuthServiceVerifyPhoneProcedure:            true,
 	apiv1connect.AuthServiceRefreshTokenProcedure:           true,

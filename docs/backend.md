@@ -347,7 +347,9 @@ Three things about it:
 **The country allowlist** (`pkg/phone`), because it fails closed at boot in a way
 a console setting doesn't: `phone.NewAllowlist("")` returns an error and the
 server refuses to start. A missing env var must not silently unlock every premium
-range on earth. It also validates E.164 before an API call is spent.
+range on earth. It also validates E.164 before an API call is spent. The same
+list is served to the app by `GetSignInOptions`, so the picker offers exactly
+what will be accepted — see `phone-login.md`.
 
 **The resend countdown** is now a hint the server reports, not a limit it
 enforces — Verify's per-number limit is what actually stops a runaway client, and
@@ -388,6 +390,13 @@ declared, and says Prelude manages the process on your behalf.
 
 What applies either way: Prelude's messaging policy and consent rules, which are
 not a multi-week blocker.
+
+10DLC is a US regime, and the other served countries have their own — the UK and
+Ireland run on alphanumeric or shared short-code senders, Australia and New
+Zealand register senders separately. Ask Prelude the same question per country
+before a market is announced: whose sender the codes leave on, and what it costs
+per message there. Adding a code to `ALLOWED_COUNTRY_CODES` starts the sends; it
+does not answer either.
 
 ---
 
@@ -500,7 +509,7 @@ Environment variables on the service — the full list is in
 | `JWT_SECRET` | `openssl rand -hex 32`. Set both keys by hand rather than scripting them into place: they are the keys to every session, and rotating one signs everybody out, so that should be a thing you did rather than a thing that happened |
 | `REFRESH_TOKEN_HMAC_KEY` | `openssl rand -hex 32`, **different from the above** — the server refuses to boot if they match, because rotating one should not invalidate every stored refresh token |
 | `PRELUDE_API_KEY` | From the Prelude dashboard → API Keys |
-| `ALLOWED_COUNTRY_CODES` | `1` |
+| `ALLOWED_COUNTRY_CODES` | `1,44,353,61,64` — US/CA, UK, IE, AU, NZ. `GetSignInOptions` serves this list to the app's country picker, so opening a market is this variable and a restart |
 | `VERIFICATION_MAX_SENDS` | `500` per hour, global. The spend ceiling (§5). Raise it before a launch push, not during one |
 | `APNS_BUNDLE_ID` | `lol.frens.openmarket`. The `apns-topic` header for outgoing pushes. Nothing reads it yet — there is no sender (§4) |
 

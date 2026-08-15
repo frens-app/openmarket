@@ -12,6 +12,20 @@ enum DevicePlatform {
   DEVICE_PLATFORM_WEB = 3;
 }
 
+// GetSignInOptions reports what the sign-in screen needs to know before it can
+// ask for a number. Unauthenticated, and called before any account exists.
+message GetSignInOptionsRequest {}
+
+message GetSignInOptionsResponse {
+  // Country calling codes without the '+', e.g. "1", "44", longest first.
+  //
+  // The server refuses to send a code anywhere else, so a picker built from
+  // anything but this list offers countries whose sends get rejected. Serving
+  // it from the same allowlist that enforces it is what keeps opening a market
+  // an env var rather than an app release.
+  repeated string phone_country_calling_codes = 1;
+}
+
 // StartPhoneVerification asks the SMS provider to deliver a code. It is
 // unauthenticated and it costs money on every call — see docs/backend.md §5 for
 // what guards it, and for why almost all of that is the provider's job rather
@@ -131,6 +145,7 @@ message LogoutRequest {}
 message LogoutResponse {}
 
 service AuthService {
+  rpc GetSignInOptions(GetSignInOptionsRequest) returns (GetSignInOptionsResponse);
   rpc StartPhoneVerification(StartPhoneVerificationRequest) returns (StartPhoneVerificationResponse);
   rpc VerifyPhone(VerifyPhoneRequest) returns (VerifyPhoneResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
