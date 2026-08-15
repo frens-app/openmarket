@@ -45,7 +45,9 @@ and the picker is built from the response. A market therefore opens with one
 environment variable and a restart: an app release is only needed to give a new
 calling code a name, a flag and a length rule.
 
-`PhoneCountry` supplies those three. It is not an authority on what exists —
+`PhoneCountry` supplies those three, for the served countries and no more: a
+market opened on the API renders as its calling code until a release names it.
+It is not an authority on what exists —
 where a length is unknown the check falls back to what E.164 itself guarantees,
 and a served code with no entry at all still appears in the picker, labelled
 with the code. That fallback is what keeps the server-side list ahead of the

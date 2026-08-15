@@ -92,9 +92,10 @@ struct PhoneCountry: Identifiable, Hashable {
         return countries.first { $0.regionCode == region } ?? countries.first
     }
 
-    /// Names come from `Locale`, so a row is an ISO code, a calling code, and
-    /// the two entry facts that vary. Adding a country here does not serve it —
-    /// `ALLOWED_COUNTRY_CODES` on the API does.
+    /// The served countries, and no more. Names come from `Locale`, so a row is
+    /// an ISO code, a calling code, and the entry facts that vary. Adding one
+    /// here does not serve it — `ALLOWED_COUNTRY_CODES` on the API does, and a
+    /// market opened there works before a row exists for it.
     static let all: [PhoneCountry] = [
         unitedStates,
         PhoneCountry("CA", "1", nationalDigits: 10...10, example: "(416) 555-0123"),
@@ -103,60 +104,10 @@ struct PhoneCountry: Identifiable, Hashable {
         PhoneCountry("AU", "61", nationalDigits: 9...9, example: "0412 345 678"),
         PhoneCountry("NZ", "64", nationalDigits: 8...10, example: "021 123 4567"),
 
-        PhoneCountry("AE", "971"),
-        PhoneCountry("AR", "54"),
-        PhoneCountry("AT", "43"),
-        PhoneCountry("BE", "32"),
-        PhoneCountry("BG", "359"),
-        PhoneCountry("BR", "55"),
-        PhoneCountry("CH", "41"),
-        PhoneCountry("CL", "56"),
-        PhoneCountry("CN", "86"),
-        PhoneCountry("CO", "57"),
-        PhoneCountry("CZ", "420"),
-        PhoneCountry("DE", "49"),
-        PhoneCountry("DK", "45"),
-        PhoneCountry("EE", "372"),
-        PhoneCountry("ES", "34"),
-        PhoneCountry("FI", "358"),
-        PhoneCountry("FR", "33"),
-        PhoneCountry("GR", "30"),
-        PhoneCountry("HK", "852"),
-        PhoneCountry("HR", "385"),
-        PhoneCountry("HU", "36"),
-        PhoneCountry("ID", "62"),
-        PhoneCountry("IL", "972"),
-        PhoneCountry("IN", "91"),
+        // The one row here for a country that is not served: Italy is where
+        // the default leading-zero strip is wrong, and that is easier to keep
+        // than to rediscover. Every other unserved market shows as its calling
+        // code until a release names it.
         PhoneCountry("IT", "39", keepsLeadingZero: true),
-        PhoneCountry("JP", "81"),
-        PhoneCountry("KE", "254"),
-        PhoneCountry("KR", "82"),
-        PhoneCountry("LT", "370"),
-        PhoneCountry("LU", "352"),
-        PhoneCountry("LV", "371"),
-        PhoneCountry("MA", "212"),
-        PhoneCountry("MX", "52"),
-        PhoneCountry("MY", "60"),
-        PhoneCountry("NG", "234"),
-        PhoneCountry("NL", "31"),
-        PhoneCountry("NO", "47"),
-        PhoneCountry("PE", "51"),
-        PhoneCountry("PH", "63"),
-        PhoneCountry("PK", "92"),
-        PhoneCountry("PL", "48"),
-        PhoneCountry("PT", "351"),
-        PhoneCountry("RO", "40"),
-        PhoneCountry("RS", "381"),
-        PhoneCountry("SA", "966"),
-        PhoneCountry("SE", "46"),
-        PhoneCountry("SG", "65"),
-        PhoneCountry("SI", "386"),
-        PhoneCountry("SK", "421"),
-        PhoneCountry("TH", "66"),
-        PhoneCountry("TR", "90"),
-        PhoneCountry("TW", "886"),
-        PhoneCountry("UA", "380"),
-        PhoneCountry("VN", "84"),
-        PhoneCountry("ZA", "27"),
     ]
 }
