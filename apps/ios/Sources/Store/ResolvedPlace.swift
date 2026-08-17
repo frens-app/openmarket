@@ -25,6 +25,9 @@ struct ResolvedPlace: Codable, Equatable, Identifiable {
     /// The coordinate that was fed to the picker to get this.
     var latitude: Double
     var longitude: Double
+    /// ISO 3166-1 alpha-2 for the coordinate Apple resolved. Optional so places
+    /// saved by releases before country gating continue to decode.
+    var countryCode: String?
     /// Where the coordinate came from, which decides whether it can go stale.
     var origin: Origin
     var resolvedAt: Date
@@ -100,11 +103,13 @@ struct ResolvedPlace: Codable, Equatable, Identifiable {
 
     init(name: String, segment: String, coordinate: CLLocationCoordinate2D,
          origin: Origin, resolvedAt: Date = Date(),
-         browseURL: String? = nil, verifiedPill: String? = nil, verifiedAt: Date? = nil) {
+         browseURL: String? = nil, verifiedPill: String? = nil, verifiedAt: Date? = nil,
+         countryCode: String? = nil) {
         self.name = name
         self.segment = segment
         latitude = coordinate.latitude
         longitude = coordinate.longitude
+        self.countryCode = countryCode?.uppercased()
         self.origin = origin
         self.resolvedAt = resolvedAt
         self.browseURL = browseURL

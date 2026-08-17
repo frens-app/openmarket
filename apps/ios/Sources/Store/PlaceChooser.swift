@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import MapKit
 import os
 
 /// Turning "here" or "that city" into a place Facebook recognises, for the two
@@ -83,6 +84,14 @@ final class PlaceChooser: ObservableObject {
     /// Settings. Settable from outside because dismissing that alert clears it.
     @Published var needsLocationSettings = false
 
+    /// A map result plus the country Apple says contains it. The country is
+    /// checked before Facebook receives the coordinate, so an unverified
+    /// market cannot silently produce a feed whose prices we may misparse.
+    private struct Target {
+        let coordinate: CLLocationCoordinate2D
+        let countryCode: String?
+    }
+
     /// What the UI should call the current place: the switch in flight if there
     /// is one, otherwise the confirmed place.
     var displayName: String? { switching?.name ?? prefs.locationName }
@@ -134,7 +143,9 @@ final class PlaceChooser: ObservableObject {
             switching?.name = name
         }
         switching?.coordinate = point
-        resolve(mine, origin: .deviceFix, coordinate: { point },
+        let countryCode = location.countryCode
+        resolve(mine, origin: .deviceFix,
+                target: { Target(coordinate: point, countryCode: countryCode) },
                 unplaceable: "Couldn't place that fix on the map.")
         return true
     }
@@ -152,7 +163,13 @@ final class PlaceChooser: ObservableObject {
         // completer being reset behind it.
         let lookup = cities.search(for: suggestion)
         resolve(mine, origin: .searchedCity,
-                coordinate: { (try? await lookup.start())?.mapItems.first?.placemark.coordinate },
+                target: {
+                    guard let placemark = (try? await lookup.start())?.mapItems.first?.placemark else {
+                        return nil
+                    }
+                    return Target(coordinate: placemark.coordinate,
+                                  countryCode: placemark.isoCountryCode)
+                },
                 unplaceable: "Couldn't place \(suggestion.title) on the map.")
     }
 
@@ -194,7 +211,7 @@ final class PlaceChooser: ObservableObject {
     /// still the switch the user is waiting on.
     private func resolve(_ mine: Int,
                          origin: ResolvedPlace.Origin,
-                         coordinate: @escaping () async -> CLLocationCoordinate2D?,
+                         target: @escaping () async -> Target?,
                          unplaceable: String) {
         let previous = inFlight
         // Cancelled *and* waited for: the signed-in resolution feeds a
@@ -208,11 +225,17 @@ final class PlaceChooser: ObservableObject {
             await previous?.value
             guard mine == generation else { return }
 
-            guard let point = await coordinate() else {
+            guard let target = await target() else {
                 finish(mine, failure: unplaceable)
                 return
             }
             guard mine == generation else { return }
+            guard let region = MarketRegion.region(countryCode: target.countryCode),
+                  region.marketplaceVerified else {
+                finish(mine, failure: MarketRegion.unsupportedMarketplaceMessage)
+                return
+            }
+            let point = target.coordinate
             // The picker's map can now move to where this is going — the first
             // confirmation that Apple found the right city, since "Berkeley, CA"
             // and "Berkeley, NJ" read the same in a list.
@@ -220,9 +243,10 @@ final class PlaceChooser: ObservableObject {
 
             let name = switching?.name ?? "that place"
             switch await resolveForCurrentSession(point, name: name, origin: origin) {
-            case .success(let place):
+            case .success(var place):
                 guard mine == generation else { return }
                 // The one write, and only ever from here: a confirmed place.
+                place.countryCode = region.countryCode
                 prefs.setResolvedPlace(place)
                 finish(mine, failure: nil)
             case .failure(.superseded):

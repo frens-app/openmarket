@@ -107,7 +107,7 @@ enum DesktopCardParser {
     }
 
     private static func isPrice(_ line: String) -> Bool {
-        line.hasPrefix("$") || line.caseInsensitiveCompare("free") == .orderedSame
+        PriceRun.isPrice(line)
     }
 
     /// "Seattle, WA" — trailing comma plus a two-letter uppercase state.
@@ -162,7 +162,7 @@ enum DesktopCardParser {
         // end of its title.
         var priceText: String?
         if let candidate = segments.last,
-           candidate.hasPrefix("$") || candidate.caseInsensitiveCompare("free") == .orderedSame {
+           PriceRun.isPrice(candidate) {
             priceText = candidate
             segments.removeLast()
         }

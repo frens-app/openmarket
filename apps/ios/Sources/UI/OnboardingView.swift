@@ -142,7 +142,7 @@ struct OnboardingView: View {
             await chooser.settle()
             isFinishing = false
 
-            guard prefs.resolvedPlace != nil else {
+            guard prefs.hasBrowseablePlace else {
                 // The only backwards move in the flow, and it is an explicit
                 // one: the required answer isn't there, so return to the screen
                 // that asks for it — which is already showing the error.
@@ -315,7 +315,7 @@ private struct LocationPage: View {
     /// Continue opens on the *choice*, not on the confirmation — the round trip
     /// finishes while the user reads the next screen.
     private var canContinue: Bool {
-        prefs.resolvedPlace != nil || chooser.switching != nil
+        prefs.hasBrowseablePlace || chooser.switching != nil
     }
 
     var body: some View {

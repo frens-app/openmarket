@@ -67,11 +67,11 @@ struct PhoneCountry: Identifiable, Hashable {
 
     /// Named because it is the last resort when nothing else resolves, and the
     /// country the debug bypass number belongs to.
-    static let unitedStates = PhoneCountry("US", "1", nationalDigits: 10...10, example: "(415) 555-0123")
+    static let unitedStates = PhoneCountry(MarketRegion.unitedStates)
 
     /// Codes to offer when the server has never been reached — a first launch
     /// with no network. Matches the API's shipped `ALLOWED_COUNTRY_CODES`.
-    static let fallbackCallingCodes = ["1", "44", "353", "61", "64"]
+    static let fallbackCallingCodes = MarketRegion.defaultPhoneCallingCodes
 
     /// The countries served by `callingCodes`, sorted by name.
     ///
@@ -96,18 +96,15 @@ struct PhoneCountry: Identifiable, Hashable {
     /// an ISO code, a calling code, and the entry facts that vary. Adding one
     /// here does not serve it — `ALLOWED_COUNTRY_CODES` on the API does, and a
     /// market opened there works before a row exists for it.
-    static let all: [PhoneCountry] = [
-        unitedStates,
-        PhoneCountry("CA", "1", nationalDigits: 10...10, example: "(416) 555-0123"),
-        PhoneCountry("GB", "44", nationalDigits: 9...10, example: "07911 123456"),
-        PhoneCountry("IE", "353", nationalDigits: 7...9, example: "085 012 3456"),
-        PhoneCountry("AU", "61", nationalDigits: 9...9, example: "0412 345 678"),
-        PhoneCountry("NZ", "64", nationalDigits: 8...10, example: "021 123 4567"),
+    static let all = MarketRegion.all.map(PhoneCountry.init)
 
-        // The one row here for a country that is not served: Italy is where
-        // the default leading-zero strip is wrong, and that is easier to keep
-        // than to rediscover. Every other unserved market shows as its calling
-        // code until a release names it.
-        PhoneCountry("IT", "39", keepsLeadingZero: true),
-    ]
+    private init(_ region: MarketRegion) {
+        self.init(
+            region.countryCode,
+            region.callingCode,
+            nationalDigits: region.nationalDigits,
+            example: region.phoneExample,
+            keepsLeadingZero: region.keepsLeadingZero
+        )
+    }
 }

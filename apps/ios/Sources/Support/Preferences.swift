@@ -65,6 +65,14 @@ final class Preferences: ObservableObject {
     }
 
     func setResolvedPlace(_ place: ResolvedPlace) {
+        // `PlaceChooser` performs this check before spending the Facebook
+        // request, and this second boundary keeps a future writer from storing
+        // an unverified market by accident. Nil is accepted only for places
+        // saved by older releases, before country codes were persisted.
+        guard place.countryCode == nil
+                || MarketRegion.region(countryCode: place.countryCode)?.marketplaceVerified == true else {
+            return
+        }
         let previous = resolvedPlace
         resolvedPlace = place
         locationSlug = place.segment
@@ -143,7 +151,17 @@ final class Preferences: ObservableObject {
     /// excluded: a "no" to Facebook or notifications must not reopen the flow at
     /// every launch.
     var needsOnboarding: Bool {
-        !hasCompletedOnboarding || resolvedPlace == nil
+        !hasCompletedOnboarding || !hasBrowseablePlace
+    }
+
+    /// A confirmed place in a Marketplace whose output format the app has
+    /// verified. A legacy saved place has no country code; it remains usable so
+    /// this release does not force every existing user through onboarding. The
+    /// next location choice records a code and becomes strictly gated.
+    var hasBrowseablePlace: Bool {
+        guard let resolvedPlace else { return false }
+        guard let countryCode = resolvedPlace.countryCode else { return true }
+        return MarketRegion.region(countryCode: countryCode)?.marketplaceVerified == true
     }
 
     /// The account id this install last saw a session for. Kept only to notice

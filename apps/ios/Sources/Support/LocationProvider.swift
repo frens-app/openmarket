@@ -12,6 +12,7 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
 
     @Published private(set) var state: State = .idle
     @Published private(set) var coordinate: CLLocationCoordinate2D?
+    @Published private(set) var countryCode: String?
 
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
@@ -171,7 +172,13 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
 
     private func reverseGeocode(_ location: CLLocation) async {
         let places = try? await CLGeocoder().reverseGeocodeLocation(location)
-        guard let place = places?.first, let city = place.locality else {
+        guard let place = places?.first else {
+            countryCode = nil
+            state = .resolved("Your area")
+            return
+        }
+        countryCode = place.isoCountryCode?.uppercased()
+        guard let city = place.locality else {
             state = .resolved("Your area")
             return
         }
