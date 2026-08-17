@@ -79,11 +79,7 @@ enum CardParser {
 
     /// "Free", "$1,200", "£40", "€15", "Please contact" — all stay strings.
     static func isPrice(_ text: String) -> Bool {
-        let lowered = text.lowercased()
-        if lowered == "free" { return true }
-        guard text.count <= 24 else { return false }
-        let symbols: Set<Character> = ["$", "£", "€", "¥", "₹", "₩"]
-        return text.contains(where: symbols.contains) && text.contains(where: \.isNumber)
+        text.count <= 24 && PriceRun.isPrice(text)
     }
 
     /// Mobile cards usually omit location, but when present it looks like

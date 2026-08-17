@@ -77,7 +77,7 @@ enum CardLabel {
     // MARK: - Patterns
 
     /// En and em dashes both appear in Facebook's own copy.
-    private static let dash = "\\s*[-\\u{2013}\\u{2014}]\\s*"
+    private static let dash = "\\s*[-\u{2013}\u{2014}]\\s*"
 
     private static var conditionAlternation: String {
         conditions
@@ -87,8 +87,14 @@ enum CardLabel {
 
     private static let tail = "\\s+in\\s+([^,]{1,60}),\\s*([A-Za-z]{2})\\s*$"
 
+    private static var pricePrefixAlternation: String {
+        MarketRegion.supportedPricePrefixes
+            .map(NSRegularExpression.escapedPattern(for:))
+            .joined(separator: "|")
+    }
+
     private static var pricedPattern: String {
-        "^(.*) for sale\(dash)(\(conditionAlternation))\(dash)(\\$[\\d,]+(?:\\.\\d{2})?)\(tail)"
+        "^(.*) for sale\(dash)(\(conditionAlternation))\(dash)((?:\(pricePrefixAlternation))[\\d,]+(?:\\.\\d{2})?)\(tail)"
     }
 
     private static var freePattern: String {

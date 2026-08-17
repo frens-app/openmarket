@@ -21,7 +21,18 @@ import Foundation
 /// mobile runs — and only the JSON payload route (`DesktopPayload`) gets a
 /// separate `strikethroughFormatted` field for free.
 enum PriceRun {
-    private static let symbols: Set<Character> = ["$", "£", "€", "¥", "₹", "₩"]
+    static func isPrice(_ text: String) -> Bool {
+        text.caseInsensitiveCompare("free") == .orderedSame
+            || currencySymbol(in: text) != nil
+    }
+
+    private static func currencySymbol(in text: String) -> String? {
+        guard let symbol = PriceGuide.currencySymbol(in: text),
+              MarketRegion.supportedPricePrefixes.contains(where: {
+                  $0.caseInsensitiveCompare(symbol) == .orderedSame
+              }) else { return nil }
+        return symbol
+    }
 
     /// `("$50", "$60")` for `"$50$60"`, and nil for anything that isn't exactly
     /// two amounts back to back.
@@ -41,12 +52,13 @@ enum PriceRun {
                 index = text.index(after: index)
                 continue
             }
-            // Anything that isn't the start of an amount disqualifies the whole
-            // run — that's what keeps ranges and prose out.
-            guard Self.symbols.contains(text[index]) else { return nil }
+            // `currencySymbol` accepts both one-character symbols and the
+            // country-qualified forms Facebook uses outside the US, such as
+            // `CA$`. Anything else keeps ranges and prose out.
+            let remainder = String(text[index...])
+            guard let symbol = currencySymbol(in: remainder) else { return nil }
 
-            var end = text.index(after: index)
-            guard end < text.endIndex, text[end].isNumber else { return nil }
+            var end = text.index(index, offsetBy: symbol.count)
             while end < text.endIndex, text[end].isNumber || text[end] == "," || text[end] == "." {
                 end = text.index(after: end)
             }
