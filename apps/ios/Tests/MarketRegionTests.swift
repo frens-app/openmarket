@@ -34,9 +34,13 @@ final class MarketRegionTests: XCTestCase {
     }
 
     func testOnlyVerifiedCountriesCanBrowseMarketplace() {
-        XCTAssertEqual(MarketRegion.verifiedMarketplaceCountryCodes, ["US", "CA"])
+        XCTAssertEqual(
+            MarketRegion.verifiedMarketplaceCountryCodes,
+            ["US", "CA", "GB", "IE", "AU", "NZ"]
+        )
         XCTAssertTrue(MarketRegion.region(countryCode: "ca")?.marketplaceVerified == true)
-        XCTAssertFalse(MarketRegion.region(countryCode: "GB")?.marketplaceVerified == true)
+        XCTAssertTrue(MarketRegion.region(countryCode: "GB")?.marketplaceVerified == true)
+        XCTAssertFalse(MarketRegion.region(countryCode: "IT")?.marketplaceVerified == true)
         XCTAssertNil(MarketRegion.region(countryCode: "JP"))
     }
 
@@ -62,11 +66,11 @@ final class MarketRegionTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let place = ResolvedPlace(
-            name: "London",
-            segment: "london",
-            coordinate: CLLocationCoordinate2D(latitude: 51.5072, longitude: -0.1276),
+            name: "Rome",
+            segment: "rome",
+            coordinate: CLLocationCoordinate2D(latitude: 41.9028, longitude: 12.4964),
             origin: .searchedCity,
-            countryCode: "GB"
+            countryCode: "IT"
         )
         defaults.set(try JSONEncoder().encode(place), forKey: "resolvedPlace")
 
@@ -74,6 +78,27 @@ final class MarketRegionTests: XCTestCase {
 
         XCTAssertFalse(preferences.hasBrowseablePlace)
         XCTAssertTrue(preferences.needsOnboarding)
+    }
+
+    func testPreferencesAcceptEveryNewlyVerifiedMarketplace() throws {
+        for countryCode in ["GB", "IE", "AU", "NZ"] {
+            let suite = "MarketRegionTests.verified.\(countryCode).\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let place = ResolvedPlace(
+                name: countryCode,
+                segment: countryCode.lowercased(),
+                coordinate: CLLocationCoordinate2D(latitude: 1, longitude: 1),
+                origin: .searchedCity,
+                countryCode: countryCode
+            )
+            defaults.set(try JSONEncoder().encode(place), forKey: "resolvedPlace")
+
+            XCTAssertTrue(
+                Preferences(defaults: defaults).hasBrowseablePlace,
+                "\(countryCode) should be browseable"
+            )
+        }
     }
 
     func testLegacyStoredPlaceRemainsBrowseableUntilItIsReselected() throws {

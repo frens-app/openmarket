@@ -57,22 +57,22 @@ struct MarketRegion: Equatable, Identifiable {
         MarketRegion(
             "GB", callingCode: "44", nationalDigits: 9...10,
             phoneExample: "07911 123456", pricePrefixes: ["£"],
-            phoneEnabledByDefault: true, marketplaceVerified: false
+            phoneEnabledByDefault: true, marketplaceVerified: true
         ),
         MarketRegion(
             "IE", callingCode: "353", nationalDigits: 7...9,
             phoneExample: "085 012 3456", pricePrefixes: ["€"],
-            phoneEnabledByDefault: true, marketplaceVerified: false
+            phoneEnabledByDefault: true, marketplaceVerified: true
         ),
         MarketRegion(
             "AU", callingCode: "61", nationalDigits: 9...9,
             phoneExample: "0412 345 678", pricePrefixes: ["AU$", "A$"],
-            phoneEnabledByDefault: true, marketplaceVerified: false
+            phoneEnabledByDefault: true, marketplaceVerified: true
         ),
         MarketRegion(
             "NZ", callingCode: "64", nationalDigits: 8...10,
             phoneExample: "021 123 4567", pricePrefixes: ["NZ$"],
-            phoneEnabledByDefault: true, marketplaceVerified: false
+            phoneEnabledByDefault: true, marketplaceVerified: true
         ),
 
         // Retained for correct E.164 entry if the server enables +39. Italy's
@@ -116,5 +116,5 @@ struct MarketRegion: Equatable, Identifiable {
     }
 
     static let unsupportedMarketplaceMessage =
-        "Marketplace browsing is currently available in the United States and Canada."
+        "Marketplace browsing isn't available in that country yet."
 }

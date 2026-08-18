@@ -74,11 +74,16 @@ enum PriceRun {
         // first and the struck-through old one second — and the amounts have to
         // agree with it. A pair that doesn't ascend isn't a markdown, so it's
         // left alone rather than relabelled into one.
-        guard let current = PriceGuide.parse(parts[0]),
-              let original = PriceGuide.parse(parts[1]),
+        guard let current = amount(in: parts[0]),
+              let original = amount(in: parts[1]),
               original > current else { return nil }
 
         return (parts[0], parts[1])
+    }
+
+    private static func amount(in text: String) -> Decimal? {
+        guard let symbol = currencySymbol(in: text) else { return nil }
+        return Decimal(string: text.dropFirst(symbol.count).replacingOccurrences(of: ",", with: ""))
     }
 
     /// Applies `split` to a price that may or may not need it.
