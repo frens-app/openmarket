@@ -53,6 +53,10 @@ enum DesktopCardParser {
         var lines = raw.lines.filter { !$0.isEmpty }
         guard !lines.isEmpty else { return nil }
 
+        lines.removeAll { line in
+            CardParser.knownBadges.contains(line.lowercased())
+        }
+
         // Price: the first line that is one. Free is spelled both ways across
         // surfaces, hence the case-insensitive compare the label path also uses.
         var priceText: String?
@@ -74,10 +78,10 @@ enum DesktopCardParser {
         // "$50$60" as one run and the loop above finds no second price to take.
         (priceText, originalPriceText) = PriceRun.resolve(price: priceText, original: originalPriceText)
 
-        // City: "Seattle, WA" — a trailing two-letter state is the only
-        // reliable marker, and titles routinely contain commas.
+        // A place is only removed when another line remains for the title;
+        // titles routinely contain commas too.
         var locationText: String?
-        if let index = lines.lastIndex(where: { isPlace($0) }) {
+        if lines.count >= 2, let index = lines.lastIndex(where: { isPlace($0) }) {
             locationText = lines[index]
             lines.remove(at: index)
         }
@@ -110,12 +114,12 @@ enum DesktopCardParser {
         PriceRun.isPrice(line)
     }
 
-    /// "Seattle, WA" — trailing comma plus a two-letter uppercase state.
+    /// A rendered place has at least a city and a region or country.
     private static func isPlace(_ line: String) -> Bool {
-        let parts = line.components(separatedBy: ", ")
-        guard parts.count >= 2, let state = parts.last else { return false }
-        return state.count == 2 && state == state.uppercased()
-            && state.allSatisfy(\.isLetter)
+        let parts = line.components(separatedBy: ",")
+        guard parts.count >= 2, let suffix = parts.last?.trimmingCharacters(in: .whitespaces),
+              !suffix.isEmpty, suffix.count <= 32 else { return false }
+        return suffix.allSatisfy { $0.isLetter || $0.isWhitespace }
     }
 
     static func parseLabel(_ raw: DesktopRawCard, cardIndex: Int) -> Listing? {
@@ -129,42 +133,35 @@ enum DesktopCardParser {
         guard let last = segments.last, last.hasPrefix("listing ") else { return nil }
         segments.removeLast()
 
-        // An empty city segment is a shipping listing: desktop leaves the slot
-        // in place rather than omitting it, which is a cleaner signal than
-        // guessing from the absence of a comma.
+        let shipsOnly = segments.last?.isEmpty == true
+        if shipsOnly { segments.removeLast() }
+
         var locationText: String?
-        var shipsOnly = false
-        if let city = segments.last {
-            if city.isEmpty {
-                shipsOnly = true
-                segments.removeLast()
-            } else if city.count == 2, city.uppercased() == city, segments.count >= 2 {
-                // "San Francisco", "CA" split across two segments — rejoin.
-                let state = segments.removeLast()
-                let name = segments.removeLast()
-                locationText = "\(name), \(state)"
-            } else {
-                locationText = segments.removeLast()
-            }
-        }
-
-        // Optional "reduced from $70", then the current price.
         var originalPriceText: String?
-        if let candidate = segments.last, candidate.hasPrefix("reduced from ") {
-            originalPriceText = String(candidate.dropFirst("reduced from ".count))
-            segments.removeLast()
-        }
-
-        // Case-insensitive on "free" because the surfaces disagree: a search
-        // result's label says "Free", the browse feed's says "FREE". Matching
-        // one spelling left the other unparsed, and a free listing then
-        // rendered with an em dash for a price and the word FREE stuck on the
-        // end of its title.
         var priceText: String?
-        if let candidate = segments.last,
-           PriceRun.isPrice(candidate) {
-            priceText = candidate
-            segments.removeLast()
+        var titleSegments = segments
+
+        // Price is the boundary between the comma-bearing title and whatever
+        // geography this market renders. Unlike a North American state suffix,
+        // that boundary survives "London, United Kingdom" and "Dublin, Ireland".
+        if let priceIndex = segments.lastIndex(where: PriceRun.isPrice) {
+            priceText = segments[priceIndex]
+            titleSegments = Array(segments[..<priceIndex])
+            var trailing = Array(segments[segments.index(after: priceIndex)...])
+            if let first = trailing.first,
+               first.lowercased().hasPrefix("reduced from ") {
+                let candidate = String(first.dropFirst("reduced from ".count))
+                if PriceRun.isPrice(candidate) {
+                    originalPriceText = candidate
+                    trailing.removeFirst()
+                }
+            }
+            if !trailing.isEmpty {
+                locationText = trailing.joined(separator: ", ")
+            }
+        } else if let last = segments.last {
+            locationText = last
+            titleSegments.removeLast()
         }
 
         // The label normally spells a markdown out ("reduced from $70") and is
@@ -173,7 +170,7 @@ enum DesktopCardParser {
         (priceText, originalPriceText) = PriceRun.resolve(price: priceText, original: originalPriceText)
 
         // Whatever is left is the title, commas and all.
-        let title = segments.joined(separator: ", ")
+        let title = titleSegments.joined(separator: ", ")
         guard !title.isEmpty else { return nil }
 
         let thumbnail = raw.imageURL.isEmpty ? nil : URL(string: raw.imageURL)

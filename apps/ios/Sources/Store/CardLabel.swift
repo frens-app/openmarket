@@ -50,26 +50,26 @@ enum CardLabel {
         guard text.count > 12,
               text.range(of: " for sale", options: .caseInsensitive) != nil else { return nil }
 
-        if let g = match(text, pricedPattern), g.count == 6 {
+        if let g = match(text, pricedPattern), g.count == 5 {
             return Parsed(title: trimmed(g[1]),
                           conditionText: canonicalCondition(g[2]),
                           priceText: trimmed(g[3]),
-                          locationText: place(g[4], g[5]))
+                          locationText: place(g[4]))
         }
         // Free listings prefix "Free " to the title and omit the price segment
         // entirely. Tried second so "Free weights for sale - … - $50 in …"
         // keeps "Free weights" as its title rather than losing the first word.
-        if let g = match(text, freePattern), g.count == 5 {
+        if let g = match(text, freePattern), g.count == 4 {
             return Parsed(title: trimmed(g[1]),
                           conditionText: canonicalCondition(g[2]),
                           priceText: "Free",
-                          locationText: place(g[3], g[4]))
+                          locationText: place(g[3]))
         }
-        if let g = match(text, loosePattern), g.count == 4 {
+        if let g = match(text, loosePattern), g.count == 3 {
             return Parsed(title: trimmed(g[1]),
                           conditionText: nil,
                           priceText: nil,
-                          locationText: place(g[2], g[3]))
+                          locationText: place(g[2]))
         }
         return nil
     }
@@ -85,7 +85,7 @@ enum CardLabel {
             .joined(separator: "|")
     }
 
-    private static let tail = "\\s+in\\s+([^,]{1,60}),\\s*([A-Za-z]{2})\\s*$"
+    private static let tail = "\\s+in\\s+(.{1,100})\\s*$"
 
     private static var pricePrefixAlternation: String {
         MarketRegion.supportedPricePrefixes
@@ -131,10 +131,14 @@ enum CardLabel {
         return conditions.first { $0.caseInsensitiveCompare(normalized) == .orderedSame } ?? normalized
     }
 
-    private static func place(_ city: String, _ region: String) -> String? {
-        let c = trimmed(city), r = trimmed(region)
-        guard let c, let r else { return nil }
-        return "\(c), \(r.uppercased())"
+    private static func place(_ raw: String) -> String? {
+        guard let location = trimmed(raw) else { return nil }
+        let pieces = location.components(separatedBy: ",")
+        guard pieces.count > 1, let region = pieces.last?.trimmingCharacters(in: .whitespaces),
+              (2...3).contains(region.count), region.allSatisfy(\.isLetter) else {
+            return location
+        }
+        return pieces.dropLast().joined(separator: ",") + ", " + region.uppercased()
     }
 
     private static func trimmed(_ s: String) -> String? {
