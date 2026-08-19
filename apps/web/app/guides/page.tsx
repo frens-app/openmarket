@@ -43,6 +43,16 @@ export default function GuidesIndex() {
                 {g.title}
               </h2>
               <p className="mt-2 leading-7 text-gray-400">{g.description}</p>
+              <p className="mt-3 text-sm text-gray-500">
+                Posted{" "}
+                <time dateTime={g.date}>
+                  {new Date(`${g.date}T00:00:00`).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </time>
+              </p>
             </Link>
           ))}
         </div>

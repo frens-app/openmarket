@@ -83,8 +83,11 @@ session; captures below point at a session id.
 | `2026-08-18-explore-shipping-badges-all-cells-01.png` | `S1` | Marketplace Explore. Six full cells and two partial, every one carrying the shipping badge. Prices $28–$85, houseplant category | Shipping listings occupy the Explore grid. **Does not** support any distance claim — see below | Yes. No faces, seller names or addresses. Hands appear in three seller photos |
 | `2026-08-18-filters-suggested-default-selected-01.png` | `S3` | The Distance sheet over a search for `anthurium`, location San Francisco, CA. **Suggested** is the selected radio. Presets are 20 / 40 / 60 / 100 miles; Custom distance carries its own slider, shown at 7 mi | The default distance is a named setting, not a mileage. Also: no preset below 20 miles | Yes. No faces, seller names or addresses |
 | `2026-08-18-search-suggested-86mi-result-01.png` | `S3` | Results for `anthurium` from San Francisco, one minute after the sheet above and on the same battery reading. Rancho Cordova · 86 mi, Concord · 28 mi, San Francisco · 1 mi. The one shipped cell carries no location line at all | **Under the default, a San Francisco search returned a listing 86 miles out.** The guide's central claim, in a single session | Yes. Nav avatar masked on re-capture; clock and battery left legible so the pairing with the sheet above stays checkable |
+| `2026-08-18-search-ad-cells-in-grid-01.png` | `S4` | The same `fitbit air` search scrolled on, 10:49. RingConn and WHOOP occupy single grid cells marked "Ad", among listings at San Francisco &middot; 2 mi, 4 mi and Oakland &middot; 15 mi | Ads take listing-shaped cells, not only full rows. The label reads "Ad" — the guide says so rather than "Sponsored" | Yes. No faces, seller names or addresses |
 | `2026-08-18-search-ad-unit-in-results-01.png` | `S4` | Search for `fitbit air` from San Francisco. Two organic results carrying real mileage — Oakland · 12 mi, San Jose · 47 mi — then an "Amazfit · Ad" unit with two cells occupying a full row | Paid units sit inside the results list, and carry no distance because they are not listings. Also the first frame with mileage on result cells | Yes. Nav avatar masked on re-capture |
-| `2026-08-18-item-shipping-cost-on-55-plant-01.png` | `S1` | Item page for "Anthurium Zara F4 x Debile", $55, **"Ships for $20 + taxes"**, Buy now with Purchase Protection. Same clock and battery as the Explore frame, and the same listing as its top-left cell | Buyer-side shipping cost on a shipped listing — $20 on a $55 item. Ties the `S1` grid to a specific listing | Yes. Seller's hand and desk only, no face |
+| `2026-08-18-item-shipping-cost-on-55-plant-01.png` | `S1` | Item page for "Anthurium Zara F4 x Debile", $55, **"Ships for $20 + taxes"**, Buy now with Purchase Protection. Same clock and battery as the Explore frame, and the same listing as its top-left cell | Buyer-side shipping cost on a shipped listing — $20 on a $55 item. Ties the `S1` grid to a specific listing. **Not currently used by any guide** | Yes. Seller's hand and desk only, no face |
+| `2026-08-18-explore-ebay-partner-cell-01.png` | `S2` | The Explore grid at 1:51, Raven Table Lamp at $36 in the top-left cell. Its corner badge is a different icon from the delivery truck on shipped cells | The partner listing as it appears in the feed, before it is opened. Pairs with the item page below, one minute later on the same battery reading | Yes. No faces, seller names or addresses |
+| `2026-08-18-item-ebay-partner-listing-01.png` | `S2` | A Marketplace item page for an eBay product, 1:52 on the same battery reading as the Explore frame below. eBay badge, "Buy now on eBay", an eBay description block, and Facebook's own line: "Facebook may receive a commission on this sale." $35.95, free shipping, no location anywhere on the page | A class of listing that is not a local seller and not a sponsored ad — a retail product carrying no location at all. The commission line is first-party | Yes. No faces, seller names or addresses |
 | `2026-08-18-explore-farther-away-badge-01.png` | `S2` | Marketplace Explore, mixed categories, no shipping badges. Top-left cell carries Facebook's own **"Farther away"** badge; a **"Nearby"** badge is partly visible at the bottom edge of the same grid | One Explore grid carrying both distance labels at once — Facebook's own UI stating the feed is not distance-bounded | Yes. No faces, seller names or addresses |
 
 **`S1` cannot substantiate a distance claim.** The frame carries no distance
@@ -125,6 +128,37 @@ and its results reach San Jose · 47 mi, but its filter state was never opened,
 so "Suggested was set" is inference there. Use it for the ad unit, not for
 distance.
 
+## Source records — `reddit/`
+
+Screenshots of third-party posts the guides cite. A different kind of artifact
+from everything above: not our observation of Marketplace, just proof that a
+source said what we say it said, on the day we read it.
+
+Dates, authors and scores below are read from each post's own
+`created-timestamp`, not from the "3y ago" string in the screenshot. Verify that
+way — the relative string cannot distinguish June 2023 from May 2024.
+
+A public post under a pseudonymous handle can be shown with its username, and
+the crop we publish keeps the attribution visible. Crop to the post itself: the
+full frame carries a login sidebar, a related-posts rail, and whichever ad
+Reddit served that second.
+
+Keep both files even when a guide cites only one — a source read and set aside
+is still part of how the claim was reached.
+
+| File | Thread | Says | Cited in |
+|---|---|---|---|
+| `2026-08-18-feed-far-items-thread-01.png` | [`14j95p4`](https://www.reddit.com/r/FacebookMarketplace/comments/14j95p4/why_does_marketplace_keep_showing_me_items_that/), u/charcoalritual, **26 Jun 2023**, 18 points, 17 comments | The browse feed showing far-away items with a 20 km radius set, while searches for a specific product behave. Comments name radii from 10 to 209 miles with results outside them | **Published** as a cropped figure in the distance-filter guide |
+| `2026-08-18-distance-filter-thread-01.png` | [`1hizqw1`](https://www.reddit.com/r/FacebookMarketplace/comments/1hizqw1/the_distance_filter_doesnt_work_at_all_anymore/), u/42tooth_sprocket, **21 Dec 2024**, 36 points, 27 comments | A filter set to 1 km still returning listings 200 km out, in a city dense enough to fill the page locally | **Not currently cited.** Kept as a second source for the same behaviour — see below |
+
+**`1hizqw1` is cited but not shown, and that is deliberate.** Its post and much
+of its comment thread assert why Meta supposedly does this. Running it as a
+figure would put an intent claim on our page in someone else's voice, which
+`docs/content-standards.md` §1 rules out however it is attributed. Its
+observation — 1 km set, 200 km returned — is fine to cite, and the guide does.
+`14j95p4` makes the same observation without the motive, which is why it is the
+one on the page.
+
 ## Wanted
 
 The five the distance-filter guide is blocked on. It ships as a draft until
@@ -135,7 +169,7 @@ these exist — see `apps/web/lib/guides.ts`.
 | The "Suggested" default | `filters` | The distance filter showing its default state | **Have it** — `S3` |
 | Shipping listings in the grid | `explore` | Shipping badges on the cells | **Have it** — `S1`, though it proves the badges, not the distance |
 | The grid mixes distances | `explore` | Facebook's own distance labels | **Have it** — `S2`, "Farther away" and "Nearby" in one grid |
-| Distances under "Suggested" | `search` | Result cells with city or distance labels, in a session where Suggested is confirmed set | **Have it** — `S3`, both halves one minute apart |
+| Distances under "Suggested" | `search` | Result cells with city or distance labels, in a session where Suggested is confirmed set | **Have it** — `S3`, both halves on disk, one minute apart |
 | Sponsored density | `search` | Sponsored cells and banner units across a defined run of consecutive screens. Count them; do not estimate | **Missing** |
 | Radius vs drive time | graphic | A straight-line circle over a metro, with the area actually reachable shaded inside it. Not a screenshot | **Missing** |
 | The filter panel, after | `filters` | The distance field once it is changed off "Suggested" | **Missing** — `S3` is the before half |

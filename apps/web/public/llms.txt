@@ -14,3 +14,7 @@ Availability: iOS. Website: https://openmarket.io
 - [For buyers](https://openmarket.io/buyers): search, filters, distance and travel time, saves, only-new-listings
 - [For sellers](https://openmarket.io/sellers): Price Check — local comps, sold data, ready-to-paste listings
 - [Guides](https://openmarket.io/guides): practical guides to buying and selling secondhand locally
+
+## Guides
+
+- [Why Facebook Marketplace shows items outside your distance filter](https://openmarket.io/guides/facebook-marketplace-items-outside-distance-filter): the default distance is "Suggested", not a mileage — one San Francisco search under it returned a listing 86 miles out; plus shipped listings and ad rows that carry no distance at all

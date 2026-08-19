@@ -29,13 +29,21 @@ export const GUIDES: Guide[] = [
     date: "2026-08-18",
     lastVerified: "2026-08-18",
     readingMinutes: 6,
-    draft: true,
     html: `
 <p class="dek">Tested on the Facebook iOS app v574.0.0, searching from San Francisco, CA.</p>
 
-<p>Facebook Marketplace shows you listings outside your distance filter because several categories of listing aren't governed by that filter at all — shipped items, sponsored placements, and results returned under the default "Suggested" distance setting. The mile radius you set constrains one subset of what appears in your feed, not the feed itself.</p>
+<aside class="tldr">
+  <p class="tldr-label">TL;DR</p>
+  <p>Facebook Marketplace often shows listings far away and outside of your distance filter range because of shipped items, sponsored listings, and results returned under the default "Suggested" distance setting.</p>
+</aside>
 
-<p>Here's what each one looks like on screen.</p>
+<p>You might find yourself frustrated by how many far-away or irrelevant listings turn up on Facebook Marketplace. You're not alone in that — it's a common complaint.</p>
+
+<figure>
+  <img src="/guides/distance-filter/reddit-feed-far-items.png" alt="An archived r/FacebookMarketplace post from June 2023 asking why Marketplace keeps showing items that are far away despite a 20 km local radius, with 18 points and 17 comments" loading="lazy" />
+  <figcaption>u/charcoalritual, <a href="https://www.reddit.com/r/FacebookMarketplace/comments/14j95p4/why_does_marketplace_keep_showing_me_items_that/">r/FacebookMarketplace</a>, 26 June 2023.</figcaption>
+</figure>
+
 
 <h2>At a glance</h2>
 <div class="table-scroll">
@@ -45,20 +53,19 @@ export const GUIDES: Guide[] = [
 </thead>
 <tbody>
 <tr><td>Shipped listings</td><td>A shipped item has no meaningful location from your side, so a local pickup radius doesn't constrain it</td><td>Filter delivery method to <strong>Local pickup</strong></td></tr>
-<tr><td>Sponsored placements</td><td>Paid units take grid positions regardless of filters</td><td>Nothing in Marketplace's own filters</td></tr>
+<tr><td>Sponsored placements</td><td>Paid units take grid positions regardless of filters, as do retail listings sold through partners</td><td>Nothing in Marketplace's own filters</td></tr>
 <tr><td>Results under "Suggested"</td><td>The default distance is a setting named "Suggested", not a mileage value. One San Francisco search under it returned a listing 86 miles out</td><td>Set an explicit radius, once per device</td></tr>
-<tr><td>In-radius but unreachable</td><td>A radius is a straight-line circle with no knowledge of what's inside it</td><td>Sort by distance; judge by the drive, not the number</td></tr>
 </tbody>
 </table>
 </div>
 
-<h2>Shipping listings aren't bound by your radius</h2>
+<h2>Shipped listings aren't bound by your radius</h2>
 <p>Marketplace started as local pickup only. Meta later added shipping, and a shipped listing has no meaningful location from your side — the seller's ZIP is incidental — so a local pickup radius doesn't constrain it.</p>
-<p>This is the biggest single source of far-away results, and it's most visible on Discover before you've searched anything.</p>
+<p>This is the biggest single source of far-away results, and it's most visible on Explore before you've searched anything.</p>
 
 <figure>
   <div class="device"><img src="/guides/distance-filter/explore-shipped.jpg" alt="The Facebook Marketplace Explore grid, every visible listing carrying a shipping badge in its top corner" loading="lazy" /></div>
-  <figcaption>Marketplace Explore. Every cell in view carries the shipping badge.</figcaption>
+  <figcaption>Marketplace Explore. A little delivery truck in the corner of a listing indicates a shipped item — here, every cell in view has one.</figcaption>
 </figure>
 
 <p>Marketplace also labels distance on Explore itself, and it labels both directions. One grid carried a cell marked <strong>"Farther away"</strong> and another marked <strong>"Nearby"</strong> at the same time.</p>
@@ -68,24 +75,27 @@ export const GUIDES: Guide[] = [
   <figcaption>One Explore grid, two distance labels.</figcaption>
 </figure>
 
-<p>Shipping is also priced separately from the item, and on a cheap item the freight is not small. One $55 plant in that grid listed at "Ships for $20 + taxes" — a 36% surcharge before tax, on something a local seller would have handed over for $55.</p>
+<h2>Sponsored placements aren't sorted by distance</h2>
+<p>Paid units take grid positions regardless of your filters. They come in two shapes: a full row of advertising, and single cells shaped exactly like listings, sitting between them and marked only by a small "Ad". These sponsored listings don't get filtered out.</p>
+
+<p>A search for "fitbit air" from San Francisco returned two listings with distances on them — Oakland &middot; 12 mi and San Jose &middot; 47 mi — and then a full row of Amazfit advertising. Scrolling on, two more ads turned up as ordinary-looking cells among four real listings.</p>
 
 <figure>
-  <div class="device"><img src="/guides/distance-filter/item-shipping-cost.jpg" alt="A Marketplace item page for a 55 dollar plant showing a Ships for 20 dollars plus taxes line above a Buy now button" loading="lazy" /></div>
-  <figcaption>The item page for the $55 listing in the grid above.</figcaption>
+  <div class="device-pair">
+    <div class="device"><img src="/guides/distance-filter/search-ad-unit.jpg" alt="Marketplace search results showing two listings with mileage labels followed by a labelled Amazfit advertisement occupying a full row" loading="lazy" /></div>
+    <div class="device"><img src="/guides/distance-filter/search-ad-cells.jpg" alt="Marketplace search results where two single grid cells are RingConn and WHOOP advertisements marked Ad, sitting among listings labelled 2, 4 and 15 miles away" loading="lazy" /></div>
+  </div>
+  <figcaption>Both from the same search for "fitbit air" in San Francisco. Left: an ad taking a full row. Right: two ads taking single cells — RingConn and WHOOP — among listings from 2, 4 and 15 miles out. The listings carry a distance; the ads carry an "Ad".</figcaption>
 </figure>
 
-<p>Worth knowing: Meta takes 10% of every shipped order, a rate that moved from 5% to 10% in April 2024 [SOURCE]. Local pickup generates no such fee. The two listing types aren't economically equivalent to the platform.</p>
-
-<h2>Sponsored placements aren't sorted by distance</h2>
-<p>Paid units take grid positions regardless of your filters — both horizontal banners and in-grid cells that look like organic listings but carry a "Sponsored" label.</p>
-<p>Neither respects your distance setting, because neither is a Marketplace listing in the sense your filter understands.</p>
-
-<p>A search for "fitbit air" from San Francisco returned two listings with distances on them — Oakland &middot; 12 mi and San Jose &middot; 47 mi — and then a full row of Amazfit advertising. The ad has no distance because it isn't a listing at all.</p>
+<p>Not every commercial placement is labelled that way. This one is a retail product opened from inside Marketplace: an eBay badge, a <strong>"Buy now on eBay"</strong> button, an eBay description, and a line in Facebook's own words — "Facebook may receive a commission on this sale." It carries no location because there isn't one to carry, just free shipping from wherever the seller ships from.</p>
 
 <figure>
-  <div class="device"><img src="/guides/distance-filter/search-ad-unit.jpg" alt="Marketplace search results showing two listings with mileage labels followed by a labelled Amazfit advertisement occupying a full row" loading="lazy" /></div>
-  <figcaption>Search results for "fitbit air", San Francisco. The third row is an ad.</figcaption>
+  <div class="device-pair">
+    <div class="device"><img src="/guides/distance-filter/ebay-partner-feed.jpg" alt="The Marketplace Explore grid with a Raven Table Lamp listed at $36, its corner carrying a badge different from the shipping truck on other cells" loading="lazy" /></div>
+    <div class="device"><img src="/guides/distance-filter/ebay-partner-listing.jpg" alt="A Facebook Marketplace item page for an eBay listing, showing an eBay badge, a Buy now on eBay button, and a note that Facebook may receive a commission on the sale" loading="lazy" /></div>
+  </div>
+  <figcaption>Left: the listing sitting in the Explore grid at $36, its corner badge a different icon from the delivery truck on shipped cells. Right: the same lamp opened a minute later — $35.95, free shipping, and no location line anywhere on the page.</figcaption>
 </figure>
 
 <!-- NOT CAPTURED. Count sponsored positions across a defined run of consecutive screens; do not estimate. Uncomment when the file exists.
@@ -97,28 +107,18 @@ export const GUIDES: Guide[] = [
 
 <h2>The default distance isn't a number — it's "Suggested"</h2>
 <p>This one surprises most people, and it's the easiest to fix.</p>
-<p>Marketplace's default isn't a mileage value. It's a setting labeled <strong>"Suggested."</strong> Most people never open the filter panel and reasonably assume they're seeing nearby items.</p>
-<p>Here is what that produced. Searching "anthurium" from San Francisco with the distance filter untouched, the first screen of results ran from San Francisco &middot; 1 mi to Rancho Cordova &middot; 86 mi, with Concord &middot; 28 mi in between. The two frames below are one minute apart in the same session.</p>
+<p>Marketplace's default isn't a distance value. It's a setting labeled <strong>"Suggested."</strong> Most people never open the filter panel and reasonably assume they're seeing nearby items.</p>
+<p>Here is what that produced. Searching "anthurium" from San Francisco with the distance filter untouched, the first screen of results ran from San Francisco &middot; 1 mi to Rancho Cordova &middot; 86 mi, with Concord &middot; 28 mi in between.</p>
 <p>If you've never manually set a radius, you've never had one.</p>
 
 <!-- SCREENSHOT 3 production note: draw a line from the "Suggested" label to the distance labels on the result cells. -->
 <figure>
-  <div class="device"><img src="/guides/distance-filter/suggested-default.jpg" alt="The Marketplace Distance filter sheet with Suggested selected, above preset options of 20, 40, 60 and 100 miles and a custom distance slider" loading="lazy" /></div>
-  <figcaption>The Distance filter, untouched, on a search for "anthurium" from San Francisco. "Suggested" is what's selected.</figcaption>
+  <div class="device-pair">
+    <div class="device"><img src="/guides/distance-filter/suggested-default.jpg" alt="The Marketplace Distance filter sheet with Suggested selected, above preset options of 20, 40, 60 and 100 miles and a custom distance slider" loading="lazy" /></div>
+    <div class="device"><img src="/guides/distance-filter/suggested-results.jpg" alt="Marketplace results for anthurium from San Francisco, with listings labelled Rancho Cordova 86 miles, Concord 28 miles and San Francisco 1 mile" loading="lazy" /></div>
+  </div>
+  <figcaption>Left: the Distance filter, untouched — "Suggested" is what's selected. Right: the results a minute later, running to Rancho Cordova &middot; 86 mi, with Concord &middot; 28 mi and San Francisco &middot; 1 mi in the same grid.</figcaption>
 </figure>
-
-<!-- NOT ON DISK. The 12:35 results frame, redacted. This is the half that shows the 86 mi listing; uncomment once suggested-results.jpg exists.
-<figure>
-  <div class="device"><img src="/guides/distance-filter/suggested-results.jpg" alt="Marketplace results for anthurium from San Francisco, with listings labelled Rancho Cordova 86 miles, Concord 28 miles and San Francisco 1 mile" loading="lazy" /></div>
-  <figcaption>The results from that same session, one minute later: Rancho Cordova &middot; 86 mi, Concord &middot; 28 mi, San Francisco &middot; 1 mi.</figcaption>
-</figure>
--->
-
-<p>Two things worth noticing in that filter panel. The presets jump 20, 40, 60, 100 — there is nothing below 20 miles unless you drag the custom slider. And only the custom option carries a promise, in Facebook's own words: "Only show me listings within this specific distance."</p>
-
-<h2>A radius is a circle, not a drive</h2>
-<p>Even working exactly as designed, "20 miles" means 20 miles in a straight line, in every direction — a circle drawn on a map with no knowledge of what's inside it.</p>
-<p>Twenty miles east and twenty miles west often aren't the same trip. A bay, a river with three bridges, or a state park turns a technically-in-radius listing into a ninety-minute drive.</p>
 
 <!-- NOT DRAWN. Uncomment when the graphic exists.
 <figure>
@@ -138,8 +138,7 @@ export const GUIDES: Guide[] = [
 -->
 
 <p><strong>Filter to local pickup only.</strong> Same panel, delivery method → <strong>Local pickup</strong>. This excludes shipping-enabled listings at the source. It also drops nearby sellers who happen to offer shipping, so it's blunt — but correct if you want things you can go pick up today.</p>
-<p><strong>Set location by ZIP, not city.</strong> Marketplace measures from a point, not from you. A city-center default can shift your search area by [DISTANCE] miles before the radius is even applied.</p>
-<p><strong>Sort by distance, and apply it last.</strong> This surfaces the closest results first, though out-of-radius items remain further down. Entering price values has been reported to clear a previously-applied sort [SOURCE] — so set your price range first, then your sort, and confirm it's still selected.</p>
+<p><strong>Set location by ZIP, not city.</strong> Marketplace measures from a point, not from you. A city-center default measures from the middle of the city rather than from where you are, moving your search area before the radius is even applied.</p>
 
 <h2>Questions people ask</h2>
 <h3>Why do I see listings from another state when my radius is set to 20 miles?</h3>
