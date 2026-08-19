@@ -27,7 +27,8 @@ you are, the other is how the browsing engines see listings.
 protos/         the API schema; one `make generate` writes both Go and Swift
 apps/ios/       the app (xcodegen: `xcodegen generate`, then build the OpenMarket scheme)
 apps/backend/   Go + Connect + Postgres. Accounts and phone login; `make dev` runs it
-apps/web/       openmarket.io marketing + SEO site (Next.js; strategy in docs/website-strategy.md)
+apps/web/       openmarket.io marketing + SEO site (Next.js; strategy in docs/website-strategy.md,
+                writing rules in docs/content-standards.md, screenshot evidence in apps/web/captures/)
 tools/probe/    harness for measuring the live site; every finding below came from it
 docs/           findings and decisions, listed at the bottom
 ```
@@ -877,6 +878,7 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/data-model.md` | Proposed schema for storing listings across devices |
 | `docs/status.md` | What's built and verified, and the open gaps |
 | `docs/messaging.md` | The product language: the three pillars, taglines, and the observation-then-improvement pattern for talking about Marketplace |
+| **`docs/content-standards.md`** | **How anything published on the site gets written** — the sourcing and substantiation rules for writing about a competitor, the phrasings to avoid, the pre-publish risk checklist, the article shape, and the backlog |
 | `docs/app-store.md` | App Store listing copy, ready to paste, with the review-risk notes |
 | `docs/surface-strategy.md` | Mobile vs. web trade-off, options, and recommendation |
 | `docs/mobile-location-radius-notes.md` | Why mobile's location and radius don't behave as the URL implies |

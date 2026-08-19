@@ -20,6 +20,7 @@ export async function generateMetadata({
     title: guide.title,
     description: guide.description,
     alternates: { canonical: `/guides/${guide.slug}` },
+    robots: guide.draft ? { index: false, follow: false } : undefined,
     openGraph: {
       type: "article",
       title: guide.title,
@@ -80,6 +81,13 @@ export default async function GuidePage({
             })}
           </time>{" "}
           · {guide.readingMinutes} min read
+          {guide.lastVerified && (
+            <>
+              {" "}
+              · Last verified{" "}
+              <time dateTime={guide.lastVerified}>{guide.lastVerified}</time>
+            </>
+          )}
         </p>
         <div
           className="prose-guide mt-10"

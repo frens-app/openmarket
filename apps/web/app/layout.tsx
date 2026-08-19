@@ -151,8 +151,6 @@ function Footer() {
             <p className="mb-3 font-semibold text-white">Guides</p>
             <ul className="space-y-2 text-gray-400">
               <li><Link className="hover:text-white" href="/guides">All guides</Link></li>
-              <li><Link className="hover:text-white" href="/guides/how-to-price-used-items">Pricing used items</Link></li>
-              <li><Link className="hover:text-white" href="/guides/local-pickup-safety-tips">Local pickup safety</Link></li>
             </ul>
           </div>
           <div>

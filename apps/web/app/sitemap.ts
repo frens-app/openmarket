@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { GUIDES } from "@/lib/guides";
+import { PUBLISHED_GUIDES } from "@/lib/guides";
 import { SITE } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -11,7 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: path === "" ? 1 : 0.7,
     }),
   );
-  const guidePages = GUIDES.map((g) => ({
+  const guidePages = PUBLISHED_GUIDES.map((g) => ({
     url: `${SITE.url}/guides/${g.slug}`,
     lastModified: new Date(g.date),
     changeFrequency: "monthly" as const,
