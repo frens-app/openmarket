@@ -6,6 +6,7 @@ import {
   IBM_Plex_Mono,
   Instrument_Sans,
 } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import logo from "@/public/logo.png";
 import { SITE, DISCLAIMER } from "@/lib/site";
 import "./globals.css";
@@ -187,6 +188,7 @@ export default function RootLayout({
         <Nav />
         <main>{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
