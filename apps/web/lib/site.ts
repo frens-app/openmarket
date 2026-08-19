@@ -26,7 +26,6 @@ export const AUTHORS: Record<
     role: "Builder",
     bio: [
       "Brian is an avid Marketplace user who browses it daily even when there's nothing he needs to buy. He has sold a few thousand dollars' worth of things on Facebook Marketplace, mostly variegated houseplants.",
-      "That is where the app came from. The listings on Marketplace are good; the browsing is not. Openmarket keeps the listings and fixes the part around them — a radius that holds, real distance and travel time on every card, and no ads.",
     ],
     sameAs: [
       "https://x.com/brianli101",
