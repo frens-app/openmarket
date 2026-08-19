@@ -75,6 +75,7 @@ session; captures below point at a session id.
 | `S2` | 2026-08-18 | 574.0.0 | **unrecorded** | **unrecorded** | n/a — Explore, no search | **unrecorded** |
 | `S3` | 2026-08-18 | 574.0.0 | San Francisco, CA (city-level, as shown) | Suggested (default) | `anthurium` | **unrecorded** |
 | `S4` | 2026-08-18 | 574.0.0 | San Francisco, CA (city-level, as shown) | **unrecorded** — chip reads "Distance" with no value | `fitbit air` | **unrecorded** |
+| `S5` | 2026-08-18, 21:34 | 574.0.0 | San Francisco, CA (city-level, as shown) | Custom distance, 7 mi | `firbit air` | **unrecorded** |
 
 ## Captures
 
@@ -83,6 +84,9 @@ session; captures below point at a session id.
 | `2026-08-18-explore-shipping-badges-all-cells-01.png` | `S1` | Marketplace Explore. Six full cells and two partial, every one carrying the shipping badge. Prices $28–$85, houseplant category | Shipping listings occupy the Explore grid. **Does not** support any distance claim — see below | Yes. No faces, seller names or addresses. Hands appear in three seller photos |
 | `2026-08-18-filters-suggested-default-selected-01.png` | `S3` | The Distance sheet over a search for `anthurium`, location San Francisco, CA. **Suggested** is the selected radio. Presets are 20 / 40 / 60 / 100 miles; Custom distance carries its own slider, shown at 7 mi | The default distance is a named setting, not a mileage. Also: no preset below 20 miles | Yes. No faces, seller names or addresses |
 | `2026-08-18-search-suggested-86mi-result-01.png` | `S3` | Results for `anthurium` from San Francisco, one minute after the sheet above and on the same battery reading. Rancho Cordova · 86 mi, Concord · 28 mi, San Francisco · 1 mi. The one shipped cell carries no location line at all | **Under the default, a San Francisco search returned a listing 86 miles out.** The guide's central claim, in a single session | Yes. Nav avatar masked on re-capture; clock and battery left legible so the pairing with the sheet above stays checkable |
+| `2026-08-18-filters-custom-distance-set-01.png` | `S5` | The Distance sheet with **Custom distance** selected and its slider at 7 mi, presets unselected. Reset is active, unlike the untouched sheet in `S3` | The after-state of setting a radius. Also shows there is no preset below 20 miles | Yes |
+| `2026-08-18-filters-delivery-local-01.png` | `S5` | The **Delivery** sheet: Local (selected), Shipped, All Marketplace | The control that excludes shipped listings. Note the option is "Local" under "Delivery" — not "Local pickup" | Yes |
+| `2026-08-18-filters-location-picker-01.png` | `S5` | The **Location** sheet: a search field reading "San Francisco, California" over a map with a dropped pin and an Apply button | Where the measuring point is set. The picker takes a search term and a map pin, so a ZIP or neighbourhood is available but a city name is what it defaults to | Yes |
 | `2026-08-18-search-ad-cells-in-grid-01.png` | `S4` | The same `fitbit air` search scrolled on, 10:49. RingConn and WHOOP occupy single grid cells marked "Ad", among listings at San Francisco &middot; 2 mi, 4 mi and Oakland &middot; 15 mi | Ads take listing-shaped cells, not only full rows. The label reads "Ad" — the guide says so rather than "Sponsored" | Yes. No faces, seller names or addresses |
 | `2026-08-18-search-ad-unit-in-results-01.png` | `S4` | Search for `fitbit air` from San Francisco. Two organic results carrying real mileage — Oakland · 12 mi, San Jose · 47 mi — then an "Amazfit · Ad" unit with two cells occupying a full row | Paid units sit inside the results list, and carry no distance because they are not listings. Also the first frame with mileage on result cells | Yes. Nav avatar masked on re-capture |
 | `2026-08-18-item-shipping-cost-on-55-plant-01.png` | `S1` | Item page for "Anthurium Zara F4 x Debile", $55, **"Ships for $20 + taxes"**, Buy now with Purchase Protection. Same clock and battery as the Explore frame, and the same listing as its top-left cell | Buyer-side shipping cost on a shipped listing — $20 on a $55 item. Ties the `S1` grid to a specific listing. **Not currently used by any guide** | Yes. Seller's hand and desk only, no face |
@@ -172,7 +176,7 @@ these exist — see `apps/web/lib/guides.ts`.
 | Distances under "Suggested" | `search` | Result cells with city or distance labels, in a session where Suggested is confirmed set | **Have it** — `S3`, both halves on disk, one minute apart |
 | Sponsored density | `search` | Sponsored cells and banner units across a defined run of consecutive screens. Count them; do not estimate | **Missing** |
 | Radius vs drive time | graphic | A straight-line circle over a metro, with the area actually reachable shaded inside it. Not a screenshot | **Missing** |
-| The filter panel, after | `filters` | The distance field once it is changed off "Suggested" | **Missing** — `S3` is the before half |
+| The filter panel, after | `filters` | The distance field once it is changed off "Suggested" | **Have it** — `S5`, Custom distance at 7 mi |
 
 ## Publishing a capture
 

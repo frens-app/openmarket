@@ -170,6 +170,11 @@ body {
   border-radius: 999px;
 }
 
+.prose-guide figure.narrow img {
+  max-width: 560px;
+  margin-inline: auto;
+}
+
 .prose-guide .device-pair {
   display: flex;
   flex-wrap: wrap;
