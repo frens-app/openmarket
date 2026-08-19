@@ -4,7 +4,7 @@ export const SITE = {
   url: "https://openmarket.io",
   title: "Openmarket — actually local listings",
   description:
-    "A better way to marketplace: filters that work, actually local listings with distance and travel time on every card, and price comparisons backed by what actually sells nearby.",
+    "A better way to marketplace: actually local listings with distance and travel time on every card, filters that work, and price comparisons backed by what actually sells nearby.",
   // TestFlight until the App Store listing is live — swap for the real
   // https://apps.apple.com/... URL then.
   downloadUrl: "https://testflight.apple.com/join/qcB76WmM",
