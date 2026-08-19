@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GUIDES, getGuide } from "@/lib/guides";
 import { CtaBlock, JsonLd } from "@/components/ui";
-import { AUTHORS, SITE } from "@/lib/site";
+import { authorSchema, SITE } from "@/lib/site";
 
 export function generateStaticParams() {
   return GUIDES.map((g) => ({ slug: g.slug }));
@@ -26,6 +26,16 @@ export async function generateMetadata({
       title: guide.title,
       description: guide.description,
       publishedTime: guide.date,
+      modifiedTime: guide.lastVerified,
+      authors: [guide.author],
+    },
+    // Set explicitly: without these the card inherits the site-wide title and
+    // description from the root layout, so a shared article reads as the home
+    // page. Images come from the sibling opengraph-image route.
+    twitter: {
+      card: "summary_large_image",
+      title: guide.title,
+      description: guide.description,
     },
   };
 }
@@ -43,20 +53,45 @@ export default async function GuidePage({
       <JsonLd
         data={{
           "@context": "https://schema.org",
-          "@type": "Article",
+          "@type": "BlogPosting",
           headline: guide.title,
           description: guide.description,
           datePublished: guide.date,
           dateModified: guide.lastVerified,
-          author: {
-            "@type": "Person",
-            name: guide.author,
-            ...(AUTHORS[guide.author] && { sameAs: AUTHORS[guide.author].sameAs }),
-          },
+          author: authorSchema(guide.author),
           publisher: { "@type": "Organization", name: SITE.name, url: SITE.url },
           mainEntityOfPage: `${SITE.url}/guides/${guide.slug}`,
+          image: `${SITE.url}/guides/${guide.slug}/opengraph-image`,
         }}
       />
+      {guide.howTo.length > 0 && (
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@type": "HowTo",
+            name: "How to see fewer far-away listings on Facebook Marketplace",
+            step: guide.howTo.map((s, i) => ({
+              "@type": "HowToStep",
+              position: i + 1,
+              name: s.name,
+              text: s.text,
+            })),
+          }}
+        />
+      )}
+      {guide.faq.length > 0 && (
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: guide.faq.map(({ q, a }) => ({
+              "@type": "Question",
+              name: q,
+              acceptedAnswer: { "@type": "Answer", text: a },
+            })),
+          }}
+        />
+      )}
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -99,6 +134,21 @@ export default async function GuidePage({
           className="prose-guide mt-10"
           dangerouslySetInnerHTML={{ __html: guide.html }}
         />
+        {guide.faq.length > 0 && (
+          <section className="mt-14">
+            <h2 className="font-display text-2xl font-bold tracking-tight text-white">
+              Questions people search for
+            </h2>
+            <div className="mt-5 divide-y divide-white/10 border-y border-white/10">
+              {guide.faq.map(({ q, a }) => (
+                <details key={q} className="faq-item group">
+                  <summary>{q}</summary>
+                  <p>{a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
       </article>
       <CtaBlock />
     </>

@@ -14,6 +14,7 @@ Availability: iOS. Website: https://openmarket.io
 - [For buyers](https://openmarket.io/buyers): search, filters, distance and travel time, saves, only-new-listings
 - [For sellers](https://openmarket.io/sellers): Price Check — local comps, sold data, ready-to-paste listings
 - [Guides](https://openmarket.io/guides): practical guides to buying and selling secondhand locally
+- [About](https://openmarket.io/about): who builds Openmarket, and how the guides are researched
 
 ## Guides
 
