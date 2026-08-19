@@ -39,20 +39,6 @@ export const metadata: Metadata = {
     template: `%s · ${SITE.name}`,
   },
   description: SITE.description,
-  keywords: [
-    "local marketplace app",
-    "marketplace app ios",
-    "browse local listings",
-    "marketplace filters",
-    "buy and sell locally",
-    "price used items",
-    "facebook",
-    "marketplace",
-    "offerup",
-    "letgo",
-    "vinted",
-    "depop",
-  ],
   openGraph: {
     type: "website",
     siteName: SITE.name,
@@ -156,6 +142,7 @@ function Footer() {
           <div>
             <p className="mb-3 font-semibold text-white">Legal</p>
             <ul className="space-y-2 text-gray-400">
+              <li><Link className="hover:text-white" href="/about">About</Link></li>
               <li><Link className="hover:text-white" href="/privacy">Privacy</Link></li>
               <li><Link className="hover:text-white" href="/terms">Terms</Link></li>
             </ul>

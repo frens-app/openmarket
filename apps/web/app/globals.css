@@ -250,3 +250,40 @@ body {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.faq-item {
+  padding: 1.1rem 0;
+}
+
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  color: #fff;
+  padding-right: 1.75rem;
+  position: relative;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::after {
+  content: "+";
+  position: absolute;
+  right: 0;
+  top: -0.1rem;
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: rgb(156 163 175);
+}
+
+.faq-item[open] summary::after {
+  content: "\2212";
+}
+
+.faq-item p {
+  margin-top: 0.7rem;
+  line-height: 1.75;
+  color: rgb(212 214 220);
+}

@@ -8,6 +8,18 @@ export type Guide = {
   lastVerified: string;
   /** Shown as a byline and emitted as the schema.org Person author. */
   author: string;
+  /**
+   * Rendered as collapsed accordions at the foot of the article and emitted as
+   * FAQPage schema. Phrase each question the way it gets typed into a search
+   * box, and answer it in two or three self-contained sentences — the answer
+   * has to stand up once it is lifted away from the page.
+   */
+  faq: { q: string; a: string }[];
+  /**
+   * HowTo schema for the "How to reduce it" section. Kept in step with that
+   * prose by hand; edit both or neither.
+   */
+  howTo: { name: string; text: string }[];
   readingMinutes: number;
   /**
    * Unsubstantiated or unfinished. Reachable by URL for review, but kept out of
@@ -27,10 +39,42 @@ export const GUIDES: Guide[] = [
     title:
       "Why Facebook Marketplace Shows You Items Outside Your Distance Filter",
     description:
-      "Shipped listings, sponsored placements, and the default “Suggested” distance setting are not governed by the mile radius you set. What each one looks like on screen, and how to cut them down.",
+      "Shipped items, sponsored listings, and the default “Suggested” setting aren’t governed by the radius you set. What each looks like on screen, and how to cut them down.",
     date: "2026-08-18",
     lastVerified: "2026-08-18",
     author: "Brian Li",
+    faq: [
+      {
+        q: "Does the Facebook Marketplace distance filter work?",
+        a: "It works on the listings it governs, which are local pickup listings from nearby sellers. It does not govern shipped listings or paid placements, and if you have never opened the filter panel it governs nothing at all, because the default is a setting named \"Suggested\" rather than a mileage.",
+      },
+      {
+        q: "Why does Marketplace show items far away?",
+        a: "Shipped listings have no meaningful location, so a local pickup radius does not constrain them. Paid placements take grid positions regardless of your filters. And under the default \"Suggested\" setting there is no radius in force at all — in one San Francisco search on 18 August 2026, results ran out to 86 miles.",
+      },
+      {
+        q: "What does \"Suggested\" distance mean on Facebook Marketplace?",
+        a: "It is the distance filter's default state, and it is not a number. Until you pick a mileage yourself you do not have a radius set. The presets start at 20 miles, so in a city you want Custom distance and its slider.",
+      },
+      {
+        q: "How do I see only local pickup items on Facebook Marketplace?",
+        a: "Open the Delivery filter and choose Local rather than Shipped or All Marketplace. That excludes shipping-enabled listings at the source. It also hides nearby sellers who happen to offer shipping, so it is blunt, but it is the right setting when you want something you can collect today.",
+      },
+    ],
+    howTo: [
+      {
+        name: "Set an explicit radius",
+        text: "Open the filter icon, choose Distance, and pick anything other than Suggested. The presets jump 20, 40, 60 and 100 miles, so in a city use Custom distance and its slider.",
+      },
+      {
+        name: "Filter to local pickup only",
+        text: "In the Delivery filter choose Local rather than Shipped or All Marketplace. This excludes shipping-enabled listings at the source.",
+      },
+      {
+        name: "Set your location precisely",
+        text: "Set the location filter to your neighborhood rather than your city. Marketplace measures from the point you give it, so a city name measures from the city centre.",
+      },
+    ],
     readingMinutes: 6,
     html: `
 <p class="dek">Tested on the Facebook iOS app v574.0.0, searching from San Francisco, CA.</p>
