@@ -6,6 +6,8 @@ export type Guide = {
   date: string;
   /** Date the claims were last checked against the live site, ISO. */
   lastVerified: string;
+  /** Shown as a byline and emitted as the schema.org Person author. */
+  author: string;
   readingMinutes: number;
   /**
    * Unsubstantiated or unfinished. Reachable by URL for review, but kept out of
@@ -28,6 +30,7 @@ export const GUIDES: Guide[] = [
       "Shipped listings, sponsored placements, and the default “Suggested” distance setting are not governed by the mile radius you set. What each one looks like on screen, and how to cut them down.",
     date: "2026-08-18",
     lastVerified: "2026-08-18",
+    author: "Brian Li",
     readingMinutes: 6,
     html: `
 <p class="dek">Tested on the Facebook iOS app v574.0.0, searching from San Francisco, CA.</p>
@@ -64,7 +67,7 @@ export const GUIDES: Guide[] = [
 
 <figure>
   <div class="device"><img src="/guides/distance-filter/explore-shipped.jpg" alt="The Facebook Marketplace Explore grid, every visible listing carrying a shipping badge in its top corner" loading="lazy" /></div>
-  <figcaption>Marketplace Explore. A little delivery truck in the corner of a listing indicates a shipped item — here, every cell in view has one.</figcaption>
+  <figcaption>Marketplace Explore. The little delivery truck marks a shipped item — here, every cell has one.</figcaption>
 </figure>
 
 <h2>Sponsored placements aren't sorted by distance</h2>
@@ -77,7 +80,7 @@ export const GUIDES: Guide[] = [
     <div class="device"><img src="/guides/distance-filter/search-ad-unit.jpg" alt="Marketplace search results showing two listings with mileage labels followed by a labelled Amazfit advertisement occupying a full row" loading="lazy" /></div>
     <div class="device"><img src="/guides/distance-filter/search-ad-cells.jpg" alt="Marketplace search results where two single grid cells are RingConn and WHOOP advertisements marked Ad, sitting among listings labelled 2, 4 and 15 miles away" loading="lazy" /></div>
   </div>
-  <figcaption>Both from the same search for "fitbit air" in San Francisco. Left: an ad taking a full row. Right: two ads taking single cells — RingConn and WHOOP — among listings from 2, 4 and 15 miles out. The listings carry a distance; the ads carry an "Ad".</figcaption>
+  <figcaption>Same search, a minute apart. Left: an ad as a full row. Right: two as single cells, among listings 2 to 15 miles out.</figcaption>
 </figure>
 
 <p>Recently, eBay items have been appearing as normal listings as well. When you click into them, they show <strong>"Buy now on eBay"</strong> button, and a line indicating "Facebook may receive a commission on this sale."</p>
@@ -87,7 +90,7 @@ export const GUIDES: Guide[] = [
     <div class="device"><img src="/guides/distance-filter/ebay-partner-feed.jpg" alt="The Marketplace Explore grid with a Raven Table Lamp listed at $36, its corner carrying a badge different from the shipping truck on other cells" loading="lazy" /></div>
     <div class="device"><img src="/guides/distance-filter/ebay-partner-listing.jpg" alt="A Facebook Marketplace item page for an eBay listing, showing an eBay badge, a Buy now on eBay button, and a note that Facebook may receive a commission on the sale" loading="lazy" /></div>
   </div>
-  <figcaption>Left: the listing sitting in the Explore grid at $36, its corner badge a different icon from the delivery truck on shipped cells. Right: the same lamp opened a minute later — $35.95, free shipping, and no location line anywhere on the page.</figcaption>
+  <figcaption>Left: the lamp in the Explore grid at $36, its corner badge unlike the shipped cells'. Right: opened a minute later — free shipping, no location anywhere.</figcaption>
 </figure>
 
 <!-- NOT CAPTURED. Count sponsored positions across a defined run of consecutive screens; do not estimate. Uncomment when the file exists.
@@ -107,7 +110,7 @@ export const GUIDES: Guide[] = [
     <div class="device"><img src="/guides/distance-filter/suggested-default.jpg" alt="The Marketplace Distance filter sheet with Suggested selected, above preset options of 20, 40, 60 and 100 miles and a custom distance slider" loading="lazy" /></div>
     <div class="device"><img src="/guides/distance-filter/suggested-results.jpg" alt="Marketplace results for anthurium from San Francisco, with listings labelled Rancho Cordova 86 miles, Concord 28 miles and San Francisco 1 mile" loading="lazy" /></div>
   </div>
-  <figcaption>Left: the Distance filter, untouched — "Suggested" is what's selected. Right: the results a minute later, running to Rancho Cordova &middot; 86 mi, with Concord &middot; 28 mi and San Francisco &middot; 1 mi in the same grid.</figcaption>
+  <figcaption>Left: the Distance filter, untouched. Right: the results a minute later, running to 86 miles.</figcaption>
 </figure>
 
 <p>Marketplace Explore also frequently recommends items marked <strong>"Farther away"</strong>.</p>
@@ -130,7 +133,7 @@ export const GUIDES: Guide[] = [
 
 <figure>
   <div class="device"><img src="/guides/distance-filter/set-distance.jpg" alt="The Marketplace Distance filter with Custom distance selected and its slider set to 7 miles, the preset options above it unselected" loading="lazy" /></div>
-  <figcaption>Custom distance set to 7 mi. Only this option carries a promise, in Facebook's own words: "Only show me listings within this specific distance."</figcaption>
+  <figcaption>Custom distance at 7 mi — the only option that promises "listings within this specific distance."</figcaption>
 </figure>
 
 <p><strong>Filter to local pickup only.</strong> The <strong>Delivery</strong> filter offers Local, Shipped, and All Marketplace. Picking <strong>Local</strong> excludes shipping-enabled listings at the source.</p>
@@ -140,7 +143,7 @@ export const GUIDES: Guide[] = [
   <figcaption>The Delivery filter, set to Local. "All Marketplace" is the setting that lets shipped listings back in.</figcaption>
 </figure>
 
-<p><strong>Set your location precisely.</strong> Marketplace measures from a point, not from you. The location picker takes a search term and drops a pin on a map — a ZIP or a neighbourhood puts that pin nearer to where you actually are than a city name, which lands it in the middle of the city and moves your search area before the radius is even applied.</p>
+<p><strong>Set your location precisely.</strong> Marketplace distances can be measured from a city broadly or a specific point. Make sure to update your location filters to your specific neighborhood instead of your city more broadly or results will show relative to the center of your city.</p>
 
 <figure>
   <div class="device"><img src="/guides/distance-filter/set-location.jpg" alt="The Marketplace location picker showing a search field reading San Francisco, California above a map of the city with a pin dropped on it" loading="lazy" /></div>
@@ -150,6 +153,13 @@ export const GUIDES: Guide[] = [
 <h2>A shorter version of all of this</h2>
 <p>Openmarket shows local listings only. Accurate distance filtering is on by default — no filter panel, no "Suggested," no shipped listings from three states away mixed into your results. No ads.</p>
 <p><a href="/">Try Openmarket →</a></p>
+
+<aside class="method">
+  <p class="method-label">How we researched this</p>
+  <p>Everything on this page comes from our own testing, not from summarising what other people have written. On 18 August 2026 we used Facebook Marketplace on an iPhone — app version 574.0.0 — searching from San Francisco, California. We ran the searches named above, browsed Explore, and screenshotted what came back across five sessions.</p>
+  <p>Every screenshot here is ours, unedited apart from masking personal details. The Reddit threads are linked so you can read them yourself rather than take our word for it. Where we couldn't measure something, we left it out instead of estimating — which is why this guide says less than it could.</p>
+  <p>Marketplace behaves differently by market, account history and app version, so your results may differ from ours. We re-check these findings quarterly.</p>
+</aside>
 
 <hr />
 

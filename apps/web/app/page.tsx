@@ -1,3 +1,4 @@
+import Link from "next/link";
 import filtersShot from "@/public/screens/filters.png";
 import priceEvidenceShot from "@/public/screens/price-evidence.png";
 import priceListingShot from "@/public/screens/price-on-listing.png";
@@ -14,6 +15,7 @@ import {
   ShotCard,
   Spec,
 } from "@/components/ui";
+import { PUBLISHED_GUIDES } from "@/lib/guides";
 import { SITE } from "@/lib/site";
 
 const FEATURES = [
@@ -253,6 +255,49 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Guides — pillar page linking out to the supporting articles, which is
+          the half of internal linking that earns them traffic. */}
+      {PUBLISHED_GUIDES.length > 0 && (
+        <section className="border-t border-white/10">
+          <div className="mx-auto max-w-6xl px-5 py-20">
+            <SectionHeading eyebrow="Guides" title="How Marketplace actually behaves.">
+              Field notes from our own testing, with the screenshots behind every
+              claim.
+            </SectionHeading>
+            <div
+              className={
+                PUBLISHED_GUIDES.length === 1
+                  ? "mx-auto mt-12 grid max-w-2xl gap-5"
+                  : "mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+              }
+            >
+              {PUBLISHED_GUIDES.slice(0, 3).map((g) => (
+                <Link
+                  key={g.slug}
+                  href={`/guides/${g.slug}`}
+                  className="group rounded-2xl border border-white/10 bg-card p-7 transition hover:border-accent/40"
+                >
+                  <p className="mb-2 text-xs uppercase tracking-widest text-gray-500">
+                    {g.readingMinutes} min read
+                  </p>
+                  <h3 className="text-lg font-semibold text-white transition group-hover:text-accent">
+                    {g.title}
+                  </h3>
+                  <p className="mt-2 leading-7 text-gray-400">{g.description}</p>
+                </Link>
+              ))}
+            </div>
+            {PUBLISHED_GUIDES.length > 3 && (
+              <p className="mt-8 text-center">
+                <Link href="/guides" className="text-accent hover:underline">
+                  All guides &rarr;
+                </Link>
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* FAQ — answers stay in the markup rather than behind a disclosure, so
           crawlers and answer engines read them without running scripts. */}

@@ -13,3 +13,14 @@ export const SITE = {
 
 export const DISCLAIMER =
   "Openmarket is an independent app. It is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Marketplace are trademarks of Meta Platforms, Inc. Listings are viewed with your own account and messaging happens in the Facebook app.";
+
+// Profiles that tie a byline to an identity search engines already know. A bare
+// name is a weak entity; a linked one resolves to a person.
+export const AUTHORS: Record<string, { sameAs: string[] }> = {
+  "Brian Li": {
+    sameAs: [
+      "https://x.com/brianli101",
+      "https://www.linkedin.com/in/brianli101/",
+    ],
+  },
+};

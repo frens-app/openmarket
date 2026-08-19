@@ -130,6 +130,33 @@ body {
   margin-bottom: 0;
 }
 
+.prose-guide .method {
+  margin: 2.5rem 0 0;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 0.02);
+}
+
+.prose-guide .method p {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: rgb(156 163 175);
+}
+
+.prose-guide .method p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-guide .method-label {
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(212 214 220);
+}
+
 .prose-guide .tldr-label {
   margin-bottom: 0.4rem;
   font-size: 0.7rem;
