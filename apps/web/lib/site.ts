@@ -23,11 +23,10 @@ export const AUTHORS: Record<
 > = {
   "Brian Li": {
     slug: "brian-li",
-    role: "Founder, Openmarket",
+    role: "Builder",
     bio: [
-      "Brian Li builds Openmarket. He has sold a few thousand dollars' worth of things on Facebook Marketplace, mostly variegated houseplants, and he browses it daily even when there is nothing he wants to buy.",
+      "Brian is an avid Marketplace user who browses it daily even when there's nothing he needs to buy. He has sold a few thousand dollars' worth of things on Facebook Marketplace, mostly variegated houseplants.",
       "That is where the app came from. The listings on Marketplace are good; the browsing is not. Openmarket keeps the listings and fixes the part around them — a radius that holds, real distance and travel time on every card, and no ads.",
-      "He writes the guides here too. Every claim they make about Marketplace comes from screenshots taken on his own phone, dated and kept, so anything stated can be checked rather than taken on trust.",
     ],
     sameAs: [
       "https://x.com/brianli101",
