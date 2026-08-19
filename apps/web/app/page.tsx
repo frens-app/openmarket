@@ -1,24 +1,44 @@
-import Link from "next/link";
-import searchShot from "@/public/screens/search.png";
 import filtersShot from "@/public/screens/filters.png";
-import homeShot from "@/public/screens/home.png";
-import priceCheckShot from "@/public/screens/price-check.png";
-import priceResultShot from "@/public/screens/price-result.png";
+import priceEvidenceShot from "@/public/screens/price-evidence.png";
+import priceListingShot from "@/public/screens/price-on-listing.png";
+import searchShot from "@/public/screens/search.png";
 import travelShot from "@/public/screens/travel-time.png";
 import {
-  PhoneFrame,
-  ShotCard,
-  Feature,
-  SectionHeading,
   CtaBlock,
+  DownloadButton,
   JsonLd,
+  PhoneFrame,
+  Pillar,
+  Point,
+  SectionHeading,
+  ShotCard,
+  Spec,
 } from "@/components/ui";
 import { SITE } from "@/lib/site";
+
+const FEATURES = [
+  "Distance radius enforced on your device, so a 5-mile search stays within 5 miles",
+  "City and real distance from you on every listing card",
+  "Walking, driving, and transit time to every listing",
+  "A price comparison on any listing, read from similar nearby and recently sold listings",
+  "Price Check: photo or description in, an asking price and a ready-to-paste listing out",
+  "Only new listings — a filter that hides anything you have already opened",
+  "Sponsored posts filtered out of every feed",
+  "Saves and recently viewed, kept on your phone",
+];
 
 const FAQ: { q: string; a: string }[] = [
   {
     q: "What is Openmarket?",
-    a: "Openmarket is a free iOS app — a better way to browse the local listings on Marketplace. It adds the things power buyers and sellers wish they had: filters that work, actually local listings with distance and travel time on every card, saves and recently-viewed, a filter that hides listings you've already opened, and price comparisons that tell sellers what similar items list and sell for nearby.",
+    a: "Openmarket is an iOS app — a better way to browse the local listings on Marketplace. It adds filters that work, distance and travel time on every card, saves and recently-viewed, a filter that hides listings you've already opened, and a price comparison on any listing, read from what similar items list and sell for nearby.",
+  },
+  {
+    q: "Where do the listings come from?",
+    a: "Openmarket aggregates publicly available local listings, including those posted to Facebook Marketplace — thousands of nearby items. It doesn't run its own marketplace: you see the same listings the source carries, browsed with your own account, and messaging and offers happen in the Facebook app.",
+  },
+  {
+    q: "How is it different from browsing Marketplace directly?",
+    a: "Three things Marketplace doesn't do: the distance radius is enforced on your device, so a 5-mile search stays within 5 miles; every card carries its city and real distance from you, and every listing carries walking, driving, and transit time; and any listing can be compared against similar nearby and recently sold listings in one tap. Sponsored posts are filtered out, and one toggle hides listings you've already opened.",
   },
   {
     q: "Is Openmarket affiliated with Facebook or Meta?",
@@ -26,11 +46,19 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Do I need a Facebook account?",
-    a: "Browsing works without one — search, filters, distances, and saves all function. Signing in with your own Facebook account (on Facebook's own login page) unlocks the full experience: endless scrolling past the first page and seller names and ratings.",
+    a: "Browsing works without one — search, filters, distances, price comparisons, and saves all function. Signing in with your own account, on Facebook's own login page inside the app, unlocks endless scrolling past the first page plus seller names and ratings.",
+  },
+  {
+    q: "How does the price comparison work?",
+    a: "Open any listing and Openmarket searches similar items near you — both what's listed right now and what recently sold — then shows where this listing's price falls against them on a range bar: the low ask, the band most sit in, and the high. It also estimates how long similar items take to sell. Tap “See what this is based on” to read the actual comparable listings it used.",
+  },
+  {
+    q: "Are the price comparisons based on what items actually sold for?",
+    a: "No, and Openmarket says so on the screen. Marketplace publishes asking prices and never what a buyer actually paid — even on a sold listing, the price shown is what it was listed at. So a comparison tells you what sellers are asking nearby and which items did sell, not what changed hands. The sold list also only contains things that sold, so it can show that certain prices worked, never that a price is too high.",
   },
   {
     q: "How do I message a seller?",
-    a: "Tap \"View on Facebook\" on any listing and it opens that exact listing in the Facebook app, where you can message, save, or make an offer with your own account. Openmarket never sends messages for you.",
+    a: "Tap “View on Facebook” on any listing and it opens that exact listing in the Facebook app, where you can message, save, or make an offer with your own account. Openmarket never sends messages for you.",
   },
   {
     q: "Is Openmarket on Android or the web?",
@@ -50,7 +78,7 @@ export default function HomePage() {
           applicationCategory: "ShoppingApplication",
           description: SITE.description,
           url: SITE.url,
-          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+          featureList: FEATURES,
         }}
       />
       <JsonLd
@@ -69,206 +97,188 @@ export default function HomePage() {
       <section className="relative overflow-hidden">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-[-200px] h-[500px] bg-[radial-gradient(ellipse_at_top,rgba(10,132,255,0.18),transparent_60%)]"
+          className="pointer-events-none absolute inset-x-0 top-[-220px] h-[520px] bg-[radial-gradient(ellipse_at_top,rgba(47,208,138,0.16),transparent_62%)]"
         />
-        <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-16 sm:pt-24 lg:grid-cols-2">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
-              Actually{" "}
-              <span className="text-accent">local listings.</span>
-            </h1>
-            <ul className="mt-6 max-w-xl space-y-2 text-lg leading-8 text-gray-300">
-              <li>Filters that work.</li>
-              <li>Distance and travel time on every card.</li>
-              <li>Price comparisons backed by what actually sells nearby.</li>
-            </ul>
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              <a
-                href={SITE.downloadUrl}
-                className="rounded-full bg-accent px-7 py-3.5 text-[17px] font-semibold text-white transition hover:bg-[#3395ff]"
-              >
-                Download for iOS
-              </a>
-              <Link
-                href="#buyers"
-                className="rounded-full border border-white/15 px-7 py-3.5 text-[17px] font-semibold text-white transition hover:bg-white/5"
-              >
-                See what it does
-              </Link>
-            </div>
-            <p className="mt-5 text-sm text-gray-500">
-              A better way to marketplace.
-            </p>
+        <div className="mx-auto flex max-w-5xl flex-col items-center px-5 pb-4 pt-16 text-center sm:pt-24">
+          <h1 className="max-w-3xl font-display text-[2.75rem] font-bold leading-[0.96] tracking-tight text-white sm:text-7xl">
+            Actually local listings.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-8 text-gray-400 sm:text-xl">
+            Nearby listings. Filters that work. And price comparisons backed by
+            what actually sells.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
+            <DownloadButton />
+            <DownloadButton variant="ghost" href="#features">
+              See what it does
+            </DownloadButton>
           </div>
+        </div>
+
+        <div className="mx-auto flex max-w-6xl items-end justify-center gap-4 px-5 pt-14 sm:gap-7">
+          <PhoneFrame
+            src={filtersShot}
+            alt="Openmarket filter sheet: sort options, San Francisco with a radius, and an Only-new-listings toggle"
+            size="sm"
+            className="hidden shrink-0 lg:block"
+          />
           <PhoneFrame
             src={searchShot}
-            alt="Openmarket search results for “desk” showing prices, price drops, and the city and distance on every listing"
+            alt="Openmarket search results for “desk” showing the price, a price drop, and the city and distance on every card"
+            className="shrink-0"
             priority
+          />
+          <PhoneFrame
+            src={priceListingShot}
+            alt="An Openmarket listing for a $150 Nintendo Switch with a price range bar showing most nearby sellers asking $120 to $200"
+            size="sm"
+            className="hidden shrink-0 lg:block"
           />
         </div>
       </section>
 
-      {/* Buyer superpowers */}
-      <section id="buyers" className="mx-auto max-w-6xl scroll-mt-24 px-5 py-20">
-        <SectionHeading eyebrow="For buyers" title="Find it first. Know before you go.">
-          Everything on one screen: what it costs, where it is, and how long it
-          takes to get there.
-        </SectionHeading>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature icon="📍" title="Filters that work">
-            Facebook Marketplace frequently shows listings that are in
-            different cities. We filter them down to the ones you can actually
-            reach — every card shows its city and real distance from you.
-          </Feature>
-          <Feature icon="🚗" title="Travel time to every listing">
-            Walking, driving, and transit estimates on the listing itself, so
-            “is it worth the trip” has an answer before you message anyone.
-          </Feature>
-          <Feature icon="✨" title="Only new listings">
-            One toggle hides everything you&apos;ve already opened — a filter
-            Marketplace doesn&apos;t have. Stop re-scrolling the same couches.
-          </Feature>
-          <Feature icon="🔖" title="A shortlist that sticks">
-            Save from any listing and keep everything you&apos;re deciding
-            between in one place. Your home screen is what you kept.
-          </Feature>
-          <Feature icon="🕘" title="Recently viewed, always there">
-            Every listing you open is kept. Go back to “that desk from
-            yesterday” in one tap.
-          </Feature>
-          <Feature icon="🧹" title="No sponsored posts">
-            Sponsored cards are filtered out of every feed. What you see is
-            what&apos;s actually for sale near you.
-          </Feature>
-        </div>
+      {/* The three claims as facts, for readers who skim and engines that quote. */}
+      <section className="mx-auto max-w-6xl px-5 pt-16">
+        <dl className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-card sm:grid sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <Spec label="Every card" value="City + distance" />
+          <Spec label="Radius" value="Enforced on device" />
+          <Spec label="Any listing" value="Price comparison" />
+          <Spec label="Sponsored posts" value="Filtered out" />
+        </dl>
+        <p className="mx-auto mt-6 max-w-2xl text-center leading-7 text-gray-400">
+          Openmarket aggregates publicly available local listings, including
+          those posted to Facebook Marketplace — thousands of nearby items, in
+          one place you can actually search.
+        </p>
+      </section>
 
-        <div className="mt-16 grid items-center gap-10 lg:grid-cols-2">
-          <div className="order-2 lg:order-1">
-            <h3 className="text-2xl font-bold tracking-tight text-white">
-              Filters you can trust
-            </h3>
-            <p className="mt-4 text-lg leading-8 text-gray-400">
-              Marketplace&apos;s own distance setting often doesn&apos;t limit
-              results — in our testing, a search set to 5 miles can return
-              listings 60 miles away. Here, place and radius travel together and are enforced on
-              your device. Sort by newest, nearest, or price, and flip on{" "}
-              <strong className="text-white">Only new listings</strong> to hide
-              anything you&apos;ve already seen.
-            </p>
-            <p className="mt-4 text-lg leading-8 text-gray-400">
-              Know before you go: every listing carries an honest approximate
-              area on the map, plus walking, driving, and transit time from
-              where you are.
-            </p>
+      {/* Three pillars */}
+      <section id="features" className="scroll-mt-20 px-5 py-20">
+        <div className="mx-auto max-w-6xl overflow-hidden rounded-2xl border border-white/10">
+          <div className="grid gap-px bg-white/10 lg:grid-cols-3">
+            <Pillar title="Nearby listings">
+              Set a place and a radius and they hold. A Marketplace search set to
+              5 miles can return listings 60 miles away; here the radius is
+              enforced on your device, so anything outside it is cleared out
+              before you see it. What&apos;s left carries its city and real
+              distance on the card, and walking, driving, and transit time on
+              the listing.
+            </Pillar>
+            <Pillar title="Filters that work">
+              Sort by newest, nearest, or price. Narrow by price range,
+              condition, and whether it ships or you collect it. Then flip on
+              <strong className="font-semibold text-white"> Only new listings</strong>{" "}
+              to hide everything you&apos;ve already opened — a filter with no
+              counterpart on Marketplace at all. Sponsored posts never appear.
+            </Pillar>
+            <Pillar title="Price comparisons">
+              Any listing can be placed against similar ones near you — the low
+              ask, the band most sit in, and the high — with the listings behind
+              it one tap away. Buy without guessing; sell at the number that
+              moves.
+            </Pillar>
           </div>
-          <div className="order-1 space-y-5 lg:order-2">
-            <div className="flex justify-center">
-              <PhoneFrame
-                src={filtersShot}
-                alt="Openmarket filter sheet with sort options, location with radius, an Only-new-listings toggle, and delivery options"
-              />
-            </div>
+        </div>
+      </section>
+
+      {/* Filters, in detail */}
+      <section className="mx-auto max-w-6xl px-5 pb-20">
+        <div className="grid items-center gap-12 lg:grid-cols-2">
+          <div>
+            <SectionHeading
+              eyebrow="Search"
+              align="left"
+              title="Find what you're looking for"
+            >
+              Intelligent search and powerful filters.
+            </SectionHeading>
+            <ul className="mt-8 space-y-5">
+              <Point title="No sponsored posts.">
+                Sponsored cards are filtered out of every feed. What you see is
+                what&apos;s actually for sale near you.
+              </Point>
+              <Point title="Saved and recently viewed.">
+                Every listing you open is kept. Back to “that desk from
+                yesterday” in one tap.
+              </Point>
+              <Point title="Advanced filters.">
+                Hide things you&apos;ve already seen, and narrow by price,
+                condition, and pickup or shipping — then sort by newest,
+                nearest, or price.
+              </Point>
+            </ul>
+          </div>
+          <div className="space-y-6">
+            <PhoneFrame
+              src={filtersShot}
+              alt="Openmarket filter sheet with sort options, location with radius, an Only-new-listings toggle, and delivery options"
+            />
             <ShotCard
               src={travelShot}
-              alt="Listing map showing an approximate area and walking, driving, and transit travel times"
+              alt="A listing map showing an approximate area with walking, driving, and transit travel times"
               className="mx-auto max-w-[480px]"
             />
           </div>
         </div>
       </section>
 
-      {/* Seller superpowers */}
-      <section id="sellers" className="border-y border-white/10 bg-panel">
-        <div className="mx-auto max-w-6xl scroll-mt-24 px-5 py-20">
-          <SectionHeading eyebrow="For sellers" title="Price it right in 30 seconds.">
-            Describe what you&apos;re selling — or just snap a photo — and get an
-            asking price backed by what&apos;s listed and what&apos;s actually
-            sold near you.
-          </SectionHeading>
-          <div className="mt-14 grid items-center gap-10 lg:grid-cols-2">
-            <div className="flex justify-center gap-5">
+      {/* Price comparison */}
+      <section className="border-y border-white/10 bg-panel">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <div className="grid items-center gap-12 lg:grid-cols-2">
+            <div className="flex justify-center gap-5 lg:order-1">
               <PhoneFrame
-                src={priceCheckShot}
-                alt="Openmarket Price Check asking “What are you selling?” with photo and text input"
+                src={priceListingShot}
+                alt="“About what others are asking” on a $150 Nintendo Switch listing: a range bar from $55 to $399 with most sellers asking $120 to $200, and a note that similar ones usually sell in about two weeks"
                 className="translate-y-6"
               />
               <PhoneFrame
-                src={priceResultShot}
-                alt="Price Check result recommending a listing price read from nearby and sold listings, with ready-to-paste title and description"
+                src={priceEvidenceShot}
+                alt="The “What this is based on” screen listing the nearby asking prices and recently sold items behind a comparison, with sale speeds like “Sold within a day”"
                 className="hidden -translate-y-6 sm:block"
               />
             </div>
-            <div>
-              <ul className="space-y-6 text-lg leading-8 text-gray-400">
-                <li>
-                  <strong className="block text-white">
-                    Real price comparisons, not guesses.
-                  </strong>
-                  Price Check compares similar listings near you — including
-                  ones that just sold — and tells you the number that moves.
-                </li>
-                <li>
-                  <strong className="block text-white">A photo is enough.</strong>
-                  Point the camera at the thing. Openmarket figures out what it
-                  is and runs the search for you.
-                </li>
-                <li>
-                  <strong className="block text-white">Ready-to-paste listing.</strong>
-                  Get a title and description you can copy straight into your
-                  listing, wherever you post it.
-                </li>
+            <div className="lg:order-2">
+              <SectionHeading
+                eyebrow="Price comparison"
+                align="left"
+                title="Never wonder what it's worth."
+              />
+              <ul className="mt-8 space-y-5">
+                <Point title="Compare with what&rsquo;s listed.">
+                  Where this price sits against every similar item for sale near
+                  you right now.
+                </Point>
+                <Point title="Compare with what&rsquo;s selling.">
+                  What recently sold nearby, and how fast it went.
+                </Point>
               </ul>
             </div>
           </div>
         </div>
       </section>
 
-      {/* How it works / honesty section */}
-      <section className="mx-auto max-w-6xl px-5 py-20">
-        <SectionHeading eyebrow="How it works" title="Your account. Your phone. Your deals.">
-          Openmarket is an independent app that works with the marketplace your
-          neighborhood already uses.
-        </SectionHeading>
-        <div className="mx-auto mt-14 grid max-w-3xl gap-5 sm:grid-cols-2">
-          <Feature icon="🪪" title="Browse with your own account">
-            Sign in on Facebook&apos;s own page, inside the app. Openmarket
-            never sees your password and works signed-out too.
-          </Feature>
-          <Feature icon="💬" title="Message in the Facebook app">
-            Tap through to the real listing to chat, offer, or pay. Sellers
-            never have to leave the platform they already trust.
-          </Feature>
-        </div>
-        <div className="mt-10 flex justify-center">
-          <PhoneFrame
-            src={homeShot}
-            alt="Openmarket home screen with Recently viewed and a Discover feed of listings within 10 miles of San Francisco"
-          />
+      {/* FAQ — answers stay in the markup rather than behind a disclosure, so
+          crawlers and answer engines read them without running scripts. */}
+      <section id="faq" className="scroll-mt-20 border-t border-white/10 bg-panel">
+        <div className="mx-auto max-w-6xl px-5 py-20">
+          <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            Questions, answered.
+          </h2>
+          <dl className="mt-10 grid gap-x-14 gap-y-9 sm:grid-cols-2">
+            {FAQ.map(({ q, a }) => (
+              <div key={q}>
+                <dt className="font-semibold text-white">{q}</dt>
+                <dd className="mt-2 leading-7 text-gray-400">{a}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
-      {/* FAQ */}
-      <section className="mx-auto max-w-3xl px-5 pb-20">
-        <SectionHeading eyebrow="FAQ" title="Questions, answered." />
-        <div className="mt-10 divide-y divide-white/10 rounded-2xl border border-white/10 bg-card px-6">
-          {FAQ.map(({ q, a }) => (
-            <details key={q} className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-[17px] font-semibold text-white [&::-webkit-details-marker]:hidden">
-                {q}
-                <span
-                  aria-hidden
-                  className="ml-4 text-gray-500 transition group-open:rotate-45"
-                >
-                  +
-                </span>
-              </summary>
-              <p className="mt-3 leading-7 text-gray-400">{a}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      <CtaBlock />
+      <div className="pt-20">
+        <CtaBlock />
+      </div>
     </>
   );
 }

@@ -18,7 +18,7 @@ export const GUIDES: Guide[] = [
     date: "2026-08-13",
     readingMinutes: 7,
     html: `
-<p>Short answer: Marketplace has the most inventory in almost every city, OfferUp is the strongest standalone alternative — especially if you want shipping or verified profiles — and Openmarket isn't a marketplace at all: it's a free iOS app that fixes how you <em>browse</em> Marketplace. Most serious local buyers and sellers end up using two of the three.</p>
+<p>Short answer: Marketplace has the most inventory in almost every city, OfferUp is the strongest standalone alternative — especially if you want shipping or verified profiles — and Openmarket isn't a marketplace at all: it's an iOS app that fixes how you <em>browse</em> Marketplace. Most serious local buyers and sellers end up using two of the three.</p>
 
 <h2>At a glance</h2>
 <div class="table-scroll">
@@ -27,7 +27,7 @@ export const GUIDES: Guide[] = [
 <tr><th></th><th>Marketplace</th><th>OfferUp</th><th>Openmarket</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>What it is</strong></td><td>The biggest local marketplace, inside Facebook</td><td>A standalone marketplace app (absorbed Letgo in 2020)</td><td>A free iOS companion app for browsing Marketplace listings</td></tr>
+<tr><td><strong>What it is</strong></td><td>The biggest local marketplace, inside Facebook</td><td>A standalone marketplace app (absorbed Letgo in 2020)</td><td>An iOS companion app for browsing Marketplace listings</td></tr>
 <tr><td><strong>Inventory</strong></td><td>Largest in most areas</td><td>Strong in big metros, thinner elsewhere</td><td>The same listings as Marketplace</td></tr>
 <tr><td><strong>Local deals</strong></td><td>Free</td><td>Free</td><td>Free — it's a browser, not a middleman</td></tr>
 <tr><td><strong>Shipping</strong></td><td>On eligible items, with a seller fee</td><td>Nationwide; seller fee of 12.9% ($1.99 minimum)</td><td>No shipping — local focus</td></tr>
@@ -53,7 +53,7 @@ export const GUIDES: Guide[] = [
 <p>The trade-off is inventory: it's a separate pool of listings. Sellers who want full reach end up cross-posting to both.</p>
 
 <h2>Openmarket: not a third marketplace — a better window into the biggest one</h2>
-<p><a href="/">Openmarket</a> doesn't add another pool of listings to check. It's a free iOS app that shows you Marketplace's own inventory the way you wish the original did:</p>
+<p><a href="/">Openmarket</a> doesn't add another pool of listings to check. It's an iOS app that shows you Marketplace's own inventory the way you wish the original did:</p>
 <ul>
 <li><strong>Filters that work.</strong> Set a place and radius and results respect them, with the city, real distance, and walking/driving/transit time on every card.</li>
 <li><strong>“Only new listings.”</strong> One toggle hides everything you've already opened — checking the feed twice a day stops meaning reading it twice.</li>
@@ -100,7 +100,7 @@ export const GUIDES: Guide[] = [
 </ol>
 
 <h2>The shortcut</h2>
-<p><a href="/">Openmarket</a>, a free iOS app for browsing local listings, was built around exactly this frustration. You set a place and a radius together, results respect them, and every card shows its city and its real distance from you — plus walking, driving, and transit time on the listing itself. If a result is outside your radius, it simply doesn't appear.</p>
+<p><a href="/">Openmarket</a>, an iOS app for browsing local listings, was built around exactly this frustration. You set a place and a radius together, results respect them, and every card shows its city and its real distance from you — plus walking, driving, and transit time on the listing itself. If a result is outside your radius, it simply doesn't appear.</p>
 `,
   },
   {

@@ -1,9 +1,35 @@
 import type { Metadata, Viewport } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import {
+  Bricolage_Grotesque,
+  IBM_Plex_Mono,
+  Instrument_Sans,
+} from "next/font/google";
 import logo from "@/public/logo.png";
 import { SITE, DISCLAIMER } from "@/lib/site";
 import "./globals.css";
+
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-bricolage",
+  display: "swap",
+});
+
+const sans = Instrument_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-instrument-sans",
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
@@ -63,7 +89,10 @@ function Nav() {
         aria-label="Main"
         className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5"
       >
-        <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-white">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 font-display text-[19px] font-bold tracking-tight text-white"
+        >
           <Image
             src={logo}
             alt=""
@@ -74,19 +103,19 @@ function Nav() {
           Openmarket
         </Link>
         <div className="hidden items-center gap-7 text-[15px] text-gray-300 sm:flex">
-          <Link href="/buyers" className="transition hover:text-white">
-            For buyers
-          </Link>
-          <Link href="/sellers" className="transition hover:text-white">
-            For sellers
+          <Link href="/#features" className="transition hover:text-white">
+            Features
           </Link>
           <Link href="/guides" className="transition hover:text-white">
             Guides
           </Link>
+          <Link href="/#faq" className="transition hover:text-white">
+            FAQ
+          </Link>
         </div>
         <a
           href={SITE.downloadUrl}
-          className="rounded-full bg-accent px-4 py-2 text-[15px] font-semibold text-white transition hover:bg-[#3395ff]"
+          className="rounded-xl bg-accent px-4 py-2 text-[15px] font-semibold text-on-accent transition hover:bg-accent-soft"
         >
           Download for iOS
         </a>
@@ -100,10 +129,12 @@ function Footer() {
     <footer className="border-t border-white/10 bg-panel">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:grid-cols-3">
         <div>
-          <p className="font-semibold text-white">Openmarket</p>
+          <p className="font-display text-lg font-bold tracking-tight text-white">
+            Openmarket
+          </p>
           <p className="mt-2 max-w-xs text-sm leading-6 text-gray-400">
-            A better way to marketplace — filters that work, actually local
-            listings, and price comparisons for sellers.
+            Nearby listings. Filters that work. And price comparisons backed
+            by what actually sells.
           </p>
         </div>
         <nav aria-label="Footer" className="grid grid-cols-2 gap-8 text-sm sm:col-span-2 sm:grid-cols-3">
@@ -148,7 +179,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+    >
       <body className="min-h-screen bg-ink">
         <Nav />
         <main>{children}</main>

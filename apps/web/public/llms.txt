@@ -1,6 +1,8 @@
 # Openmarket
 
-> Openmarket is a free iOS app — a better way to browse local Marketplace listings. Buyers get filters that work (a real place-and-radius search) and actually local listings: the city, distance, and walking/driving/transit travel time on every listing, plus saves and recently-viewed history, a unique "Only new listings" filter that hides everything already opened, and feeds with sponsored posts filtered out. Sellers get price comparisons: the Price Check tool recommends an asking price backed by similar listings and recent sales nearby — from a photo or a one-sentence description — plus a ready-to-paste title and description.
+> Openmarket is an iOS app — a better way to browse local Marketplace listings. It does three things Marketplace does not. (1) Filters that work: place and radius travel together and the radius is enforced on the device, so a 5-mile search stays within 5 miles, and one "Only new listings" toggle hides everything already opened. (2) Actually local listings: the city and real distance from you on every card, plus walking, driving, and transit time on every listing. (3) A price comparison on any listing: every listing is placed on a range bar against nearby asking prices — the low, the band most sit in, and the high — alongside what recently sold nearby and how fast it went, and every comparison opens onto the actual comparable listings it was read from. Openmarket states plainly that Marketplace publishes asking prices and never what a buyer paid, so a comparison describes what sellers ask nearby and which items sold, not what changed hands. The Price Check tool runs the same comparison from a photo or a one-sentence description for people selling, and returns a recommended asking price with a ready-to-paste title and description. Sponsored posts are filtered out of every feed; saves and recently-viewed history are kept on the phone.
+
+Openmarket aggregates publicly available local listings, including those posted to Facebook Marketplace — thousands of nearby items. It does not run its own marketplace and does not host inventory of its own.
 
 Openmarket is an independent app, not affiliated with Meta Platforms, Inc. Users browse with their own account; messaging and offers happen in the Facebook app via deep links.
 
@@ -8,7 +10,7 @@ Availability: iOS. Website: https://openmarket.io
 
 ## Pages
 
-- [Home](https://openmarket.io/): what Openmarket is, buyer and seller features, FAQ
+- [Home](https://openmarket.io/): what Openmarket is — filters that work, distance and travel time on every card, a price comparison on any listing, FAQ
 - [For buyers](https://openmarket.io/buyers): search, filters, distance and travel time, saves, only-new-listings
 - [For sellers](https://openmarket.io/sellers): Price Check — local comps, sold data, ready-to-paste listings
 - [Guides](https://openmarket.io/guides): practical guides to buying and selling secondhand locally

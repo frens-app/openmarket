@@ -50,13 +50,13 @@ export default async function OgImage() {
             fontSize: 72,
             fontWeight: 700,
             lineHeight: 1.1,
-            color: "#0a84ff",
+            color: "#2fd08a",
           }}
         >
           local listings.
         </div>
         <div style={{ fontSize: 28, color: "#9ca3af", marginTop: 36 }}>
-          Filters that work · Actually local listings · Price comparisons
+          Nearby listings · Filters that work · Price comparisons
         </div>
       </div>
     ),
