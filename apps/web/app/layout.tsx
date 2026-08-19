@@ -133,8 +133,8 @@ function Footer() {
             Openmarket
           </p>
           <p className="mt-2 max-w-xs text-sm leading-6 text-gray-400">
-            Nearby listings. Filters that work. And price comparisons backed
-            by what actually sells.
+            Thousands of nearby listings. Filters that work. And price
+            comparisons backed by what actually sells.
           </p>
         </div>
         <nav aria-label="Footer" className="grid grid-cols-2 gap-8 text-sm sm:col-span-2 sm:grid-cols-3">

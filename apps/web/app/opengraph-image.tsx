@@ -56,7 +56,7 @@ export default async function OgImage() {
           local listings.
         </div>
         <div style={{ fontSize: 28, color: "#9ca3af", marginTop: 36 }}>
-          Nearby listings · Filters that work · Price comparisons
+          Thousands of nearby listings · Filters that work · Price comparisons
         </div>
       </div>
     ),

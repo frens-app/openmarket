@@ -53,10 +53,6 @@ const FAQ: { q: string; a: string }[] = [
     a: "Open any listing and Openmarket searches similar items near you — both what's listed right now and what recently sold — then shows where this listing's price falls against them on a range bar: the low ask, the band most sit in, and the high. It also estimates how long similar items take to sell. Tap “See what this is based on” to read the actual comparable listings it used.",
   },
   {
-    q: "Are the price comparisons based on what items actually sold for?",
-    a: "No, and Openmarket says so on the screen. Marketplace publishes asking prices and never what a buyer actually paid — even on a sold listing, the price shown is what it was listed at. So a comparison tells you what sellers are asking nearby and which items did sell, not what changed hands. The sold list also only contains things that sold, so it can show that certain prices worked, never that a price is too high.",
-  },
-  {
     q: "How do I message a seller?",
     a: "Tap “View on Facebook” on any listing and it opens that exact listing in the Facebook app, where you can message, save, or make an offer with your own account. Openmarket never sends messages for you.",
   },
@@ -104,8 +100,8 @@ export default function HomePage() {
             Actually local listings.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-gray-400 sm:text-xl">
-            Nearby listings. Filters that work. And price comparisons backed by
-            what actually sells.
+            Thousands of nearby listings. Filters that work. And price
+            comparisons backed by what actually sells.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
             <DownloadButton />
