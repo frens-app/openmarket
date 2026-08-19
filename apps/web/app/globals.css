@@ -106,6 +106,145 @@ body {
   color: #fff;
 }
 
+.prose-guide figure {
+  margin: 1.75rem 0;
+}
+
+.prose-guide figure img {
+  width: 100%;
+  height: auto;
+  border-radius: 1rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.prose-guide .tldr {
+  margin: 1.75rem 0 2.25rem;
+  padding: 1.35rem 1.5rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.prose-guide .tldr p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-guide .method {
+  margin: 2.5rem 0 0;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 0.02);
+}
+
+.prose-guide .method p {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: rgb(156 163 175);
+}
+
+.prose-guide .method p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-guide .method-label {
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(212 214 220);
+}
+
+.prose-guide .tldr-label {
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.prose-guide .device {
+  position: relative;
+  max-width: 300px;
+  margin: 0 auto;
+  padding: 0.55rem;
+  background: linear-gradient(160deg, #3a3a3f, #111114 45%, #2a2a2e);
+  border-radius: 2.9rem;
+  box-shadow: 0 20px 45px rgb(0 0 0 / 0.55);
+}
+
+.prose-guide .device img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 0;
+  border-radius: 2.35rem;
+}
+
+/* Sits in the gap the captured status bar already leaves for it. */
+.prose-guide .device::after {
+  content: "";
+  position: absolute;
+  top: 1.35rem;
+  left: 50%;
+  width: 21%;
+  aspect-ratio: 2.7;
+  transform: translateX(-50%);
+  background: #000;
+  border-radius: 999px;
+}
+
+.prose-guide figure.narrow img {
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.prose-guide .device-pair {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.prose-guide .device-pair .device {
+  flex: 0 1 240px;
+  margin: 0;
+}
+
+.prose-guide figure:has(.device) figcaption {
+  text-align: center;
+  max-width: 34rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.prose-guide figcaption {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: rgb(156 163 175);
+}
+
+.prose-guide .dek {
+  font-size: 0.9rem;
+  color: rgb(156 163 175);
+}
+
+.prose-guide .fine-print {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: rgb(156 163 175);
+}
+
+.prose-guide hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+}
+
 .prose-guide a {
   color: var(--color-accent);
   text-decoration: underline;

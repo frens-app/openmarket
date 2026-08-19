@@ -76,6 +76,18 @@ Ask of each comment you added: *would a competent reader be surprised without
 this?* If not, delete it. Re-read comments near code you changed — a stale
 comment is worse than none.
 
+## Writing for the site
+
+Anything published under `apps/web` — a guide, landing copy, an FAQ answer —
+follows `docs/content-standards.md`. Read it before writing, and run its
+Section 3 risk checklist before committing. The constraints there are not
+stylistic: we are a competitor writing about a competitor, so every factual
+claim about Facebook Marketplace has to be sourced or come from our own dated
+testing, and claims about Meta's intent are out entirely.
+
+Guides live in `apps/web/lib/guides.ts`, one object per article. The screenshots
+behind their claims live in `apps/web/captures/`, indexed by its README.
+
 ## Verifying a change
 
 ```bash

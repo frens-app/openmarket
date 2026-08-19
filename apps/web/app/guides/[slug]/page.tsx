@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GUIDES, getGuide } from "@/lib/guides";
 import { CtaBlock, JsonLd } from "@/components/ui";
-import { SITE } from "@/lib/site";
+import { AUTHORS, SITE } from "@/lib/site";
 
 export function generateStaticParams() {
   return GUIDES.map((g) => ({ slug: g.slug }));
@@ -20,6 +20,7 @@ export async function generateMetadata({
     title: guide.title,
     description: guide.description,
     alternates: { canonical: `/guides/${guide.slug}` },
+    robots: guide.draft ? { index: false, follow: false } : undefined,
     openGraph: {
       type: "article",
       title: guide.title,
@@ -46,7 +47,12 @@ export default async function GuidePage({
           headline: guide.title,
           description: guide.description,
           datePublished: guide.date,
-          author: { "@type": "Organization", name: SITE.name, url: SITE.url },
+          dateModified: guide.lastVerified,
+          author: {
+            "@type": "Person",
+            name: guide.author,
+            ...(AUTHORS[guide.author] && { sameAs: AUTHORS[guide.author].sameAs }),
+          },
           publisher: { "@type": "Organization", name: SITE.name, url: SITE.url },
           mainEntityOfPage: `${SITE.url}/guides/${guide.slug}`,
         }}
@@ -72,6 +78,7 @@ export default async function GuidePage({
           {guide.title}
         </h1>
         <p className="mt-4 text-sm text-gray-500">
+          By <span className="text-gray-300">{guide.author}</span> ·{" "}
           <time dateTime={guide.date}>
             {new Date(`${guide.date}T00:00:00`).toLocaleDateString("en-US", {
               year: "numeric",
@@ -80,6 +87,13 @@ export default async function GuidePage({
             })}
           </time>{" "}
           · {guide.readingMinutes} min read
+          {guide.lastVerified && (
+            <>
+              {" "}
+              · Last verified{" "}
+              <time dateTime={guide.lastVerified}>{guide.lastVerified}</time>
+            </>
+          )}
         </p>
         <div
           className="prose-guide mt-10"

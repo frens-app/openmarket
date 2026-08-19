@@ -2,203 +2,181 @@ export type Guide = {
   slug: string;
   title: string;
   description: string;
+  /** Publication date, ISO. */
   date: string;
+  /** Date the claims were last checked against the live site, ISO. */
+  lastVerified: string;
+  /** Shown as a byline and emitted as the schema.org Person author. */
+  author: string;
   readingMinutes: number;
+  /**
+   * Unsubstantiated or unfinished. Reachable by URL for review, but kept out of
+   * the index, the sitemap and llms.txt, and served `noindex`.
+   */
+  draft?: boolean;
   /** Rendered inside a .prose-guide container. */
   html: string;
 };
 
+// Every guide is held to docs/content-standards.md — sourced claims about
+// Facebook Marketplace, no assertions of Meta's intent, and the Section 3
+// checklist run before publishing.
 export const GUIDES: Guide[] = [
   {
-    slug: "facebook-marketplace-vs-offerup-vs-openmarket",
+    slug: "facebook-marketplace-items-outside-distance-filter",
     title:
-      "Facebook Marketplace vs OfferUp vs Openmarket: where should you buy and sell locally?",
+      "Why Facebook Marketplace Shows You Items Outside Your Distance Filter",
     description:
-      "An honest three-way comparison — inventory, fees, location filtering, shipping, and safety — between the two big local marketplaces and a companion app that changes how you browse one of them.",
-    date: "2026-08-13",
-    readingMinutes: 7,
+      "Shipped listings, sponsored placements, and the default “Suggested” distance setting are not governed by the mile radius you set. What each one looks like on screen, and how to cut them down.",
+    date: "2026-08-18",
+    lastVerified: "2026-08-18",
+    author: "Brian Li",
+    readingMinutes: 6,
     html: `
-<p>Short answer: Marketplace has the most inventory in almost every city, OfferUp is the strongest standalone alternative — especially if you want shipping or verified profiles — and Openmarket isn't a marketplace at all: it's an iOS app that fixes how you <em>browse</em> Marketplace. Most serious local buyers and sellers end up using two of the three.</p>
+<p class="dek">Tested on the Facebook iOS app v574.0.0, searching from San Francisco, CA.</p>
+
+<aside class="tldr">
+  <p class="tldr-label">TL;DR</p>
+  <p>Facebook Marketplace often shows listings far away and outside of your distance filter range because of shipped items, sponsored listings, and results returned under the default "Suggested" distance setting. Using the right filters can help but you will still see many non-local listings.</p>
+</aside>
+
+<p>You might find yourself frustrated by how many far-away or irrelevant listings turn up on Facebook Marketplace. You're not alone in that — it's a common complaint.</p>
+
+<figure class="narrow">
+  <img src="/guides/distance-filter/reddit-feed-far-items.png" alt="An archived r/FacebookMarketplace post from June 2023 asking why Marketplace keeps showing items that are far away despite a 20 km local radius, with 18 points and 17 comments" loading="lazy" />
+  <figcaption>u/charcoalritual, <a href="https://www.reddit.com/r/FacebookMarketplace/comments/14j95p4/why_does_marketplace_keep_showing_me_items_that/">r/FacebookMarketplace</a>, 26 June 2023.</figcaption>
+</figure>
+
 
 <h2>At a glance</h2>
 <div class="table-scroll">
 <table>
 <thead>
-<tr><th></th><th>Marketplace</th><th>OfferUp</th><th>Openmarket</th></tr>
+<tr><th>What appears</th><th>Why your radius doesn't hold it back</th><th>What you can do</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>What it is</strong></td><td>The biggest local marketplace, inside Facebook</td><td>A standalone marketplace app (absorbed Letgo in 2020)</td><td>An iOS companion app for browsing Marketplace listings</td></tr>
-<tr><td><strong>Inventory</strong></td><td>Largest in most areas</td><td>Strong in big metros, thinner elsewhere</td><td>The same listings as Marketplace</td></tr>
-<tr><td><strong>Local deals</strong></td><td>Free</td><td>Free</td><td>Free — it's a browser, not a middleman</td></tr>
-<tr><td><strong>Shipping</strong></td><td>On eligible items, with a seller fee</td><td>Nationwide; seller fee of 12.9% ($1.99 minimum)</td><td>No shipping — local focus</td></tr>
-<tr><td><strong>Location filtering</strong></td><td>Radius is loosely enforced in practice</td><td>Standard radius search</td><td>Place + radius enforced on your device; distance and travel time on every card</td></tr>
-<tr><td><strong>Repeat listings</strong></td><td>No way to hide what you've seen</td><td>No way to hide what you've seen</td><td>“Only new listings” filter hides anything you've opened</td></tr>
-<tr><td><strong>Messaging</strong></td><td>Messenger</td><td>In-app chat, TruYou profile verification</td><td>Hands you to the Facebook app — your account, their messenger</td></tr>
-<tr><td><strong>Platforms</strong></td><td>Web, iOS, Android</td><td>Web, iOS, Android</td><td>iOS</td></tr>
+<tr><td>Shipped listings</td><td>A shipped item has no meaningful location from your side, so a local pickup radius doesn't constrain it</td><td>Filter delivery method to <strong>Local pickup</strong></td></tr>
+<tr><td>Sponsored placements</td><td>Paid units take grid positions regardless of filters, as do retail listings sold through partners</td><td>Nothing in Marketplace's own filters</td></tr>
+<tr><td>Results under "Suggested"</td><td>The default distance is a setting named "Suggested", not a mileage value. One San Francisco search under it returned a listing 86 miles out</td><td>Set an explicit radius, once per device</td></tr>
 </tbody>
 </table>
 </div>
 
-<h2>Marketplace: unbeatable inventory, frustrating browsing</h2>
-<p>For sheer selection, nothing local touches Marketplace — a large share of casual sellers list there first and only there, because the audience is already in the app. Local deals cost nothing, and a seller's profile gives you years of history to judge.</p>
-<p>The weaknesses are all in the browsing. The <a href="/guides/facebook-marketplace-location-filter-not-working">distance filter is loosely enforced</a> — a 5-mile search can surface listings from other cities — the feed <a href="/guides/stop-seeing-same-listings-facebook-marketplace">re-shows you the same listings</a> every session, and sponsored posts are mixed into results.</p>
+<h2>Shipped listings aren't bound by your radius</h2>
+<p>Marketplace started as local pickup only. Facebook later added shipping, which isn't constrained by radius. This is one of the biggest sources of far-away results, and it's most visible on Explore before you've searched anything. Shipped listings are often marked with a delivery truck icon in the corner of the listing.</p>
 
-<h2>OfferUp: the strongest standalone alternative</h2>
-<p>OfferUp is its own ecosystem with its own listings, so what you gain depends on your city — in big metros it's a genuine second market; elsewhere it can feel thin. Its real differentiators:</p>
-<ul>
-<li><strong>Shipping.</strong> Nationwide shipping on eligible items, with a 12.9% seller fee ($1.99 minimum) on shipped sales. Local pickup deals are free.</li>
-<li><strong>Verification.</strong> TruYou identity verification and community meetup spots give it a safety story Marketplace mostly lacks.</li>
-<li><strong>A cleaner buy flow</strong> for shipped items — closer to eBay than to a classifieds board.</li>
-</ul>
-<p>The trade-off is inventory: it's a separate pool of listings. Sellers who want full reach end up cross-posting to both.</p>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/explore-shipped.jpg" alt="The Facebook Marketplace Explore grid, every visible listing carrying a shipping badge in its top corner" loading="lazy" /></div>
+  <figcaption>Marketplace Explore. The little delivery truck marks a shipped item — here, every cell has one.</figcaption>
+</figure>
 
-<h2>Openmarket: not a third marketplace — a better window into the biggest one</h2>
-<p><a href="/">Openmarket</a> doesn't add another pool of listings to check. It's an iOS app that shows you Marketplace's own inventory the way you wish the original did:</p>
-<ul>
-<li><strong>Filters that work.</strong> Set a place and radius and results respect them, with the city, real distance, and walking/driving/transit time on every card.</li>
-<li><strong>“Only new listings.”</strong> One toggle hides everything you've already opened — checking the feed twice a day stops meaning reading it twice.</li>
-<li><strong>No sponsored posts</strong> in any feed.</li>
-<li><strong>Price Check for sellers.</strong> Snap a photo and get an asking price backed by similar listings and recent sales nearby — <a href="/sellers">useful whichever marketplace you post on</a>.</li>
-</ul>
-<p>Deals still happen where they always did: tap through to the real listing and message the seller in the Facebook app with your own account.</p>
+<h2>Sponsored placements aren't sorted by distance</h2>
+<p>Paid items show up in your results regardless of your filters. They come in two shapes: a full row of advertising, and single cells shaped exactly like listings, sitting between them and marked only by a small "Ad". These sponsored listings don't get filtered out.</p>
 
-<h2>So which should you use?</h2>
-<ul>
-<li><strong>Buying locally and want the most options:</strong> Marketplace's inventory — browsed through Openmarket if you're on iOS.</li>
-<li><strong>Want items shipped, or verified profiles:</strong> OfferUp.</li>
-<li><strong>Selling:</strong> list on both marketplaces — it costs nothing for local deals and doubles your audience. Run <a href="/sellers">Price Check</a> first so the number is grounded in what actually sells near you.</li>
-<li><strong>Checking the feed every day for deals:</strong> Openmarket's only-new filter is the difference between reading the feed and re-reading it.</li>
-</ul>
+<p>A search for "fitbit air" from San Francisco returned two listings with distances on them — Oakland &middot; 12 mi and San Jose &middot; 47 mi — and then a full row of Amazfit advertising. Scrolling on, two more ads turned up as ordinary-looking items among four real listings.</p>
 
-<p><em>Fees and features above were checked in August 2026 and can change.</em></p>
-`,
-  },
-  {
-    slug: "facebook-marketplace-location-filter-not-working",
-    title:
-      "Facebook Marketplace location filter not working? Here's what's actually happening",
-    description:
-      "Why Marketplace keeps showing listings from 50 miles away even when you set a radius, what the radius control really does, and how to actually search near you.",
-    date: "2026-08-12",
-    readingMinutes: 6,
-    html: `
-<p>You set the radius to 10 miles. The first row of results is 40 miles away. You set it again — same thing. You are not imagining it, and you are not doing it wrong.</p>
+<figure>
+  <div class="device-pair">
+    <div class="device"><img src="/guides/distance-filter/search-ad-unit.jpg" alt="Marketplace search results showing two listings with mileage labels followed by a labelled Amazfit advertisement occupying a full row" loading="lazy" /></div>
+    <div class="device"><img src="/guides/distance-filter/search-ad-cells.jpg" alt="Marketplace search results where two single grid cells are RingConn and WHOOP advertisements marked Ad, sitting among listings labelled 2, 4 and 15 miles away" loading="lazy" /></div>
+  </div>
+  <figcaption>Same search, a minute apart. Left: an ad as a full row. Right: two as single cells, among listings 2 to 15 miles out.</figcaption>
+</figure>
 
-<h2>The radius is a suggestion, not a rule</h2>
-<p>Marketplace's distance control appears to influence ranking more than it limits results. In practice, the feed behaves as if it's assembled from what's popular and available in a broad region around the location it inferred for you, with the radius nudging that mix rather than fencing it. Two consequences follow:</p>
-<ul>
-<li><strong>Faraway listings leak in.</strong> Especially for popular categories, results well outside your radius routinely rank into the feed.</li>
-<li><strong>The location it uses may not be yours.</strong> Marketplace can key off the rough location of your network connection, not your actual neighborhood — on a VPN or a corporate network it can be a different city entirely.</li>
-</ul>
+<p>Recently, eBay items have been appearing as normal listings as well. When you click into them, they show <strong>"Buy now on eBay"</strong> button, and a line indicating "Facebook may receive a commission on this sale."</p>
 
-<h2>What actually helps</h2>
-<ol>
-<li><strong>Set the place explicitly, not just the radius.</strong> Searching against a named place gives more consistent local results than adjusting distance alone.</li>
-<li><strong>Check each listing's stated city before you commit.</strong> The distance shown on the feed can be missing or stale; the listing's own city is the reliable field.</li>
-<li><strong>Sort by distance when the option appears.</strong> It surfaces the close-by listings the default ranking buries.</li>
-<li><strong>Re-set the location after travel.</strong> If you searched from another city recently, the inferred location can stick.</li>
-</ol>
+<figure>
+  <div class="device-pair">
+    <div class="device"><img src="/guides/distance-filter/ebay-partner-feed.jpg" alt="The Marketplace Explore grid with a Raven Table Lamp listed at $36, its corner carrying a badge different from the shipping truck on other cells" loading="lazy" /></div>
+    <div class="device"><img src="/guides/distance-filter/ebay-partner-listing.jpg" alt="A Facebook Marketplace item page for an eBay listing, showing an eBay badge, a Buy now on eBay button, and a note that Facebook may receive a commission on the sale" loading="lazy" /></div>
+  </div>
+  <figcaption>Left: the lamp in the Explore grid at $36, its corner badge unlike the shipped cells'. Right: opened a minute later — free shipping, no location anywhere.</figcaption>
+</figure>
 
-<h2>The shortcut</h2>
-<p><a href="/">Openmarket</a>, an iOS app for browsing local listings, was built around exactly this frustration. You set a place and a radius together, results respect them, and every card shows its city and its real distance from you — plus walking, driving, and transit time on the listing itself. If a result is outside your radius, it simply doesn't appear.</p>
-`,
-  },
-  {
-    slug: "stop-seeing-same-listings-facebook-marketplace",
-    title: "How to stop scrolling past the same listings again and again",
-    description:
-      "Marketplace has no “hide what I've seen” option, so every session starts with re-reading yesterday's feed. Here are the workarounds — and the one real fix.",
-    date: "2026-08-12",
-    readingMinutes: 5,
-    html: `
-<p>Serious buyers check the feed a few times a day, because good deals go in hours. The tax on that habit: every session starts by scrolling past everything you already saw this morning. The same sectional. The same Peloton. The same “vintage” coffee table.</p>
+<!-- NOT CAPTURED. Count sponsored positions across a defined run of consecutive screens; do not estimate. Uncomment when the file exists.
+<figure>
+  <img src="/guides/distance-filter/sponsored-density.png" alt="A Marketplace results grid with the sponsored cells and banner units marked, showing how many grid positions they occupy" loading="lazy" />
+  <figcaption>[N] consecutive screens captured [DATE]. Sponsored cells and banner units occupied [X] of [Y] grid positions ([Z]%).</figcaption>
+</figure>
+-->
 
-<h2>Why the feed repeats itself</h2>
-<p>Marketplace's feed appears to favor listings it expects you to engage with — and in practice, things you've already looked at keep resurfacing. There is no “only show me new listings” switch, no “sort by newest since my last visit”, and hiding listings one by one is a per-item chore that teaches the ranking very little.</p>
+<h2>The default distance isn't a number — it's "Suggested"</h2>
+<p>Marketplace's default isn't a distance value. It's a setting labeled <strong>"Suggested."</strong> Most people never open the filter panel and reasonably assume they're seeing nearby items.</p>
+<p>Here is what that produced. Searching "anthurium" from San Francisco with the distance filter untouched, the first screen of results ran from San Francisco &middot; 1 mi to Rancho Cordova &middot; 86 mi, with Concord &middot; 28 mi in between.</p>
 
-<h2>Workarounds people use</h2>
-<ul>
-<li><strong>Sort by “Date listed: newest first”</strong> and stop when you recognize a listing. Works, but you lose the relevance ranking entirely, and one re-listed item breaks the “stop when familiar” rule.</li>
-<li><strong>Search, don't browse.</strong> Tight queries (“walnut dresser”, not “dresser”) churn less than category feeds.</li>
-<li><strong>Save aggressively, then work from saves.</strong> Turns the feed into an inbox — but you still had to scroll the feed to build it.</li>
-</ul>
+<!-- SCREENSHOT 3 production note: draw a line from the "Suggested" label to the distance labels on the result cells. -->
+<figure>
+  <div class="device-pair">
+    <div class="device"><img src="/guides/distance-filter/suggested-default.jpg" alt="The Marketplace Distance filter sheet with Suggested selected, above preset options of 20, 40, 60 and 100 miles and a custom distance slider" loading="lazy" /></div>
+    <div class="device"><img src="/guides/distance-filter/suggested-results.jpg" alt="Marketplace results for anthurium from San Francisco, with listings labelled Rancho Cordova 86 miles, Concord 28 miles and San Francisco 1 mile" loading="lazy" /></div>
+  </div>
+  <figcaption>Left: the Distance filter, untouched. Right: the results a minute later, running to 86 miles.</figcaption>
+</figure>
 
-<h2>The real fix: filter on your own history</h2>
-<p>Your phone already knows which listings you've opened. A filter that hides them turns a stale feed into a pure stream of new inventory — Marketplace just doesn't offer one.</p>
-<p><a href="/">Openmarket</a> does. It keeps your viewing history on-device and adds an <strong>“Only new listings”</strong> toggle to its filters: flip it on and anything you've already opened disappears from results. Checking the feed twice a day stops meaning reading it twice.</p>
-`,
-  },
-  {
-    slug: "how-to-price-used-items",
-    title: "How to price used items so they actually sell",
-    description:
-      "A practical pricing method for local selling: what percentage of retail to ask, how condition changes the math, and why sold prices beat listed prices.",
-    date: "2026-08-12",
-    readingMinutes: 7,
-    html: `
-<p>Most used items that never sell fail at the price, not the product. Here is a method that takes five minutes and survives contact with lowballers.</p>
+<p>Marketplace Explore also frequently recommends items marked <strong>"Farther away"</strong>.</p>
 
-<h2>Start from sold, not listed</h2>
-<p>Listed prices tell you what other sellers <em>hope</em>. Sold prices tell you what buyers <em>pay</em>. A search of your item will show plenty of both — the listings that have sat for six weeks at a fantasy price are data about what doesn't work. Weight anything that sold recently far above anything that's merely listed.</p>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/explore-distance-labels.jpg" alt="A Marketplace Explore grid where one listing carries a Farther away badge while another carries a Nearby badge" loading="lazy" /></div>
+  <figcaption>Explore feed with items marked "Farther away".</figcaption>
+</figure>
 
-<h2>The percentage-of-retail baseline</h2>
-<p>When you can't find good comps, anchor on what the item costs new today (not what you paid):</p>
-<ul>
-<li><strong>Like new, in demand:</strong> 60–80% of current retail</li>
-<li><strong>Good condition, normal wear:</strong> 40–60%</li>
-<li><strong>Visible wear, fully functional:</strong> 25–40%</li>
-<li><strong>IKEA-tier or heavily worn:</strong> 10–25%, and price to move</li>
-</ul>
-<p>Electronics depreciate faster than furniture; anything with a battery loses value by the month. Solid wood and name-brand tools hold value better than almost anything else.</p>
 
-<h2>Leave room to negotiate — a little</h2>
-<p>Local buyers offer under asking on principle. Price about 10% above the number you actually want, and no more: inflated prices filter out the serious buyers who sort by price, leaving only the lowballers you padded against.</p>
+<!-- NOT DRAWN. Uncomment when the graphic exists.
+<figure>
+  <img src="/guides/distance-filter/radius-vs-drive-time.png" alt="A map illustration showing a straight-line radius circle over a metro area with the smaller area actually reachable in a reasonable drive shaded inside it" loading="lazy" />
+  <figcaption>A straight-line radius against the area actually reachable in a reasonable trip.</figcaption>
+</figure>
+-->
 
-<h2>Signals you priced it wrong</h2>
-<ul>
-<li><strong>No messages in 48 hours:</strong> too high, or bad photos. Drop 10–15% — a visible price cut also re-ranks you in many feeds.</li>
-<li><strong>Five “is this available?” in an hour:</strong> too low. You can't raise the price on people mid-conversation, but you can hold firm and let them compete.</li>
-</ul>
+<h2>How to reduce it</h2>
+<p><strong>Set an explicit radius.</strong> Filter icon → <strong>Distance</strong> → anything other than "Suggested".</p>
 
-<h2>Or let the data do it</h2>
-<p><a href="/sellers">Openmarket's Price Check</a> runs this method automatically: describe the item or snap a photo, and it reads similar listings <em>and recent sales near you</em>, then recommends an asking price — with a ready-to-paste title and description. It shows how many nearby and sold listings the number came from, so you know it's grounded, not guessed.</p>
-`,
-  },
-  {
-    slug: "local-pickup-safety-tips",
-    title: "Local pickup, done safely: a checklist for buyers and sellers",
-    description:
-      "Where to meet, how to handle payment, what to verify before you drive, and the scams to recognize when buying or selling secondhand locally.",
-    date: "2026-08-12",
-    readingMinutes: 6,
-    html: `
-<p>Millions of local deals complete without a hitch, and the ones that go wrong mostly break the same few rules. Here is the short list that covers nearly everything.</p>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/set-distance.jpg" alt="The Marketplace Distance filter with Custom distance selected and its slider set to 7 miles, the preset options above it unselected" loading="lazy" /></div>
+  <figcaption>Custom distance at 7 mi — the only option that promises "listings within this specific distance."</figcaption>
+</figure>
 
-<h2>Before you drive</h2>
-<ul>
-<li><strong>Verify the seller has history.</strong> A profile with ratings and years of activity is a different risk than one created last week.</li>
-<li><strong>Get specifics in writing:</strong> model numbers, defects, dimensions. “Does it have any issues I should know about?” in chat creates a record.</li>
-<li><strong>Know the distance before committing.</strong> A vague “north side” can mean an hour round trip. Check the real travel time — if it's over ~25 minutes, ask for more photos first so the trip can't be wasted.</li>
-</ul>
+<p><strong>Filter to local pickup only.</strong> The <strong>Delivery</strong> filter offers Local, Shipped, and All Marketplace. Picking <strong>Local</strong> excludes shipping-enabled listings at the source.</p>
 
-<h2>Choosing where to meet</h2>
-<ul>
-<li><strong>Small items:</strong> daylight, public, busy. Coffee shops, grocery store lots, or a police-station “safe exchange zone” — many stations offer marked, camera-covered spots exactly for this.</li>
-<li><strong>Furniture and appliances:</strong> pickup at the address is normal. Bring a second person, keep the transaction at the door or garage, and share the address and time with someone.</li>
-</ul>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/set-delivery.jpg" alt="The Marketplace Delivery filter showing three options, Local, Shipped and All Marketplace, with Local selected" loading="lazy" /></div>
+  <figcaption>The Delivery filter, set to Local. "All Marketplace" is the setting that lets shipped listings back in.</figcaption>
+</figure>
 
-<h2>Payment</h2>
-<ul>
-<li><strong>Cash or an in-person tap payment at handoff.</strong> Nothing in advance — “deposit to hold it” is the single most common local-marketplace scam.</li>
-<li><strong>No gift cards, no shipping “agents”, no overpayment refunds.</strong> Each of those phrases ends the conversation.</li>
-<li><strong>Sellers of electronics:</strong> power it on together before money changes hands. Buyers: test every function you can.</li>
-</ul>
+<p><strong>Set your location precisely.</strong> Marketplace distances can be measured from a city broadly or a specific point. Make sure to update your location filters to your specific neighborhood instead of your city more broadly or results will show relative to the center of your city.</p>
 
-<h2>Trust the messaging platform</h2>
-<p>Keep the conversation on the marketplace's own messenger until the deal is done — moving to text or another app early removes the record and the recourse. This is one reason <a href="/">Openmarket</a> hands you to the Facebook app to message sellers instead of building its own chat: the conversation, the profile history, and any buyer protections stay where they already exist.</p>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/set-location.jpg" alt="The Marketplace location picker showing a search field reading San Francisco, California above a map of the city with a pin dropped on it" loading="lazy" /></div>
+  <figcaption>The location picker. Everything the radius measures is measured from that pin.</figcaption>
+</figure>
+
+<h2>A shorter version of all of this</h2>
+<p>Openmarket shows local listings only. Accurate distance filtering is on by default — no filter panel, no "Suggested," no shipped listings from three states away mixed into your results. No ads.</p>
+<p><a href="/">Try Openmarket →</a></p>
+
+<aside class="method">
+  <p class="method-label">How we researched this</p>
+  <p>Everything on this page comes from our own testing, not from summarising what other people have written. On 18 August 2026 we used Facebook Marketplace on an iPhone — app version 574.0.0 — searching from San Francisco, California. We ran the searches named above, browsed Explore, and screenshotted what came back across five sessions.</p>
+  <p>Every screenshot here is ours, unedited apart from masking personal details. The Reddit threads are linked so you can read them yourself rather than take our word for it. Where we couldn't measure something, we left it out instead of estimating — which is why this guide says less than it could.</p>
+  <p>Marketplace behaves differently by market, account history and app version, so your results may differ from ours. We re-check these findings quarterly.</p>
+</aside>
+
+<hr />
+
+<p class="fine-print">Openmarket is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Facebook Marketplace are trademarks of Meta Platforms, Inc., used here for identification and commentary only.</p>
 `,
   },
 ];
+
+// A guide that reaches the index without a verification date is a Section 3
+// checklist failure; fail the build rather than ship one.
+for (const g of GUIDES) {
+  if (!g.draft && !g.lastVerified) {
+    throw new Error(`Guide "${g.slug}" is missing lastVerified`);
+  }
+}
+
+export const PUBLISHED_GUIDES = GUIDES.filter((g) => !g.draft);
 
 export function getGuide(slug: string): Guide | undefined {
   return GUIDES.find((g) => g.slug === slug);

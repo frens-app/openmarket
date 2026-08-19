@@ -28,3 +28,7 @@ apps/ios/OpenMarket.entitlements
 node_modules/
 .next/
 next-env.d.ts
+
+# Unredacted Marketplace captures, staged before redaction. Seller names, faces
+# and addresses must never enter git history — see apps/web/captures/README.md.
+apps/web/captures/raw/
