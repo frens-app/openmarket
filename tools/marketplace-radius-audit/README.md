@@ -35,6 +35,44 @@ search query has actor ID `0` and the page exposes a Log In control.
 If Chrome is already installed, `--browser-channel chrome` can use it instead
 of Playwright's downloaded Chromium.
 
+## Verified location registry
+
+[`locations.json`](./locations.json) stores the canonical URL key, Marketplace
+path, and Facebook-returned filter center for the cities used by comparative
+tests. All entries were verified together on the logged-out desktop surface at
+a 16 km radius; the registry records the verification timestamp.
+
+| City | URL key | Marketplace path |
+|---|---|---|
+| New York | `nyc` | `/marketplace/nyc/` |
+| Los Angeles | `la` | `/marketplace/la/` |
+| Chicago | `chicago` | `/marketplace/chicago/` |
+| Houston | `houston` | `/marketplace/houston/` |
+| Phoenix | `phoenix` | `/marketplace/phoenix/` |
+| Philadelphia | `philly` | `/marketplace/philly/` |
+| Dallas | `dallas` | `/marketplace/dallas/` |
+| Atlanta | `atlanta` | `/marketplace/atlanta/` |
+| Miami | `miami` | `/marketplace/miami/` |
+| Seattle | `seattle` | `/marketplace/seattle/` |
+| Boston | `boston` | `/marketplace/boston/` |
+| San Francisco | `sanfrancisco` | `/marketplace/sanfrancisco/` |
+| Denver | `denver` | `/marketplace/denver/` |
+| Minneapolis | `minneapolis` | `/marketplace/minneapolis/` |
+| Detroit | `detroit` | `/marketplace/detroit/` |
+
+Refresh every mapping with the paced, search-only verifier:
+
+```bash
+pnpm run verify-locations --headless --browser-channel chrome
+```
+
+Use `--city 'San Francisco'` to check one entry. The generated verification
+report is ignored by Git; update the committed registry only after reviewing a
+complete successful run. A route passes only when the browser is logged out,
+the visual and GraphQL radii match, and Facebook's returned center is within 50
+km of the registry reference point. This catches silent fallbacks from invalid
+slugs—for example, `philadelphia` is invalid here while `philly` is verified.
+
 `--max-results` defaults to 24. Facebook may return fewer results to an
 anonymous browser; the report records both the GraphQL `count` requested and
 the number actually returned. The tool does not manufacture or paginate extra
