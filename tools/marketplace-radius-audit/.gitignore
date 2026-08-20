@@ -1,0 +1,4 @@
+/*.json
+!/package.json
+!/locations.json
+/*.csv

@@ -30,6 +30,8 @@ apps/backend/   Go + Connect + Postgres. Accounts and phone login; `make dev` ru
 apps/web/       openmarket.io marketing + SEO site (Next.js; strategy in docs/website-strategy.md,
                 writing rules in docs/content-standards.md, screenshot evidence in apps/web/captures/)
 tools/probe/    harness for measuring the live site; every finding below came from it
+tools/marketplace-radius-audit/
+                repeatable PII-free logged-out desktop radius audit
 docs/           findings and decisions, listed at the bottom
 ```
 
