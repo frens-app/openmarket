@@ -1,0 +1,14 @@
+{
+  "name": "marketplace-radius-audit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.13.1",
+  "scripts": {
+    "audit": "node facebook-radius-audit.mjs",
+    "test": "node --test facebook-radius-audit.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}
