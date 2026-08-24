@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/validate"
 	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
+	"frens.lol/openmarket/backend/pkg/ingest"
 	"frens.lol/openmarket/backend/pkg/llm"
 	"frens.lol/openmarket/backend/pkg/phone"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
@@ -37,6 +38,7 @@ const (
 	shutdownGrace       = 15 * time.Second
 	readHeaderTimeout   = 10 * time.Second
 	verificationPruneAt = time.Hour
+	ingestPruneAt       = time.Hour
 )
 
 // maxRequestBytes is the ceiling on a single request body.
@@ -144,10 +146,41 @@ func main() {
 		logger: logger.Named("pricing"),
 	}
 
+	observationSvc := &observationServer{
+		queries: queries,
+		builds: ingest.BuildPolicy{
+			MinBuild: cfg.IngestMinAppBuild,
+			Blocked:  ingest.ParseBlockedBuilds(cfg.IngestBlockedAppBuilds),
+		},
+		ingest: ingest.NewService(
+			pool,
+			queries,
+			ingest.NewKeyring(queries, cfg.IngestEpochLength, cfg.IngestEpochKeyGrace),
+			[]byte(cfg.IngestSellerHMACKey),
+			ingest.Breaker{
+				Rate:     cfg.IngestBreakerQuarantineRate,
+				MinCards: int64(cfg.IngestBreakerMinCards),
+			},
+			ingest.Limits{
+				MaxObservationAge: cfg.IngestMaxObservationAge,
+				MaxClockSkew:      cfg.IngestMaxClockSkew,
+				// One epoch: corroboration is only meaningful inside the window
+				// where two submitters share a key, so looking further back
+				// would count a device's own repeats as agreement.
+				CorroborationWindow: cfg.IngestEpochLength,
+				BreakerWindow:       cfg.IngestBreakerWindow,
+				ShapeWindow:         cfg.IngestShapeWindow,
+			},
+			logger.Named("ingest"),
+		),
+		logger: logger.Named("observation"),
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, handlerOptions...))
+	mux.Handle(apiv1connect.NewObservationServiceHandler(observationSvc, handlerOptions...))
 	mux.HandleFunc("/health", healthHandler(pool))
 
 	// Reflection is for grpcurl against a local server. Off in production:
@@ -158,6 +191,7 @@ func main() {
 			apiv1connect.AuthServiceName,
 			apiv1connect.UserServiceName,
 			apiv1connect.PricingServiceName,
+			apiv1connect.ObservationServiceName,
 		)
 		mux.Handle(grpcreflect.NewHandlerV1(reflector))
 		mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
@@ -173,6 +207,7 @@ func main() {
 	}
 
 	go prunePeriodically(ctx, ceiling, logger.Named("prune"))
+	go pruneIngestPeriodically(ctx, queries, cfg.IngestActivityRetentionDays, logger.Named("prune"))
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -280,6 +315,49 @@ func prunePeriodically(ctx context.Context, ceiling *sendCeiling, logger *zap.Lo
 			if err := ceiling.prune(ctx); err != nil {
 				logger.Warn("prune verification sends", zap.Error(err))
 			}
+		}
+	}
+}
+
+// pruneIngestPeriodically deletes expired epoch keys and stale volume counters.
+//
+// The key deletion is the operation that makes the privacy claim true, so it is
+// a scheduled job with its own log line rather than a cleanup somebody remembers
+// to run. It is idempotent and takes no lock: several instances racing it delete
+// the same expired rows.
+//
+// **What this does not delete is the data.** Batches, observations and listings
+// stay; a batch keeps its submitter_id forever and that value simply stops
+// meaning anything once its key is gone.
+//
+// The live database is not the last copy. A key deleted here is still in every
+// backup taken while it existed, so unlinkability actually begins at deletion
+// plus backup retention (docs/ingest-attribution.md §6).
+func pruneIngestPeriodically(ctx context.Context, queries *db.Queries, retentionDays int, logger *zap.Logger) {
+	prune := func() {
+		keys, err := queries.DeleteExpiredIngestEpochKeys(ctx)
+		if err != nil {
+			logger.Error("delete expired epoch keys", zap.Error(err))
+		} else if keys > 0 {
+			logger.Info("deleted expired epoch keys", zap.Int64("keys", keys))
+		}
+		if _, err := queries.PruneDeviceActivity(ctx, int32(retentionDays)); err != nil {
+			logger.Warn("prune device activity", zap.Error(err))
+		}
+	}
+
+	// Once at boot as well as on the tick: a service that restarts more often
+	// than the interval would otherwise never reach the deletion at all.
+	prune()
+
+	ticker := time.NewTicker(ingestPruneAt)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			prune()
 		}
 	}
 }

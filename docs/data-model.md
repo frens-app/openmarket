@@ -1,10 +1,15 @@
-# Listing data model — proposal v0.4
+# Listing data model
 
-**Status:** proposal; no listing persistence or ingest RPC is built.
+**Status:** built. `apps/backend/deployments/migrations/00009`–`00011` are the
+schema; where this file and a migration disagree, the migration is right. The
+sections below settle names, ownership, presence semantics and keys, and
+`ingest-attribution.md` governs what may be written through them.
 **Updated:** 2026-08-12.
 **Related:** `embedded-payload.md`, `logged-in-findings.md`,
-`backend-platform.md` §4–§5, and
-`protos/openmarket/api/v1/listing.proto`.
+`backend-platform.md` §4–§5,
+`protos/openmarket/api/v1/listing.proto`, and `ingest-attribution.md`, which
+governs what may be written here, how a submission is labelled and rejected,
+and how it is attributed.
 
 This version replaces v0.2's assumption that every listing is one of two
 shapes, "search sighting" or "detail open". What the app receives is determined
@@ -196,9 +201,17 @@ CREATE TABLE listings (
   previous_price_minor       bigint,
   price_changed_at           timestamptz,
 
-  availability              text NOT NULL DEFAULT 'unknown',
+  availability               listing_availability NOT NULL DEFAULT 'unknown',
   availability_raw           text,
-  availability_changed_at    timestamptz,
+
+  -- Sold is an interval, not an instant: Facebook publishes no sale, close or
+  -- updated timestamp anywhere. These bracket it — the last sighting of not
+  -- sold, and the first sighting of sold. A single availability_changed_at
+  -- would claim we know when Facebook changed the value, and we know when we
+  -- first saw it changed (ingest-attribution.md §5.4).
+  sold_not_before            timestamptz,
+  sold_not_after             timestamptz,
+
   delivery_types             text[],
 
   listing_location_text      text,
@@ -229,6 +242,12 @@ CREATE TABLE listings (
 `price_minor = 0` is a real free listing and is distinct from `NULL`. Every
 nullable protobuf scalar therefore uses proto3 `optional` presence.
 
+`price_currency` is filled from the **page's** marketplace currency, not from
+anything on the card: `listing_price` publishes no code, and
+`marketplace_settings.current_marketplace.primary_currency` does
+(`ingest-attribution.md` §5.5). Without it `price_minor` stays null, because the
+exponent that converts major units to minor is a property of the currency.
+
 `availability` is preferred over `status`: "status" otherwise has to describe
 sold/pending/live, moderation, deletion, and ingestion health at once.
 
@@ -237,20 +256,31 @@ sold/pending/live, moderation, deletion, and ingestion health at once.
 ```sql
 CREATE TABLE sellers (
   id                         uuid PRIMARY KEY,
-  facebook_profile_id        text UNIQUE,
+  -- An HMAC of Facebook's /marketplace/profile/<id>, never the id. The id names
+  -- an account and is readable only with a session; a keyed hash keeps the
+  -- grouping and drops the identifier (ingest-attribution.md §1.4).
+  seller_cluster_key         bytea UNIQUE,
+  -- Confirmed visible to an unauthenticated mobile browser, 2026-08-22.
   display_name               text,
+  rating                     real,
+  -- Reputation. None of these names an account, and the key they hang off
+  -- already names nobody.
   joined_text                text,
   joined_year                int,
-  rating                     real,
   rating_count               int,
   highly_rated               bool,
-  seller_location_text       text,
-  seller_approx_lat          double precision,
-  seller_approx_lon          double precision,
   first_observed_at          timestamptz NOT NULL,
   last_observed_at           timestamptz NOT NULL
 );
 ```
+
+Seller location is deliberately absent, in any form. The item page publishes a
+city and an approximate point for the **listing**, and that is not evidence of
+where the seller lives or trades — those values live on `listings` as
+`listing_location_text` and `listing_approx_lat`/`lon`. A `seller_location`
+column here could only be filled from them, which is the inference §1 forbids
+and §8 names. Add one when a surface is observed publishing text explicitly
+associated with the seller.
 
 The v0.2 statement "there is no stable seller ID" is obsolete. Signed-in
 desktop item pages contain repeated `/marketplace/profile/<id>` links for the
@@ -302,13 +332,7 @@ CREATE TABLE listing_observations (
   listing_id                    uuid NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   observed_at                   timestamptz NOT NULL,
   received_at                   timestamptz NOT NULL DEFAULT now(),
-  observer_device_id            uuid REFERENCES user_devices(id) ON DELETE SET NULL,
-  observer_app_version          text,
-  observer_app_build            text,
-  facebook_browser_variant      text NOT NULL,
-  facebook_page_route           text NOT NULL,
-  extraction_method             text NOT NULL,
-  facebook_authentication_state text NOT NULL,
+  batch_id                      uuid NOT NULL REFERENCES observation_batches(id) ON DELETE CASCADE,
   payload                       jsonb NOT NULL
 );
 
@@ -319,6 +343,12 @@ CREATE INDEX listing_observations_listing_time_idx
 `payload` is the protobuf observation's JSON form and retains field presence.
 If raw-observation retention is bounded, `listing_changes` remains the durable
 history of accepted price and availability transitions.
+
+Capture context, the extractor and the submitter live on `observation_batches`,
+one row per ingest call, rather than being repeated here. A foreign key to
+`user_devices` on every observation would be a browsing record with the join
+already written, and on `listing_changes` — which is kept indefinitely — it
+would be a permanent one (`ingest-attribution.md` §2.5).
 
 ### `listing_changes`
 
@@ -334,16 +364,10 @@ CREATE TABLE listing_changes (
   recorded_at                   timestamptz NOT NULL DEFAULT now(),
   price_minor                   bigint,
   price_currency                char(3),
-  availability                  text NOT NULL,
+  availability                  listing_availability NOT NULL,
   availability_raw              text,
   changed                       text[] NOT NULL,
-  facebook_browser_variant      text NOT NULL,
-  facebook_page_route           text NOT NULL,
-  extraction_method             text NOT NULL,
-  facebook_authentication_state text NOT NULL,
-  observer_device_id            uuid,
-  observer_app_version          text,
-  observer_app_build            text
+  batch_id                      uuid REFERENCES observation_batches(id) ON DELETE SET NULL
 );
 ```
 

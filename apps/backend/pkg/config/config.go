@@ -83,6 +83,47 @@ func init() {
 	// retry. Every attempt is charged and every attempt is a row.
 	pflag.Int("llm_max_attempts", 2, "attempts per model call, including the first")
 	pflag.Duration("llm_timeout", 30*time.Second, "deadline for a single model call")
+
+	// Observation ingest.
+	//
+	// The seller key is the one secret here that must never rotate: it derives
+	// the cluster key that groups a seller's listings, so a new key shatters
+	// every existing cluster and there is no migration back — the Facebook
+	// profile ids it was derived from are not stored.
+	pflag.String("ingest_seller_hmac_key", "", "HMAC-SHA256 key for the seller cluster key; rotating it discards every seller grouping")
+	// A week, and the reason is corroboration rather than privacy: two
+	// submissions only count as independent inside one epoch, so a shorter
+	// grain means more pairs straddle a boundary and fail to corroborate when
+	// they should (docs/ingest-attribution.md §4.2).
+	pflag.Duration("ingest_epoch_length", 7*24*time.Hour, "how long one submitter pseudonym stays stable")
+	// How long a superseded key stays readable. A poisoned batch is usually
+	// noticed days after it lands, and this is the window in which "which
+	// install sent this" still has an answer.
+	pflag.Duration("ingest_epoch_key_grace", 14*24*time.Hour, "how long a superseded epoch key is kept before deletion")
+	// The circuit breaker. A per-card gate is not enough on its own: when
+	// Facebook changes something the failure is every card from every device on
+	// that build, and a systematically wrong extractor writing whatever it
+	// happens to get right is worse than nothing.
+	pflag.Float64("ingest_breaker_quarantine_rate", 0.4, "quarantine rate at which a browser variant, route, method and extractor stops being accepted")
+	pflag.Int("ingest_breaker_min_cards", 200, "cards that must be seen in the window before the rate is trusted")
+	pflag.Duration("ingest_breaker_window", 6*time.Hour, "window the quarantine rate is measured over")
+	// Longer than the breaker window on purpose: a payload shape that appeared
+	// once a fortnight ago is not news, and warning about it again would train
+	// everybody to ignore the line that matters.
+	pflag.Duration("ingest_shape_window", 14*24*time.Hour, "how far back to look before calling a payload shape unseen")
+	// observed_at is the live-read instant, so a batch queued offline is
+	// expected to arrive late. The server cannot tell a live read from a
+	// replayed one; it can only bound the claim.
+	pflag.Duration("ingest_max_observation_age", 48*time.Hour, "how far behind received_at an observed_at may be")
+	pflag.Duration("ingest_max_clock_skew", 5*time.Minute, "how far ahead of received_at an observed_at may be")
+	pflag.Int("ingest_activity_retention_days", 30, "days of per-install volume counters kept for abuse detection")
+	// Refusing a client build by name is the cheapest lever against a bad
+	// extractor: the circuit breaker needs traffic before it can react and acts
+	// on a whole surface, where these act at the door on exactly the release
+	// that is wrong. Both default to off, so the gate exists before there is a
+	// build worth refusing.
+	pflag.Int("ingest_min_app_build", 0, "refuse observations from client builds below this CURRENT_PROJECT_VERSION; 0 disables the floor")
+	pflag.String("ingest_blocked_app_builds", "", "comma-separated client builds whose observations are refused regardless of the floor")
 }
 
 var parseFlagsOnce sync.Once
@@ -118,6 +159,19 @@ type ServiceConfig struct {
 	LLMCallWindow      time.Duration `mapstructure:"llm_call_window"`
 	LLMMaxAttempts     int           `mapstructure:"llm_max_attempts"`
 	LLMTimeout         time.Duration `mapstructure:"llm_timeout"`
+
+	IngestSellerHMACKey         string        `mapstructure:"ingest_seller_hmac_key"`
+	IngestEpochLength           time.Duration `mapstructure:"ingest_epoch_length"`
+	IngestEpochKeyGrace         time.Duration `mapstructure:"ingest_epoch_key_grace"`
+	IngestBreakerQuarantineRate float64       `mapstructure:"ingest_breaker_quarantine_rate"`
+	IngestBreakerMinCards       int           `mapstructure:"ingest_breaker_min_cards"`
+	IngestBreakerWindow         time.Duration `mapstructure:"ingest_breaker_window"`
+	IngestShapeWindow           time.Duration `mapstructure:"ingest_shape_window"`
+	IngestMaxObservationAge     time.Duration `mapstructure:"ingest_max_observation_age"`
+	IngestMaxClockSkew          time.Duration `mapstructure:"ingest_max_clock_skew"`
+	IngestActivityRetentionDays int           `mapstructure:"ingest_activity_retention_days"`
+	IngestMinAppBuild           int           `mapstructure:"ingest_min_app_build"`
+	IngestBlockedAppBuilds      string        `mapstructure:"ingest_blocked_app_builds"`
 }
 
 // IsProduction reports whether this is the production environment.
@@ -184,6 +238,7 @@ func requireAPIValues(cfg ServiceConfig) {
 		"refresh_token_hmac_key", cfg.RefreshTokenHMACKey,
 		"allowed_country_codes", cfg.AllowedCountryCodes,
 		"prelude_api_key", cfg.PreludeAPIKey,
+		"ingest_seller_hmac_key", cfg.IngestSellerHMACKey,
 	}
 
 	var missing []string
@@ -245,6 +300,33 @@ func requireAPIValues(cfg ServiceConfig) {
 	}
 	if cfg.JWTSecret == cfg.RefreshTokenHMACKey {
 		panic("jwt_secret and refresh_token_hmac_key must differ; rotating one should not invalidate the other")
+	}
+
+	if cfg.IngestEpochLength <= 0 {
+		panic("ingest_epoch_length must be positive")
+	}
+	// A grace shorter than the epoch would delete the key that is still minting
+	// pseudonyms, which stops ingest rather than protecting anything.
+	if cfg.IngestEpochKeyGrace < cfg.IngestEpochLength {
+		panic("ingest_epoch_key_grace must be at least ingest_epoch_length")
+	}
+	if cfg.IngestBreakerQuarantineRate <= 0 || cfg.IngestBreakerQuarantineRate > 1 {
+		panic("ingest_breaker_quarantine_rate must be in (0, 1]")
+	}
+	if cfg.IngestBreakerWindow <= 0 {
+		panic("ingest_breaker_window must be positive")
+	}
+	if cfg.IngestMaxObservationAge <= 0 {
+		panic("ingest_max_observation_age must be positive")
+	}
+	if cfg.IngestActivityRetentionDays < 1 {
+		panic("ingest_activity_retention_days must be at least 1")
+	}
+	// Distinct from the other two for the same reason they are distinct from
+	// each other: these keys have different lifetimes, and the seller key is the
+	// one that can never be rotated.
+	if cfg.IngestSellerHMACKey == cfg.JWTSecret || cfg.IngestSellerHMACKey == cfg.RefreshTokenHMACKey {
+		panic("ingest_seller_hmac_key must differ from jwt_secret and refresh_token_hmac_key")
 	}
 }
 

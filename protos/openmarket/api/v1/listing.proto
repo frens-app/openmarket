@@ -41,6 +41,39 @@ enum FacebookAuthenticationState {
   FACEBOOK_AUTHENTICATION_STATE_SIGNED_IN = 2;
 }
 
+// The filter parameters behind a search or discover capture, as named by
+// Facebook's own controls (docs/filter-parameters.md §1).
+//
+// This is what makes presence in a result set interpretable. A plain search
+// returns 0 sold and 0 pending by construction, so `sold` from an unfiltered
+// query would be a contradiction, while the same value from OUT_OF_STOCK is the
+// strongest public evidence of a sale that exists.
+message FacebookMarketplaceQueryContext {
+  // SHA-256 of the lowercased, trimmed query text. The term itself never
+  // crosses this boundary (docs/ingest-attribution.md §1.5); the hash exists so
+  // two runs of the same query can be recognised as the same query.
+  optional bytes query_text_sha256 = 1 [(buf.validate.field).bytes.len = 32];
+  FacebookMarketplaceAvailabilityFilter availability_filter = 2 [(buf.validate.field).enum.defined_only = true];
+  optional int32 days_since_listed = 3 [(buf.validate.field).int32.gte = 0];
+  // Facebook's raw `sortBy` and `deliveryMethod` tokens rather than enums.
+  // These only feed the query fingerprint, and an enum would collapse a token
+  // we have not surveyed into UNSPECIFIED — the silent drop that
+  // docs/parsing-conventions.md §1 exists to forbid.
+  optional string sort_by = 4 [(buf.validate.field).string.max_len = 64];
+  optional string delivery_method = 5 [(buf.validate.field).string.max_len = 64];
+  optional string facebook_place_id = 6 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
+  optional int32 radius_miles = 7 [(buf.validate.field).int32.gte = 0];
+}
+
+// Facebook's `availability` control offers two values and no third
+// (docs/filter-parameters.md §10). UNSPECIFIED means no filter was applied,
+// which is a different query from either of them.
+enum FacebookMarketplaceAvailabilityFilter {
+  FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_UNSPECIFIED = 0;
+  FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_IN_STOCK = 1;
+  FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK = 2;
+}
+
 message FacebookMarketplaceObservationContext {
   // The Facebook browser variant that was parsed, not the observer's hardware.
   // A phone requesting the desktop site records DESKTOP here.
@@ -67,14 +100,39 @@ message FacebookListingKey {
 }
 
 message FacebookMarketplacePriceObservation {
-  // Facebook's decimal string, in major units (for example "40.00"). Keep the
-  // source value: converting to minor units requires knowing the currency's
-  // exponent, which a rendered card does not always reveal.
+  // Facebook's decimal string, in major units (for example "40.00"). This is
+  // the listing's price, and with `currency_code` it is the only pair that
+  // converts to a storable number.
   optional string amount_decimal = 1;
   optional string formatted_amount = 2;
+  // The strikethrough price, which carries a decimal of its own — measured
+  // 2026-08-23: `"strikethrough_price":{"formatted_amount":"$150","amount":"150.00"}`.
   optional string previous_amount_decimal = 3;
   optional string previous_formatted_amount = 4;
+
+  // **Page-level, not per-listing.** The `listing_price` object carries no
+  // currency at all; the search page publishes one for the whole marketplace at
+  // `marketplace_settings.current_marketplace.primary_currency` (measured
+  // 2026-08-23: `"primary_currency":"USD"` on a US search). Every card on a
+  // page shares it, so the client reads it once and stamps it on each
+  // observation.
+  //
+  // Without it there is no number: scaling major units to minor needs the
+  // currency's exponent, and that is two places for most currencies, zero for
+  // JPY and three for KWD.
   optional string currency_code = 5 [(buf.validate.field).string.len = 3];
+
+  // Fields 6 and 7 are reserved. They held Facebook's
+  // `amount_with_offset_in_currency`, which is **not** the listing price in
+  // minor units: on a Toronto payload it was 5429 against an `amount` of
+  // "75.00", a ~0.7239 factor applied to every card. It is an internal
+  // converted amount, and it collapses to the listing price only on US pages —
+  // which is precisely how it passed a US-only check.
+  //
+  // Reading it as the price would store CA$75 as 54.29, and would manufacture
+  // price changes out of exchange-rate movement on listings nobody edited.
+  reserved 6, 7;
+  reserved "amount_minor", "previous_amount_minor";
 }
 
 message FacebookMarketplacePlaceObservation {
@@ -110,6 +168,10 @@ message FacebookMarketplaceSellerObservation {
   FacebookMarketplaceSellerSectionStatus section_status = 1 [(buf.validate.field).enum.defined_only = true];
   // Numeric id from /marketplace/profile/<id>. Stable on signed-in desktop item
   // pages and preferable to clustering on name plus listing coordinates.
+  //
+  // Sent, never stored. The server derives a cluster key from it and discards
+  // the value: the id is only readable with a session, so it fails the
+  // public-visibility rule in docs/ingest-attribution.md §1.
   optional string facebook_profile_id = 2 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
   optional string display_name = 3;
   optional string joined_text = 4;
@@ -144,7 +206,10 @@ message FacebookMarketplaceAvailabilityObservation {
 // search page normally uses EMBEDDED_GRAPHQL and can carry listed_at; cards
 // inserted by infinite scroll use RENDERED_DOM and cannot.
 message FacebookMarketplaceSearchListingObservation {
-  FacebookMarketplaceObservationContext context = 1 [(buf.validate.field).required = true];
+  // Field 1 is reserved: capture context describes the page, so it is carried
+  // once on the enclosing batch rather than repeated on every card.
+  reserved 1;
+
   FacebookListingKey key = 2 [(buf.validate.field).required = true];
   optional string title = 3;
   FacebookMarketplacePriceObservation price = 4;
@@ -164,7 +229,9 @@ message FacebookMarketplaceSearchListingObservation {
 // together with context.facebook_authentication_state and
 // seller.section_status.
 message FacebookMarketplaceListingDetailObservation {
-  FacebookMarketplaceObservationContext context = 1 [(buf.validate.field).required = true];
+  // Field 1 is reserved for the same reason as on the search observation.
+  reserved 1;
+
   FacebookListingKey key = 2 [(buf.validate.field).required = true];
   optional string title = 3;
   optional string description = 4;
@@ -178,6 +245,12 @@ message FacebookMarketplaceListingDetailObservation {
   repeated string delivery_types = 10;
   FacebookMarketplaceAvailabilityObservation availability = 11;
   FacebookMarketplaceSellerObservation seller = 12;
+
+  // True only when the capture settled: the gallery finished loading and the
+  // seller re-poll completed (docs/logged-in-findings.md §7.4). An unsettled
+  // capture may still add facts; it may never shrink a gallery
+  // (docs/ingest-attribution.md §5.6).
+  bool capture_settled = 13;
 }
 
 message FacebookMarketplaceListingObservation {
