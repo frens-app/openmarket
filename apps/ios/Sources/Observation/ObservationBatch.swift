@@ -21,7 +21,6 @@ enum ObservationBatch {
     static func feed(
         payload: [PayloadListing],
         cards: [Listing],
-        query: SearchQuery?,
         route: FacebookMarketplacePageRoute,
         session: BrowserSession,
         /// The marketplace's own currency, read once off the page. Every card
@@ -32,6 +31,29 @@ enum ObservationBatch {
         shapeKeys: [String],
         observedAt: Date = Date()
     ) -> SubmitObservationsRequest? {
+        // The payload and rendered card are independent reads of the same
+        // price. A disagreement means at least one extractor attached the
+        // wrong value, so neither copy is safe to submit.
+        var priceConflicts = Set<String>()
+        for item in payload {
+            guard let payloadPrice = priceDigits(item.priceFormatted),
+                  let card = cards.first(where: {
+                      listingID(of: $0) == item.id || item.listingIdentity == $0.id
+                  }),
+                  let renderedPrice = priceDigits(card.priceText),
+                  payloadPrice != renderedPrice else { continue }
+            priceConflicts.insert(item.id)
+            if let identity = item.listingIdentity { priceConflicts.insert(identity) }
+        }
+        let safePayload = payload.filter {
+            !priceConflicts.contains($0.id) && !($0.listingIdentity.map(priceConflicts.contains) ?? false)
+        }
+        let safeCards = cards.filter {
+            !priceConflicts.contains($0.id) && !(listingID(of: $0).map(priceConflicts.contains) ?? false)
+        }
+        var effectiveDropReasons = dropReasons
+        if !priceConflicts.isEmpty { effectiveDropReasons.append("price_disagreement") }
+
         // **The payload and the DOM describe the same first page.**
         //
         // `renderedCards()` returns every card on screen, which includes the
@@ -44,15 +66,25 @@ enum ObservationBatch {
         // only added for a listing the payload did not describe, which is the
         // same rule `ListingStore.absorb` applies to the grid.
         var observations: [FacebookMarketplaceListingObservation] = []
-        var claimed = Set<String>()
-        for observation in payload.compactMap({ ObservationCapture.observation(payload: $0, currency: currency) }) {
-            if claimed.insert(identity(of: observation)).inserted { observations.append(observation) }
+        var claimedListingIDs = Set<String>()
+        var claimedPhotoIDs = Set<String>()
+        for observation in safePayload.compactMap({ ObservationCapture.observation(payload: $0, currency: currency) }) {
+            appendIfUnclaimed(
+                observation,
+                to: &observations,
+                listingIDs: &claimedListingIDs,
+                photoIDs: &claimedPhotoIDs
+            )
         }
         let fromPayload = observations.count
-        for observation in cards.compactMap(ObservationCapture.observation(card:)) {
-            if claimed.insert(identity(of: observation)).inserted { observations.append(observation) }
+        for observation in safeCards.compactMap(ObservationCapture.observation(card:)) {
+            appendIfUnclaimed(
+                observation,
+                to: &observations,
+                listingIDs: &claimedListingIDs,
+                photoIDs: &claimedPhotoIDs
+            )
         }
-        guard !observations.isEmpty else { return nil }
 
         // The method describes the batch, and a batch that mixes the embedded
         // payload with the rendered tail is genuinely both. Calling it
@@ -73,11 +105,8 @@ enum ObservationBatch {
             session: session,
             observedAt: observedAt
         )
-        if let query, let context = queryContext(query) {
-            request.query = context
-        }
         request.extractorRevision = ObservationCapture.extractorRevision
-        request.counts = counts(cardsSeen: max(cardsSeen, observations.count), dropReasons: dropReasons)
+        request.counts = counts(cardsSeen: max(cardsSeen, observations.count), dropReasons: effectiveDropReasons)
         if let fingerprint = shapeFingerprint(shapeKeys) {
             request.shapeFingerprint = fingerprint
         }
@@ -90,6 +119,8 @@ enum ObservationBatch {
         listing: Listing,
         detail: ListingDetail,
         session: BrowserSession,
+        variant: FacebookMarketplaceBrowserVariant,
+        method: FacebookMarketplaceExtractionMethod,
         settled: Bool,
         observedAt: Date = Date()
     ) -> SubmitObservationsRequest? {
@@ -98,11 +129,9 @@ enum ObservationBatch {
         }
         var request = SubmitObservationsRequest()
         request.context = ObservationCapture.context(
-            variant: .desktop,
+            variant: variant,
             route: .item,
-            // The item extractor reads the rendered page and its embedded
-            // objects together, which is what HYBRID names.
-            method: .hybrid,
+            method: method,
             session: session,
             observedAt: observedAt
         )
@@ -114,20 +143,38 @@ enum ObservationBatch {
 
     // MARK: - Pieces
 
-    /// Both aliases together, so two cards for one listing collide here even
-    /// when only one of them carries the listing id.
-    ///
-    /// Deliberately not "whichever key is present": a payload card has both and
-    /// a mobile card has only the photo, and matching on whichever one happened
-    /// to be set would let the same listing through twice.
-    private static func identity(of observation: FacebookMarketplaceListingObservation) -> String {
+    private static func priceDigits(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let digits = value.filter { $0.isNumber }
+        return digits.isEmpty ? nil : digits
+    }
+
+    private static func listingID(of listing: Listing) -> String? {
+        listing.itemURL?.pathComponents.last
+    }
+
+    /// Claims every alias independently. A rich payload card can carry both
+    /// aliases while its DOM copy carries only one; sharing either is enough to
+    /// prove they describe the same listing.
+    private static func appendIfUnclaimed(
+        _ observation: FacebookMarketplaceListingObservation,
+        to observations: inout [FacebookMarketplaceListingObservation],
+        listingIDs: inout Set<String>,
+        photoIDs: inout Set<String>
+    ) {
         let key: FacebookListingKey
         switch observation.observation {
         case .search(let search): key = search.key
         case .detail(let detail): key = detail.key
-        case .none: return UUID().uuidString
+        case .none: return
         }
-        return "l:\(key.facebookListingID)|p:\(key.coverPhotoFbid)"
+        if (!key.facebookListingID.isEmpty && listingIDs.contains(key.facebookListingID)) ||
+            (!key.coverPhotoFbid.isEmpty && photoIDs.contains(key.coverPhotoFbid)) {
+            return
+        }
+        if !key.facebookListingID.isEmpty { listingIDs.insert(key.facebookListingID) }
+        if !key.coverPhotoFbid.isEmpty { photoIDs.insert(key.coverPhotoFbid) }
+        observations.append(observation)
     }
 
     private static func counts(cardsSeen: Int, dropReasons: [String]) -> ClientExtractionCounts {
@@ -137,49 +184,6 @@ enum ObservationBatch {
         // repeated once per dropped card is the same fact fifteen times.
         counts.dropReasons = Array(Set(dropReasons)).sorted().prefix(16).map { $0 }
         return counts
-    }
-
-    /// The query, as the parameters that produced it.
-    ///
-    /// This is what makes a result set interpretable rather than merely
-    /// present. A card carrying `is_sold` from an unfiltered query is a
-    /// contradiction the server refuses, and the same card from
-    /// `availability=out of stock` is the strongest public evidence of a sale
-    /// there is (`docs/filter-parameters.md` §10). Only this field tells them
-    /// apart.
-    ///
-    /// The search term is hashed here and never sent. It reaches the ingest
-    /// boundary as a fingerprint so two runs of one query can be recognised as
-    /// the same query, and for no other purpose.
-    static func queryContext(_ query: SearchQuery) -> FacebookMarketplaceQueryContext? {
-        var context = FacebookMarketplaceQueryContext()
-        var carries = false
-
-        if case .search(let term) = query.kind {
-            let normalised = term.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if !normalised.isEmpty {
-                context.queryTextSha256 = Data(SHA256.hash(data: Data(normalised.utf8)))
-                carries = true
-            }
-        }
-        switch query.availability {
-        case .any: break
-        case .available: context.availabilityFilter = .inStock; carries = true
-        case .unavailable: context.availabilityFilter = .outOfStock; carries = true
-        }
-        if query.age != .any {
-            context.daysSinceListed = Int32(query.age.rawValue)
-            carries = true
-        }
-        if query.sort != .bestMatch {
-            context.sortBy = query.sort.rawValue
-            carries = true
-        }
-        if query.delivery != .any {
-            context.deliveryMethod = query.delivery.rawValue
-            carries = true
-        }
-        return carries ? context : nil
     }
 
     /// One hash of the key names a structured payload carried, values excluded.

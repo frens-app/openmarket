@@ -12,9 +12,9 @@ import SwiftProtobuf
 /// Ingest for Facebook Marketplace observations.
 ///
 /// One call is one **batch**: everything one device parsed off one page at one
-/// time. Capture context, the query behind it, and the extractor that produced
-/// it are properties of the page, so they are carried once here rather than on
-/// every card (docs/ingest-attribution.md §2).
+/// time. Capture context and the extractor that produced it are properties of
+/// the page, so they are carried once here rather than on every card
+/// (docs/ingest-attribution.md §2).
 ///
 /// The submitting device is taken from the authenticated session and never from
 /// the request. What is persisted alongside the batch is not the device but a

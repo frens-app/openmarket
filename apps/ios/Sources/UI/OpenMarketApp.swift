@@ -85,6 +85,7 @@ struct OpenMarketApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task {
+                    await ObservationSubmitter.shared.resume()
                     // A failed launch-time check keeps the local account signed
                     // in. Foregrounding is the natural retry point once the
                     // network or server has recovered.

@@ -49,8 +49,9 @@ type Candidate struct {
 
 	// Nil when the price could not be expressed in minor units, which happens
 	// whenever the currency is unknown — see parsePrice.
-	PriceMinor    *int64
-	PriceCurrency *string
+	PriceMinor         *int64
+	PriceCurrency      *string
+	PreviousPriceMinor *int64
 
 	Availability    db.ListingAvailability
 	AvailabilityRaw *string
@@ -79,7 +80,7 @@ func Validate(req *v1.SubmitObservationsRequest, observedAt time.Time) ([]Candid
 	route := req.GetContext().GetPageRoute()
 
 	for i, obs := range req.GetObservations() {
-		cand, rej := validateOne(i, obs, route, req.GetQuery(), observedAt)
+		cand, rej := validateOne(i, obs, route, observedAt)
 		if rej != nil {
 			rejections = append(rejections, *rej)
 			continue
@@ -123,7 +124,6 @@ func validateOne(
 	index int,
 	obs *v1.FacebookMarketplaceListingObservation,
 	route v1.FacebookMarketplacePageRoute,
-	query *v1.FacebookMarketplaceQueryContext,
 	observedAt time.Time,
 ) (*Candidate, *Rejection) {
 	reject := func(reason v1.ObservationRejectionReason, path string) (*Candidate, *Rejection) {
@@ -206,6 +206,14 @@ func validateOne(
 		return implausible("price.amount_decimal")
 	}
 	cand.PriceMinor, cand.PriceCurrency = minor, currency
+	previousMinor, err := parsePreviousPrice(price)
+	if err != nil {
+		return malformed("price.previous_amount_decimal")
+	}
+	if previousMinor != nil && (*previousMinor < 0 || *previousMinor > maxPriceMinor) {
+		return implausible("price.previous_amount_decimal")
+	}
+	cand.PreviousPriceMinor = previousMinor
 
 	if place != nil {
 		lat, lon := place.Latitude, place.Longitude
@@ -238,27 +246,12 @@ func validateOne(
 		return contradictory("availability")
 	}
 
-	// A plain search returns 0 sold and 0 pending by construction: an item that
-	// has sold or is pending is not in an unfiltered result set at all
-	// (docs/filter-parameters.md §10). So an unavailable card from a query we
-	// know was unfiltered is a card we cannot label, and the instruction for
-	// something we cannot label is to drop it.
-	if cand.Search != nil && query != nil && !filterCanReturnUnavailable(query.GetAvailabilityFilter()) {
-		if cand.Availability == db.ListingAvailabilitySold || cand.Availability == db.ListingAvailabilityPending {
-			return contradictory("availability")
-		}
-	}
-
 	return &cand, nil
 }
 
 func isFeedRoute(route v1.FacebookMarketplacePageRoute) bool {
 	return route == v1.FacebookMarketplacePageRoute_FACEBOOK_MARKETPLACE_PAGE_ROUTE_SEARCH ||
 		route == v1.FacebookMarketplacePageRoute_FACEBOOK_MARKETPLACE_PAGE_ROUTE_DISCOVER
-}
-
-func filterCanReturnUnavailable(f v1.FacebookMarketplaceAvailabilityFilter) bool {
-	return f == v1.FacebookMarketplaceAvailabilityFilter_FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK
 }
 
 // availabilityInvalid is the sentinel for sold and pending both true, which is

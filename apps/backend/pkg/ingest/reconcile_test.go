@@ -51,6 +51,52 @@ func TestMergeKeepsTheRicherTitle(t *testing.T) {
 	}
 }
 
+func TestFormattedOnlyObservationDoesNotSplitCanonicalPrice(t *testing.T) {
+	minor, currency, formatted := int64(10_000), "USD", "$100"
+	cur := db.Listing{
+		ID: uuid.New(), PriceMinor: &minor, PriceCurrency: &currency,
+		PriceFormatted: &formatted, PriceObservedAt: timestamp(observedAt),
+	}
+	c := Candidate{Search: &v1.FacebookMarketplaceSearchListingObservation{
+		Price: &v1.FacebookMarketplacePriceObservation{FormattedAmount: ptr("$80")},
+	}}
+
+	got := mergeListing(cur, c, renderedSearch(), observedAt.Add(time.Hour), false)
+	if *got.params.PriceMinor != minor || *got.params.PriceFormatted != formatted {
+		t.Fatalf("formatted-only evidence split the price: %+v", got.params)
+	}
+}
+
+func TestStaleObservationCannotRevertVolatileFields(t *testing.T) {
+	minor, currency, formatted := int64(8_000), "USD", "$80"
+	cur := db.Listing{
+		ID: uuid.New(), PriceMinor: &minor, PriceCurrency: &currency,
+		PriceFormatted: &formatted, PriceObservedAt: timestamp(observedAt),
+		Availability:           db.ListingAvailabilityAvailable,
+		AvailabilityObservedAt: timestamp(observedAt),
+	}
+	olderMinor := int64(10_000)
+	stale := candidate(&v1.FacebookMarketplaceSearchListingObservation{
+		Price: &v1.FacebookMarketplacePriceObservation{
+			AmountDecimal: ptr("100.00"), CurrencyCode: &currency,
+			FormattedAmount: ptr("$100"),
+		},
+		Availability: &v1.FacebookMarketplaceAvailabilityObservation{
+			Sold: ptr(true), Pending: ptr(false),
+		},
+	})
+	stale.PriceMinor = &olderMinor
+	stale.PriceCurrency = &currency
+
+	got := mergeListing(cur, stale, embeddedSearch(), observedAt.Add(-time.Hour), false)
+	if *got.params.PriceMinor != minor || got.params.Availability != db.ListingAvailabilityAvailable {
+		t.Fatalf("stale evidence reverted canonical state: %+v", got.params)
+	}
+	if len(got.changed) != 0 {
+		t.Fatalf("stale evidence created changes: %v", got.changed)
+	}
+}
+
 // listed_at is Facebook's exact creation_time. A source that does not carry one
 // must not write the column, and a coarse estimate must never land in it.
 func TestMergeOnlyWritesExactListedAtFromAPayload(t *testing.T) {

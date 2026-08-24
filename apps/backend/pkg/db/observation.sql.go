@@ -42,11 +42,11 @@ INSERT INTO observation_batches (
     observed_at, submitter_id, epoch, submitter_trust,
     facebook_browser_variant, facebook_page_route, extraction_method,
     facebook_authentication_state, extractor_revision, app_version, app_build,
-    query_fingerprint, shape_fingerprint,
+    shape_fingerprint,
     cards_seen, cards_submitted, client_drop_reasons, suspended
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-RETURNING id, observed_at, received_at, submitter_id, epoch, submitter_trust, facebook_browser_variant, facebook_page_route, extraction_method, facebook_authentication_state, extractor_revision, app_version, app_build, query_fingerprint, shape_fingerprint, cards_seen, cards_submitted, cards_accepted, cards_quarantined, client_drop_reasons, suspended
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING id, observed_at, received_at, submitter_id, epoch, submitter_trust, facebook_browser_variant, facebook_page_route, extraction_method, facebook_authentication_state, extractor_revision, app_version, app_build, shape_fingerprint, cards_seen, cards_submitted, cards_accepted, cards_quarantined, client_drop_reasons, suspended
 `
 
 type CreateObservationBatchParams struct {
@@ -61,7 +61,6 @@ type CreateObservationBatchParams struct {
 	ExtractorRevision           string
 	AppVersion                  *string
 	AppBuild                    *string
-	QueryFingerprint            []byte
 	ShapeFingerprint            []byte
 	CardsSeen                   int32
 	CardsSubmitted              int32
@@ -82,7 +81,6 @@ func (q *Queries) CreateObservationBatch(ctx context.Context, arg CreateObservat
 		arg.ExtractorRevision,
 		arg.AppVersion,
 		arg.AppBuild,
-		arg.QueryFingerprint,
 		arg.ShapeFingerprint,
 		arg.CardsSeen,
 		arg.CardsSubmitted,
@@ -104,7 +102,6 @@ func (q *Queries) CreateObservationBatch(ctx context.Context, arg CreateObservat
 		&i.ExtractorRevision,
 		&i.AppVersion,
 		&i.AppBuild,
-		&i.QueryFingerprint,
 		&i.ShapeFingerprint,
 		&i.CardsSeen,
 		&i.CardsSubmitted,
@@ -210,4 +207,20 @@ func (q *Queries) InsertObservationQuarantine(ctx context.Context, arg InsertObs
 		arg.Payload,
 	)
 	return err
+}
+
+const pruneObservationBatches = `-- name: PruneObservationBatches :execrows
+DELETE FROM observation_batches
+WHERE received_at < CURRENT_TIMESTAMP - $1::interval
+`
+
+// Raw observations and quarantine rows cascade from the batch. Durable
+// canonical listings and listing_changes remain; their batch reference is
+// cleared by ON DELETE SET NULL.
+func (q *Queries) PruneObservationBatches(ctx context.Context, retention pgtype.Interval) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneObservationBatches, retention)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // The two ways a batch is refused before anything is stored. Both are about
@@ -138,7 +139,6 @@ func (s *Service) Submit(ctx context.Context, in Submission) (*v1.SubmitObservat
 		ExtractorRevision:           req.GetExtractorRevision(),
 		AppVersion:                  optional(in.AppVersion),
 		AppBuild:                    optional(in.AppBuild),
-		QueryFingerprint:            QueryFingerprint(req.GetQuery()),
 		ShapeFingerprint:            req.GetShapeFingerprint(),
 		CardsSeen:                   cardsSeen(req),
 		CardsSubmitted:              int32(len(req.GetObservations())),
@@ -322,7 +322,14 @@ func marshalObservation(observations []*v1.FacebookMarketplaceListingObservation
 	// Presence is preserved: an absent optional stays absent rather than
 	// appearing as a zero. An observation that cannot distinguish "not supplied
 	// by this surface" from "supplied as empty" is not evidence of anything.
-	out, err := protojson.Marshal(observations[index])
+	observation := proto.Clone(observations[index]).(*v1.FacebookMarketplaceListingObservation)
+	if detail := observation.GetDetail(); detail != nil && detail.Seller != nil {
+		// The profile id is transit-only. It may be used to derive the keyed
+		// seller cluster before this function is called, but neither accepted
+		// evidence nor quarantine may retain it.
+		detail.Seller.FacebookProfileId = nil
+	}
+	out, err := protojson.Marshal(observation)
 	if err != nil {
 		return nil, fmt.Errorf("marshal observation: %w", err)
 	}

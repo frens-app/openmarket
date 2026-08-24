@@ -365,4 +365,14 @@ func TestSubmitStoresSellerReputationAndNotTheProfileID(t *testing.T) {
 	if leaked != 0 {
 		t.Fatal("the profile id reached a stored column")
 	}
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM listing_observations
+		 WHERE batch_id = $2::uuid AND position($1 in payload::text) > 0`,
+		profileID, resp.GetBatchId(),
+	).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Fatal("the profile id reached the raw accepted payload")
+	}
 }

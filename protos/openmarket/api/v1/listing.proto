@@ -41,39 +41,6 @@ enum FacebookAuthenticationState {
   FACEBOOK_AUTHENTICATION_STATE_SIGNED_IN = 2;
 }
 
-// The filter parameters behind a search or discover capture, as named by
-// Facebook's own controls (docs/filter-parameters.md §1).
-//
-// This is what makes presence in a result set interpretable. A plain search
-// returns 0 sold and 0 pending by construction, so `sold` from an unfiltered
-// query would be a contradiction, while the same value from OUT_OF_STOCK is the
-// strongest public evidence of a sale that exists.
-message FacebookMarketplaceQueryContext {
-  // SHA-256 of the lowercased, trimmed query text. The term itself never
-  // crosses this boundary (docs/ingest-attribution.md §1.5); the hash exists so
-  // two runs of the same query can be recognised as the same query.
-  optional bytes query_text_sha256 = 1 [(buf.validate.field).bytes.len = 32];
-  FacebookMarketplaceAvailabilityFilter availability_filter = 2 [(buf.validate.field).enum.defined_only = true];
-  optional int32 days_since_listed = 3 [(buf.validate.field).int32.gte = 0];
-  // Facebook's raw `sortBy` and `deliveryMethod` tokens rather than enums.
-  // These only feed the query fingerprint, and an enum would collapse a token
-  // we have not surveyed into UNSPECIFIED — the silent drop that
-  // docs/parsing-conventions.md §1 exists to forbid.
-  optional string sort_by = 4 [(buf.validate.field).string.max_len = 64];
-  optional string delivery_method = 5 [(buf.validate.field).string.max_len = 64];
-  optional string facebook_place_id = 6 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
-  optional int32 radius_miles = 7 [(buf.validate.field).int32.gte = 0];
-}
-
-// Facebook's `availability` control offers two values and no third
-// (docs/filter-parameters.md §10). UNSPECIFIED means no filter was applied,
-// which is a different query from either of them.
-enum FacebookMarketplaceAvailabilityFilter {
-  FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_UNSPECIFIED = 0;
-  FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_IN_STOCK = 1;
-  FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK = 2;
-}
-
 message FacebookMarketplaceObservationContext {
   // The Facebook browser variant that was parsed, not the observer's hardware.
   // A phone requesting the desktop site records DESKTOP here.

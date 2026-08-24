@@ -1,4 +1,5 @@
 import Foundation
+import OpenMarketProtos
 import SwiftUI
 import os
 
@@ -618,7 +619,7 @@ final class ListingStore: ObservableObject {
             var updated = listing
             updated.detail = detailValue
             if updated.locationText == nil { updated.locationText = detailValue.locationText }
-            record(updated)
+            record(updated, variant: .desktop, method: .hybrid)
             onStage(updated)
             Logger.store.info("tap -> revalidated in \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
             return updated
@@ -635,7 +636,7 @@ final class ListingStore: ObservableObject {
             let updated = Self.merging(listing, harvest)
             metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: true)
             Logger.store.info("tap -> complete in \(String(format: "%.2f", Date().timeIntervalSince(started)))s (harvested in place)")
-            record(updated)
+            record(updated, variant: .mobile, method: .renderedDom)
             onStage(updated)
             return updated
         }
@@ -649,7 +650,7 @@ final class ListingStore: ObservableObject {
         guard let detailValue = await detail.loadDetail(id: updated.id, url: url) else { return nil }
         updated.detail = detailValue
         if updated.locationText == nil { updated.locationText = detailValue.locationText }
-        record(updated)
+        record(updated, variant: .desktop, method: .hybrid)
         onStage(updated)
         return updated
     }
@@ -657,7 +658,11 @@ final class ListingStore: ObservableObject {
     /// Writes a fully-read listing to both the grid and the profile store,
     /// tagged with the context it was read under so a later reader can tell
     /// "this seller has no rating" from "we had no session when we looked".
-    private func record(_ listing: Listing) {
+    private func record(
+        _ listing: Listing,
+        variant: FacebookMarketplaceBrowserVariant,
+        method: FacebookMarketplaceExtractionMethod
+    ) {
         guard let detail = listing.detail else { return }
         cache.store(listing, capture: capture)
         apply(listing)
@@ -668,7 +673,7 @@ final class ListingStore: ObservableObject {
         // branches of `fetchLive` and from nowhere else, which is what keeps a
         // cached detail from being submitted as a fresh observation
         // (`docs/ingest-attribution.md` §2.4).
-        submitItemObservation(listing, detail: detail)
+        submitItemObservation(listing, detail: detail, variant: variant, method: method)
     }
 
     /// One search page, as it was read.
@@ -690,12 +695,11 @@ final class ListingStore: ObservableObject {
                 dropped += 1
             }
         }
-        let seen = max(desktop.coverage.rendered, payload.count + parsed.count + dropped)
+        let seen = max(desktop.coverage.rendered, max(payload.count, parsed.count + dropped))
 
         guard let request = ObservationBatch.feed(
             payload: payload,
             cards: parsed,
-            query: query,
             route: query.isBrowse ? .discover : .search,
             session: session,
             currency: desktop.lastMarketplaceCurrency,
@@ -713,11 +717,18 @@ final class ListingStore: ObservableObject {
     /// (`docs/logged-in-findings.md` §7.4). The server treats an unsettled
     /// capture as able to add facts and not to remove them, which is the honest
     /// reading of a page we did not wait out.
-    private func submitItemObservation(_ listing: Listing, detail: ListingDetail) {
+    private func submitItemObservation(
+        _ listing: Listing,
+        detail: ListingDetail,
+        variant: FacebookMarketplaceBrowserVariant,
+        method: FacebookMarketplaceExtractionMethod
+    ) {
         guard let request = ObservationBatch.item(
             listing: listing,
             detail: detail,
             session: session,
+            variant: variant,
+            method: method,
             settled: false
         ) else { return }
         ObservationSubmitter.shared.submit(request)

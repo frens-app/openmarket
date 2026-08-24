@@ -45,9 +45,7 @@ actor ObservationSubmitter {
     private var draining = false
     private var consecutiveFailures = 0
 
-    /// Set when the server refuses this build outright, or refuses the surface
-    /// this build extracts. Both mean the same thing to a running process:
-    /// there is nothing a retry can fix, so stop until the app is replaced.
+    /// Set only when the server refuses this build outright.
     private var stopped = false
 
     init(session: AccountSession = .shared, client: ObservationServiceClient? = nil) {
@@ -62,8 +60,6 @@ actor ObservationSubmitter {
 
     private func enqueue(_ request: SubmitObservationsRequest) async {
         guard !stopped else { return }
-        guard !request.observations.isEmpty else { return }
-
         pending.append(request)
         if pending.count > Self.queueLimit {
             // Oldest first. A capture's value decays — the newest batch is the
@@ -109,11 +105,9 @@ actor ObservationSubmitter {
         case .success(let message):
             consecutiveFailures = 0
             if message.sourceSuspended {
-                // The server is refusing this surface because its quarantine
-                // rate says the extractor no longer matches the page. Retrying
-                // sends more of the same.
-                stopped = true
-                Logger.observation.error("source suspended by the server; submission stopped")
+                // Suspension is scoped to this request's surface. Other routes
+                // remain healthy and must continue to submit.
+                Logger.observation.error("source suspended by the server; batch not merged")
             }
             if message.quarantined > 0 {
                 Logger.observation.error("""

@@ -3,10 +3,10 @@ INSERT INTO observation_batches (
     observed_at, submitter_id, epoch, submitter_trust,
     facebook_browser_variant, facebook_page_route, extraction_method,
     facebook_authentication_state, extractor_revision, app_version, app_build,
-    query_fingerprint, shape_fingerprint,
+    shape_fingerprint,
     cards_seen, cards_submitted, client_drop_reasons, suspended
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: FinalizeObservationBatch :exec
@@ -28,6 +28,13 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 -- name: InsertObservationQuarantine :exec
 INSERT INTO observation_quarantine (batch_id, observation_index, reason, field_path, payload)
 VALUES ($1, $2, $3, $4, $5);
+
+-- name: PruneObservationBatches :execrows
+-- Raw observations and quarantine rows cascade from the batch. Durable
+-- canonical listings and listing_changes remain; their batch reference is
+-- cleared by ON DELETE SET NULL.
+DELETE FROM observation_batches
+WHERE received_at < CURRENT_TIMESTAMP - sqlc.arg('retention')::interval;
 
 -- name: CountDistinctSubmittersForListing :one
 -- Independence, per docs/ingest-attribution.md §5.2: distinct submitters inside

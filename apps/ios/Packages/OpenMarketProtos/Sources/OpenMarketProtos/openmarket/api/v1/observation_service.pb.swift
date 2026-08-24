@@ -139,72 +139,56 @@ public nonisolated struct Openmarket_Api_V1_ClientExtractionCounts: Sendable {
   public init() {}
 }
 
-public nonisolated struct Openmarket_Api_V1_SubmitObservationsRequest: @unchecked Sendable {
+public nonisolated struct Openmarket_Api_V1_SubmitObservationsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var context: Openmarket_Api_V1_FacebookMarketplaceObservationContext {
-    get {_storage._context ?? Openmarket_Api_V1_FacebookMarketplaceObservationContext()}
-    set {_uniqueStorage()._context = newValue}
+    get {_context ?? Openmarket_Api_V1_FacebookMarketplaceObservationContext()}
+    set {_context = newValue}
   }
   /// Returns true if `context` has been explicitly set.
-  public var hasContext: Bool {_storage._context != nil}
+  public var hasContext: Bool {self._context != nil}
   /// Clears the value of `context`. Subsequent reads from it will return its default value.
-  public mutating func clearContext() {_uniqueStorage()._context = nil}
-
-  /// Search and discover routes only. Its absence on those routes means the
-  /// capture cannot say what query produced it, which costs the inference in
-  /// docs/ingest-attribution.md §2.2 and nothing else.
-  public var query: Openmarket_Api_V1_FacebookMarketplaceQueryContext {
-    get {_storage._query ?? Openmarket_Api_V1_FacebookMarketplaceQueryContext()}
-    set {_uniqueStorage()._query = newValue}
-  }
-  /// Returns true if `query` has been explicitly set.
-  public var hasQuery: Bool {_storage._query != nil}
-  /// Clears the value of `query`. Subsequent reads from it will return its default value.
-  public mutating func clearQuery() {_uniqueStorage()._query = nil}
+  public mutating func clearContext() {self._context = nil}
 
   /// Identifies the parser, not the app. Debug builds pin the app build to 1
   /// (docs/data-model.md §2), so the app version alone cannot attribute a
   /// regression to the code that caused it.
-  public var extractorRevision: String {
-    get {_storage._extractorRevision}
-    set {_uniqueStorage()._extractorRevision = newValue}
-  }
+  public var extractorRevision: String = String()
 
   public var counts: Openmarket_Api_V1_ClientExtractionCounts {
-    get {_storage._counts ?? Openmarket_Api_V1_ClientExtractionCounts()}
-    set {_uniqueStorage()._counts = newValue}
+    get {_counts ?? Openmarket_Api_V1_ClientExtractionCounts()}
+    set {_counts = newValue}
   }
   /// Returns true if `counts` has been explicitly set.
-  public var hasCounts: Bool {_storage._counts != nil}
+  public var hasCounts: Bool {self._counts != nil}
   /// Clears the value of `counts`. Subsequent reads from it will return its default value.
-  public mutating func clearCounts() {_uniqueStorage()._counts = nil}
+  public mutating func clearCounts() {self._counts = nil}
 
   /// Hash of the sorted set of key paths the extractor saw in a structured
   /// payload, values excluded. A fingerprint nobody has seen before, arriving
   /// across many devices at once, is Facebook shipping a change — and it fires
   /// whether or not anything failed to parse (docs/ingest-attribution.md §3.4).
   public var shapeFingerprint: Data {
-    get {_storage._shapeFingerprint ?? Data()}
-    set {_uniqueStorage()._shapeFingerprint = newValue}
+    get {_shapeFingerprint ?? Data()}
+    set {_shapeFingerprint = newValue}
   }
   /// Returns true if `shapeFingerprint` has been explicitly set.
-  public var hasShapeFingerprint: Bool {_storage._shapeFingerprint != nil}
+  public var hasShapeFingerprint: Bool {self._shapeFingerprint != nil}
   /// Clears the value of `shapeFingerprint`. Subsequent reads from it will return its default value.
-  public mutating func clearShapeFingerprint() {_uniqueStorage()._shapeFingerprint = nil}
+  public mutating func clearShapeFingerprint() {self._shapeFingerprint = nil}
 
-  public var observations: [Openmarket_Api_V1_FacebookMarketplaceListingObservation] {
-    get {_storage._observations}
-    set {_uniqueStorage()._observations = newValue}
-  }
+  public var observations: [Openmarket_Api_V1_FacebookMarketplaceListingObservation] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _storage = _StorageClass.defaultInstance
+  fileprivate var _context: Openmarket_Api_V1_FacebookMarketplaceObservationContext? = nil
+  fileprivate var _counts: Openmarket_Api_V1_ClientExtractionCounts? = nil
+  fileprivate var _shapeFingerprint: Data? = nil
 }
 
 public nonisolated struct Openmarket_Api_V1_ObservationRejection: Sendable {
@@ -296,104 +280,53 @@ nonisolated extension Openmarket_Api_V1_ClientExtractionCounts: SwiftProtobuf.Me
 
 nonisolated extension Openmarket_Api_V1_SubmitObservationsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SubmitObservationsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}query\0\u{3}extractor_revision\0\u{1}counts\0\u{3}shape_fingerprint\0\u{1}observations\0")
-
-  fileprivate class _StorageClass {
-    var _context: Openmarket_Api_V1_FacebookMarketplaceObservationContext? = nil
-    var _query: Openmarket_Api_V1_FacebookMarketplaceQueryContext? = nil
-    var _extractorRevision: String = String()
-    var _counts: Openmarket_Api_V1_ClientExtractionCounts? = nil
-    var _shapeFingerprint: Data? = nil
-    var _observations: [Openmarket_Api_V1_FacebookMarketplaceListingObservation] = []
-
-      // This property is used as the initial default value for new instances of the type.
-      // The type itself is protecting the reference to its storage via CoW semantics.
-      // This will force a copy to be made of this reference when the first mutation occurs;
-      // hence, it is safe to mark this as `nonisolated(unsafe)`.
-      static nonisolated(unsafe) let defaultInstance = _StorageClass()
-
-    private init() {}
-
-    init(copying source: _StorageClass) {
-      _context = source._context
-      _query = source._query
-      _extractorRevision = source._extractorRevision
-      _counts = source._counts
-      _shapeFingerprint = source._shapeFingerprint
-      _observations = source._observations
-    }
-  }
-
-  fileprivate mutating func _uniqueStorage() -> _StorageClass {
-    if !isKnownUniquelyReferenced(&_storage) {
-      _storage = _StorageClass(copying: _storage)
-    }
-    return _storage
-  }
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{4}\u{2}extractor_revision\0\u{1}counts\0\u{3}shape_fingerprint\0\u{1}observations\0\u{b}query\0\u{c}\u{2}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    _ = _uniqueStorage()
-    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      while let fieldNumber = try decoder.nextFieldNumber() {
-        // The use of inline closures is to circumvent an issue where the compiler
-        // allocates stack space for every case branch when no optimizations are
-        // enabled. https://github.com/apple/swift-protobuf/issues/1034
-        switch fieldNumber {
-        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._context) }()
-        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._query) }()
-        case 3: try { try decoder.decodeSingularStringField(value: &_storage._extractorRevision) }()
-        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._counts) }()
-        case 5: try { try decoder.decodeSingularBytesField(value: &_storage._shapeFingerprint) }()
-        case 6: try { try decoder.decodeRepeatedMessageField(value: &_storage._observations) }()
-        default: break
-        }
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._context) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.extractorRevision) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._counts) }()
+      case 5: try { try decoder.decodeSingularBytesField(value: &self._shapeFingerprint) }()
+      case 6: try { try decoder.decodeRepeatedMessageField(value: &self.observations) }()
+      default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every if/case branch local when no optimizations
-      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-      // https://github.com/apple/swift-protobuf/issues/1182
-      try { if let v = _storage._context {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-      } }()
-      try { if let v = _storage._query {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-      } }()
-      if !_storage._extractorRevision.isEmpty {
-        try visitor.visitSingularStringField(value: _storage._extractorRevision, fieldNumber: 3)
-      }
-      try { if let v = _storage._counts {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-      } }()
-      try { if let v = _storage._shapeFingerprint {
-        try visitor.visitSingularBytesField(value: v, fieldNumber: 5)
-      } }()
-      if !_storage._observations.isEmpty {
-        try visitor.visitRepeatedMessageField(value: _storage._observations, fieldNumber: 6)
-      }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._context {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if !self.extractorRevision.isEmpty {
+      try visitor.visitSingularStringField(value: self.extractorRevision, fieldNumber: 3)
+    }
+    try { if let v = self._counts {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try { if let v = self._shapeFingerprint {
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 5)
+    } }()
+    if !self.observations.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.observations, fieldNumber: 6)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Openmarket_Api_V1_SubmitObservationsRequest, rhs: Openmarket_Api_V1_SubmitObservationsRequest) -> Bool {
-    if lhs._storage !== rhs._storage {
-      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
-        let _storage = _args.0
-        let rhs_storage = _args.1
-        if _storage._context != rhs_storage._context {return false}
-        if _storage._query != rhs_storage._query {return false}
-        if _storage._extractorRevision != rhs_storage._extractorRevision {return false}
-        if _storage._counts != rhs_storage._counts {return false}
-        if _storage._shapeFingerprint != rhs_storage._shapeFingerprint {return false}
-        if _storage._observations != rhs_storage._observations {return false}
-        return true
-      }
-      if !storagesAreEqual {return false}
-    }
+    if lhs._context != rhs._context {return false}
+    if lhs.extractorRevision != rhs.extractorRevision {return false}
+    if lhs._counts != rhs._counts {return false}
+    if lhs._shapeFingerprint != rhs._shapeFingerprint {return false}
+    if lhs.observations != rhs.observations {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

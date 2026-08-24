@@ -15,6 +15,7 @@ SELECT * FROM listings WHERE id = $1 FOR UPDATE;
 -- name: CreateFacebookListing :one
 INSERT INTO listings (origin, facebook_listing_id, cover_photo_fbid, first_observed_at, last_observed_at)
 VALUES ('facebook', $1, $2, $3, $3)
+ON CONFLICT DO NOTHING
 RETURNING *;
 
 -- name: AttachListingAliases :one
@@ -44,8 +45,10 @@ SET title = sqlc.narg('title'),
     price_formatted = sqlc.narg('price_formatted'),
     previous_price_minor = sqlc.narg('previous_price_minor'),
     price_changed_at = sqlc.narg('price_changed_at'),
+    price_observed_at = sqlc.narg('price_observed_at'),
     availability = sqlc.arg('availability'),
     availability_raw = sqlc.narg('availability_raw'),
+    availability_observed_at = sqlc.narg('availability_observed_at'),
     sold_not_before = sqlc.narg('sold_not_before'),
     sold_not_after = sqlc.narg('sold_not_after'),
     delivery_types = sqlc.narg('delivery_types'),

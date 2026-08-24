@@ -174,10 +174,6 @@ func (x *ClientExtractionCounts) GetDropReasons() []string {
 type SubmitObservationsRequest struct {
 	state   protoimpl.MessageState                 `protogen:"open.v1"`
 	Context *FacebookMarketplaceObservationContext `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	// Search and discover routes only. Its absence on those routes means the
-	// capture cannot say what query produced it, which costs the inference in
-	// docs/ingest-attribution.md §2.2 and nothing else.
-	Query *FacebookMarketplaceQueryContext `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	// Identifies the parser, not the app. Debug builds pin the app build to 1
 	// (docs/data-model.md §2), so the app version alone cannot attribute a
 	// regression to the code that caused it.
@@ -226,13 +222,6 @@ func (*SubmitObservationsRequest) Descriptor() ([]byte, []int) {
 func (x *SubmitObservationsRequest) GetContext() *FacebookMarketplaceObservationContext {
 	if x != nil {
 		return x.Context
-	}
-	return nil
-}
-
-func (x *SubmitObservationsRequest) GetQuery() *FacebookMarketplaceQueryContext {
-	if x != nil {
-		return x.Query
 	}
 	return nil
 }
@@ -417,17 +406,14 @@ const file_openmarket_api_v1_observation_service_proto_rawDesc = "" +
 	"\x16ClientExtractionCounts\x12&\n" +
 	"\n" +
 	"cards_seen\x18\x01 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\tcardsSeen\x121\n" +
-	"\fdrop_reasons\x18\x02 \x03(\tB\x0e\xbaH\v\x92\x01\b\x10\x10\"\x04r\x02\x18@R\vdropReasons\"\xcf\x05\n" +
+	"\fdrop_reasons\x18\x02 \x03(\tB\x0e\xbaH\v\x92\x01\b\x10\x10\"\x04r\x02\x18@R\vdropReasons\"\xc2\x03\n" +
 	"\x19SubmitObservationsRequest\x12Z\n" +
-	"\acontext\x18\x01 \x01(\v28.openmarket.api.v1.FacebookMarketplaceObservationContextB\x06\xbaH\x03\xc8\x01\x01R\acontext\x12H\n" +
-	"\x05query\x18\x02 \x01(\v22.openmarket.api.v1.FacebookMarketplaceQueryContextR\x05query\x128\n" +
+	"\acontext\x18\x01 \x01(\v28.openmarket.api.v1.FacebookMarketplaceObservationContextB\x06\xbaH\x03\xc8\x01\x01R\acontext\x128\n" +
 	"\x12extractor_revision\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x11extractorRevision\x12I\n" +
 	"\x06counts\x18\x04 \x01(\v2).openmarket.api.v1.ClientExtractionCountsB\x06\xbaH\x03\xc8\x01\x01R\x06counts\x129\n" +
-	"\x11shape_fingerprint\x18\x05 \x01(\fB\a\xbaH\x04z\x02h H\x00R\x10shapeFingerprint\x88\x01\x01\x12h\n" +
-	"\fobservations\x18\x06 \x03(\v28.openmarket.api.v1.FacebookMarketplaceListingObservationB\n" +
-	"\xbaH\a\x92\x01\x04\b\x01\x10dR\fobservations:\xcb\x01\xbaH\xc7\x01\x1a\xc4\x01\n" +
-	"4submit_observations.query_context_belongs_to_a_query\x12:query is only meaningful on the SEARCH and DISCOVER routes\x1aP!has(this.query) || this.context.page_route == 1 || this.context.page_route == 2B\x14\n" +
-	"\x12_shape_fingerprint\"\x92\x01\n" +
+	"\x11shape_fingerprint\x18\x05 \x01(\fB\a\xbaH\x04z\x02h H\x00R\x10shapeFingerprint\x88\x01\x01\x12f\n" +
+	"\fobservations\x18\x06 \x03(\v28.openmarket.api.v1.FacebookMarketplaceListingObservationB\b\xbaH\x05\x92\x01\x02\x10dR\fobservationsB\x14\n" +
+	"\x12_shape_fingerprintJ\x04\b\x02\x10\x03R\x05query\"\x92\x01\n" +
 	"\x14ObservationRejection\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12E\n" +
 	"\x06reason\x18\x02 \x01(\x0e2-.openmarket.api.v1.ObservationRejectionReasonR\x06reason\x12\x1d\n" +
@@ -476,23 +462,21 @@ var file_openmarket_api_v1_observation_service_proto_goTypes = []any{
 	(*ObservationRejection)(nil),                  // 3: openmarket.api.v1.ObservationRejection
 	(*SubmitObservationsResponse)(nil),            // 4: openmarket.api.v1.SubmitObservationsResponse
 	(*FacebookMarketplaceObservationContext)(nil), // 5: openmarket.api.v1.FacebookMarketplaceObservationContext
-	(*FacebookMarketplaceQueryContext)(nil),       // 6: openmarket.api.v1.FacebookMarketplaceQueryContext
-	(*FacebookMarketplaceListingObservation)(nil), // 7: openmarket.api.v1.FacebookMarketplaceListingObservation
+	(*FacebookMarketplaceListingObservation)(nil), // 6: openmarket.api.v1.FacebookMarketplaceListingObservation
 }
 var file_openmarket_api_v1_observation_service_proto_depIdxs = []int32{
 	5, // 0: openmarket.api.v1.SubmitObservationsRequest.context:type_name -> openmarket.api.v1.FacebookMarketplaceObservationContext
-	6, // 1: openmarket.api.v1.SubmitObservationsRequest.query:type_name -> openmarket.api.v1.FacebookMarketplaceQueryContext
-	1, // 2: openmarket.api.v1.SubmitObservationsRequest.counts:type_name -> openmarket.api.v1.ClientExtractionCounts
-	7, // 3: openmarket.api.v1.SubmitObservationsRequest.observations:type_name -> openmarket.api.v1.FacebookMarketplaceListingObservation
-	0, // 4: openmarket.api.v1.ObservationRejection.reason:type_name -> openmarket.api.v1.ObservationRejectionReason
-	3, // 5: openmarket.api.v1.SubmitObservationsResponse.rejections:type_name -> openmarket.api.v1.ObservationRejection
-	2, // 6: openmarket.api.v1.ObservationService.SubmitObservations:input_type -> openmarket.api.v1.SubmitObservationsRequest
-	4, // 7: openmarket.api.v1.ObservationService.SubmitObservations:output_type -> openmarket.api.v1.SubmitObservationsResponse
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	1, // 1: openmarket.api.v1.SubmitObservationsRequest.counts:type_name -> openmarket.api.v1.ClientExtractionCounts
+	6, // 2: openmarket.api.v1.SubmitObservationsRequest.observations:type_name -> openmarket.api.v1.FacebookMarketplaceListingObservation
+	0, // 3: openmarket.api.v1.ObservationRejection.reason:type_name -> openmarket.api.v1.ObservationRejectionReason
+	3, // 4: openmarket.api.v1.SubmitObservationsResponse.rejections:type_name -> openmarket.api.v1.ObservationRejection
+	2, // 5: openmarket.api.v1.ObservationService.SubmitObservations:input_type -> openmarket.api.v1.SubmitObservationsRequest
+	4, // 6: openmarket.api.v1.ObservationService.SubmitObservations:output_type -> openmarket.api.v1.SubmitObservationsResponse
+	6, // [6:7] is the sub-list for method output_type
+	5, // [5:6] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_openmarket_api_v1_observation_service_proto_init() }

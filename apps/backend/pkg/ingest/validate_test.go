@@ -100,30 +100,19 @@ func TestValidateRejectsRouteMismatch(t *testing.T) {
 	}
 }
 
-// A plain search returns 0 sold and 0 pending by construction, so a sold card
-// from an unfiltered query is a card we cannot label.
-func TestValidateRejectsSoldFromAnUnfilteredQuery(t *testing.T) {
+func TestValidateRejectsMalformedPreviousPrice(t *testing.T) {
 	obs := searchObs(func(s *v1.FacebookMarketplaceSearchListingObservation) {
-		s.Availability = &v1.FacebookMarketplaceAvailabilityObservation{Sold: ptr(true), Pending: ptr(false)}
+		s.Price.PreviousAmountDecimal = ptr("$50")
 	})
-	req := request(v1.FacebookMarketplacePageRoute_FACEBOOK_MARKETPLACE_PAGE_ROUTE_SEARCH, obs)
-	req.Query = &v1.FacebookMarketplaceQueryContext{
-		AvailabilityFilter: v1.FacebookMarketplaceAvailabilityFilter_FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_UNSPECIFIED,
+	candidates, rejects := Validate(
+		request(v1.FacebookMarketplacePageRoute_FACEBOOK_MARKETPLACE_PAGE_ROUTE_SEARCH, obs),
+		observedAt,
+	)
+	if len(candidates) != 0 || len(rejects) != 1 {
+		t.Fatalf("candidates=%d rejects=%+v", len(candidates), rejects)
 	}
-	_, rejects := Validate(req, observedAt)
-	if len(rejects) != 1 || rejects[0].Reason != v1.ObservationRejectionReason_OBSERVATION_REJECTION_REASON_CONTRADICTORY_FIELDS {
-		t.Fatalf("rejections = %+v", rejects)
-	}
-
-	// The same card from availability=out of stock is the strongest public
-	// evidence of a sale there is.
-	req.Query.AvailabilityFilter = v1.FacebookMarketplaceAvailabilityFilter_FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK
-	cands, rejects := Validate(req, observedAt)
-	if len(rejects) != 0 || len(cands) != 1 {
-		t.Fatalf("cands=%d rejects=%+v", len(cands), rejects)
-	}
-	if cands[0].Availability != db.ListingAvailabilitySold {
-		t.Fatalf("availability = %v", cands[0].Availability)
+	if rejects[0].FieldPath != "price.previous_amount_decimal" {
+		t.Fatalf("field path = %q", rejects[0].FieldPath)
 	}
 }
 

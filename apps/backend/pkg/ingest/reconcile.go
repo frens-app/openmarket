@@ -35,35 +35,37 @@ func mergeListing(cur db.Listing, c Candidate, src source, observedAt time.Time,
 
 		// Carried forward by default. The UPDATE writes every column, so a
 		// field this observation cannot speak to has to be restated.
-		Title:               cur.Title,
-		Description:         cur.Description,
-		Condition:           cur.Condition,
-		CategoryPath:        cur.CategoryPath,
-		FacebookCategoryID:  cur.FacebookCategoryID,
-		PriceMinor:          cur.PriceMinor,
-		PriceCurrency:       cur.PriceCurrency,
-		PriceFormatted:      cur.PriceFormatted,
-		PreviousPriceMinor:  cur.PreviousPriceMinor,
-		PriceChangedAt:      cur.PriceChangedAt,
-		Availability:        cur.Availability,
-		AvailabilityRaw:     cur.AvailabilityRaw,
-		SoldNotBefore:       cur.SoldNotBefore,
-		SoldNotAfter:        cur.SoldNotAfter,
-		DeliveryTypes:       cur.DeliveryTypes,
-		ListingLocationText: cur.ListingLocationText,
-		ListingCity:         cur.ListingCity,
-		ListingRegion:       cur.ListingRegion,
-		ListingCountry:      cur.ListingCountry,
-		FacebookPlaceID:     cur.FacebookPlaceID,
-		ListingApproxLat:    cur.ListingApproxLat,
-		ListingApproxLon:    cur.ListingApproxLon,
-		SellerID:            cur.SellerID,
-		ListedAt:            cur.ListedAt,
-		ListedAtText:        cur.ListedAtText,
-		ListedAtPrecision:   cur.ListedAtPrecision,
-		FirstObservedAt:     cur.FirstObservedAt,
-		LastObservedAt:      cur.LastObservedAt,
-		DetailObservedAt:    cur.DetailObservedAt,
+		Title:                  cur.Title,
+		Description:            cur.Description,
+		Condition:              cur.Condition,
+		CategoryPath:           cur.CategoryPath,
+		FacebookCategoryID:     cur.FacebookCategoryID,
+		PriceMinor:             cur.PriceMinor,
+		PriceCurrency:          cur.PriceCurrency,
+		PriceFormatted:         cur.PriceFormatted,
+		PreviousPriceMinor:     cur.PreviousPriceMinor,
+		PriceChangedAt:         cur.PriceChangedAt,
+		PriceObservedAt:        cur.PriceObservedAt,
+		Availability:           cur.Availability,
+		AvailabilityRaw:        cur.AvailabilityRaw,
+		AvailabilityObservedAt: cur.AvailabilityObservedAt,
+		SoldNotBefore:          cur.SoldNotBefore,
+		SoldNotAfter:           cur.SoldNotAfter,
+		DeliveryTypes:          cur.DeliveryTypes,
+		ListingLocationText:    cur.ListingLocationText,
+		ListingCity:            cur.ListingCity,
+		ListingRegion:          cur.ListingRegion,
+		ListingCountry:         cur.ListingCountry,
+		FacebookPlaceID:        cur.FacebookPlaceID,
+		ListingApproxLat:       cur.ListingApproxLat,
+		ListingApproxLon:       cur.ListingApproxLon,
+		SellerID:               cur.SellerID,
+		ListedAt:               cur.ListedAt,
+		ListedAtText:           cur.ListedAtText,
+		ListedAtPrecision:      cur.ListedAtPrecision,
+		FirstObservedAt:        cur.FirstObservedAt,
+		LastObservedAt:         cur.LastObservedAt,
+		DetailObservedAt:       cur.DetailObservedAt,
 	}}
 
 	at := timestamp(observedAt)
@@ -136,21 +138,25 @@ func applyPrice(
 	price *v1.FacebookMarketplacePriceObservation,
 	observedAt time.Time,
 ) {
-	if price == nil {
+	if price == nil || c.PriceMinor == nil {
 		return
 	}
+	if cur.PriceObservedAt.Valid && observedAt.Before(cur.PriceObservedAt.Time) {
+		return
+	}
+
+	// A price is one atomic fact. Formatted-only DOM observations cannot update
+	// it because retaining an older number beside a newer display string creates
+	// a canonical value that contradicts itself.
+	out.params.PriceFormatted = nil
 	if f := price.GetFormattedAmount(); f != "" {
 		out.params.PriceFormatted = &f
 	}
-	if prev, err := parsePreviousPrice(price); err == nil && prev != nil {
-		out.params.PreviousPriceMinor = prev
-	}
-	if c.PriceMinor == nil {
-		return
-	}
+	out.params.PreviousPriceMinor = c.PreviousPriceMinor
 	out.params.PriceMinor = c.PriceMinor
 	out.params.PriceCurrency = c.PriceCurrency
-	if cur.PriceMinor == nil || *cur.PriceMinor != *c.PriceMinor {
+	out.params.PriceObservedAt = timestamp(observedAt)
+	if cur.PriceMinor == nil || *cur.PriceMinor != *c.PriceMinor || !equalString(cur.PriceCurrency, c.PriceCurrency) {
 		out.params.PriceChangedAt = timestamp(observedAt)
 		if cur.PriceMinor != nil {
 			out.changed = append(out.changed, "price")
@@ -204,6 +210,9 @@ func applyAvailability(
 	if !src.carriesAvailability() || c.Availability == db.ListingAvailabilityUnknown {
 		return
 	}
+	if cur.AvailabilityObservedAt.Valid && observedAt.Before(cur.AvailabilityObservedAt.Time) {
+		return
+	}
 
 	forward := availabilityRank(c.Availability) >= availabilityRank(cur.Availability)
 	if !forward && !src.isItemPage() && !corroborated {
@@ -218,6 +227,7 @@ func applyAvailability(
 	}
 	out.params.Availability = c.Availability
 	out.params.AvailabilityRaw = c.AvailabilityRaw
+	out.params.AvailabilityObservedAt = timestamp(observedAt)
 
 	at := timestamp(observedAt)
 	switch {
@@ -237,6 +247,13 @@ func applyAvailability(
 		// opened.
 		out.params.SoldNotBefore = latest(cur.SoldNotBefore, at)
 	}
+}
+
+func equalString(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 // mediaPlan is what to write for one listing's photos.

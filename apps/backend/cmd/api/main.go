@@ -207,7 +207,13 @@ func main() {
 	}
 
 	go prunePeriodically(ctx, ceiling, logger.Named("prune"))
-	go pruneIngestPeriodically(ctx, queries, cfg.IngestActivityRetentionDays, logger.Named("prune"))
+	go pruneIngestPeriodically(
+		ctx,
+		queries,
+		cfg.IngestRawRetention,
+		cfg.IngestActivityRetentionDays,
+		logger.Named("prune"),
+	)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -319,29 +325,38 @@ func prunePeriodically(ctx context.Context, ceiling *sendCeiling, logger *zap.Lo
 	}
 }
 
-// pruneIngestPeriodically deletes expired epoch keys and stale volume counters.
+// pruneIngestPeriodically deletes raw evidence, expired epoch keys and stale
+// volume counters. Canonical listings and their narrow change history remain.
 //
 // The key deletion is the operation that makes the privacy claim true, so it is
 // a scheduled job with its own log line rather than a cleanup somebody remembers
 // to run. It is idempotent and takes no lock: several instances racing it delete
 // the same expired rows.
 //
-// **What this does not delete is the data.** Batches, observations and listings
-// stay; a batch keeps its submitter_id forever and that value simply stops
-// meaning anything once its key is gone.
-//
 // The live database is not the last copy. A key deleted here is still in every
 // backup taken while it existed, so unlinkability actually begins at deletion
 // plus backup retention (docs/ingest-attribution.md §6).
-func pruneIngestPeriodically(ctx context.Context, queries *db.Queries, retentionDays int, logger *zap.Logger) {
+func pruneIngestPeriodically(
+	ctx context.Context,
+	queries *db.Queries,
+	rawRetention time.Duration,
+	activityRetentionDays int,
+	logger *zap.Logger,
+) {
 	prune := func() {
+		batches, err := queries.PruneObservationBatches(ctx, interval(rawRetention))
+		if err != nil {
+			logger.Error("prune raw observation batches", zap.Error(err))
+		} else if batches > 0 {
+			logger.Info("pruned raw observation batches", zap.Int64("batches", batches))
+		}
 		keys, err := queries.DeleteExpiredIngestEpochKeys(ctx)
 		if err != nil {
 			logger.Error("delete expired epoch keys", zap.Error(err))
 		} else if keys > 0 {
 			logger.Info("deleted expired epoch keys", zap.Int64("keys", keys))
 		}
-		if _, err := queries.PruneDeviceActivity(ctx, int32(retentionDays)); err != nil {
+		if _, err := queries.PruneDeviceActivity(ctx, int32(activityRetentionDays)); err != nil {
 			logger.Warn("prune device activity", zap.Error(err))
 		}
 	}

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"frens.lol/openmarket/backend/pkg/db"
-	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -146,25 +145,6 @@ func TestClusterKeyGroupsWithoutStoringTheIdentifier(t *testing.T) {
 	}
 	if bytes.Equal(a, ClusterKey([]byte("other-key"), "100000123456789")) {
 		t.Fatal("the key must actually key the hash")
-	}
-}
-
-func TestQueryFingerprintSeparatesFiltersFromTheirAbsence(t *testing.T) {
-	base := &v1.FacebookMarketplaceQueryContext{
-		AvailabilityFilter: v1.FacebookMarketplaceAvailabilityFilter_FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK,
-	}
-	withZero := &v1.FacebookMarketplaceQueryContext{
-		AvailabilityFilter: base.AvailabilityFilter,
-		DaysSinceListed:    ptr(int32(0)),
-	}
-	if bytes.Equal(QueryFingerprint(base), QueryFingerprint(withZero)) {
-		t.Fatal("no day filter and daysSinceListed=0 are different queries")
-	}
-	if QueryFingerprint(nil) != nil {
-		t.Fatal("no query context is not a query")
-	}
-	if !bytes.Equal(QueryFingerprint(base), QueryFingerprint(base)) {
-		t.Fatal("the same query must hash the same")
 	}
 }
 

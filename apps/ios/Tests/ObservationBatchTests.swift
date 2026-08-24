@@ -1,49 +1,9 @@
-import CryptoKit
 import Foundation
 import OpenMarketProtos
 import XCTest
 @testable import OpenMarket
 
 final class ObservationBatchTests: XCTestCase {
-
-    private func query(kind: SearchQuery.Kind = .search("Oak Dresser")) -> SearchQuery {
-        SearchQuery(kind: kind, radiusKM: 16, citySlug: "sanfrancisco")
-    }
-
-    /// The search term is hashed before it leaves the device. It reaches the
-    /// ingest boundary as a fingerprint so two runs of one query can be
-    /// recognised as the same query, and for no other purpose.
-    func testQueryTermTravelsOnlyAsAHash() throws {
-        let context = try XCTUnwrap(ObservationBatch.queryContext(query()))
-        let expected = Data(SHA256.hash(data: Data("oak dresser".utf8)))
-        XCTAssertEqual(context.queryTextSha256, expected)
-    }
-
-    /// Case and surrounding space are not different queries.
-    func testQueryHashIsNormalised() throws {
-        let a = try XCTUnwrap(ObservationBatch.queryContext(query(kind: .search("  Oak Dresser  "))))
-        let b = try XCTUnwrap(ObservationBatch.queryContext(query(kind: .search("oak dresser"))))
-        XCTAssertEqual(a.queryTextSha256, b.queryTextSha256)
-    }
-
-    /// A browse page has no query at all, and an empty hash would be a query
-    /// nobody typed.
-    func testBrowseCarriesNoQueryContext() {
-        XCTAssertNil(ObservationBatch.queryContext(query(kind: .browse)))
-    }
-
-    /// The filter is what makes a sold card interpretable: from an unfiltered
-    /// query it is a contradiction the server refuses, and from `out of stock`
-    /// it is the strongest public evidence of a sale there is.
-    func testAvailabilityFilterIsLabelled() throws {
-        var sold = query()
-        sold.availability = .unavailable
-        XCTAssertEqual(try XCTUnwrap(ObservationBatch.queryContext(sold)).availabilityFilter, .outOfStock)
-
-        var plain = query()
-        plain.availability = .any
-        XCTAssertEqual(try XCTUnwrap(ObservationBatch.queryContext(plain)).availabilityFilter, .unspecified)
-    }
 
     func testShapeFingerprintSeparatesDifferentKeySets() {
         let a = ObservationBatch.shapeFingerprint(["is_sold", "listing_price"])
@@ -102,7 +62,6 @@ extension ObservationBatchTests {
                 domCard(id: "1550206205946897", photoFBID: "1095213896513326"),
                 domCard(id: "1550206205946898", photoFBID: "1095213896513327"),
             ],
-            query: query(),
             route: .search,
             session: .authed,
             currency: "USD",
@@ -129,16 +88,42 @@ extension ObservationBatchTests {
     func testMethodDescribesWhatTheBatchActuallyContains() throws {
         let domOnly = try XCTUnwrap(ObservationBatch.feed(
             payload: [], cards: [domCard(id: "1550206205946898", photoFBID: "1095213896513327")],
-            query: query(), route: .search, session: .authed,
+            route: .search, session: .authed,
             currency: "USD", cardsSeen: 1, dropReasons: [], shapeKeys: []
         ))
         XCTAssertEqual(domOnly.context.extractionMethod, .renderedDom)
 
         let payloadOnly = try XCTUnwrap(ObservationBatch.feed(
             payload: [payloadCard(id: "1550206205946897", photoFBID: "1095213896513326")],
-            cards: [], query: query(), route: .search, session: .authed,
+            cards: [], route: .search, session: .authed,
             currency: "USD", cardsSeen: 1, dropReasons: [], shapeKeys: []
         ))
         XCTAssertEqual(payloadOnly.context.extractionMethod, .embeddedGraphql)
+    }
+
+    func testAllDroppedPageStillProducesAHealthBatch() throws {
+        let request = try XCTUnwrap(ObservationBatch.feed(
+            payload: [], cards: [], route: .search, session: .authed,
+            currency: "USD", cardsSeen: 15,
+            dropReasons: ["card_unparseable"], shapeKeys: []
+        ))
+
+        XCTAssertTrue(request.observations.isEmpty)
+        XCTAssertEqual(request.counts.cardsSeen, 15)
+        XCTAssertEqual(request.counts.dropReasons, ["card_unparseable"])
+    }
+
+    func testPayloadAndRenderedPriceDisagreementDropsBothCopies() throws {
+        var rendered = domCard(id: "1550206205946897", photoFBID: "1095213896513326")
+        rendered.priceText = "$15"
+
+        let request = try XCTUnwrap(ObservationBatch.feed(
+            payload: [payloadCard(id: "1550206205946897", photoFBID: "1095213896513326")],
+            cards: [rendered], route: .search, session: .authed,
+            currency: "USD", cardsSeen: 1, dropReasons: [], shapeKeys: []
+        ))
+
+        XCTAssertTrue(request.observations.isEmpty)
+        XCTAssertEqual(request.counts.dropReasons, ["price_disagreement"])
     }
 }

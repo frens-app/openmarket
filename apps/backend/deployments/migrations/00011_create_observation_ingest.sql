@@ -38,10 +38,8 @@ CREATE TABLE observation_batches (
     app_version text,
     app_build text,
 
-    -- Derived from the filter parameters, never from a stored query string. Two
-    -- runs of the same query share a fingerprint, which is the whole of what
-    -- absence from a later run is allowed to mean
-    -- (docs/ingest-attribution.md §2.2).
+    -- Deprecated by migration 00012. Kept here so databases which already
+    -- applied this migration can move forward through the same schema history.
     query_fingerprint bytea,
     -- Hash of the key paths a structured payload carried. A fingerprint nobody
     -- has seen before, across many devices at once, is Facebook shipping a

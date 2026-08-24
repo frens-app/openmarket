@@ -63,7 +63,8 @@ struct PayloadListing: Decodable, Equatable {
 
     var price: Decimal? {
         guard let priceAmount else { return nil }
-        return Decimal(string: priceAmount)
+        // GraphQL decimals use a point regardless of the device locale.
+        return Decimal(string: priceAmount, locale: Locale(identifier: "en_US_POSIX"))
     }
 
     /// `SHIPPING_ONSITE` marked 24 of 24 cards on a shipping-filtered page and

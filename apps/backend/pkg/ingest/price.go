@@ -6,19 +6,13 @@ import (
 	"strings"
 
 	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
+	"golang.org/x/text/currency"
 )
 
-var errPriceShape = errors.New("price is not a plain decimal")
-
-// currencyExponent holds the currencies whose minor unit is not two decimal
-// places. Everything absent from this map is assumed to have two, which is
-// true of every currency this app has been pointed at.
-var currencyExponent = map[string]int{
-	"BIF": 0, "CLP": 0, "DJF": 0, "GNF": 0, "ISK": 0, "JPY": 0, "KMF": 0,
-	"KRW": 0, "PYG": 0, "RWF": 0, "UGX": 0, "VND": 0, "VUV": 0,
-	"XAF": 0, "XOF": 0, "XPF": 0,
-	"BHD": 3, "IQD": 3, "JOD": 3, "KWD": 3, "LYD": 3, "OMR": 3, "TND": 3,
-}
+var (
+	errPriceShape          = errors.New("price is not a plain decimal")
+	errUnsupportedCurrency = errors.New("currency exponent is not supported")
+)
 
 // parsePrice converts Facebook's decimal to minor units, using the currency the
 // page declared.
@@ -57,7 +51,11 @@ func parsePrice(p *v1.FacebookMarketplacePriceObservation) (*int64, *string, err
 	if code == "" {
 		return nil, nil, nil
 	}
-	minor, err := scaleToMinor(whole, frac, exponentFor(code))
+	exponent, err := currencyExponent(code)
+	if err != nil {
+		return nil, nil, errUnsupportedCurrency
+	}
+	minor, err := scaleToMinor(whole, frac, exponent)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -82,18 +80,24 @@ func parsePreviousPrice(p *v1.FacebookMarketplacePriceObservation) (*int64, erro
 	if code == "" {
 		return nil, nil
 	}
-	minor, err := scaleToMinor(whole, frac, exponentFor(code))
+	exponent, err := currencyExponent(code)
+	if err != nil {
+		return nil, errUnsupportedCurrency
+	}
+	minor, err := scaleToMinor(whole, frac, exponent)
 	if err != nil {
 		return nil, err
 	}
 	return &minor, nil
 }
 
-func exponentFor(code string) int {
-	if e, ok := currencyExponent[code]; ok {
-		return e
+func currencyExponent(code string) (int, error) {
+	unit, err := currency.ParseISO(code)
+	if err != nil || unit == currency.XXX {
+		return 0, errUnsupportedCurrency
 	}
-	return 2
+	exponent, _ := currency.Standard.Rounding(unit)
+	return exponent, nil
 }
 
 // splitDecimal accepts digits, optionally followed by a point and more digits.

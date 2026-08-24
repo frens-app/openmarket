@@ -152,6 +152,12 @@ func (s *Service) resolveListing(
 			CoverPhotoFbid:    c.CoverPhotoFBID,
 			FirstObservedAt:   timestamp(observedAt),
 		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Another submitter created one of these aliases after our lookup.
+			// ON CONFLICT waited for that transaction; resolve again so a normal
+			// first-sighting race does not abort this whole batch.
+			return s.resolveListing(ctx, q, c, observedAt)
+		}
 		if err != nil {
 			return db.Listing{}, nil, fmt.Errorf("create listing: %w", err)
 		}

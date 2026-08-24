@@ -8,11 +8,6 @@
 // For information on using the generated types, please see the documentation:
 //   https://github.com/apple/swift-protobuf/
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -196,47 +191,6 @@ public nonisolated enum Openmarket_Api_V1_FacebookAuthenticationState: SwiftProt
 
 }
 
-/// Facebook's `availability` control offers two values and no third
-/// (docs/filter-parameters.md §10). UNSPECIFIED means no filter was applied,
-/// which is a different query from either of them.
-public nonisolated enum Openmarket_Api_V1_FacebookMarketplaceAvailabilityFilter: SwiftProtobuf.Enum, Swift.CaseIterable {
-  public typealias RawValue = Int
-  case unspecified // = 0
-  case inStock // = 1
-  case outOfStock // = 2
-  case UNRECOGNIZED(Int)
-
-  public init() {
-    self = .unspecified
-  }
-
-  public init?(rawValue: Int) {
-    switch rawValue {
-    case 0: self = .unspecified
-    case 1: self = .inStock
-    case 2: self = .outOfStock
-    default: self = .UNRECOGNIZED(rawValue)
-    }
-  }
-
-  public var rawValue: Int {
-    switch self {
-    case .unspecified: return 0
-    case .inStock: return 1
-    case .outOfStock: return 2
-    case .UNRECOGNIZED(let i): return i
-    }
-  }
-
-  // The compiler won't synthesize support with the UNRECOGNIZED case.
-  public static let allCases: [Openmarket_Api_V1_FacebookMarketplaceAvailabilityFilter] = [
-    .unspecified,
-    .inStock,
-    .outOfStock,
-  ]
-
-}
-
 public nonisolated enum Openmarket_Api_V1_FacebookMarketplaceSellerSectionStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
@@ -283,93 +237,6 @@ public nonisolated enum Openmarket_Api_V1_FacebookMarketplaceSellerSectionStatus
     .observed,
   ]
 
-}
-
-/// The filter parameters behind a search or discover capture, as named by
-/// Facebook's own controls (docs/filter-parameters.md §1).
-///
-/// This is what makes presence in a result set interpretable. A plain search
-/// returns 0 sold and 0 pending by construction, so `sold` from an unfiltered
-/// query would be a contradiction, while the same value from OUT_OF_STOCK is the
-/// strongest public evidence of a sale that exists.
-public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceQueryContext: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  /// SHA-256 of the lowercased, trimmed query text. The term itself never
-  /// crosses this boundary (docs/ingest-attribution.md §1.5); the hash exists so
-  /// two runs of the same query can be recognised as the same query.
-  public var queryTextSha256: Data {
-    get {_queryTextSha256 ?? Data()}
-    set {_queryTextSha256 = newValue}
-  }
-  /// Returns true if `queryTextSha256` has been explicitly set.
-  public var hasQueryTextSha256: Bool {self._queryTextSha256 != nil}
-  /// Clears the value of `queryTextSha256`. Subsequent reads from it will return its default value.
-  public mutating func clearQueryTextSha256() {self._queryTextSha256 = nil}
-
-  public var availabilityFilter: Openmarket_Api_V1_FacebookMarketplaceAvailabilityFilter = .unspecified
-
-  public var daysSinceListed: Int32 {
-    get {_daysSinceListed ?? 0}
-    set {_daysSinceListed = newValue}
-  }
-  /// Returns true if `daysSinceListed` has been explicitly set.
-  public var hasDaysSinceListed: Bool {self._daysSinceListed != nil}
-  /// Clears the value of `daysSinceListed`. Subsequent reads from it will return its default value.
-  public mutating func clearDaysSinceListed() {self._daysSinceListed = nil}
-
-  /// Facebook's raw `sortBy` and `deliveryMethod` tokens rather than enums.
-  /// These only feed the query fingerprint, and an enum would collapse a token
-  /// we have not surveyed into UNSPECIFIED — the silent drop that
-  /// docs/parsing-conventions.md §1 exists to forbid.
-  public var sortBy: String {
-    get {_sortBy ?? String()}
-    set {_sortBy = newValue}
-  }
-  /// Returns true if `sortBy` has been explicitly set.
-  public var hasSortBy: Bool {self._sortBy != nil}
-  /// Clears the value of `sortBy`. Subsequent reads from it will return its default value.
-  public mutating func clearSortBy() {self._sortBy = nil}
-
-  public var deliveryMethod: String {
-    get {_deliveryMethod ?? String()}
-    set {_deliveryMethod = newValue}
-  }
-  /// Returns true if `deliveryMethod` has been explicitly set.
-  public var hasDeliveryMethod: Bool {self._deliveryMethod != nil}
-  /// Clears the value of `deliveryMethod`. Subsequent reads from it will return its default value.
-  public mutating func clearDeliveryMethod() {self._deliveryMethod = nil}
-
-  public var facebookPlaceID: String {
-    get {_facebookPlaceID ?? String()}
-    set {_facebookPlaceID = newValue}
-  }
-  /// Returns true if `facebookPlaceID` has been explicitly set.
-  public var hasFacebookPlaceID: Bool {self._facebookPlaceID != nil}
-  /// Clears the value of `facebookPlaceID`. Subsequent reads from it will return its default value.
-  public mutating func clearFacebookPlaceID() {self._facebookPlaceID = nil}
-
-  public var radiusMiles: Int32 {
-    get {_radiusMiles ?? 0}
-    set {_radiusMiles = newValue}
-  }
-  /// Returns true if `radiusMiles` has been explicitly set.
-  public var hasRadiusMiles: Bool {self._radiusMiles != nil}
-  /// Clears the value of `radiusMiles`. Subsequent reads from it will return its default value.
-  public mutating func clearRadiusMiles() {self._radiusMiles = nil}
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-
-  fileprivate var _queryTextSha256: Data? = nil
-  fileprivate var _daysSinceListed: Int32? = nil
-  fileprivate var _sortBy: String? = nil
-  fileprivate var _deliveryMethod: String? = nil
-  fileprivate var _facebookPlaceID: String? = nil
-  fileprivate var _radiusMiles: Int32? = nil
 }
 
 public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceObservationContext: Sendable {
@@ -1069,76 +936,8 @@ nonisolated extension Openmarket_Api_V1_FacebookAuthenticationState: SwiftProtob
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0FACEBOOK_AUTHENTICATION_STATE_UNSPECIFIED\0\u{1}FACEBOOK_AUTHENTICATION_STATE_SIGNED_OUT\0\u{1}FACEBOOK_AUTHENTICATION_STATE_SIGNED_IN\0")
 }
 
-nonisolated extension Openmarket_Api_V1_FacebookMarketplaceAvailabilityFilter: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_UNSPECIFIED\0\u{1}FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_IN_STOCK\0\u{1}FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK\0")
-}
-
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSellerSectionStatus: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_UNSPECIFIED\0\u{1}FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_UNAVAILABLE\0\u{1}FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_NOT_OBSERVED\0\u{1}FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_OBSERVED\0")
-}
-
-nonisolated extension Openmarket_Api_V1_FacebookMarketplaceQueryContext: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceQueryContext"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}query_text_sha256\0\u{3}availability_filter\0\u{3}days_since_listed\0\u{3}sort_by\0\u{3}delivery_method\0\u{3}facebook_place_id\0\u{3}radius_miles\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBytesField(value: &self._queryTextSha256) }()
-      case 2: try { try decoder.decodeSingularEnumField(value: &self.availabilityFilter) }()
-      case 3: try { try decoder.decodeSingularInt32Field(value: &self._daysSinceListed) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self._sortBy) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self._deliveryMethod) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self._facebookPlaceID) }()
-      case 7: try { try decoder.decodeSingularInt32Field(value: &self._radiusMiles) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._queryTextSha256 {
-      try visitor.visitSingularBytesField(value: v, fieldNumber: 1)
-    } }()
-    if self.availabilityFilter != .unspecified {
-      try visitor.visitSingularEnumField(value: self.availabilityFilter, fieldNumber: 2)
-    }
-    try { if let v = self._daysSinceListed {
-      try visitor.visitSingularInt32Field(value: v, fieldNumber: 3)
-    } }()
-    try { if let v = self._sortBy {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
-    } }()
-    try { if let v = self._deliveryMethod {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
-    try { if let v = self._facebookPlaceID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 6)
-    } }()
-    try { if let v = self._radiusMiles {
-      try visitor.visitSingularInt32Field(value: v, fieldNumber: 7)
-    } }()
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Openmarket_Api_V1_FacebookMarketplaceQueryContext, rhs: Openmarket_Api_V1_FacebookMarketplaceQueryContext) -> Bool {
-    if lhs._queryTextSha256 != rhs._queryTextSha256 {return false}
-    if lhs.availabilityFilter != rhs.availabilityFilter {return false}
-    if lhs._daysSinceListed != rhs._daysSinceListed {return false}
-    if lhs._sortBy != rhs._sortBy {return false}
-    if lhs._deliveryMethod != rhs._deliveryMethod {return false}
-    if lhs._facebookPlaceID != rhs._facebookPlaceID {return false}
-    if lhs._radiusMiles != rhs._radiusMiles {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
 }
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceObservationContext: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

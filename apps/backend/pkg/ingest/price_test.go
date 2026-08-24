@@ -44,6 +44,7 @@ func TestParsePrice(t *testing.T) {
 		{name: "leading point", amount: ".40", currency: "USD", wantErr: true},
 		{name: "more precision than the currency has", amount: "40.501", currency: "USD", wantErr: true},
 		{name: "words", amount: "Free", currency: "USD", wantErr: true},
+		{name: "unknown currency is not guessed", amount: "40.00", currency: "ZZZ", wantErr: true},
 	}
 
 	for _, tt := range tests {

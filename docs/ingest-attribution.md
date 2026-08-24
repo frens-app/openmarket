@@ -250,10 +250,10 @@ of request-level failure paths. The server rejects a batch that contains a field
 labelled `observer_derived`, because "the client never sends them" is a property
 of the current client and the server outlives it.
 
-Search terms are the deliberate exception, and they are already an exception:
-`analytics.md` §2 sends them to PostHog on purpose, having weighed it. A search
-term reaches the ingest path only as the query fingerprint of §2.2 — a hash,
-used to compare two runs of the same query, not a stored string.
+Search terms do not enter observation ingest. A public hash would not change
+that boundary in a meaningful way: marketplace terms are low entropy and can
+be recovered with an offline dictionary. Product analytics has its own policy;
+the listing corpus does not join to it.
 
 ---
 
@@ -281,14 +281,12 @@ CREATE TABLE observation_batches (
   app_version                   text NOT NULL,
   app_build                     text NOT NULL,
 
-  query_fingerprint             bytea,                  -- §2.2
   shape_fingerprint             bytea,                  -- §3.4
 
   cards_seen                    int NOT NULL,
   cards_submitted               int NOT NULL,
   cards_accepted                int NOT NULL,
   cards_quarantined             int NOT NULL,
-  client_dropped                int NOT NULL,
   client_drop_reasons           text[] NOT NULL DEFAULT '{}'
 );
 ```
@@ -312,52 +310,30 @@ is a Facebook change, and it is visible in a query.
 the DOM parse itself and counts what came back nil, rather than taking the
 grid's length as the answer.
 
-### 2.2 `query_fingerprint`, and why absence usually proves nothing
+### 2.2 Absence inference is deliberately out of scope
 
 A listing that was in a result set yesterday and is not today has *not* been
 shown to have been delisted. It might be a different query, a different radius,
 a different account's floor (`logged-in-findings.md` §7.3 — the account's radius
 is a floor the app cannot raise), or the same query on a different day.
 
-```
-query_fingerprint = SHA256(query_text_lower ‖ availability ‖ daysSinceListed
-                           ‖ sortBy ‖ deliveryMethod ‖ place_id ‖ radius)
-```
-
-With it, one narrow inference becomes available: the same fingerprint, from the
-same authentication state, within a short window, missing a listing that a prior
-run of it contained is **weak** delisting evidence. It never writes
-`availability`; it can lower a confidence score and schedule a detail re-check.
-Without the fingerprint, that inference is not available at all, and the
-temptation is to make it anyway from whatever query happened to run.
-
-The fingerprint is computed, stored and indexed. The inference itself is not
-built — there is no confidence score to lower and no re-check queue to schedule
-into, and adding either before the corpus exists would be guessing at both.
+Snapshot ingest makes no inference from a listing's absence. Doing that safely
+would require a complete identity for the result-defining query and a privacy
+design stronger than a public hash of the search term. Neither is needed to
+save facts from listings that were actually observed, so query identity is not
+part of the request or database schema.
 
 ### 2.3 Where the schema puts each of these
 
-`SubmitObservationsRequest` carries the batch: one capture context, one query
-context, the extractor revision, the client's counts, the shape fingerprint, and
-the observations. Field 1 on both observation messages is reserved, because
+`SubmitObservationsRequest` carries the batch: one capture context, the
+extractor revision, the client's counts, the shape fingerprint, and the
+observations. Field 1 on both observation messages is reserved, because
 capture context describes the page and belongs on the batch rather than on every
 card.
-
-`FacebookMarketplaceQueryContext` holds the filter parameters of
-`filter-parameters.md` §1 plus the query-text hash. It is what labels a card
-from `availability=out of stock` as coming from the sold-filtered query —
-presence in that result set is the strongest public evidence of sold there is,
-and it is only usable if it is labelled. A separate page route would be the
-wrong shape: it is the same search route with a filter on it.
 
 `extractor_revision` sits on the batch rather than on each observation.
 `data-model.md` §2 notes that debug pins build `1`, so the app build alone
 cannot identify a parser.
-
-Two fields on the query context are strings where an enum looks natural.
-`sort_by` and `delivery_method` only feed the fingerprint, and an enum would
-collapse a token nobody has surveyed into UNSPECIFIED — the silent drop
-`parsing-conventions.md` §1 exists to forbid.
 
 ### 2.4 Only a live read may mint an observation
 
@@ -731,13 +707,11 @@ poorer source cannot overwrite a better one merely by arriving later:
 | price, availability | embedded payload; item page | rendered DOM | Discover card (carries no sold state) |
 | media set completeness | item page | — | search card (cover photo only) |
 | description, condition | item page | — | search card |
-| `availability = sold` | the sold-filtered query, labelled per §2.2; item page `is_sold` | — | a plain search, which returns 0 sold by construction |
+| `availability = sold` | embedded payload or item page carrying `is_sold` | rendered DOM | Discover card (carries no sold state) |
 
-The last row is the one that has to be labelled to be usable. A plain search
-returning 0 sold and 0 pending (`filter-parameters.md` §10, logged out,
-2026-08-07) means *absence from a plain search is not evidence of anything* —
-and presence in an `out of stock` result set is strong evidence of sold. Same
-route, same parser, opposite meanings, distinguishable only by the query context.
+Absence from a plain search remains evidence of nothing. Only an explicit
+`is_sold` or `is_pending` value carried by the observed listing can update the
+canonical availability.
 
 ### 5.2 Provisional and confirmed
 
@@ -822,9 +796,8 @@ weeks ago" is a different claim from the same phrase computed from an embedded
 construction (`filter-parameters.md` §10, logged out, 2026-08-07). A listing
 dropping out of a live result set is equally consistent with sold, pending,
 deleted, expired, edited out of the query, or moved outside the radius. It must
-never write `sold_not_after`. The same-fingerprint rule in §2.2 may lower a
-confidence score and schedule a detail re-check, and that is the whole of what
-absence buys.
+never write `sold_not_after`, lower a confidence score, or otherwise update the
+corpus. Snapshot ingest records observed facts only.
 
 **The bracket is revocable.** Relisting is real (§5.3), so a corroborated
 `sold → available` clears both columns rather than leaving behind a bracket
@@ -932,20 +905,18 @@ than identity, and the freshness rule falls straight out of it:
 |---|---|
 | canonical `listings`, `listing_media`, `sellers` | indefinitely |
 | `listing_changes` (price and availability history) | indefinitely |
-| `listing_observations` raw payloads | short window, per `data-model.md` §7 item 5 |
-| quarantined payloads | short window |
+| observation batches, raw payloads, and quarantine | 7 days by default (`INGEST_RAW_RETENTION`) |
 | `ingest_epoch_keys` | one epoch, plus a 14-day grace (§4.2) |
 | `device_activity` counters | rolling window sufficient for abuse detection |
 | `device_reputation` counters | life of the install |
 
-**Nothing here deletes an observation.** The key is what gets destroyed. The
-listing corpus, `listing_changes`, and the batches themselves stay on their own
-schedules — a batch keeps its `submitter_id` forever, and that value simply
-stops meaning anything once the key is gone.
+The scheduled ingest prune deletes expired batches; raw accepted observations
+and quarantine rows cascade with them. Canonical listings and `listing_changes`
+remain, and the latter's batch reference becomes null. This both enforces the
+raw-evidence window and removes the per-epoch submitter token with the batch.
 
-Deleting the key is the operation that makes the privacy claim true, so it
-should be a scheduled job with its own alarm rather than a `TODO` in a cleanup
-routine.
+Epoch keys are deleted independently on their own schedule, by the same
+scheduled job.
 
 **Database backups bound the real date.** A key deleted from the live database
 is still in every backup taken while it existed, so unlinkability actually

@@ -108,14 +108,15 @@ func init() {
 	pflag.Int("ingest_breaker_min_cards", 200, "cards that must be seen in the window before the rate is trusted")
 	pflag.Duration("ingest_breaker_window", 6*time.Hour, "window the quarantine rate is measured over")
 	// Longer than the breaker window on purpose: a payload shape that appeared
-	// once a fortnight ago is not news, and warning about it again would train
+	// once this week is not news, and warning about it again would train
 	// everybody to ignore the line that matters.
-	pflag.Duration("ingest_shape_window", 14*24*time.Hour, "how far back to look before calling a payload shape unseen")
+	pflag.Duration("ingest_shape_window", 7*24*time.Hour, "how far back to look before calling a payload shape unseen")
 	// observed_at is the live-read instant, so a batch queued offline is
 	// expected to arrive late. The server cannot tell a live read from a
 	// replayed one; it can only bound the claim.
 	pflag.Duration("ingest_max_observation_age", 48*time.Hour, "how far behind received_at an observed_at may be")
 	pflag.Duration("ingest_max_clock_skew", 5*time.Minute, "how far ahead of received_at an observed_at may be")
+	pflag.Duration("ingest_raw_retention", 7*24*time.Hour, "how long raw observation batches and quarantine payloads are retained")
 	pflag.Int("ingest_activity_retention_days", 30, "days of per-install volume counters kept for abuse detection")
 	// Refusing a client build by name is the cheapest lever against a bad
 	// extractor: the circuit breaker needs traffic before it can react and acts
@@ -169,6 +170,7 @@ type ServiceConfig struct {
 	IngestShapeWindow           time.Duration `mapstructure:"ingest_shape_window"`
 	IngestMaxObservationAge     time.Duration `mapstructure:"ingest_max_observation_age"`
 	IngestMaxClockSkew          time.Duration `mapstructure:"ingest_max_clock_skew"`
+	IngestRawRetention          time.Duration `mapstructure:"ingest_raw_retention"`
 	IngestActivityRetentionDays int           `mapstructure:"ingest_activity_retention_days"`
 	IngestMinAppBuild           int           `mapstructure:"ingest_min_app_build"`
 	IngestBlockedAppBuilds      string        `mapstructure:"ingest_blocked_app_builds"`
@@ -316,8 +318,17 @@ func requireAPIValues(cfg ServiceConfig) {
 	if cfg.IngestBreakerWindow <= 0 {
 		panic("ingest_breaker_window must be positive")
 	}
+	if cfg.IngestShapeWindow <= 0 {
+		panic("ingest_shape_window must be positive")
+	}
 	if cfg.IngestMaxObservationAge <= 0 {
 		panic("ingest_max_observation_age must be positive")
+	}
+	if cfg.IngestRawRetention <= 0 {
+		panic("ingest_raw_retention must be positive")
+	}
+	if cfg.IngestRawRetention < cfg.IngestEpochLength || cfg.IngestRawRetention < cfg.IngestShapeWindow {
+		panic("ingest_raw_retention must cover the epoch and shape windows")
 	}
 	if cfg.IngestActivityRetentionDays < 1 {
 		panic("ingest_activity_retention_days must be at least 1")

@@ -18,7 +18,7 @@ SET facebook_listing_id = COALESCE(facebook_listing_id, $1),
     cover_photo_fbid = COALESCE(cover_photo_fbid, $2),
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $3
-RETURNING id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at
+RETURNING id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at, price_observed_at, availability_observed_at
 `
 
 type AttachListingAliasesParams struct {
@@ -72,6 +72,8 @@ func (q *Queries) AttachListingAliases(ctx context.Context, arg AttachListingAli
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PriceObservedAt,
+		&i.AvailabilityObservedAt,
 	)
 	return i, err
 }
@@ -118,7 +120,8 @@ func (q *Queries) ClaimSellerClusterKey(ctx context.Context, arg ClaimSellerClus
 const createFacebookListing = `-- name: CreateFacebookListing :one
 INSERT INTO listings (origin, facebook_listing_id, cover_photo_fbid, first_observed_at, last_observed_at)
 VALUES ('facebook', $1, $2, $3, $3)
-RETURNING id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at
+ON CONFLICT DO NOTHING
+RETURNING id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at, price_observed_at, availability_observed_at
 `
 
 type CreateFacebookListingParams struct {
@@ -169,6 +172,8 @@ func (q *Queries) CreateFacebookListing(ctx context.Context, arg CreateFacebookL
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PriceObservedAt,
+		&i.AvailabilityObservedAt,
 	)
 	return i, err
 }
@@ -248,7 +253,7 @@ func (q *Queries) DeleteListingMediaNotIn(ctx context.Context, arg DeleteListing
 }
 
 const getListingByCoverPhotoFBID = `-- name: GetListingByCoverPhotoFBID :one
-SELECT id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at FROM listings
+SELECT id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at, price_observed_at, availability_observed_at FROM listings
 WHERE origin = 'facebook' AND cover_photo_fbid = $1
 `
 
@@ -294,12 +299,14 @@ func (q *Queries) GetListingByCoverPhotoFBID(ctx context.Context, coverPhotoFbid
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PriceObservedAt,
+		&i.AvailabilityObservedAt,
 	)
 	return i, err
 }
 
 const getListingByFacebookID = `-- name: GetListingByFacebookID :one
-SELECT id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at FROM listings
+SELECT id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at, price_observed_at, availability_observed_at FROM listings
 WHERE origin = 'facebook' AND facebook_listing_id = $1
 `
 
@@ -345,6 +352,8 @@ func (q *Queries) GetListingByFacebookID(ctx context.Context, facebookListingID 
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PriceObservedAt,
+		&i.AvailabilityObservedAt,
 	)
 	return i, err
 }
@@ -385,7 +394,7 @@ func (q *Queries) ListListingMedia(ctx context.Context, listingID uuid.UUID) ([]
 }
 
 const lockListing = `-- name: LockListing :one
-SELECT id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at FROM listings WHERE id = $1 FOR UPDATE
+SELECT id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at, price_observed_at, availability_observed_at FROM listings WHERE id = $1 FOR UPDATE
 `
 
 // The merge reads the current row, decides per field group, and writes once.
@@ -433,6 +442,8 @@ func (q *Queries) LockListing(ctx context.Context, id uuid.UUID) (Listing, error
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PriceObservedAt,
+		&i.AvailabilityObservedAt,
 	)
 	return i, err
 }
@@ -449,61 +460,65 @@ SET title = $1,
     price_formatted = $8,
     previous_price_minor = $9,
     price_changed_at = $10,
-    availability = $11,
-    availability_raw = $12,
-    sold_not_before = $13,
-    sold_not_after = $14,
-    delivery_types = $15,
-    listing_location_text = $16,
-    listing_city = $17,
-    listing_region = $18,
-    listing_country = $19,
-    facebook_place_id = $20,
-    listing_approx_lat = $21,
-    listing_approx_lon = $22,
-    seller_id = $23,
-    listed_at = $24,
-    listed_at_text = $25,
-    listed_at_precision = $26,
-    first_observed_at = $27,
-    last_observed_at = $28,
-    detail_observed_at = $29,
+    price_observed_at = $11,
+    availability = $12,
+    availability_raw = $13,
+    availability_observed_at = $14,
+    sold_not_before = $15,
+    sold_not_after = $16,
+    delivery_types = $17,
+    listing_location_text = $18,
+    listing_city = $19,
+    listing_region = $20,
+    listing_country = $21,
+    facebook_place_id = $22,
+    listing_approx_lat = $23,
+    listing_approx_lon = $24,
+    seller_id = $25,
+    listed_at = $26,
+    listed_at_text = $27,
+    listed_at_precision = $28,
+    first_observed_at = $29,
+    last_observed_at = $30,
+    detail_observed_at = $31,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $30
-RETURNING id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at
+WHERE id = $32
+RETURNING id, origin, owner_id, facebook_listing_id, cover_photo_fbid, title, description, condition, category_path, facebook_category_id, price_minor, price_currency, price_formatted, previous_price_minor, price_changed_at, availability, availability_raw, sold_not_before, sold_not_after, delivery_types, listing_location_text, listing_city, listing_region, listing_country, facebook_place_id, listing_approx_lat, listing_approx_lon, seller_id, listed_at, listed_at_text, listed_at_precision, first_observed_at, last_observed_at, detail_observed_at, moderation_state, deleted_at, created_at, updated_at, price_observed_at, availability_observed_at
 `
 
 type UpdateListingFromObservationParams struct {
-	Title               *string
-	Description         *string
-	Condition           *string
-	CategoryPath        []string
-	FacebookCategoryID  *string
-	PriceMinor          *int64
-	PriceCurrency       *string
-	PriceFormatted      *string
-	PreviousPriceMinor  *int64
-	PriceChangedAt      pgtype.Timestamptz
-	Availability        ListingAvailability
-	AvailabilityRaw     *string
-	SoldNotBefore       pgtype.Timestamptz
-	SoldNotAfter        pgtype.Timestamptz
-	DeliveryTypes       []string
-	ListingLocationText *string
-	ListingCity         *string
-	ListingRegion       *string
-	ListingCountry      *string
-	FacebookPlaceID     *string
-	ListingApproxLat    *float64
-	ListingApproxLon    *float64
-	SellerID            *uuid.UUID
-	ListedAt            pgtype.Timestamptz
-	ListedAtText        *string
-	ListedAtPrecision   *ListedAtPrecision
-	FirstObservedAt     pgtype.Timestamptz
-	LastObservedAt      pgtype.Timestamptz
-	DetailObservedAt    pgtype.Timestamptz
-	ID                  uuid.UUID
+	Title                  *string
+	Description            *string
+	Condition              *string
+	CategoryPath           []string
+	FacebookCategoryID     *string
+	PriceMinor             *int64
+	PriceCurrency          *string
+	PriceFormatted         *string
+	PreviousPriceMinor     *int64
+	PriceChangedAt         pgtype.Timestamptz
+	PriceObservedAt        pgtype.Timestamptz
+	Availability           ListingAvailability
+	AvailabilityRaw        *string
+	AvailabilityObservedAt pgtype.Timestamptz
+	SoldNotBefore          pgtype.Timestamptz
+	SoldNotAfter           pgtype.Timestamptz
+	DeliveryTypes          []string
+	ListingLocationText    *string
+	ListingCity            *string
+	ListingRegion          *string
+	ListingCountry         *string
+	FacebookPlaceID        *string
+	ListingApproxLat       *float64
+	ListingApproxLon       *float64
+	SellerID               *uuid.UUID
+	ListedAt               pgtype.Timestamptz
+	ListedAtText           *string
+	ListedAtPrecision      *ListedAtPrecision
+	FirstObservedAt        pgtype.Timestamptz
+	LastObservedAt         pgtype.Timestamptz
+	DetailObservedAt       pgtype.Timestamptz
+	ID                     uuid.UUID
 }
 
 // Every mergeable column, written once. The decisions are made in Go — which
@@ -522,8 +537,10 @@ func (q *Queries) UpdateListingFromObservation(ctx context.Context, arg UpdateLi
 		arg.PriceFormatted,
 		arg.PreviousPriceMinor,
 		arg.PriceChangedAt,
+		arg.PriceObservedAt,
 		arg.Availability,
 		arg.AvailabilityRaw,
+		arg.AvailabilityObservedAt,
 		arg.SoldNotBefore,
 		arg.SoldNotAfter,
 		arg.DeliveryTypes,
@@ -583,6 +600,8 @@ func (q *Queries) UpdateListingFromObservation(ctx context.Context, arg UpdateLi
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PriceObservedAt,
+		&i.AvailabilityObservedAt,
 	)
 	return i, err
 }

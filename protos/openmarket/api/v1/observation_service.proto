@@ -8,9 +8,9 @@ import "openmarket/api/v1/listing.proto";
 // Ingest for Facebook Marketplace observations.
 //
 // One call is one **batch**: everything one device parsed off one page at one
-// time. Capture context, the query behind it, and the extractor that produced
-// it are properties of the page, so they are carried once here rather than on
-// every card (docs/ingest-attribution.md §2).
+// time. Capture context and the extractor that produced it are properties of
+// the page, so they are carried once here rather than on every card
+// (docs/ingest-attribution.md §2).
 //
 // The submitting device is taken from the authenticated session and never from
 // the request. What is persisted alongside the batch is not the device but a
@@ -41,18 +41,12 @@ message ClientExtractionCounts {
 }
 
 message SubmitObservationsRequest {
-  option (buf.validate.message).cel = {
-    id: "submit_observations.query_context_belongs_to_a_query"
-    message: "query is only meaningful on the SEARCH and DISCOVER routes"
-    expression:
-      "!has(this.query) || this.context.page_route == 1 || this.context.page_route == 2"
-  };
-
   FacebookMarketplaceObservationContext context = 1 [(buf.validate.field).required = true];
-  // Search and discover routes only. Its absence on those routes means the
-  // capture cannot say what query produced it, which costs the inference in
-  // docs/ingest-attribution.md §2.2 and nothing else.
-  FacebookMarketplaceQueryContext query = 2;
+  // Query identity is deliberately outside this API. A public hash of a
+  // low-entropy search term is dictionary-reversible, and absence inference is
+  // not part of snapshot ingest. Reserve the old field so it cannot be reused.
+  reserved 2;
+  reserved "query";
 
   // Identifies the parser, not the app. Debug builds pin the app build to 1
   // (docs/data-model.md §2), so the app version alone cannot attribute a
@@ -71,7 +65,6 @@ message SubmitObservationsRequest {
   optional bytes shape_fingerprint = 5 [(buf.validate.field).bytes.len = 32];
 
   repeated FacebookMarketplaceListingObservation observations = 6 [(buf.validate.field).repeated = {
-    min_items: 1
     max_items: 100
   }];
 }

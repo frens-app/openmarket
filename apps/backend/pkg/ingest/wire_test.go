@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -34,13 +35,6 @@ func TestClientShapedRequestsSatisfyTheSchema(t *testing.T) {
 			ExtractionMethod:            v1.FacebookMarketplaceExtractionMethod_FACEBOOK_MARKETPLACE_EXTRACTION_METHOD_HYBRID,
 			FacebookAuthenticationState: v1.FacebookAuthenticationState_FACEBOOK_AUTHENTICATION_STATE_SIGNED_IN,
 			ObservedAt:                  timestamppb.New(now),
-		},
-		Query: &v1.FacebookMarketplaceQueryContext{
-			QueryTextSha256:    make([]byte, 32),
-			AvailabilityFilter: v1.FacebookMarketplaceAvailabilityFilter_FACEBOOK_MARKETPLACE_AVAILABILITY_FILTER_OUT_OF_STOCK,
-			DaysSinceListed:    ptr(int32(30)),
-			SortBy:             ptr("creation_time_descend"),
-			DeliveryMethod:     ptr("local_pick_up"),
 		},
 		ExtractorRevision: "desktop-2026-08-23",
 		Counts: &v1.ClientExtractionCounts{
@@ -139,33 +133,30 @@ func TestClientShapedRequestsSatisfyTheSchema(t *testing.T) {
 	}
 }
 
-// The one message rule that is not about a single field: a query context only
-// means anything on a route that ran a query.
-func TestQueryContextIsRefusedOnAnItemPage(t *testing.T) {
-	validator, err := protovalidate.New()
+func TestMarshalObservationRemovesTransitOnlySellerID(t *testing.T) {
+	profileID := "100000123456789"
+	observation := &v1.FacebookMarketplaceListingObservation{
+		Observation: &v1.FacebookMarketplaceListingObservation_Detail{
+			Detail: &v1.FacebookMarketplaceListingDetailObservation{
+				Seller: &v1.FacebookMarketplaceSellerObservation{
+					FacebookProfileId: &profileID,
+					DisplayName:       ptr("Public seller name"),
+				},
+			},
+		},
+	}
+
+	payload, err := marshalObservation([]*v1.FacebookMarketplaceListingObservation{observation}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := "1054280080442808"
-	req := &v1.SubmitObservationsRequest{
-		Context: &v1.FacebookMarketplaceObservationContext{
-			BrowserVariant:   v1.FacebookMarketplaceBrowserVariant_FACEBOOK_MARKETPLACE_BROWSER_VARIANT_DESKTOP,
-			PageRoute:        v1.FacebookMarketplacePageRoute_FACEBOOK_MARKETPLACE_PAGE_ROUTE_ITEM,
-			ExtractionMethod: v1.FacebookMarketplaceExtractionMethod_FACEBOOK_MARKETPLACE_EXTRACTION_METHOD_HYBRID,
-			ObservedAt:       timestamppb.New(time.Now()),
-		},
-		Query:             &v1.FacebookMarketplaceQueryContext{},
-		ExtractorRevision: "desktop-2026-08-23",
-		Counts:            &v1.ClientExtractionCounts{CardsSeen: 1},
-		Observations: []*v1.FacebookMarketplaceListingObservation{
-			{Observation: &v1.FacebookMarketplaceListingObservation_Detail{
-				Detail: &v1.FacebookMarketplaceListingDetailObservation{
-					Key: &v1.FacebookListingKey{FacebookListingId: &id},
-				},
-			}},
-		},
+	if bytes.Contains(payload, []byte(profileID)) || bytes.Contains(payload, []byte("facebookProfileId")) {
+		t.Fatalf("transit-only seller id survived sanitization: %s", payload)
 	}
-	if err := validator.Validate(req); err == nil {
-		t.Fatal("an item page did not run a query")
+	if !bytes.Contains(payload, []byte("Public seller name")) {
+		t.Fatalf("public seller fields were removed with the id: %s", payload)
+	}
+	if observation.GetDetail().GetSeller().GetFacebookProfileId() != profileID {
+		t.Fatal("sanitization mutated the observation used for reconciliation")
 	}
 }

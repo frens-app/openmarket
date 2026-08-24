@@ -470,44 +470,46 @@ type IngestEpochKey struct {
 }
 
 type Listing struct {
-	ID                  uuid.UUID
-	Origin              ListingOrigin
-	OwnerID             *uuid.UUID
-	FacebookListingID   *string
-	CoverPhotoFbid      *string
-	Title               *string
-	Description         *string
-	Condition           *string
-	CategoryPath        []string
-	FacebookCategoryID  *string
-	PriceMinor          *int64
-	PriceCurrency       *string
-	PriceFormatted      *string
-	PreviousPriceMinor  *int64
-	PriceChangedAt      pgtype.Timestamptz
-	Availability        ListingAvailability
-	AvailabilityRaw     *string
-	SoldNotBefore       pgtype.Timestamptz
-	SoldNotAfter        pgtype.Timestamptz
-	DeliveryTypes       []string
-	ListingLocationText *string
-	ListingCity         *string
-	ListingRegion       *string
-	ListingCountry      *string
-	FacebookPlaceID     *string
-	ListingApproxLat    *float64
-	ListingApproxLon    *float64
-	SellerID            *uuid.UUID
-	ListedAt            pgtype.Timestamptz
-	ListedAtText        *string
-	ListedAtPrecision   *ListedAtPrecision
-	FirstObservedAt     pgtype.Timestamptz
-	LastObservedAt      pgtype.Timestamptz
-	DetailObservedAt    pgtype.Timestamptz
-	ModerationState     *string
-	DeletedAt           pgtype.Timestamptz
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
+	ID                     uuid.UUID
+	Origin                 ListingOrigin
+	OwnerID                *uuid.UUID
+	FacebookListingID      *string
+	CoverPhotoFbid         *string
+	Title                  *string
+	Description            *string
+	Condition              *string
+	CategoryPath           []string
+	FacebookCategoryID     *string
+	PriceMinor             *int64
+	PriceCurrency          *string
+	PriceFormatted         *string
+	PreviousPriceMinor     *int64
+	PriceChangedAt         pgtype.Timestamptz
+	Availability           ListingAvailability
+	AvailabilityRaw        *string
+	SoldNotBefore          pgtype.Timestamptz
+	SoldNotAfter           pgtype.Timestamptz
+	DeliveryTypes          []string
+	ListingLocationText    *string
+	ListingCity            *string
+	ListingRegion          *string
+	ListingCountry         *string
+	FacebookPlaceID        *string
+	ListingApproxLat       *float64
+	ListingApproxLon       *float64
+	SellerID               *uuid.UUID
+	ListedAt               pgtype.Timestamptz
+	ListedAtText           *string
+	ListedAtPrecision      *ListedAtPrecision
+	FirstObservedAt        pgtype.Timestamptz
+	LastObservedAt         pgtype.Timestamptz
+	DetailObservedAt       pgtype.Timestamptz
+	ModerationState        *string
+	DeletedAt              pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	PriceObservedAt        pgtype.Timestamptz
+	AvailabilityObservedAt pgtype.Timestamptz
 }
 
 type ListingChange struct {
@@ -576,7 +578,6 @@ type ObservationBatch struct {
 	ExtractorRevision           string
 	AppVersion                  *string
 	AppBuild                    *string
-	QueryFingerprint            []byte
 	ShapeFingerprint            []byte
 	CardsSeen                   int32
 	CardsSubmitted              int32
