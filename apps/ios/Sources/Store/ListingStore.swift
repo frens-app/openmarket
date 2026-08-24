@@ -49,6 +49,13 @@ final class ListingStore: ObservableObject {
     /// different answers from a different cache.
     private let distances = DistanceResolver.shared
     private var seenIDs = Set<String>()
+    /// Rendered listings already submitted for this live result set.
+    ///
+    /// Desktop virtualises and each pagination harvest overlaps the previous
+    /// window heavily. Keeping this separate from `seenIDs` matters because a
+    /// locally filtered listing was still observed, but should not be submitted
+    /// again on every subsequent screen.
+    private var observedRenderedIDs = Set<String>()
     /// True while the grid is showing last session's cards. They render on the
     /// first frame, but their `cardIndex` refers to a DOM that no longer
     /// exists, so nothing may tap through them until live cards replace them.
@@ -123,6 +130,7 @@ final class ListingStore: ObservableObject {
         resultsGeneration += 1
         listings = []
         seenIDs = []
+        observedRenderedIDs = []
         deepestVisibleIndexSeen = -1
         scrolledSinceLastPage = false
         paginationBuffer = []
@@ -149,8 +157,8 @@ final class ListingStore: ObservableObject {
         // The payload covers the first page only; anything else already
         // rendered has to be read from the DOM.
         let rendered = await desktop.renderedCards()
-        await ingest(cards: rendered)
-        submitFeedObservations(payload: payload, rawCards: rendered, query: query)
+        let renderedParse = await ingest(cards: rendered)
+        submitFeedObservations(payload: payload, rendered: renderedParse, query: query)
         isLoadingFirstPage = false
         isRefreshingSearch = false
         cache.saveResults(listings, for: query, session: session)
@@ -257,7 +265,7 @@ final class ListingStore: ObservableObject {
     /// way there. Everything gathered here is markup-only — timestamps, delivery
     /// types and sold state exist for the first page and nowhere else.
     func loadMore() async {
-        guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
+        guard let query, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
         isLoadingMore = true
         loadingPlaceholderCount = Self.loadingReservation
         paginationBuffer = []
@@ -277,7 +285,9 @@ final class ListingStore: ObservableObject {
             case .indeterminate:
                 break pagination
             }
-            await ingest(cards: await desktop.renderedCards(), stageForPagination: true)
+            let rendered = await desktop.renderedCards()
+            let parsed = await ingest(cards: rendered, stageForPagination: true)
+            submitPaginationObservations(parsed, query: query)
             publishReadyPaginationRows()
         }
         publishReadyPaginationRows(flush: true)
@@ -331,14 +341,24 @@ final class ListingStore: ObservableObject {
 
     /// The markup tail — everything past the first page, plus anything rendered
     /// that the payload didn't describe.
+    private struct RenderedParse {
+        let listings: [Listing]
+        let dropped: Int
+    }
+
+    @discardableResult
     private func ingest(
         cards: [DesktopRawCard],
         stageForPagination: Bool = false
-    ) async {
-        guard !cards.isEmpty else { return }
+    ) async -> RenderedParse {
+        guard !cards.isEmpty else { return RenderedParse(listings: [], dropped: 0) }
         var parsed: [Listing] = []
+        var dropped = 0
         for (index, card) in cards.enumerated() {
-            guard let listing = DesktopCardParser.parse(card, cardIndex: index) else { continue }
+            guard let listing = DesktopCardParser.parse(card, cardIndex: index) else {
+                dropped += 1
+                continue
+            }
             parsed.append(listing)
         }
         await absorb(
@@ -346,6 +366,7 @@ final class ListingStore: ObservableObject {
             replacingCache: isShowingCachedResults && !parsed.isEmpty,
             stageForPagination: stageForPagination
         )
+        return RenderedParse(listings: parsed, dropped: dropped)
     }
 
     /// Merges a batch into the grid: new listings append, known ones fill gaps.
@@ -682,31 +703,50 @@ final class ListingStore: ObservableObject {
     /// block, and returns nothing to wait on. A search has already produced its
     /// results by the time this runs, and if the server is unreachable the
     /// correct outcome is that nobody notices.
-    private func submitFeedObservations(payload: [PayloadListing], rawCards: [DesktopRawCard], query: SearchQuery) {
-        // Cards the DOM pass could not parse are the interesting number here,
-        // not a nuisance: seen far above submitted is what a Facebook change
-        // looks like from the server, and it is invisible without both.
-        var parsed: [Listing] = []
-        var dropped = 0
-        for (index, card) in rawCards.enumerated() {
-            if let listing = DesktopCardParser.parse(card, cardIndex: index) {
-                parsed.append(listing)
-            } else {
-                dropped += 1
-            }
-        }
-        let seen = max(desktop.coverage.rendered, max(payload.count, parsed.count + dropped))
+    private func submitFeedObservations(payload: [PayloadListing], rendered: RenderedParse, query: SearchQuery) {
+        let seen = max(
+            desktop.coverage.rendered,
+            max(payload.count, rendered.listings.count + rendered.dropped)
+        )
 
         guard let request = ObservationBatch.feed(
             payload: payload,
-            cards: parsed,
+            cards: rendered.listings,
             route: query.isBrowse ? .discover : .search,
             session: session,
             currency: desktop.lastMarketplaceCurrency,
             cardsSeen: seen,
-            dropReasons: dropped > 0 ? ["card_unparseable"] : [],
+            dropReasons: rendered.dropped > 0 ? ["card_unparseable"] : [],
             shapeKeys: desktop.lastShapeKeys
         ) else { return }
+        // The first page deliberately includes payload/DOM duplicates so the
+        // batch builder can cross-check their prices. Remember both sources
+        // only after that check; pagination can then omit virtualized overlap.
+        for (index, item) in payload.enumerated() {
+            observedRenderedIDs.insert(item.makeListing(cardIndex: index).id)
+        }
+        for listing in rendered.listings { observedRenderedIDs.insert(listing.id) }
+        ObservationSubmitter.shared.submit(request)
+    }
+
+    /// One markup-only pagination window, minus cards a previous window in this
+    /// result set already submitted. No query, position, or page number is sent.
+    private func submitPaginationObservations(_ rendered: RenderedParse, query: SearchQuery) {
+        let newlyObserved = rendered.listings.filter {
+            observedRenderedIDs.insert($0.id).inserted
+        }
+        let cardsSeen = newlyObserved.count + rendered.dropped
+        guard cardsSeen > 0,
+              let request = ObservationBatch.feed(
+                payload: [],
+                cards: newlyObserved,
+                route: query.isBrowse ? .discover : .search,
+                session: session,
+                currency: nil,
+                cardsSeen: cardsSeen,
+                dropReasons: rendered.dropped > 0 ? ["card_unparseable"] : [],
+                shapeKeys: []
+              ) else { return }
         ObservationSubmitter.shared.submit(request)
     }
 

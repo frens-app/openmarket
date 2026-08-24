@@ -306,9 +306,13 @@ counts make a client-side drop legible server-side without shipping the dropped
 payload: `cards_seen: 15, cards_submitted: 0, client_drop_reasons: {"card_unparseable"}`
 is a Facebook change, and it is visible in a query.
 
-`ListingStore.submitFeedObservations` is where the client counts them: it runs
-the DOM parse itself and counts what came back nil, rather than taking the
-grid's length as the answer.
+`ListingStore` and `DiscoverFeed` count them at each live DOM harvest. Search
+submits its first page and each new pagination window; Discover submits its
+initial page and each signed-in scroll window. Both suppress the overlapping
+cards produced by Facebook's virtualized grid, while an unparseable card is
+still represented by the count and `card_unparseable` reason rather than by its
+raw contents. Discover's radius, city selection, card order, and local
+radius-filter result are never part of the request.
 
 ### 2.2 Absence inference is deliberately out of scope
 

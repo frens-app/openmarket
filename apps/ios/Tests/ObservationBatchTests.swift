@@ -113,6 +113,44 @@ extension ObservationBatchTests {
         XCTAssertEqual(request.counts.dropReasons, ["card_unparseable"])
     }
 
+    func testDiscoverWindowUsesCoarseDOMContextOnly() throws {
+        let request = try XCTUnwrap(ObservationBatch.feed(
+            payload: [],
+            cards: [domCard(id: "1550206205946898", photoFBID: "1095213896513327")],
+            route: .discover,
+            session: .authed,
+            currency: nil,
+            cardsSeen: 1,
+            dropReasons: [],
+            shapeKeys: []
+        ))
+
+        XCTAssertEqual(request.context.browserVariant, .desktop)
+        XCTAssertEqual(request.context.pageRoute, .discover)
+        XCTAssertEqual(request.context.extractionMethod, .renderedDom)
+        XCTAssertEqual(request.context.facebookAuthenticationState, .signedIn)
+        XCTAssertTrue(request.shapeFingerprint.isEmpty)
+
+        let price = try XCTUnwrap(request.observations.first?.search.price)
+        XCTAssertEqual(price.formattedAmount, "$150")
+        XCTAssertTrue(price.amountDecimal.isEmpty)
+        XCTAssertTrue(price.currencyCode.isEmpty)
+    }
+
+    func testAllDroppedDiscoverWindowStillProducesAHealthBatch() throws {
+        let request = try XCTUnwrap(ObservationBatch.feed(
+            payload: [], cards: [], route: .discover, session: .unauthed,
+            currency: nil, cardsSeen: 3,
+            dropReasons: ["card_unparseable"], shapeKeys: []
+        ))
+
+        XCTAssertTrue(request.observations.isEmpty)
+        XCTAssertEqual(request.context.pageRoute, .discover)
+        XCTAssertEqual(request.context.extractionMethod, .renderedDom)
+        XCTAssertEqual(request.counts.cardsSeen, 3)
+        XCTAssertEqual(request.counts.dropReasons, ["card_unparseable"])
+    }
+
     func testPayloadAndRenderedPriceDisagreementDropsBothCopies() throws {
         var rendered = domCard(id: "1550206205946897", photoFBID: "1095213896513326")
         rendered.priceText = "$15"
