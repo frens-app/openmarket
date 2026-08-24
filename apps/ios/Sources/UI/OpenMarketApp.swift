@@ -116,7 +116,8 @@ struct OpenMarketApp: App {
 ///
 /// Signing in is the *first step of onboarding* rather than a gate in front of
 /// it, so a first run is one flow with one beginning. `OnboardingView` owns all
-/// four questions; this view only decides whether any are outstanding.
+/// three presented questions; this view only decides whether any are
+/// outstanding.
 struct RootView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences

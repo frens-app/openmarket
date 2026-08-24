@@ -92,15 +92,15 @@ struct SettingsView: View {
                     LabeledContent("Backend", value: API.environmentSummary)
                     LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
 
-                    // Onboarding is four screens that a given install sees
+                    // Onboarding is three screens that a given install sees
                     // exactly once, which makes changing one of them tedious to
                     // check: the alternatives are deleting the account, or
                     // deleting the app and signing in again from scratch.
                     //
                     // Signing out is part of it rather than a separate step,
                     // because the phone screen *is* the first step — resetting
-                    // the flags alone would reopen the flow on Facebook and skip
-                    // the thing most likely to be under test.
+                    // the flags alone would reopen after the phone screen and
+                    // skip the thing most likely to be under test.
                     Button("Restart onboarding") {
                         Task {
                             prefs.resetOnboarding()

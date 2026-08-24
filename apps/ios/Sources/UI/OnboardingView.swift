@@ -3,18 +3,15 @@ import CoreLocation
 
 /// Everything between opening the app for the first time and using it.
 ///
-/// Four steps, in the order the app needs the answers rather than the order
-/// they're easiest to ask:
+/// Three presented steps, in the order the app needs the answers rather than
+/// the order they're easiest to ask:
 ///
 /// 1. **Phone** — required. The account is the app; there is no signed-out
 ///    version of a product whose listings belong to accounts.
-/// 2. **Facebook** — skippable, and pressed anyway. Everything measured about a
-///    signed-in session says it is the version worth having
-///    (`docs/logged-in-findings.md`).
-/// 3. **Location** — required. Every search is centred on a place and distance
+/// 2. **Location** — required. Every search is centred on a place and distance
 ///    is applied on this device (`docs/filter-parameters.md` §3), so without one
 ///    the app measures from a hardcoded city and pretends that's the user's.
-/// 4. **Notifications** — skippable, asked for price alerts specifically. A
+/// 3. **Notifications** — skippable, asked for price alerts specifically. A
 ///    permission prompt with no stated purpose is the one people decline by
 ///    reflex, and iOS only ever shows it once.
 ///
@@ -24,9 +21,11 @@ import CoreLocation
 /// has inputs: a place resolving in the background skipped the rest of the run,
 /// a second account inherited the first's answers, a returning account's
 /// server-side `onboardingCompleted` dismissed the flow mid-step. The cost is
-/// resumability — quitting halfway starts the four screens over, two of which
-/// are one tap to pass.
+/// resumability — quitting halfway starts the three screens over, one of which
+/// is one tap to pass.
 struct OnboardingView: View {
+    static let includesFacebookStep = false
+
     /// Called once every step has been answered or passed. Sets
     /// `hasCompletedOnboarding`, which is what dismisses this.
     let done: () -> Void
@@ -45,7 +44,10 @@ struct OnboardingView: View {
     enum Step: Int, CaseIterable {
         case phone, facebook, location, notifications
 
-        var next: Step { Step(rawValue: rawValue + 1) ?? .notifications }
+        func next(includingFacebook: Bool) -> Step {
+            if self == .phone, !includingFacebook { return .location }
+            return Step(rawValue: rawValue + 1) ?? .notifications
+        }
 
         /// Spelled out rather than derived from the case name, which a rename
         /// would silently change into a second breakdown row.
@@ -57,6 +59,14 @@ struct OnboardingView: View {
             case .notifications: return "notifications"
             }
         }
+    }
+
+    private var presentedSteps: [Step] {
+        Step.allCases.filter { Self.includesFacebookStep || $0 != .facebook }
+    }
+
+    private var currentStepIndex: Int {
+        presentedSteps.firstIndex(of: current).map { $0 + 1 } ?? 1
     }
 
     var body: some View {
@@ -94,7 +104,11 @@ struct OnboardingView: View {
         // so a flow that opened because the *place* went missing starts at the
         // step after it. Read here rather than in `current` so that signing in
         // later in this run can't retroactively move anything.
-        .onAppear { if account.isSignedIn { current = .facebook } }
+        .onAppear {
+            if account.isSignedIn {
+                current = Self.includesFacebookStep ? .facebook : .location
+            }
+        }
     }
 
     /// The only way forward, so the only place a step is counted. The flow is
@@ -102,18 +116,18 @@ struct OnboardingView: View {
     private func advance() {
         Analytics.capture(.onboardingStepCompleted, [
             "step": current.analyticsName,
-            "step_index": current.rawValue + 1
+            "step_index": currentStepIndex
         ])
-        current = current.next
+        current = current.next(includingFacebook: Self.includesFacebookStep)
     }
 
-    /// A dot per step, and no back button: three of the four steps are answered
-    /// outside this flow — a verified phone number, a Facebook cookie jar, a
-    /// system permission — so a chevron would offer to return to questions that
-    /// are no longer askable. Settings is where a second thought belongs.
+    /// A dot per step, and no back button: two of the three steps are answered
+    /// outside this flow — a verified phone number and a system permission — so
+    /// a chevron would offer to return to questions that are no longer askable.
+    /// Settings is where a second thought belongs.
     private var header: some View {
         HStack(spacing: 6) {
-            ForEach(Step.allCases, id: \.rawValue) { dot in
+            ForEach(presentedSteps, id: \.rawValue) { dot in
                 Capsule()
                     .fill(dot == current ? Color.primary : Color(.tertiaryLabel))
                     .frame(width: dot == current ? 18 : 6, height: 6)
@@ -122,7 +136,7 @@ struct OnboardingView: View {
         .animation(.easeInOut(duration: 0.22), value: current)
         .padding(.top, 14)
         .padding(.bottom, 4)
-        .accessibilityLabel("Step \(current.rawValue + 1) of \(Step.allCases.count)")
+        .accessibilityLabel("Step \(currentStepIndex) of \(presentedSteps.count)")
     }
 
     /// The one place in the app that waits for a location to be agreed.
@@ -135,7 +149,7 @@ struct OnboardingView: View {
         // The last step finishes rather than advances, so it is counted here.
         Analytics.capture(.onboardingStepCompleted, [
             "step": Step.notifications.analyticsName,
-            "step_index": Step.notifications.rawValue + 1
+            "step_index": presentedSteps.count
         ])
         Task {
             isFinishing = true
