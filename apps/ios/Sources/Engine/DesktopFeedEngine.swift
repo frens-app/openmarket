@@ -178,6 +178,8 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
             coverage = PayloadCoverage(rendered: result.renderedCount,
                                        withPayload: result.payloadCount)
+            lastShapeKeys = result.shapeKeys ?? []
+            lastMarketplaceCurrency = result.marketplaceCurrency
             last = result.listings
 
             // Done as soon as the payload matches what's on screen, or as soon
@@ -209,12 +211,44 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         let renderedIDs: [String]
         let renderedCount: Int
         let payloadCount: Int
+        /// The key names the payload carried, sorted and deduplicated by the
+        /// extractor. Hashed into one fingerprint before it leaves the device;
+        /// the values behind them never travel.
+        let shapeKeys: [String]?
+        let marketplaceCurrency: String?
         let loginWall: Bool
     }
 
+    /// The shape of the payload behind the last harvest.
+    ///
+    /// Published rather than returned: the fingerprint belongs to the page and
+    /// the batch, not to any card, and threading it through the listing array
+    /// would put it on fifteen objects that have no use for it.
+    private(set) var lastShapeKeys: [String] = []
+
+    /// The marketplace currency the last harvest ran against, from
+    /// `marketplace_settings.current_marketplace.primary_currency`.
+    ///
+    /// Page-level for the same reason as above, and load-bearing: `listing_price`
+    /// carries no code, so without this a price is a string and never a number.
+    private(set) var lastMarketplaceCurrency: String?
+
+    /// Decodes one harvest, and says so when it cannot.
+    ///
+    /// The `try?` this replaces made a decode failure indistinguishable from a
+    /// page that had not hydrated yet: the poll simply ran again and eventually
+    /// timed out with `coverage.isSuspicious`, which reads as "Facebook served
+    /// no payload" and is a different problem with a different fix. A field
+    /// whose *type* changed — a string becoming a number — fails exactly this
+    /// way and nowhere else (`docs/parsing-conventions.md` §1).
     private func decode(_ json: String) -> PayloadResult? {
         guard let data = json.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(PayloadResult.self, from: data)
+        do {
+            return try JSONDecoder().decode(PayloadResult.self, from: data)
+        } catch {
+            Logger.desktop.error("payload decode failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     // MARK: - Pagination

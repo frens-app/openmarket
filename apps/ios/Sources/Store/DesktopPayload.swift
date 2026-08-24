@@ -26,6 +26,9 @@ struct PayloadListing: Decodable, Equatable {
     let creationTime: Double?
     let priceAmount: String?
     let priceFormatted: String?
+    /// The strikethrough's own decimal. Measured 2026-08-23:
+    /// `"strikethrough_price":{"formatted_amount":"$150","amount":"150.00"}`.
+    let strikethroughAmount: String?
     let strikethroughFormatted: String?
     let photoURL: String?
     let photoID: String?
@@ -33,7 +36,19 @@ struct PayloadListing: Decodable, Equatable {
     let state: String?
     let cityPageID: String?
     let deliveryTypes: [String]
+    /// Facebook's three independent booleans, and `nil` is a fourth answer.
+    ///
+    /// A page that never said is not a page that said no
+    /// (`docs/parsing-conventions.md` §2), and here the difference is
+    /// load-bearing rather than tidy: the server reads `isSold == false` and
+    /// `isPending == false` **together** as a positive statement that the
+    /// listing is available, so an extractor that reported absence as false
+    /// would assert availability nothing observed.
+    ///
+    /// `isLive` is not an availability signal — it has been seen true on sold
+    /// cards — and is carried only because it is part of the raw record.
     let isSold: Bool?
+    let isPending: Bool?
     let isLive: Bool?
     let categoryID: String?
     let createdWithSellerApp: Bool?

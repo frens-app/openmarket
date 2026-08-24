@@ -9,6 +9,7 @@
 public typealias AuthServiceClient = Openmarket_Api_V1_AuthServiceClient
 public typealias UserServiceClient = Openmarket_Api_V1_UserServiceClient
 public typealias PricingServiceClient = Openmarket_Api_V1_PricingServiceClient
+public typealias ObservationServiceClient = Openmarket_Api_V1_ObservationServiceClient
 
 public typealias Viewer = Openmarket_Api_V1_Viewer
 public typealias Device = Openmarket_Api_V1_Device
@@ -44,3 +45,27 @@ public typealias PriceCheckSummary = Openmarket_Api_V1_PriceCheckSummary
 // `ProtoComparable`: a plain `Comparable` alias shadows the Swift standard
 // library protocol across every file importing this module, including the `<`
 // operators the app's own sorts rely on.
+
+// Observation ingest. The Facebook-facing names keep their full spelling: they
+// describe somebody else's surface, and `SearchListingObservation` on its own
+// would read as one of ours.
+public typealias SubmitObservationsRequest = Openmarket_Api_V1_SubmitObservationsRequest
+public typealias SubmitObservationsResponse = Openmarket_Api_V1_SubmitObservationsResponse
+public typealias ClientExtractionCounts = Openmarket_Api_V1_ClientExtractionCounts
+public typealias FacebookMarketplaceObservationContext = Openmarket_Api_V1_FacebookMarketplaceObservationContext
+public typealias FacebookMarketplaceQueryContext = Openmarket_Api_V1_FacebookMarketplaceQueryContext
+public typealias FacebookMarketplaceBrowserVariant = Openmarket_Api_V1_FacebookMarketplaceBrowserVariant
+public typealias FacebookMarketplacePageRoute = Openmarket_Api_V1_FacebookMarketplacePageRoute
+public typealias FacebookMarketplaceExtractionMethod = Openmarket_Api_V1_FacebookMarketplaceExtractionMethod
+public typealias FacebookMarketplaceAvailabilityFilter = Openmarket_Api_V1_FacebookMarketplaceAvailabilityFilter
+public typealias FacebookAuthenticationState = Openmarket_Api_V1_FacebookAuthenticationState
+public typealias FacebookListingKey = Openmarket_Api_V1_FacebookListingKey
+public typealias FacebookMarketplaceListingObservation = Openmarket_Api_V1_FacebookMarketplaceListingObservation
+public typealias FacebookMarketplaceSearchListingObservation = Openmarket_Api_V1_FacebookMarketplaceSearchListingObservation
+public typealias FacebookMarketplaceListingDetailObservation = Openmarket_Api_V1_FacebookMarketplaceListingDetailObservation
+public typealias FacebookMarketplacePriceObservation = Openmarket_Api_V1_FacebookMarketplacePriceObservation
+public typealias FacebookMarketplacePlaceObservation = Openmarket_Api_V1_FacebookMarketplacePlaceObservation
+public typealias FacebookMarketplaceMediaObservation = Openmarket_Api_V1_FacebookMarketplaceMediaObservation
+public typealias FacebookMarketplaceAvailabilityObservation = Openmarket_Api_V1_FacebookMarketplaceAvailabilityObservation
+public typealias FacebookMarketplaceSellerObservation = Openmarket_Api_V1_FacebookMarketplaceSellerObservation
+public typealias FacebookMarketplaceSellerSectionStatus = Openmarket_Api_V1_FacebookMarketplaceSellerSectionStatus

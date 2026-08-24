@@ -1,0 +1,144 @@
+import CryptoKit
+import Foundation
+import OpenMarketProtos
+import XCTest
+@testable import OpenMarket
+
+final class ObservationBatchTests: XCTestCase {
+
+    private func query(kind: SearchQuery.Kind = .search("Oak Dresser")) -> SearchQuery {
+        SearchQuery(kind: kind, radiusKM: 16, citySlug: "sanfrancisco")
+    }
+
+    /// The search term is hashed before it leaves the device. It reaches the
+    /// ingest boundary as a fingerprint so two runs of one query can be
+    /// recognised as the same query, and for no other purpose.
+    func testQueryTermTravelsOnlyAsAHash() throws {
+        let context = try XCTUnwrap(ObservationBatch.queryContext(query()))
+        let expected = Data(SHA256.hash(data: Data("oak dresser".utf8)))
+        XCTAssertEqual(context.queryTextSha256, expected)
+    }
+
+    /// Case and surrounding space are not different queries.
+    func testQueryHashIsNormalised() throws {
+        let a = try XCTUnwrap(ObservationBatch.queryContext(query(kind: .search("  Oak Dresser  "))))
+        let b = try XCTUnwrap(ObservationBatch.queryContext(query(kind: .search("oak dresser"))))
+        XCTAssertEqual(a.queryTextSha256, b.queryTextSha256)
+    }
+
+    /// A browse page has no query at all, and an empty hash would be a query
+    /// nobody typed.
+    func testBrowseCarriesNoQueryContext() {
+        XCTAssertNil(ObservationBatch.queryContext(query(kind: .browse)))
+    }
+
+    /// The filter is what makes a sold card interpretable: from an unfiltered
+    /// query it is a contradiction the server refuses, and from `out of stock`
+    /// it is the strongest public evidence of a sale there is.
+    func testAvailabilityFilterIsLabelled() throws {
+        var sold = query()
+        sold.availability = .unavailable
+        XCTAssertEqual(try XCTUnwrap(ObservationBatch.queryContext(sold)).availabilityFilter, .outOfStock)
+
+        var plain = query()
+        plain.availability = .any
+        XCTAssertEqual(try XCTUnwrap(ObservationBatch.queryContext(plain)).availabilityFilter, .unspecified)
+    }
+
+    func testShapeFingerprintSeparatesDifferentKeySets() {
+        let a = ObservationBatch.shapeFingerprint(["is_sold", "listing_price"])
+        let b = ObservationBatch.shapeFingerprint(["is_sold", "listing_price"])
+        let c = ObservationBatch.shapeFingerprint(["is_sold", "is_pending", "listing_price"])
+
+        XCTAssertEqual(a, b, "the same page shape must produce the same digest")
+        XCTAssertNotEqual(a, c, "a new key is the change this exists to notice")
+        XCTAssertNil(ObservationBatch.shapeFingerprint([]), "no payload is not a shape")
+    }
+
+    /// Joining without a separator would let ["ab", "c"] and ["a", "bc"] hash
+    /// the same, which is a Facebook change the alarm would sleep through.
+    func testShapeFingerprintCannotBeConfusedByConcatenation() {
+        XCTAssertNotEqual(
+            ObservationBatch.shapeFingerprint(["ab", "c"]),
+            ObservationBatch.shapeFingerprint(["a", "bc"])
+        )
+    }
+}
+
+extension ObservationBatchTests {
+
+    private func payloadCard(id: String, photoFBID: String) -> PayloadListing {
+        PayloadListing(
+            id: id, title: "Wooden dresser", creationTime: 1_756_000_000,
+            priceAmount: "150.00", priceFormatted: "$150",
+            strikethroughAmount: nil, strikethroughFormatted: nil,
+            photoURL: "https://scontent.example/v/t39/764800597_\(photoFBID)_5159691677258832564_n.jpg",
+            photoID: nil, city: "San Francisco", state: "CA", cityPageID: nil,
+            deliveryTypes: [], isSold: nil, isPending: nil, isLive: nil,
+            categoryID: nil, createdWithSellerApp: nil
+        )
+    }
+
+    private func domCard(id: String, photoFBID: String) -> Listing {
+        Listing(
+            id: "p:\(photoFBID)", title: "Wooden dresser", priceText: "$150",
+            originalPriceText: nil, locationText: "San Francisco, CA", conditionText: nil,
+            fulfillment: nil,
+            thumbnailURL: URL(string: "https://scontent.example/v/t39/764800597_\(photoFBID)_5159691677258832564_n.jpg"),
+            itemURL: URL(string: "https://www.facebook.com/marketplace/item/\(id)/"),
+            badgeText: nil, cardIndex: 0, detail: nil, capturedAt: Date()
+        )
+    }
+
+    /// The rendered cards include the ones the payload already covered, so a
+    /// naive batch sends each of those listings twice. Two cards claiming one
+    /// listing is the signature of an extractor reading a neighbour's fields,
+    /// and the server refuses both — which turns a working search into a batch
+    /// that merges nothing.
+    func testPayloadAndDOMCopiesOfOneListingAreSentOnce() throws {
+        let request = try XCTUnwrap(ObservationBatch.feed(
+            payload: [payloadCard(id: "1550206205946897", photoFBID: "1095213896513326")],
+            cards: [
+                domCard(id: "1550206205946897", photoFBID: "1095213896513326"),
+                domCard(id: "1550206205946898", photoFBID: "1095213896513327"),
+            ],
+            query: query(),
+            route: .search,
+            session: .authed,
+            currency: "USD",
+            cardsSeen: 2,
+            dropReasons: [],
+            shapeKeys: []
+        ))
+
+        XCTAssertEqual(request.observations.count, 2, "the duplicate must be dropped, the new card kept")
+
+        // The payload's copy is the one kept: it carries an exact listed_at that
+        // the rendered card has no way to know.
+        let first = request.observations[0].search
+        XCTAssertEqual(first.key.facebookListingID, "1550206205946897")
+        XCTAssertTrue(first.hasListedAt)
+
+        // Both sources contributed, so the batch is honestly labelled as both.
+        XCTAssertEqual(request.context.extractionMethod, .hybrid)
+    }
+
+    /// A batch built only from rendered cards must not claim the payload's
+    /// capabilities: the server ranks EMBEDDED_GRAPHQL above RENDERED_DOM for
+    /// timestamps and availability, and a wrong label is a wrong merge.
+    func testMethodDescribesWhatTheBatchActuallyContains() throws {
+        let domOnly = try XCTUnwrap(ObservationBatch.feed(
+            payload: [], cards: [domCard(id: "1550206205946898", photoFBID: "1095213896513327")],
+            query: query(), route: .search, session: .authed,
+            currency: "USD", cardsSeen: 1, dropReasons: [], shapeKeys: []
+        ))
+        XCTAssertEqual(domOnly.context.extractionMethod, .renderedDom)
+
+        let payloadOnly = try XCTUnwrap(ObservationBatch.feed(
+            payload: [payloadCard(id: "1550206205946897", photoFBID: "1095213896513326")],
+            cards: [], query: query(), route: .search, session: .authed,
+            currency: "USD", cardsSeen: 1, dropReasons: [], shapeKeys: []
+        ))
+        XCTAssertEqual(payloadOnly.context.extractionMethod, .embeddedGraphql)
+    }
+}

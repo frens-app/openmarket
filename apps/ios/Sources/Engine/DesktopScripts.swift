@@ -76,6 +76,20 @@ enum DesktopScripts {
           return raw.length ? raw : null;
         }
 
+        // Absent, true and false are three answers, not two.
+        //
+        // `field(...) === 'true'` collapses the first into the third, which is
+        // exactly what docs/parsing-conventions.md §2 forbids: a page that
+        // never said is not a page that said no. It matters most on sold state,
+        // where the server reads sold=false and pending=false together as a
+        // positive statement that the listing is available.
+        function flag(block, key) {
+          var raw = field(block, key);
+          if (raw === 'true') return true;
+          if (raw === 'false') return false;
+          return null;
+        }
+
         function nested(block, container, key) {
           var i = block.indexOf('"' + container + '"');
           if (i === -1) return null;
@@ -97,7 +111,26 @@ enum DesktopScripts {
           return out;
         }
 
-        var out = [], from = 0, guard_ = 0;
+        // The set of key names the payload actually carried, values excluded.
+        //
+        // Hashed on the Swift side into one fingerprint. A fingerprint nobody
+        // has seen before, arriving across many devices at once, is Facebook
+        // shipping a change — and it fires whether or not anything failed to
+        // parse, which is the point: a change that still parses is the one
+        // nobody notices (docs/ingest-attribution.md §3.4).
+        //
+        // Capped per block, because a runaway regex on a 3000-character window
+        // would turn every capture into a distinct fingerprint and the signal
+        // into noise.
+        function shapeKeys(block, into) {
+          var found = block.match(/"[a-z0-9_]{2,40}":/g);
+          if (!found) return;
+          for (var n = 0; n < found.length && n < 400; n++) {
+            into[found[n].slice(1, -2)] = 1;
+          }
+        }
+
+        var out = [], from = 0, guard_ = 0, keys = {};
         while (guard_++ < 200) {
           var start = flat.indexOf('"listing":{', from);
           if (start === -1) break;
@@ -118,6 +151,10 @@ enum DesktopScripts {
             creationTime: parseFloat(field(block, 'creation_time')) || null,
             priceAmount: nested(block, 'listing_price', 'amount'),
             priceFormatted: nested(block, 'listing_price', 'formatted_amount'),
+            // The strikethrough carries a decimal of its own, not just the
+            // rendered string: measured 2026-08-23 as
+            // {"formatted_amount":"$150","amount":"150.00"}.
+            strikethroughAmount: nested(block, 'strikethrough_price', 'amount'),
             strikethroughFormatted: nested(block, 'strikethrough_price', 'formatted_amount'),
             photoURL: photo,
             photoID: nested(block, 'primary_listing_photo', 'id'),
@@ -125,11 +162,13 @@ enum DesktopScripts {
             state: nested(block, 'reverse_geocode', 'state'),
             cityPageID: nested(block, 'city_page', 'id'),
             deliveryTypes: deliveryTypes(block),
-            isSold: field(block, 'is_sold') === 'true',
-            isLive: field(block, 'is_live') === 'true',
+            isSold: flag(block, 'is_sold'),
+            isPending: flag(block, 'is_pending'),
+            isLive: flag(block, 'is_live'),
             categoryID: field(block, 'marketplace_listing_category_id'),
-            createdWithSellerApp: field(block, 'created_with_seller_app') === 'true'
+            createdWithSellerApp: flag(block, 'created_with_seller_app')
           });
+          shapeKeys(block, keys);
         }
 
         // Cards rendered but absent from the payload — everything past the
@@ -150,11 +189,33 @@ enum DesktopScripts {
           if (rid.length > 7 && !seen[rid]) { seen[rid] = 1; rendered.push(rid); }
         }
 
+        // The marketplace's currency, which is a property of the **page** and
+        // not of any card.
+        //
+        // `listing_price` carries `amount` and `formatted_amount` and no code at
+        // all, so this is the only thing that makes a price convertible. Read
+        // from the settings block rather than from a symbol in the formatted
+        // string, because "$" is CAD, AUD and MXN as readily as USD.
+        //
+        // Anchored on `current_marketplace` so a marketplace the user could
+        // switch *to* cannot be mistaken for the one this page ran against.
+        var currency = null;
+        var cmIdx = flat.indexOf('"current_marketplace"');
+        if (cmIdx !== -1) {
+          currency = field(flat.slice(cmIdx, cmIdx + 600), 'primary_currency');
+        }
+
+        var shape = [];
+        for (var key in keys) { if (keys.hasOwnProperty(key)) shape.push(key); }
+        shape.sort();
+
         return JSON.stringify({
           listings: out,
           renderedIDs: rendered,
           renderedCount: rendered.length,
           payloadCount: out.length,
+          shapeKeys: shape,
+          marketplaceCurrency: currency,
           loginWall: document.body.innerText.indexOf('You must log in') !== -1
         });
       } catch (e) {

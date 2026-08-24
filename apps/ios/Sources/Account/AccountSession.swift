@@ -388,7 +388,14 @@ final class AccountSession: ObservableObject {
         guard let token = Keychain.get(Key.accessToken) else {
             throw APIError.unauthenticated
         }
-        return ["Authorization": ["Bearer \(token)"]]
+        return [
+            "Authorization": ["Bearer \(token)"],
+            // Which build is speaking. Observation ingest stamps these onto the
+            // batch so a parser regression stays traceable; everything else
+            // ignores them, and a header nobody reads costs nothing.
+            "X-Openmarket-App-Version": [AppBuild.version],
+            "X-Openmarket-App-Build": [AppBuild.build],
+        ]
     }
 
     private var needsRefresh: Bool {

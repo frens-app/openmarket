@@ -147,7 +147,9 @@ final class ListingStore: ObservableObject {
         await ingest(payload: payload)
         // The payload covers the first page only; anything else already
         // rendered has to be read from the DOM.
-        await ingest(cards: await desktop.renderedCards())
+        let rendered = await desktop.renderedCards()
+        await ingest(cards: rendered)
+        submitFeedObservations(payload: payload, rawCards: rendered, query: query)
         isLoadingFirstPage = false
         isRefreshingSearch = false
         cache.saveResults(listings, for: query, session: session)
@@ -656,9 +658,69 @@ final class ListingStore: ObservableObject {
     /// tagged with the context it was read under so a later reader can tell
     /// "this seller has no rating" from "we had no session when we looked".
     private func record(_ listing: Listing) {
-        guard listing.detail != nil else { return }
+        guard let detail = listing.detail else { return }
         cache.store(listing, capture: capture)
         apply(listing)
+        // **The only mint point for an item observation, and deliberately so.**
+        // `enrich` stages from `ListingCache` before it revalidates and returns
+        // the cached value when the live read fails, so the returned listing
+        // cannot say where it came from. This function is reached from the live
+        // branches of `fetchLive` and from nowhere else, which is what keeps a
+        // cached detail from being submitted as a fresh observation
+        // (`docs/ingest-attribution.md` §2.4).
+        submitItemObservation(listing, detail: detail)
+    }
+
+    /// One search page, as it was read.
+    ///
+    /// Fire and forget: `ObservationSubmitter.submit` cannot throw, cannot
+    /// block, and returns nothing to wait on. A search has already produced its
+    /// results by the time this runs, and if the server is unreachable the
+    /// correct outcome is that nobody notices.
+    private func submitFeedObservations(payload: [PayloadListing], rawCards: [DesktopRawCard], query: SearchQuery) {
+        // Cards the DOM pass could not parse are the interesting number here,
+        // not a nuisance: seen far above submitted is what a Facebook change
+        // looks like from the server, and it is invisible without both.
+        var parsed: [Listing] = []
+        var dropped = 0
+        for (index, card) in rawCards.enumerated() {
+            if let listing = DesktopCardParser.parse(card, cardIndex: index) {
+                parsed.append(listing)
+            } else {
+                dropped += 1
+            }
+        }
+        let seen = max(desktop.coverage.rendered, payload.count + parsed.count + dropped)
+
+        guard let request = ObservationBatch.feed(
+            payload: payload,
+            cards: parsed,
+            query: query,
+            route: query.isBrowse ? .discover : .search,
+            session: session,
+            currency: desktop.lastMarketplaceCurrency,
+            cardsSeen: seen,
+            dropReasons: dropped > 0 ? ["card_unparseable"] : [],
+            shapeKeys: desktop.lastShapeKeys
+        ) else { return }
+        ObservationSubmitter.shared.submit(request)
+    }
+
+    /// One opened listing, from a live item-page read.
+    ///
+    /// `settled` is false because the detail poll returns as soon as the text
+    /// and gallery are there, and the seller block renders after both
+    /// (`docs/logged-in-findings.md` §7.4). The server treats an unsettled
+    /// capture as able to add facts and not to remove them, which is the honest
+    /// reading of a page we did not wait out.
+    private func submitItemObservation(_ listing: Listing, detail: ListingDetail) {
+        guard let request = ObservationBatch.item(
+            listing: listing,
+            detail: detail,
+            session: session,
+            settled: false
+        ) else { return }
+        ObservationSubmitter.shared.submit(request)
     }
 
     /// Guarantees a saved listing has something behind it. The save control is
