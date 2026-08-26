@@ -26,23 +26,17 @@ CREATE TYPE listed_at_precision AS ENUM ('exact', 'day', 'week', 'month');
 CREATE TABLE sellers (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
 
-    -- HMAC of Facebook's /marketplace/profile/<id>, never the id itself.
-    --
-    -- The id is only readable with a session (docs/logged-in-findings.md §1:
-    -- zero profile links signed out, three signed in), so it fails the
-    -- public-visibility rule in docs/ingest-attribution.md §1. Grouping a
-    -- seller's listings needs equality and not the value, and a keyed hash
-    -- preserves exactly that much.
-    seller_cluster_key bytea UNIQUE,
+    -- Exact numeric id from Facebook's /marketplace/profile/<id>. It is a
+    -- deliberate exception to the preference for signed-out-visible facts
+    -- because it is the only reliable seller reconciliation key
+    -- (docs/ingest-attribution.md §1.2).
+    facebook_profile_id text,
 
     -- Visible to an unauthenticated mobile browser, confirmed 2026-08-22.
     display_name text,
     rating real,
 
-    -- Reputation, attached to a key that already names nobody. None of these
-    -- four identifies a seller: a review count, a join year and Facebook's own
-    -- badge describe how somebody trades, and the identifier they hang off is
-    -- an HMAC (docs/ingest-attribution.md §1.4).
+    -- Marketplace reputation observed beside that seller.
     --
     -- joined_text keeps Facebook's rendered string beside the parsed year. A
     -- year we failed to parse and a page that carried none are different facts,
@@ -61,12 +55,19 @@ CREATE TABLE sellers (
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    CONSTRAINT sellers_facebook_profile_id_format CHECK (
+        facebook_profile_id IS NULL OR facebook_profile_id ~ '^[0-9]{8,}$'
+    ),
     CONSTRAINT sellers_rating_range CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5)),
     CONSTRAINT sellers_rating_count_nonnegative CHECK (rating_count IS NULL OR rating_count >= 0),
     CONSTRAINT sellers_joined_year_range CHECK (
         joined_year IS NULL OR (joined_year >= 2004 AND joined_year <= 2200)
     )
 );
+
+CREATE UNIQUE INDEX sellers_facebook_profile_id_key
+    ON sellers (facebook_profile_id)
+    WHERE facebook_profile_id IS NOT NULL;
 
 -- Deliberately absent: seller location, in any form. The item page publishes a
 -- city and an approximate point for the **listing**, and that is not evidence of
