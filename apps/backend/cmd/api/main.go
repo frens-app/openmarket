@@ -156,7 +156,6 @@ func main() {
 			pool,
 			queries,
 			ingest.NewKeyring(queries, cfg.IngestEpochLength, cfg.IngestEpochKeyGrace),
-			[]byte(cfg.IngestSellerHMACKey),
 			ingest.Breaker{
 				Rate:     cfg.IngestBreakerQuarantineRate,
 				MinCards: int64(cfg.IngestBreakerMinCards),

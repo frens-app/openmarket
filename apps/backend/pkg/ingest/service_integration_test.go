@@ -58,7 +58,6 @@ func testService(t *testing.T, pool *pgxpool.Pool) *Service {
 	return NewService(
 		pool, queries,
 		NewKeyring(queries, week, 2*week),
-		[]byte("test-seller-key"),
 		Breaker{Rate: 0.4, MinCards: 200},
 		Limits{
 			MaxObservationAge:   48 * time.Hour,
@@ -275,9 +274,9 @@ func TestSubmitRefusesAStaleCapture(t *testing.T) {
 	}
 }
 
-// A signed-in desktop item page is the only surface with the profile id. The
-// row it produces holds the reputation and a hash, and the id itself is nowhere.
-func TestSubmitStoresSellerReputationAndNotTheProfileID(t *testing.T) {
+// A signed-in desktop item page is the only measured surface with the profile
+// id. The row and raw evidence retain the exact id alongside seller reputation.
+func TestSubmitStoresExactSellerProfileIDAndReputation(t *testing.T) {
 	pool := testPool(t)
 	svc := testService(t, pool)
 	device := testDevice(t, pool)
@@ -326,26 +325,26 @@ func TestSubmitStoresSellerReputationAndNotTheProfileID(t *testing.T) {
 	}
 
 	var (
-		clusterKey  []byte
-		name        string
-		rating      float32
-		joinedText  string
-		joinedYear  int32
-		ratingCount int32
-		highlyRated bool
+		storedProfileID string
+		name            string
+		rating          float32
+		joinedText      string
+		joinedYear      int32
+		ratingCount     int32
+		highlyRated     bool
 	)
 	err = pool.QueryRow(ctx, `
-		SELECT s.seller_cluster_key, s.display_name, s.rating, s.joined_text,
+		SELECT s.facebook_profile_id, s.display_name, s.rating, s.joined_text,
 		       s.joined_year, s.rating_count, s.highly_rated
 		FROM sellers s JOIN listings l ON l.seller_id = s.id
 		WHERE l.facebook_listing_id = $1`, listingID,
-	).Scan(&clusterKey, &name, &rating, &joinedText, &joinedYear, &ratingCount, &highlyRated)
+	).Scan(&storedProfileID, &name, &rating, &joinedText, &joinedYear, &ratingCount, &highlyRated)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if string(clusterKey) != string(ClusterKey([]byte("test-seller-key"), profileID)) {
-		t.Fatal("cluster key is not the keyed hash of the profile id")
+	if storedProfileID != profileID {
+		t.Fatalf("facebook_profile_id = %q, want %q", storedProfileID, profileID)
 	}
 	if name != "Kelsey Jones" || rating != 4.8 || joinedYear != 2010 || ratingCount != 44 || !highlyRated {
 		t.Fatalf("seller row: %s %v %d %d %v", name, rating, joinedYear, ratingCount, highlyRated)
@@ -354,25 +353,42 @@ func TestSubmitStoresSellerReputationAndNotTheProfileID(t *testing.T) {
 		t.Fatalf("joined_text = %q", joinedText)
 	}
 
-	// The identifier must be absent from the whole table, not merely from the
-	// column it would have had.
-	var leaked int
-	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM sellers WHERE display_name = $1 OR joined_text = $1`, profileID,
-	).Scan(&leaked); err != nil {
-		t.Fatal(err)
-	}
-	if leaked != 0 {
-		t.Fatal("the profile id reached a stored column")
-	}
+	var retained int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM listing_observations
 		 WHERE batch_id = $2::uuid AND position($1 in payload::text) > 0`,
 		profileID, resp.GetBatchId(),
-	).Scan(&leaked); err != nil {
+	).Scan(&retained); err != nil {
 		t.Fatal(err)
 	}
-	if leaked != 0 {
-		t.Fatal("the profile id reached the raw accepted payload")
+	if retained != 1 {
+		t.Fatal("the profile id was not retained in the raw accepted payload")
+	}
+
+	// A second listing carrying the same exact profile ID must reuse the seller
+	// row rather than creating a duplicate or guessing from the display name.
+	secondListingID := "55555555555"
+	req.Observations[0].GetDetail().Key.FacebookListingId = &secondListingID
+	second, err := svc.Submit(ctx, Submission{DeviceID: device, Request: req})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.GetAccepted() != 1 {
+		t.Fatalf("second accepted = %d, rejections %+v", second.GetAccepted(), second.GetRejections())
+	}
+	var sellerRows, distinctSellers int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM sellers WHERE facebook_profile_id = $1`, profileID,
+	).Scan(&sellerRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT count(DISTINCT seller_id) FROM listings WHERE facebook_listing_id IN ($1, $2)`,
+		listingID, secondListingID,
+	).Scan(&distinctSellers); err != nil {
+		t.Fatal(err)
+	}
+	if sellerRows != 1 || distinctSellers != 1 {
+		t.Fatalf("seller rows = %d, distinct listing sellers = %d", sellerRows, distinctSellers)
 	}
 }

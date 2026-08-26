@@ -136,9 +136,9 @@ message FacebookMarketplaceSellerObservation {
   // Numeric id from /marketplace/profile/<id>. Stable on signed-in desktop item
   // pages and preferable to clustering on name plus listing coordinates.
   //
-  // Sent, never stored. The server derives a cluster key from it and discards
-  // the value: the id is only readable with a session, so it fails the
-  // public-visibility rule in docs/ingest-attribution.md §1.
+  // Stored exactly as Facebook publishes it. This is a deliberate exception to
+  // the preference for facts visible to signed-out accounts because it is the
+  // only reliable way to group one seller's listings.
   optional string facebook_profile_id = 2 [(buf.validate.field).string.pattern = "^[0-9]{8,}$"];
   optional string display_name = 3;
   optional string joined_text = 4;

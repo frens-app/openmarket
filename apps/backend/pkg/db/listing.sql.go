@@ -78,31 +78,30 @@ func (q *Queries) AttachListingAliases(ctx context.Context, arg AttachListingAli
 	return i, err
 }
 
-const claimSellerClusterKey = `-- name: ClaimSellerClusterKey :one
+const claimFacebookProfileID = `-- name: ClaimFacebookProfileID :one
 UPDATE sellers
-SET seller_cluster_key = $1,
+SET facebook_profile_id = $1,
     updated_at = CURRENT_TIMESTAMP
 WHERE sellers.id = $2
-  AND sellers.seller_cluster_key IS NULL
-  AND NOT EXISTS (SELECT 1 FROM sellers s2 WHERE s2.seller_cluster_key = $1)
-RETURNING id, seller_cluster_key, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at
+  AND sellers.facebook_profile_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM sellers s2 WHERE s2.facebook_profile_id = $1)
+RETURNING id, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at, facebook_profile_id
 `
 
-type ClaimSellerClusterKeyParams struct {
-	SellerClusterKey []byte
-	ID               uuid.UUID
+type ClaimFacebookProfileIDParams struct {
+	FacebookProfileID *string
+	ID                uuid.UUID
 }
 
 // Promotes an unresolved seller when a capture finally supplies the profile id.
 // DO NOTHING on conflict: another row already holds that key, and merging two
 // seller histories on a first sighting is a guess, so the caller repoints the
 // listing instead.
-func (q *Queries) ClaimSellerClusterKey(ctx context.Context, arg ClaimSellerClusterKeyParams) (Seller, error) {
-	row := q.db.QueryRow(ctx, claimSellerClusterKey, arg.SellerClusterKey, arg.ID)
+func (q *Queries) ClaimFacebookProfileID(ctx context.Context, arg ClaimFacebookProfileIDParams) (Seller, error) {
+	row := q.db.QueryRow(ctx, claimFacebookProfileID, arg.FacebookProfileID, arg.ID)
 	var i Seller
 	err := row.Scan(
 		&i.ID,
-		&i.SellerClusterKey,
 		&i.DisplayName,
 		&i.Rating,
 		&i.JoinedText,
@@ -113,6 +112,7 @@ func (q *Queries) ClaimSellerClusterKey(ctx context.Context, arg ClaimSellerClus
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FacebookProfileID,
 	)
 	return i, err
 }
@@ -184,7 +184,7 @@ INSERT INTO sellers (display_name, rating, joined_text, joined_year, rating_coun
 VALUES ($1, $2, $3,
         $4, $5, $6,
         $7, $7)
-RETURNING id, seller_cluster_key, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at
+RETURNING id, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at, facebook_profile_id
 `
 
 type CreateUnresolvedSellerParams struct {
@@ -214,7 +214,6 @@ func (q *Queries) CreateUnresolvedSeller(ctx context.Context, arg CreateUnresolv
 	var i Seller
 	err := row.Scan(
 		&i.ID,
-		&i.SellerClusterKey,
 		&i.DisplayName,
 		&i.Rating,
 		&i.JoinedText,
@@ -225,6 +224,7 @@ func (q *Queries) CreateUnresolvedSeller(ctx context.Context, arg CreateUnresolv
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FacebookProfileID,
 	)
 	return i, err
 }
@@ -617,7 +617,7 @@ SET display_name = COALESCE($1, display_name),
     last_observed_at = GREATEST(last_observed_at, $7),
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $8
-RETURNING id, seller_cluster_key, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at
+RETURNING id, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at, facebook_profile_id
 `
 
 type UpdateSellerFieldsParams struct {
@@ -647,7 +647,6 @@ func (q *Queries) UpdateSellerFields(ctx context.Context, arg UpdateSellerFields
 	var i Seller
 	err := row.Scan(
 		&i.ID,
-		&i.SellerClusterKey,
 		&i.DisplayName,
 		&i.Rating,
 		&i.JoinedText,
@@ -658,6 +657,7 @@ func (q *Queries) UpdateSellerFields(ctx context.Context, arg UpdateSellerFields
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FacebookProfileID,
 	)
 	return i, err
 }
@@ -695,12 +695,12 @@ func (q *Queries) UpsertListingMedia(ctx context.Context, arg UpsertListingMedia
 }
 
 const upsertSeller = `-- name: UpsertSeller :one
-INSERT INTO sellers (seller_cluster_key, display_name, rating, joined_text, joined_year,
+INSERT INTO sellers (facebook_profile_id, display_name, rating, joined_text, joined_year,
                      rating_count, highly_rated, first_observed_at, last_observed_at)
 VALUES ($1, $2, $3,
         $4, $5, $6,
         $7, $8, $8)
-ON CONFLICT (seller_cluster_key) DO UPDATE
+ON CONFLICT (facebook_profile_id) WHERE facebook_profile_id IS NOT NULL DO UPDATE
 SET display_name = COALESCE(EXCLUDED.display_name, sellers.display_name),
     rating = COALESCE(EXCLUDED.rating, sellers.rating),
     joined_text = COALESCE(EXCLUDED.joined_text, sellers.joined_text),
@@ -709,29 +709,29 @@ SET display_name = COALESCE(EXCLUDED.display_name, sellers.display_name),
     highly_rated = COALESCE(EXCLUDED.highly_rated, sellers.highly_rated),
     last_observed_at = GREATEST(sellers.last_observed_at, EXCLUDED.last_observed_at),
     updated_at = CURRENT_TIMESTAMP
-RETURNING id, seller_cluster_key, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at
+RETURNING id, display_name, rating, joined_text, joined_year, rating_count, highly_rated, first_observed_at, last_observed_at, created_at, updated_at, facebook_profile_id
 `
 
 type UpsertSellerParams struct {
-	SellerClusterKey []byte
-	DisplayName      *string
-	Rating           *float32
-	JoinedText       *string
-	JoinedYear       *int32
-	RatingCount      *int32
-	HighlyRated      *bool
-	ObservedAt       pgtype.Timestamptz
+	FacebookProfileID *string
+	DisplayName       *string
+	Rating            *float32
+	JoinedText        *string
+	JoinedYear        *int32
+	RatingCount       *int32
+	HighlyRated       *bool
+	ObservedAt        pgtype.Timestamptz
 }
 
-// Joined on the cluster key, which is an HMAC of Facebook's profile id. The id
-// itself is never stored: it is only readable with a session, so it fails the
-// public-visibility rule.
+// The exact profile id is Facebook's stable seller identity. It is intentionally
+// stored even though it may require a signed-in surface to observe; see the
+// documented data-minimization preference and exception.
 //
 // COALESCE in that order fills gaps without erasing: a capture that could not
 // see the seller section passes NULL and leaves what is already known alone.
 func (q *Queries) UpsertSeller(ctx context.Context, arg UpsertSellerParams) (Seller, error) {
 	row := q.db.QueryRow(ctx, upsertSeller,
-		arg.SellerClusterKey,
+		arg.FacebookProfileID,
 		arg.DisplayName,
 		arg.Rating,
 		arg.JoinedText,
@@ -743,7 +743,6 @@ func (q *Queries) UpsertSeller(ctx context.Context, arg UpsertSellerParams) (Sel
 	var i Seller
 	err := row.Scan(
 		&i.ID,
-		&i.SellerClusterKey,
 		&i.DisplayName,
 		&i.Rating,
 		&i.JoinedText,
@@ -754,6 +753,7 @@ func (q *Queries) UpsertSeller(ctx context.Context, arg UpsertSellerParams) (Sel
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FacebookProfileID,
 	)
 	return i, err
 }

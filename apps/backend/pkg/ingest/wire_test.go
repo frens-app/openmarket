@@ -133,7 +133,7 @@ func TestClientShapedRequestsSatisfyTheSchema(t *testing.T) {
 	}
 }
 
-func TestMarshalObservationRemovesTransitOnlySellerID(t *testing.T) {
+func TestMarshalObservationKeepsSellerID(t *testing.T) {
 	profileID := "100000123456789"
 	observation := &v1.FacebookMarketplaceListingObservation{
 		Observation: &v1.FacebookMarketplaceListingObservation_Detail{
@@ -150,13 +150,10 @@ func TestMarshalObservationRemovesTransitOnlySellerID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(payload, []byte(profileID)) || bytes.Contains(payload, []byte("facebookProfileId")) {
-		t.Fatalf("transit-only seller id survived sanitization: %s", payload)
+	if !bytes.Contains(payload, []byte(profileID)) || !bytes.Contains(payload, []byte("facebookProfileId")) {
+		t.Fatalf("seller id missing from stored evidence: %s", payload)
 	}
 	if !bytes.Contains(payload, []byte("Public seller name")) {
 		t.Fatalf("public seller fields were removed with the id: %s", payload)
-	}
-	if observation.GetDetail().GetSeller().GetFacebookProfileId() != profileID {
-		t.Fatal("sanitization mutated the observation used for reconciliation")
 	}
 }

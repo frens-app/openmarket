@@ -125,29 +125,6 @@ func TestKeyringDoesNotServeADeletedKeyFromCache(t *testing.T) {
 	}
 }
 
-func TestClusterKeyGroupsWithoutStoringTheIdentifier(t *testing.T) {
-	secret := []byte("seller-key")
-	a := ClusterKey(secret, "100000123456789")
-	b := ClusterKey(secret, "100000123456789")
-	c := ClusterKey(secret, "100000987654321")
-
-	if !bytes.Equal(a, b) {
-		t.Fatal("grouping needs equality to be deterministic")
-	}
-	if bytes.Equal(a, c) {
-		t.Fatal("two sellers must not collapse into one")
-	}
-	if bytes.Contains(a, []byte("100000123456789")) {
-		t.Fatal("the identifier must not survive into the stored value")
-	}
-	if !bytes.Equal(ClusterKey([]byte("other-key"), "100000123456789"), ClusterKey([]byte("other-key"), "100000123456789")) {
-		t.Fatal("a different key must still be deterministic")
-	}
-	if bytes.Equal(a, ClusterKey([]byte("other-key"), "100000123456789")) {
-		t.Fatal("the key must actually key the hash")
-	}
-}
-
 func TestBreakerWaitsForEnoughCards(t *testing.T) {
 	b := Breaker{Rate: 0.4, MinCards: 200}
 	if b.Open(3, 2) {

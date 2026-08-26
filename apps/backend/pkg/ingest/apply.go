@@ -238,14 +238,13 @@ func (s *Service) applyMedia(
 	return nil
 }
 
-// resolveSeller writes the two public seller fields and the grouping key, and
-// nothing else.
+// resolveSeller writes the observed seller fields and exact Facebook profile id.
 //
 // Three cases, and the order matters. A capture with the profile id joins on
-// the cluster key. A capture without one — every mobile item page — updates the
+// that id. A capture without one — every mobile item page — updates the
 // seller this listing already has, or creates an unresolved row. And when a
-// keyed capture finds an unresolved row already attached, it promotes that row
-// rather than leaving an orphan behind.
+// identified capture finds an unresolved row already attached, it promotes
+// that row rather than leaving an orphan behind.
 func (s *Service) resolveSeller(
 	ctx context.Context,
 	q *db.Queries,
@@ -256,13 +255,13 @@ func (s *Service) resolveSeller(
 	if c.Detail == nil {
 		return nil, nil
 	}
-	obs := sellerFrom(c.Detail.GetSeller(), s.sellerKey)
+	obs := sellerFrom(c.Detail.GetSeller())
 	if obs == nil {
 		return nil, nil
 	}
 	at := timestamp(observedAt)
 
-	if obs.clusterKey == nil {
+	if obs.facebookProfileID == nil {
 		if listing.SellerID == nil {
 			created, err := q.CreateUnresolvedSeller(ctx, db.CreateUnresolvedSellerParams{
 				DisplayName: obs.displayName,
@@ -295,9 +294,9 @@ func (s *Service) resolveSeller(
 	}
 
 	if listing.SellerID != nil {
-		claimed, err := q.ClaimSellerClusterKey(ctx, db.ClaimSellerClusterKeyParams{
-			ID:               *listing.SellerID,
-			SellerClusterKey: obs.clusterKey,
+		claimed, err := q.ClaimFacebookProfileID(ctx, db.ClaimFacebookProfileIDParams{
+			ID:                *listing.SellerID,
+			FacebookProfileID: obs.facebookProfileID,
 		})
 		switch {
 		case err == nil:
@@ -318,19 +317,19 @@ func (s *Service) resolveSeller(
 		case !errors.Is(err, pgx.ErrNoRows):
 			return nil, fmt.Errorf("claim seller: %w", err)
 		}
-		// No rows: the row is already keyed, or that key belongs elsewhere.
+		// No rows: the row is already identified, or that id belongs elsewhere.
 		// Either way the upsert below is the answer, and the listing repoints.
 	}
 
 	seller, err := q.UpsertSeller(ctx, db.UpsertSellerParams{
-		SellerClusterKey: obs.clusterKey,
-		DisplayName:      obs.displayName,
-		Rating:           obs.rating,
-		JoinedText:       obs.joinedText,
-		JoinedYear:       obs.joinedYear,
-		RatingCount:      obs.ratingCount,
-		HighlyRated:      obs.highlyRated,
-		ObservedAt:       at,
+		FacebookProfileID: obs.facebookProfileID,
+		DisplayName:       obs.displayName,
+		Rating:            obs.rating,
+		JoinedText:        obs.joinedText,
+		JoinedYear:        obs.joinedYear,
+		RatingCount:       obs.ratingCount,
+		HighlyRated:       obs.highlyRated,
+		ObservedAt:        at,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("upsert seller: %w", err)

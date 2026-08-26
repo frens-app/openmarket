@@ -633,18 +633,18 @@ type PriceCheckPhoto struct {
 }
 
 type Seller struct {
-	ID               uuid.UUID
-	SellerClusterKey []byte
-	DisplayName      *string
-	Rating           *float32
-	JoinedText       *string
-	JoinedYear       *int32
-	RatingCount      *int32
-	HighlyRated      *bool
-	FirstObservedAt  pgtype.Timestamptz
-	LastObservedAt   pgtype.Timestamptz
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                uuid.UUID
+	DisplayName       *string
+	Rating            *float32
+	JoinedText        *string
+	JoinedYear        *int32
+	RatingCount       *int32
+	HighlyRated       *bool
+	FirstObservedAt   pgtype.Timestamptz
+	LastObservedAt    pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	FacebookProfileID *string
 }
 
 type User struct {

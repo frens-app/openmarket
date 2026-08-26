@@ -79,8 +79,9 @@ export default function PrivacyPage() {
         The server assigns a rotating pseudonym so it can distinguish repeat
         reports during a limited period without creating a permanent browsing
         history. If Facebook exposes a seller profile ID, the server uses it
-        only to derive a keyed grouping value and removes the original ID before
-        storing either accepted or rejected diagnostic data.
+        to group listings from the same seller and stores that exact ID with the
+        seller record and listing-observation evidence. It is not linked to the
+        Facebook account of the person browsing.
       </p>
       <h2>Who we share it with</h2>
       <p>

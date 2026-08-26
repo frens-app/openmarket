@@ -256,15 +256,14 @@ sold/pending/live, moderation, deletion, and ingestion health at once.
 ```sql
 CREATE TABLE sellers (
   id                         uuid PRIMARY KEY,
-  -- An HMAC of Facebook's /marketplace/profile/<id>, never the id. The id names
-  -- an account and is readable only with a session; a keyed hash keeps the
-  -- grouping and drops the identifier (ingest-attribution.md §1.4).
-  seller_cluster_key         bytea UNIQUE,
+  -- Facebook's exact /marketplace/profile/<id>. This signed-in-only field is a
+  -- deliberate exception to the data-minimization preference because it is the
+  -- only reliable seller reconciliation key (ingest-attribution.md §1.2).
+  facebook_profile_id        text UNIQUE,
   -- Confirmed visible to an unauthenticated mobile browser, 2026-08-22.
   display_name               text,
   rating                     real,
-  -- Reputation. None of these names an account, and the key they hang off
-  -- already names nobody.
+  -- Marketplace reputation observed beside that seller.
   joined_text                text,
   joined_year                int,
   rating_count               int,
@@ -285,7 +284,8 @@ associated with the seller.
 The v0.2 statement "there is no stable seller ID" is obsolete. Signed-in
 desktop item pages contain repeated `/marketplace/profile/<id>` links for the
 listing's seller. Deduplicate those links and accept the id only when exactly
-one unique profile id is associated with the seller section.
+one unique profile id is associated with the seller section. The server stores
+that exact ID; it does not hash it.
 
 Rows observed without that id may be kept as unresolved seller observations,
 but must not be permanently clustered on `(name, listing coordinate)`. A

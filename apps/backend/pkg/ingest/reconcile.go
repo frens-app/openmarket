@@ -307,40 +307,37 @@ func planMedia(listingID uuid.UUID, c Candidate, src source, observedAt time.Tim
 }
 
 // sellerObservation is the part of a detail capture that may reach a seller
-// row: a key to group on, and the reputation that hangs off it.
+// row: Facebook's stable seller id and the reputation that hangs off it.
 type sellerObservation struct {
-	clusterKey  []byte
-	displayName *string
-	rating      *float32
-	joinedText  *string
-	joinedYear  *int32
-	ratingCount *int32
-	highlyRated *bool
+	facebookProfileID *string
+	displayName       *string
+	rating            *float32
+	joinedText        *string
+	joinedYear        *int32
+	ratingCount       *int32
+	highlyRated       *bool
 }
 
 func (o *sellerObservation) empty() bool {
-	return o.clusterKey == nil && o.displayName == nil && o.rating == nil &&
+	return o.facebookProfileID == nil && o.displayName == nil && o.rating == nil &&
 		o.joinedText == nil && o.joinedYear == nil && o.ratingCount == nil &&
 		o.highlyRated == nil
 }
 
-// sellerFrom extracts what may be stored, and drops what may not.
-//
-// The one field that is dropped is the profile id. It is hashed here and never
-// persisted: it names a specific Facebook account, and it is only readable with
-// a session. Everything else describes how a seller trades rather than who they
-// are, and it hangs off a key that already names nobody
-// (docs/ingest-attribution.md §1.4).
+// sellerFrom extracts the seller fields the server persists. The exact Facebook
+// profile id is retained as the reconciliation key. This is a deliberate
+// exception to the preference for facts visible while signed out
+// (docs/ingest-attribution.md §1.2).
 //
 // The seller's *location* is not read at all, on any surface. The item page's
 // city and coordinate belong to the listing and are stored there.
-func sellerFrom(s *v1.FacebookMarketplaceSellerObservation, secret []byte) *sellerObservation {
+func sellerFrom(s *v1.FacebookMarketplaceSellerObservation) *sellerObservation {
 	if s == nil || s.GetSectionStatus() != v1.FacebookMarketplaceSellerSectionStatus_FACEBOOK_MARKETPLACE_SELLER_SECTION_STATUS_OBSERVED {
 		return nil
 	}
 	out := &sellerObservation{}
 	if id := s.GetFacebookProfileId(); id != "" {
-		out.clusterKey = ClusterKey(secret, id)
+		out.facebookProfileID = &id
 	}
 	if name := strings.TrimSpace(s.GetDisplayName()); name != "" {
 		out.displayName = &name

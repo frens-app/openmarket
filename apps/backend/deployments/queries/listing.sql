@@ -71,18 +71,18 @@ WHERE id = sqlc.arg('id')
 RETURNING *;
 
 -- name: UpsertSeller :one
--- Joined on the cluster key, which is an HMAC of Facebook's profile id. The id
--- itself is never stored: it is only readable with a session, so it fails the
--- public-visibility rule.
+-- The exact profile id is Facebook's stable seller identity. It is intentionally
+-- stored even though it may require a signed-in surface to observe; see the
+-- documented data-minimization preference and exception.
 --
 -- COALESCE in that order fills gaps without erasing: a capture that could not
 -- see the seller section passes NULL and leaves what is already known alone.
-INSERT INTO sellers (seller_cluster_key, display_name, rating, joined_text, joined_year,
+INSERT INTO sellers (facebook_profile_id, display_name, rating, joined_text, joined_year,
                      rating_count, highly_rated, first_observed_at, last_observed_at)
-VALUES (sqlc.arg('seller_cluster_key'), sqlc.narg('display_name'), sqlc.narg('rating'),
+VALUES (sqlc.arg('facebook_profile_id'), sqlc.narg('display_name'), sqlc.narg('rating'),
         sqlc.narg('joined_text'), sqlc.narg('joined_year'), sqlc.narg('rating_count'),
         sqlc.narg('highly_rated'), sqlc.arg('observed_at'), sqlc.arg('observed_at'))
-ON CONFLICT (seller_cluster_key) DO UPDATE
+ON CONFLICT (facebook_profile_id) WHERE facebook_profile_id IS NOT NULL DO UPDATE
 SET display_name = COALESCE(EXCLUDED.display_name, sellers.display_name),
     rating = COALESCE(EXCLUDED.rating, sellers.rating),
     joined_text = COALESCE(EXCLUDED.joined_text, sellers.joined_text),
@@ -144,15 +144,15 @@ SET display_name = COALESCE(sqlc.narg('display_name'), display_name),
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
--- name: ClaimSellerClusterKey :one
+-- name: ClaimFacebookProfileID :one
 -- Promotes an unresolved seller when a capture finally supplies the profile id.
 -- DO NOTHING on conflict: another row already holds that key, and merging two
 -- seller histories on a first sighting is a guess, so the caller repoints the
 -- listing instead.
 UPDATE sellers
-SET seller_cluster_key = sqlc.arg('seller_cluster_key'),
+SET facebook_profile_id = sqlc.arg('facebook_profile_id'),
     updated_at = CURRENT_TIMESTAMP
 WHERE sellers.id = sqlc.arg('id')
-  AND sellers.seller_cluster_key IS NULL
-  AND NOT EXISTS (SELECT 1 FROM sellers s2 WHERE s2.seller_cluster_key = sqlc.arg('seller_cluster_key'))
+  AND sellers.facebook_profile_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM sellers s2 WHERE s2.facebook_profile_id = sqlc.arg('facebook_profile_id'))
 RETURNING *;

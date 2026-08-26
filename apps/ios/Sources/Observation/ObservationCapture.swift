@@ -218,8 +218,8 @@ enum ObservationCapture {
         }
 
         seller.sectionStatus = .observed
-        // Sent, never stored. The server hashes it into a cluster key and
-        // discards the value.
+        // Stored exactly by the server so listings from the same Facebook
+        // seller can be reconciled without guessing from name or location.
         if let profileID = detail.sellerProfileID { seller.facebookProfileID = profileID }
         if let name = detail.sellerName { seller.displayName = name }
         if let joined = detail.sellerJoined {

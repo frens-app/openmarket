@@ -85,12 +85,6 @@ func init() {
 	pflag.Duration("llm_timeout", 30*time.Second, "deadline for a single model call")
 
 	// Observation ingest.
-	//
-	// The seller key is the one secret here that must never rotate: it derives
-	// the cluster key that groups a seller's listings, so a new key shatters
-	// every existing cluster and there is no migration back — the Facebook
-	// profile ids it was derived from are not stored.
-	pflag.String("ingest_seller_hmac_key", "", "HMAC-SHA256 key for the seller cluster key; rotating it discards every seller grouping")
 	// A week, and the reason is corroboration rather than privacy: two
 	// submissions only count as independent inside one epoch, so a shorter
 	// grain means more pairs straddle a boundary and fail to corroborate when
@@ -161,7 +155,6 @@ type ServiceConfig struct {
 	LLMMaxAttempts     int           `mapstructure:"llm_max_attempts"`
 	LLMTimeout         time.Duration `mapstructure:"llm_timeout"`
 
-	IngestSellerHMACKey         string        `mapstructure:"ingest_seller_hmac_key"`
 	IngestEpochLength           time.Duration `mapstructure:"ingest_epoch_length"`
 	IngestEpochKeyGrace         time.Duration `mapstructure:"ingest_epoch_key_grace"`
 	IngestBreakerQuarantineRate float64       `mapstructure:"ingest_breaker_quarantine_rate"`
@@ -240,7 +233,6 @@ func requireAPIValues(cfg ServiceConfig) {
 		"refresh_token_hmac_key", cfg.RefreshTokenHMACKey,
 		"allowed_country_codes", cfg.AllowedCountryCodes,
 		"prelude_api_key", cfg.PreludeAPIKey,
-		"ingest_seller_hmac_key", cfg.IngestSellerHMACKey,
 	}
 
 	var missing []string
@@ -332,12 +324,6 @@ func requireAPIValues(cfg ServiceConfig) {
 	}
 	if cfg.IngestActivityRetentionDays < 1 {
 		panic("ingest_activity_retention_days must be at least 1")
-	}
-	// Distinct from the other two for the same reason they are distinct from
-	// each other: these keys have different lifetimes, and the seller key is the
-	// one that can never be rotated.
-	if cfg.IngestSellerHMACKey == cfg.JWTSecret || cfg.IngestSellerHMACKey == cfg.RefreshTokenHMACKey {
-		panic("ingest_seller_hmac_key must differ from jwt_secret and refresh_token_hmac_key")
 	}
 }
 

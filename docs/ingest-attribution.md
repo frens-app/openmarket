@@ -67,169 +67,81 @@ once per batch instead of on every row.
 
 ---
 
-## 1. The public-visibility floor
+## 1. Prefer facts available while signed out
 
-**Rule.** A field may be stored only if a signed-out visitor to Facebook can
-observe the same fact on some Facebook surface. The capture may come from a
-signed-in session; the *fact* must be public. Whether we happened to read it
-through someone's account is not what makes it storable.
+**Preference.** Prefer not to retain Facebook data that is unavailable to an
+unauthenticated account. This is a data-minimization default, not an absolute
+storage boundary. An exception must have a concrete product purpose, be limited
+to the fields needed for that purpose, and be documented and disclosed.
 
-This is one rule with two independent reasons, and it would be worth keeping for
-either alone. It bounds the database to a mirror of public information rather
-than a derivative of one person's account. And it makes the signed-in and
-signed-out corpora the same corpus — a listing observed by an anonymous device
-and by a signed-in one produce rows that merge, instead of two tiers where the
-richer one can only ever be served back to the person who captured it.
+The preference is about facts, not captures. If any signed-out Facebook surface
+publishes a field, a signed-in capture of the same field is ordinary listing
+data. Signed-in-only data receives explicit review instead of being rejected by
+definition. Facts about the observer remain outside the corpus (§1.5).
 
-The rule is about facts, not about captures. If any signed-out surface publishes
-a field, a signed-in capture of that field is storable. That distinction is what
-makes §1.3 below a research question rather than a policy question.
+### 1.1 Field classifications
 
-### 1.1 Verdicts, per field group
-
-Four labels. Every field an extractor produces carries exactly one.
-
-| label | meaning | what we do |
+| label | meaning | handling |
 |---|---|---|
-| `public` | observed signed out on at least one surface, dated | store |
-| `identifying` | names a specific Facebook account, and is login-gated | never store the value; a keyed hash may stand in (§1.4) |
-| `unverified` | login-gated, or believed public on an uncited measurement | store only if it survives §1.4's second test |
-| `observer_derived` | a fact about the person browsing, not about the listing | never leaves the device (§1.5) |
+| `signed_out` | observed on at least one signed-out surface, dated | store |
+| `signed_in_only` | observed only through an authenticated Facebook session | prefer not to store; document any exception |
+| `unverified` | visibility has not been measured conclusively | minimize and record the uncertainty |
+| `observer_derived` | describes the person browsing rather than the listing or seller | never leaves the device (§1.5) |
 
-**The floor has two tests, and a field only has to pass one.** Either a
-signed-out visitor can see the fact, or the fact names nobody. The first is the
-rule the corpus is built on. The second exists because refusing an unverified
-field is a cost as well as a protection, and a review count attached to a hash
-is not a privacy problem worth paying that cost for (§1.4).
+Measured signed-out listing fields include listing identity, creation time,
+title, price, cover photo, location, delivery types, category, availability,
+description, condition and media. Anonymous Discover exposes a smaller subset.
+Seller display name and star rating were confirmed on signed-out mobile on
+2026-08-22. Rating count, join year and Facebook's highly-rated badge remain
+unverified and are retained as seller reputation fields.
 
-The `public` verdicts, with the measurement each rests on:
+### 1.2 Deliberate seller-ID exception
 
-| field group | source | verdict | evidence |
-|---|---|---|---|
-| listing id, `creation_time`, title, price, previous price, cover photo, city, `facebook_place_id`, `delivery_types`, category, `is_sold`/`is_pending`/`is_live` | desktop search, embedded payload | `public` | live signed-out search, 15 cards / 15 feed edges, `data-model.md` §1, 2026-08-12 |
-| listing id, rendered title, price, location, cover image URL | desktop search, rendered DOM tail | `public` | same run |
-| sold and pending flags on the sold-filtered query | `availability=out of stock` | `public` | San Francisco, **logged out**, desktop, `filter-parameters.md` §10, 2026-08-07 |
-| title, price, category, description, condition, photos, coarse listed-age, approximate listing location and coordinate, delivery, status | desktop item page | `public` | signed-out item row, `data-model.md` §1 |
-| card identity, title, price, location | anonymous Discover | `public` | `discover.md` §0.0; note a Discover card carries no `creation_time`, no `delivery_types` and no sold state at all (`discover.md` §4.6) |
-| seller display name, seller star rating | mobile item page, signed out | `public` | confirmed by hand, 2026-08-22; supersedes the `unverified` reading of `logged-in-findings.md` §1 (see §1.3) |
+Facebook's numeric `/marketplace/profile/<id>` is the only stable seller
+identifier we have measured. It appears on signed-in desktop item pages and was
+absent from the measured signed-out desktop and mobile pages. We nevertheless
+store it exactly in `sellers.facebook_profile_id`.
 
-The price-comparison path is the reassuring one. Both halves of what it fetches
-— the live market and the recently-sold set — were measured logged out, so the
-whole comparables corpus clears the floor without an exception.
+The purpose is narrow: reconcile listings that belong to the same seller and
+avoid the incorrect alternative of grouping by display name or a listing's
+coordinate. The ID may also support an explicit seller-profile link later. It
+must not be treated as the observer's Facebook identity, joined to Openmarket
+users or devices, or used to infer a seller location.
 
-### 1.2 The violations
+The earlier HMAC design was removed. A keyed hash did not eliminate the
+identifier's sensitivity: Facebook IDs are numeric and enumerable by anyone who
+also has the long-lived key. It added a permanent secret and made recovery or
+link generation impossible without materially changing what the server could
+correlate. The server and raw observation evidence now retain the exact ID, and
+the privacy disclosure says so.
 
-**One field fails: the stable seller id.** Everything else in the seller block
-is stored, and §1.4 says under which of the two tests.
+### 1.3 Other seller fields
 
-| field | desktop signed out | desktop signed in | mobile signed out | verdict |
-|---|---|---|---|---|
-| `/marketplace/profile/<id>` (stable seller id) | **0 links** | **3 links** | 0 on 6/6 | `identifying` |
-| display name | absent | present | **present** | `public` |
-| star rating | absent | present | **present** | `public` |
-| rating count, `Highly rated on Marketplace`, join year | absent | present | not separately pinned | `unverified`, stored |
+Seller display name and star rating are visible on signed-out mobile. Rating
+count, join year and the highly-rated badge were not separately pinned in that
+test, but are stored because they directly describe Marketplace reputation and
+help distinguish occasional sellers from commercial sellers. The badge is
+always Facebook's observed value, never derived from a private threshold.
 
-`logged-in-findings.md` §1 calls the stable seller id "the plan's best result",
-and it is the one field this rule refuses. That is not an accident of the rule;
-it is the rule working. The id is valuable *because* it names an account, and a
-value that names an account is the one thing here that cannot be stored.
+Seller location is not stored. The item page's city and coordinate describe the
+listing, not where the seller lives or trades; they remain on `listings` with a
+`listing_` prefix. Seller-section status remains capture provenance:
+`UNAVAILABLE` and `NOT_OBSERVED` are not evidence that a listing has no seller.
 
-§1.4 keeps the product function without keeping the identifier.
+### 1.4 Review rule for future signed-in-only fields
 
-### 1.3 What the mobile surface publishes, and what is still open
-
-**Resolved 2026-08-22.** Seller display name and seller star rating are visible
-to an unauthenticated mobile browser, confirmed by hand. Under the rule in §1,
-that makes both storable from *any* capture, including a signed-in desktop item
-page — the fact is public, so where we happened to read it does not matter.
-
-This resolves the contradiction that v0.1 of this document flagged.
-`logged-in-findings.md` §1 asserted in bold that the seller join date is public
-on signed-out mobile, while the table above that sentence is introduced as "Six
-listings, both user agents, **all signed in**". The assertion was right about
-the surface; its citation was the wrong table.
-
-Three neighbouring fields were not named in the 2026-08-22 check and stay
-`unverified`. They are stored anyway, under the second test in §1.4:
-
-- **rating count** — the `(N)` beside the stars.
-- **`Highly rated on Marketplace`** — Facebook's own badge against an
-  unpublished threshold (`data-model.md` §4). It is never recomputed from the
-  score, so it is observed or it is absent; there is no derivation.
-- **join year**, with `joined_text` beside it. A year we failed to parse and a
-  page that carried none are different facts, and only the raw string tells them
-  apart.
-
-Measuring them is still worth doing and is §7 item 1 — a field whose visibility
-is known is a field the next decision about it is easy. It no longer blocks
-storing them.
-
-### 1.4 The second test: does the field name anyone
-
-A login-gated field is refused when it identifies a Facebook account. It is
-stored when it describes how somebody trades and hangs off an identifier that
-already names nobody.
-
-That line falls between the profile id and everything beside it. The id *is* the
-account: it resolves to a profile page, it can be enumerated, and it is the
-whole reason a session is needed to see the block. A join year, a review count
-and a badge are aggregate reputation. Attached to a cluster key they say "this
-seller has 44 reviews and has been here since 2010" and identify no one, which
-is also the only form in which the product wants them.
-
-So the seller block splits three ways.
-
-**Seller identity — store a cluster key, never the id.** The product function is
-grouping: "these 14 listings are one seller", which is what the
-business-and-drop-shipper filter needs. Grouping needs equality, not the value.
-
-```
-seller_cluster_key = HMAC(k_seller, facebook_profile_id)   -- 16 bytes
-```
-
-`k_seller` is a single long-lived server key, never rotated (rotation would
-shatter every existing cluster) and never shipped to a client. What this buys:
-listings group by seller exactly as they would on the raw id; the column cannot
-be enumerated, cannot be turned back into a Facebook profile URL, and cannot be
-republished as an identifier. What it costs: we cannot link a seller across a
-data reset, and we cannot show anyone a link to the seller's profile. Neither is
-a feature we have.
-
-The keyspace is small enough to brute-force *with the key* — Facebook profile
-ids are numeric — so this is protection against the column leaking, not against
-the key leaking. It is still the right trade: the column is in every backup and
-every query result, and the key is in one secret.
-
-**Seller name and rating — store them, under the first test.** Both are public
-(§1.3), so a signed-in desktop capture of either merges with a mobile one.
-
-**Join year, rating count and the badge — store them, under the second.** None
-of the three names an account, and all three are what the
-business-and-drop-shipper filter is actually made of: `logged-in-findings.md`
-§1a found ten consecutive anthurium listings rated 10 out of 10, against
-one-off furniture sellers who mostly are not rated at all. "Has ratings" is
-itself the commercial-seller signal, and it is unreadable without the count.
-
-**Seller location — not stored, on any surface, under either test.** The item
-page's city and coordinate belong to the *listing*, and they are already on
-`listings` as `listing_location_text` and `listing_approx_lat`/`lon`. A
-`seller_location` column could only ever be filled from those, which is the
-inference `data-model.md` §1 exists to forbid. The `listing_` prefix on those
-columns is what makes that a naming error rather than a judgement call
-(`data-model.md` §8).
-
-**The seller section's existence — keep the status, drop the contents.**
-`FacebookMarketplaceSellerSectionStatus` in `protos/openmarket/api/v1/listing.proto`
-already separates `UNAVAILABLE` (this capture could not see a seller section)
-from `NOT_OBSERVED` (it could and did not). That distinction is extraction
-health, not seller data, and it stays.
+Before retaining another signed-in-only or unverified field, record its source,
+purpose, retention, user disclosure and why a signed-out substitute is
+insufficient. Prefer the smaller representation when it provides the same
+product value. Do not infer facts the source did not publish, and do not let a
+missing field erase richer data captured earlier.
 
 ### 1.5 `observer_derived`: what must not cross the process boundary
 
 These are facts about the person browsing. They are not covered by the
-public-visibility rule at all, because the question "could an anonymous visitor
-see this" has the wrong shape — an anonymous visitor sees *their own* version of
-it.
+signed-out-data preference at all, because the question "could an anonymous
+visitor see this" has the wrong shape — an anonymous visitor sees *their own*
+version of it.
 
 - **The account's own location.** `logged-in-findings.md` §7.3 measured the
   picker pill reading `Location: New York, New York, Within 5 mi` while the app
@@ -546,10 +458,9 @@ two things: do they have the key, and how many candidate inputs are there.
 | **with the key** | **recoverable** — enumerate every candidate and compare | safe |
 
 `device_id` is a UUID, so the input space is far too large to enumerate and the
-bottom-left cell does not apply. `facebook_profile_id` is a numeric Facebook id,
-so it does — which is the caveat §1.4 already states about `seller_cluster_key`.
-Neither case makes the hash useless. Both mean the key is the thing being
-protected, and they differ only in what happens if it leaks.
+bottom-left cell does not apply. This rotating HMAC is only for the submitter
+pseudonym. Seller reconciliation stores `facebook_profile_id` directly under
+the documented exception in §1.2 and does not share this keyring.
 
 That is why the key is deleted rather than kept. **A new secret each epoch, and
 the old one destroyed.** Inside one week, "this submitter sent 900 batches of
@@ -932,18 +843,19 @@ the true date as the longer of the two and stop describing it as immediate.
 
 ## 7. Open verification work
 
-In priority order. The first decides what the `sellers` table contains.
+In priority order. These measurements refine provenance and future review; they
+do not block the current seller schema.
 
 1. **Pin the rest of the mobile signed-out seller block.** Name and rating are
    confirmed (§1.3). One probe run against mobile with no cookies should settle
    rating count, `Highly rated on Marketplace`, and join year in the same pass,
    and should record the field list rather than a summary — the field list is
    what the previous version of this claim was missing. All three are stored
-   already, so this moves them from the second test to the first rather than
-   unblocking anything.
+   already, so this changes their classification from `unverified` to
+   `signed_out` rather than unblocking anything.
 2. **Confirm the sold-filtered query still works signed out.** The measurement is
    2026-08-07 and it is what puts the entire comparables corpus above the
-   visibility floor (`filter-parameters.md` §10).
+   signed-out-data preference (`filter-parameters.md` §10).
 3. **Survey the signed-out mobile matrix**, which `data-model.md` §7 item 1
    already lists. This document adds a reason: mobile signed out is the surface
    that decides several `unverified` verdicts, and it has now decided two.
@@ -956,8 +868,8 @@ In priority order. The first decides what the `sellers` table contains.
    at 40% over six hours with a 200-card floor, and both are placeholders: the
    floor exists so three cards cannot switch off a working extractor, and the
    rate is a guess until there is traffic to measure.
-6. **Merge an unresolved seller into a keyed one.** When a keyed capture finds
+6. **Merge an unresolved seller into an identified one.** When a capture with a seller ID finds
    the listing already pointing at an unresolved seller row, `resolveSeller`
-   promotes that row if the key is free and otherwise repoints the listing,
+   promotes that row if the ID is free and otherwise repoints the listing,
    leaving the unresolved row behind. Both outcomes are correct; the second
    leaks a row nothing will ever join.

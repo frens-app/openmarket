@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
 // The two ways a batch is refused before anything is stored. Both are about
@@ -49,34 +48,31 @@ type Submission struct {
 }
 
 type Service struct {
-	pool      *pgxpool.Pool
-	queries   *db.Queries
-	keyring   *Keyring
-	sellerKey []byte
-	breaker   Breaker
-	limits    Limits
-	logger    *zap.Logger
-	now       func() time.Time
+	pool    *pgxpool.Pool
+	queries *db.Queries
+	keyring *Keyring
+	breaker Breaker
+	limits  Limits
+	logger  *zap.Logger
+	now     func() time.Time
 }
 
 func NewService(
 	pool *pgxpool.Pool,
 	queries *db.Queries,
 	keyring *Keyring,
-	sellerKey []byte,
 	breaker Breaker,
 	limits Limits,
 	logger *zap.Logger,
 ) *Service {
 	return &Service{
-		pool:      pool,
-		queries:   queries,
-		keyring:   keyring,
-		sellerKey: sellerKey,
-		breaker:   breaker,
-		limits:    limits,
-		logger:    logger,
-		now:       time.Now,
+		pool:    pool,
+		queries: queries,
+		keyring: keyring,
+		breaker: breaker,
+		limits:  limits,
+		logger:  logger,
+		now:     time.Now,
 	}
 }
 
@@ -322,14 +318,7 @@ func marshalObservation(observations []*v1.FacebookMarketplaceListingObservation
 	// Presence is preserved: an absent optional stays absent rather than
 	// appearing as a zero. An observation that cannot distinguish "not supplied
 	// by this surface" from "supplied as empty" is not evidence of anything.
-	observation := proto.Clone(observations[index]).(*v1.FacebookMarketplaceListingObservation)
-	if detail := observation.GetDetail(); detail != nil && detail.Seller != nil {
-		// The profile id is transit-only. It may be used to derive the keyed
-		// seller cluster before this function is called, but neither accepted
-		// evidence nor quarantine may retain it.
-		detail.Seller.FacebookProfileId = nil
-	}
-	out, err := protojson.Marshal(observation)
+	out, err := protojson.Marshal(observations[index])
 	if err != nil {
 		return nil, fmt.Errorf("marshal observation: %w", err)
 	}

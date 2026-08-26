@@ -673,9 +673,9 @@ type FacebookMarketplaceSellerObservation struct {
 	// Numeric id from /marketplace/profile/<id>. Stable on signed-in desktop item
 	// pages and preferable to clustering on name plus listing coordinates.
 	//
-	// Sent, never stored. The server derives a cluster key from it and discards
-	// the value: the id is only readable with a session, so it fails the
-	// public-visibility rule in docs/ingest-attribution.md §1.
+	// Stored exactly as Facebook publishes it. This is a deliberate exception to
+	// the preference for facts visible to signed-out accounts because it is the
+	// only reliable way to group one seller's listings.
 	FacebookProfileId *string  `protobuf:"bytes,2,opt,name=facebook_profile_id,json=facebookProfileId,proto3,oneof" json:"facebook_profile_id,omitempty"`
 	DisplayName       *string  `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
 	JoinedText        *string  `protobuf:"bytes,4,opt,name=joined_text,json=joinedText,proto3,oneof" json:"joined_text,omitempty"`
