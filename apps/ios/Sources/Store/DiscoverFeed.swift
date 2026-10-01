@@ -142,6 +142,7 @@ final class DiscoverFeed: ObservableObject {
     /// Facebook's Marketplace feed for this place, cut to the user's radius.
     private func fill(citySlug: String, session: BrowserSession) async {
         browseSeen = []
+        engine.session = session
 
         let query = SearchQuery(kind: .browse, radiusKM: prefs.radiusKM,
                                 citySlug: citySlug, coordinate: nil)
@@ -153,7 +154,9 @@ final class DiscoverFeed: ObservableObject {
         if walled { Logger.discover.info("login wall on the browse feed") }
         isAnonymous = walled || session == .unauthed
 
-        var collected = await nearby(cards).kept
+        let initial = await nearby(cards)
+        submitObservations(initial, session: session)
+        var collected = initial.kept
         // Nothing is on screen during the first fill, so publish the first
         // usable page now and let any radius top-up append below it. Pull to
         // refresh deliberately keeps the old feed stable until the replacement
@@ -175,7 +178,8 @@ final class DiscoverFeed: ObservableObject {
             }
             let harvest = await scrollForMore(
                 wanted: wanted,
-                publishAsHarvested: publishesProgressively
+                publishAsHarvested: publishesProgressively,
+                session: session
             )
             collected += harvest
             loadingPlaceholderCount = 0
@@ -229,7 +233,8 @@ final class DiscoverFeed: ObservableObject {
     /// More of Facebook's feed, about two screens from the bottom. Never runs
     /// for an anonymous session — `fill` ends that feed where it lands.
     private func topUpIfAtMargin() async {
-        guard !reachedEnd, !isLoading, !isLoadingMore,
+        guard let session = filledUnder,
+              !reachedEnd, !isLoading, !isLoadingMore,
               scrolledSinceLastTopUp,
               deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
 
@@ -243,7 +248,11 @@ final class DiscoverFeed: ObservableObject {
             of \(self.listings.count, privacy: .public)
             """)
 
-        await scrollForMore(wanted: Self.browseTarget, publishAsHarvested: true)
+        await scrollForMore(
+            wanted: Self.browseTarget,
+            publishAsHarvested: true,
+            session: session
+        )
         loadingPlaceholderCount = 0
         isLoadingMore = false
 
@@ -271,7 +280,8 @@ final class DiscoverFeed: ObservableObject {
     ///   replace their existing grid once.
     @discardableResult
     private func scrollForMore(wanted: Int,
-                               publishAsHarvested: Bool = false) async -> [Listing] {
+                               publishAsHarvested: Bool = false,
+                               session: BrowserSession) async -> [Listing] {
         var found: [Listing] = []
         var staged: [Listing] = []
         var dryScreens = 0
@@ -292,6 +302,7 @@ final class DiscoverFeed: ObservableObject {
                 break harvest
             }
             let batch = await nearby(await engine.renderedCards())
+            submitObservations(batch, session: session)
             found += batch.kept
             if publishAsHarvested, !batch.kept.isEmpty {
                 staged.append(contentsOf: batch.kept)
@@ -339,6 +350,18 @@ final class DiscoverFeed: ObservableObject {
         return found
     }
 
+    private struct NearbyBatch {
+        let kept: [Listing]
+        /// New public listing facts read from this live window, before the
+        /// on-device radius filter. The radius and pass/fail result never leave
+        /// the device.
+        let observed: [Listing]
+        let cardsSeen: Int
+        let dropReasons: [String]
+
+        var newCards: Int { observed.count }
+    }
+
     /// Rendered cards, minus everything this feed shouldn't carry: duplicates,
     /// shipping-only listings, and anything outside the user's radius.
     ///
@@ -346,10 +369,12 @@ final class DiscoverFeed: ObservableObject {
     /// other list in the app. Facebook aims this feed, and it wanders — 20 cards
     /// across 11 cities on one measured load. Filtering downstream would page in
     /// twenty and show four, with no way for the fill to know to keep going.
-    /// - Returns: what survived, and how many listings were new to this fill at
-    ///   all. The caller needs both to tell "this area has run out" from "we are
-    ///   re-reading the window the fill already took" — see `scrollForMore`.
-    private func nearby(_ cards: [DesktopRawCard]) async -> (kept: [Listing], newCards: Int) {
+    ///
+    /// - Returns: what survived, plus the new observations and extractor health
+    ///   from this window. Shipping-only and overlapping cards are not new
+    ///   observation candidates; unparseable cards are counted without sending
+    ///   their contents.
+    private func nearby(_ cards: [DesktopRawCard]) async -> NearbyBatch {
         var parsed: [Listing] = []
         var unparsed = 0, ships = 0, dupes = 0
         var sample: DesktopRawCard?
@@ -383,29 +408,60 @@ final class DiscoverFeed: ObservableObject {
         }
         guard !parsed.isEmpty else {
             Logger.discover.info("batch: \(tally, privacy: .public), 0 new")
-            return ([], 0)
+            return NearbyBatch(
+                kept: [], observed: [], cardsSeen: unparsed,
+                dropReasons: unparsed > 0 ? ["card_unparseable"] : []
+            )
         }
 
         await distances.resolveAll(parsed.map(\.locationText))
-        guard prefs.radiusKM > 0 else { return (parsed, parsed.count) }
-        let kept = parsed.filter { listing in
-            let coordinate = distances.enrichedCoordinate(for: listing)
-            guard let km = distances.distanceKM(for: listing.locationText,
-                                                coordinate: coordinate) else {
-                // Unknown distance is dropped here, the opposite of the rule
-                // elsewhere. Other lists are searches Facebook already
-                // localised, so an unresolved place is probably nearby. This
-                // feed reaches across state lines — a signed-in Seattle feed
-                // served Bellingham, Wilsonville OR and Citrus Heights CA — so
-                // an unresolved place is more likely far away. Safe to drop
-                // rather than defer: `resolveAll` above has already run, so
-                // nothing vanishes from under a reader later.
-                return false
+        let kept: [Listing]
+        if prefs.radiusKM <= 0 {
+            kept = parsed
+        } else {
+            kept = parsed.filter { listing in
+                let coordinate = distances.enrichedCoordinate(for: listing)
+                guard let km = distances.distanceKM(for: listing.locationText,
+                                                    coordinate: coordinate) else {
+                    // Unknown distance is dropped here, the opposite of the
+                    // rule elsewhere. Other lists are searches Facebook
+                    // already localised, so an unresolved place is probably
+                    // nearby. This feed reaches across state lines — a signed-
+                    // in Seattle feed served Bellingham, Wilsonville OR and
+                    // Citrus Heights CA — so an unresolved place is more likely
+                    // far away. Safe to drop rather than defer: `resolveAll`
+                    // above has already run, so nothing vanishes from under a
+                    // reader later.
+                    return false
+                }
+                return km <= Double(prefs.radiusKM)
             }
-            return km <= Double(prefs.radiusKM)
         }
         Logger.discover.info("batch: \(tally, privacy: .public), \(parsed.count, privacy: .public) new, \(kept.count, privacy: .public) in radius")
-        return (kept, parsed.count)
+        return NearbyBatch(
+            kept: kept,
+            observed: parsed,
+            cardsSeen: parsed.count + unparsed,
+            dropReasons: unparsed > 0 ? ["card_unparseable"] : []
+        )
+    }
+
+    /// Submit public facts read from the Discover page. Feed order, local
+    /// radius, city selection, and whether a card survived the radius filter are
+    /// deliberately absent from the request.
+    private func submitObservations(_ batch: NearbyBatch, session: BrowserSession) {
+        guard batch.cardsSeen > 0,
+              let request = ObservationBatch.feed(
+                payload: [],
+                cards: batch.observed,
+                route: .discover,
+                session: session,
+                currency: nil,
+                cardsSeen: batch.cardsSeen,
+                dropReasons: batch.dropReasons,
+                shapeKeys: []
+              ) else { return }
+        ObservationSubmitter.shared.submit(request)
     }
 
     /// Drops the "already filled" flag without touching what's on screen, for a

@@ -11,7 +11,7 @@ export default function PrivacyPage() {
   return (
     <article className="prose-guide mx-auto max-w-3xl px-5 py-16">
       <h1 className="text-3xl font-bold tracking-tight text-white">Privacy</h1>
-      <p className="mt-2 text-sm text-gray-500">Last updated August 14, 2026</p>
+      <p className="mt-2 text-sm text-gray-500">Last updated August 23, 2026</p>
       <h2>The short version</h2>
       <p>
         We collect what we need to run your account, answer a Price Check, and
@@ -44,6 +44,16 @@ export default function PrivacyPage() {
           searches come back empty and which features earn their place.
         </li>
         <li>
+          <strong>Marketplace listing observations:</strong> when the app shows
+          or opens a Facebook Marketplace listing, it may contribute the public
+          listing facts it read — such as title, description, price,
+          availability, approximate listing location, photos, and public seller
+          name or reputation — to improve discovery for everyone. Search terms
+          and result positions are not included in this listing corpus. Raw
+          diagnostic observations are kept for up to seven days; the resulting
+          listing record and price or availability history may be retained.
+        </li>
+        <li>
           <strong>Where you are searching:</strong> the city or area and a
           rounded distance. Your precise coordinates are used on your device and
           are not sent to us.
@@ -63,6 +73,16 @@ export default function PrivacyPage() {
         </li>
         <li>Your precise location, and the photos in your library.</li>
       </ul>
+      <h2>How listing contributions are separated from you</h2>
+      <p>
+        A listing contribution is not stored with your account or device ID.
+        The server assigns a rotating pseudonym so it can distinguish repeat
+        reports during a limited period without creating a permanent browsing
+        history. If Facebook exposes a seller profile ID, the server uses it
+        to group listings from the same seller and stores that exact ID with the
+        seller record and listing-observation evidence. It is not linked to the
+        Facebook account of the person browsing.
+      </p>
       <h2>Who we share it with</h2>
       <p>
         Service providers who run parts of the app on our behalf: an SMS

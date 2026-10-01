@@ -424,16 +424,28 @@ func (x *FacebookListingKey) GetCoverPhotoFbid() string {
 
 type FacebookMarketplacePriceObservation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Facebook's decimal string, in major units (for example "40.00"). Keep the
-	// source value: converting to minor units requires knowing the currency's
-	// exponent, which a rendered card does not always reveal.
-	AmountDecimal           *string `protobuf:"bytes,1,opt,name=amount_decimal,json=amountDecimal,proto3,oneof" json:"amount_decimal,omitempty"`
-	FormattedAmount         *string `protobuf:"bytes,2,opt,name=formatted_amount,json=formattedAmount,proto3,oneof" json:"formatted_amount,omitempty"`
+	// Facebook's decimal string, in major units (for example "40.00"). This is
+	// the listing's price, and with `currency_code` it is the only pair that
+	// converts to a storable number.
+	AmountDecimal   *string `protobuf:"bytes,1,opt,name=amount_decimal,json=amountDecimal,proto3,oneof" json:"amount_decimal,omitempty"`
+	FormattedAmount *string `protobuf:"bytes,2,opt,name=formatted_amount,json=formattedAmount,proto3,oneof" json:"formatted_amount,omitempty"`
+	// The strikethrough price, which carries a decimal of its own — measured
+	// 2026-08-23: `"strikethrough_price":{"formatted_amount":"$150","amount":"150.00"}`.
 	PreviousAmountDecimal   *string `protobuf:"bytes,3,opt,name=previous_amount_decimal,json=previousAmountDecimal,proto3,oneof" json:"previous_amount_decimal,omitempty"`
 	PreviousFormattedAmount *string `protobuf:"bytes,4,opt,name=previous_formatted_amount,json=previousFormattedAmount,proto3,oneof" json:"previous_formatted_amount,omitempty"`
-	CurrencyCode            *string `protobuf:"bytes,5,opt,name=currency_code,json=currencyCode,proto3,oneof" json:"currency_code,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// **Page-level, not per-listing.** The `listing_price` object carries no
+	// currency at all; the search page publishes one for the whole marketplace at
+	// `marketplace_settings.current_marketplace.primary_currency` (measured
+	// 2026-08-23: `"primary_currency":"USD"` on a US search). Every card on a
+	// page shares it, so the client reads it once and stamps it on each
+	// observation.
+	//
+	// Without it there is no number: scaling major units to minor needs the
+	// currency's exponent, and that is two places for most currencies, zero for
+	// JPY and three for KWD.
+	CurrencyCode  *string `protobuf:"bytes,5,opt,name=currency_code,json=currencyCode,proto3,oneof" json:"currency_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *FacebookMarketplacePriceObservation) Reset() {
@@ -660,6 +672,10 @@ type FacebookMarketplaceSellerObservation struct {
 	SectionStatus FacebookMarketplaceSellerSectionStatus `protobuf:"varint,1,opt,name=section_status,json=sectionStatus,proto3,enum=openmarket.api.v1.FacebookMarketplaceSellerSectionStatus" json:"section_status,omitempty"`
 	// Numeric id from /marketplace/profile/<id>. Stable on signed-in desktop item
 	// pages and preferable to clustering on name plus listing coordinates.
+	//
+	// Stored exactly as Facebook publishes it. This is a deliberate exception to
+	// the preference for facts visible to signed-out accounts because it is the
+	// only reliable way to group one seller's listings.
 	FacebookProfileId *string  `protobuf:"bytes,2,opt,name=facebook_profile_id,json=facebookProfileId,proto3,oneof" json:"facebook_profile_id,omitempty"`
 	DisplayName       *string  `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
 	JoinedText        *string  `protobuf:"bytes,4,opt,name=joined_text,json=joinedText,proto3,oneof" json:"joined_text,omitempty"`
@@ -837,14 +853,13 @@ func (x *FacebookMarketplaceAvailabilityObservation) GetPending() bool {
 // search page normally uses EMBEDDED_GRAPHQL and can carry listed_at; cards
 // inserted by infinite scroll use RENDERED_DOM and cannot.
 type FacebookMarketplaceSearchListingObservation struct {
-	state           protoimpl.MessageState                 `protogen:"open.v1"`
-	Context         *FacebookMarketplaceObservationContext `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	Key             *FacebookListingKey                    `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Title           *string                                `protobuf:"bytes,3,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	Price           *FacebookMarketplacePriceObservation   `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`
-	ListingLocation *FacebookMarketplacePlaceObservation   `protobuf:"bytes,5,opt,name=listing_location,json=listingLocation,proto3" json:"listing_location,omitempty"`
-	Condition       *string                                `protobuf:"bytes,6,opt,name=condition,proto3,oneof" json:"condition,omitempty"`
-	PrimaryPhoto    *FacebookMarketplaceMediaObservation   `protobuf:"bytes,7,opt,name=primary_photo,json=primaryPhoto,proto3" json:"primary_photo,omitempty"`
+	state           protoimpl.MessageState               `protogen:"open.v1"`
+	Key             *FacebookListingKey                  `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Title           *string                              `protobuf:"bytes,3,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	Price           *FacebookMarketplacePriceObservation `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`
+	ListingLocation *FacebookMarketplacePlaceObservation `protobuf:"bytes,5,opt,name=listing_location,json=listingLocation,proto3" json:"listing_location,omitempty"`
+	Condition       *string                              `protobuf:"bytes,6,opt,name=condition,proto3,oneof" json:"condition,omitempty"`
+	PrimaryPhoto    *FacebookMarketplaceMediaObservation `protobuf:"bytes,7,opt,name=primary_photo,json=primaryPhoto,proto3" json:"primary_photo,omitempty"`
 	// Exact Facebook creation_time, named for its domain meaning rather than the
 	// source JSON spelling. Database row creation remains created_at.
 	ListedAt             *timestamppb.Timestamp                      `protobuf:"bytes,8,opt,name=listed_at,json=listedAt,proto3" json:"listed_at,omitempty"`
@@ -884,13 +899,6 @@ func (x *FacebookMarketplaceSearchListingObservation) ProtoReflect() protoreflec
 // Deprecated: Use FacebookMarketplaceSearchListingObservation.ProtoReflect.Descriptor instead.
 func (*FacebookMarketplaceSearchListingObservation) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_listing_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *FacebookMarketplaceSearchListingObservation) GetContext() *FacebookMarketplaceObservationContext {
-	if x != nil {
-		return x.Context
-	}
-	return nil
 }
 
 func (x *FacebookMarketplaceSearchListingObservation) GetKey() *FacebookListingKey {
@@ -975,7 +983,6 @@ func (x *FacebookMarketplaceSearchListingObservation) GetCreatedWithSellerApp() 
 // seller.section_status.
 type FacebookMarketplaceListingDetailObservation struct {
 	state           protoimpl.MessageState                 `protogen:"open.v1"`
-	Context         *FacebookMarketplaceObservationContext `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
 	Key             *FacebookListingKey                    `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Title           *string                                `protobuf:"bytes,3,opt,name=title,proto3,oneof" json:"title,omitempty"`
 	Description     *string                                `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
@@ -989,8 +996,13 @@ type FacebookMarketplaceListingDetailObservation struct {
 	DeliveryTypes []string                                    `protobuf:"bytes,10,rep,name=delivery_types,json=deliveryTypes,proto3" json:"delivery_types,omitempty"`
 	Availability  *FacebookMarketplaceAvailabilityObservation `protobuf:"bytes,11,opt,name=availability,proto3" json:"availability,omitempty"`
 	Seller        *FacebookMarketplaceSellerObservation       `protobuf:"bytes,12,opt,name=seller,proto3" json:"seller,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// True only when the capture settled: the gallery finished loading and the
+	// seller re-poll completed (docs/logged-in-findings.md §7.4). An unsettled
+	// capture may still add facts; it may never shrink a gallery
+	// (docs/ingest-attribution.md §5.6).
+	CaptureSettled bool `protobuf:"varint,13,opt,name=capture_settled,json=captureSettled,proto3" json:"capture_settled,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *FacebookMarketplaceListingDetailObservation) Reset() {
@@ -1021,13 +1033,6 @@ func (x *FacebookMarketplaceListingDetailObservation) ProtoReflect() protoreflec
 // Deprecated: Use FacebookMarketplaceListingDetailObservation.ProtoReflect.Descriptor instead.
 func (*FacebookMarketplaceListingDetailObservation) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_listing_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *FacebookMarketplaceListingDetailObservation) GetContext() *FacebookMarketplaceObservationContext {
-	if x != nil {
-		return x.Context
-	}
-	return nil
 }
 
 func (x *FacebookMarketplaceListingDetailObservation) GetKey() *FacebookListingKey {
@@ -1105,6 +1110,13 @@ func (x *FacebookMarketplaceListingDetailObservation) GetSeller() *FacebookMarke
 		return x.Seller
 	}
 	return nil
+}
+
+func (x *FacebookMarketplaceListingDetailObservation) GetCaptureSettled() bool {
+	if x != nil {
+		return x.CaptureSettled
+	}
+	return false
 }
 
 type FacebookMarketplaceListingObservation struct {
@@ -1209,7 +1221,7 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x10cover_photo_fbid\x18\x02 \x01(\tB\x12\xbaH\x0fr\r2\v^[0-9]{8,}$H\x01R\x0ecoverPhotoFbid\x88\x01\x01:\x9e\x01\xbaH\x9a\x01\x1a\x97\x01\n" +
 	"#facebook_listing_key.needs_identity\x123facebook_listing_id or cover_photo_fbid is required\x1a;has(this.facebook_listing_id) || has(this.cover_photo_fbid)B\x16\n" +
 	"\x14_facebook_listing_idB\x13\n" +
-	"\x11_cover_photo_fbid\"\xa7\x03\n" +
+	"\x11_cover_photo_fbid\"\xd8\x03\n" +
 	"#FacebookMarketplacePriceObservation\x12*\n" +
 	"\x0eamount_decimal\x18\x01 \x01(\tH\x00R\ramountDecimal\x88\x01\x01\x12.\n" +
 	"\x10formatted_amount\x18\x02 \x01(\tH\x01R\x0fformattedAmount\x88\x01\x01\x12;\n" +
@@ -1220,7 +1232,7 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x11_formatted_amountB\x1a\n" +
 	"\x18_previous_amount_decimalB\x1c\n" +
 	"\x1a_previous_formatted_amountB\x10\n" +
-	"\x0e_currency_code\"\x8d\x03\n" +
+	"\x0e_currency_codeJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\famount_minorR\x15previous_amount_minor\"\x8d\x03\n" +
 	"#FacebookMarketplacePlaceObservation\x12&\n" +
 	"\fdisplay_text\x18\x01 \x01(\tH\x00R\vdisplayText\x88\x01\x01\x12\x17\n" +
 	"\x04city\x18\x02 \x01(\tH\x01R\x04city\x88\x01\x01\x12\x1b\n" +
@@ -1271,9 +1283,8 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x05_soldB\a\n" +
 	"\x05_liveB\n" +
 	"\n" +
-	"\b_pending\"\x99\a\n" +
-	"+FacebookMarketplaceSearchListingObservation\x12Z\n" +
-	"\acontext\x18\x01 \x01(\v28.openmarket.api.v1.FacebookMarketplaceObservationContextB\x06\xbaH\x03\xc8\x01\x01R\acontext\x12?\n" +
+	"\b_pending\"\xc3\x06\n" +
+	"+FacebookMarketplaceSearchListingObservation\x12?\n" +
 	"\x03key\x18\x02 \x01(\v2%.openmarket.api.v1.FacebookListingKeyB\x06\xbaH\x03\xc8\x01\x01R\x03key\x12\x19\n" +
 	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12L\n" +
 	"\x05price\x18\x04 \x01(\v26.openmarket.api.v1.FacebookMarketplacePriceObservationR\x05price\x12a\n" +
@@ -1290,9 +1301,8 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\n" +
 	"_conditionB\x17\n" +
 	"\x15_facebook_category_idB\x1a\n" +
-	"\x18_created_with_seller_app\"\xef\x06\n" +
-	"+FacebookMarketplaceListingDetailObservation\x12Z\n" +
-	"\acontext\x18\x01 \x01(\v28.openmarket.api.v1.FacebookMarketplaceObservationContextB\x06\xbaH\x03\xc8\x01\x01R\acontext\x12?\n" +
+	"\x18_created_with_seller_appJ\x04\b\x01\x10\x02\"\xc2\x06\n" +
+	"+FacebookMarketplaceListingDetailObservation\x12?\n" +
 	"\x03key\x18\x02 \x01(\v2%.openmarket.api.v1.FacebookListingKeyB\x06\xbaH\x03\xc8\x01\x01R\x03key\x12\x19\n" +
 	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12%\n" +
 	"\vdescription\x18\x04 \x01(\tH\x01R\vdescription\x88\x01\x01\x12L\n" +
@@ -1304,12 +1314,13 @@ const file_openmarket_api_v1_listing_proto_rawDesc = "" +
 	"\x0edelivery_types\x18\n" +
 	" \x03(\tR\rdeliveryTypes\x12a\n" +
 	"\favailability\x18\v \x01(\v2=.openmarket.api.v1.FacebookMarketplaceAvailabilityObservationR\favailability\x12O\n" +
-	"\x06seller\x18\f \x01(\v27.openmarket.api.v1.FacebookMarketplaceSellerObservationR\x06sellerB\b\n" +
+	"\x06seller\x18\f \x01(\v27.openmarket.api.v1.FacebookMarketplaceSellerObservationR\x06seller\x12'\n" +
+	"\x0fcapture_settled\x18\r \x01(\bR\x0ecaptureSettledB\b\n" +
 	"\x06_titleB\x0e\n" +
 	"\f_descriptionB\f\n" +
 	"\n" +
 	"_conditionB\x11\n" +
-	"\x0f_listed_at_text\"\xea\x01\n" +
+	"\x0f_listed_at_textJ\x04\b\x01\x10\x02\"\xea\x01\n" +
 	"%FacebookMarketplaceListingObservation\x12X\n" +
 	"\x06search\x18\x01 \x01(\v2>.openmarket.api.v1.FacebookMarketplaceSearchListingObservationH\x00R\x06search\x12X\n" +
 	"\x06detail\x18\x02 \x01(\v2>.openmarket.api.v1.FacebookMarketplaceListingDetailObservationH\x00R\x06detailB\r\n" +
@@ -1380,27 +1391,25 @@ var file_openmarket_api_v1_listing_proto_depIdxs = []int32{
 	15, // 4: openmarket.api.v1.FacebookMarketplaceObservationContext.observed_at:type_name -> google.protobuf.Timestamp
 	4,  // 5: openmarket.api.v1.FacebookMarketplaceSellerObservation.section_status:type_name -> openmarket.api.v1.FacebookMarketplaceSellerSectionStatus
 	8,  // 6: openmarket.api.v1.FacebookMarketplaceSellerObservation.seller_location:type_name -> openmarket.api.v1.FacebookMarketplacePlaceObservation
-	5,  // 7: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.context:type_name -> openmarket.api.v1.FacebookMarketplaceObservationContext
-	6,  // 8: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.key:type_name -> openmarket.api.v1.FacebookListingKey
-	7,  // 9: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.price:type_name -> openmarket.api.v1.FacebookMarketplacePriceObservation
-	8,  // 10: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.listing_location:type_name -> openmarket.api.v1.FacebookMarketplacePlaceObservation
-	9,  // 11: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.primary_photo:type_name -> openmarket.api.v1.FacebookMarketplaceMediaObservation
-	15, // 12: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.listed_at:type_name -> google.protobuf.Timestamp
-	11, // 13: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.availability:type_name -> openmarket.api.v1.FacebookMarketplaceAvailabilityObservation
-	5,  // 14: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.context:type_name -> openmarket.api.v1.FacebookMarketplaceObservationContext
-	6,  // 15: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.key:type_name -> openmarket.api.v1.FacebookListingKey
-	7,  // 16: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.price:type_name -> openmarket.api.v1.FacebookMarketplacePriceObservation
-	8,  // 17: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.listing_location:type_name -> openmarket.api.v1.FacebookMarketplacePlaceObservation
-	9,  // 18: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.media:type_name -> openmarket.api.v1.FacebookMarketplaceMediaObservation
-	11, // 19: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.availability:type_name -> openmarket.api.v1.FacebookMarketplaceAvailabilityObservation
-	10, // 20: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.seller:type_name -> openmarket.api.v1.FacebookMarketplaceSellerObservation
-	12, // 21: openmarket.api.v1.FacebookMarketplaceListingObservation.search:type_name -> openmarket.api.v1.FacebookMarketplaceSearchListingObservation
-	13, // 22: openmarket.api.v1.FacebookMarketplaceListingObservation.detail:type_name -> openmarket.api.v1.FacebookMarketplaceListingDetailObservation
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	6,  // 7: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.key:type_name -> openmarket.api.v1.FacebookListingKey
+	7,  // 8: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.price:type_name -> openmarket.api.v1.FacebookMarketplacePriceObservation
+	8,  // 9: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.listing_location:type_name -> openmarket.api.v1.FacebookMarketplacePlaceObservation
+	9,  // 10: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.primary_photo:type_name -> openmarket.api.v1.FacebookMarketplaceMediaObservation
+	15, // 11: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.listed_at:type_name -> google.protobuf.Timestamp
+	11, // 12: openmarket.api.v1.FacebookMarketplaceSearchListingObservation.availability:type_name -> openmarket.api.v1.FacebookMarketplaceAvailabilityObservation
+	6,  // 13: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.key:type_name -> openmarket.api.v1.FacebookListingKey
+	7,  // 14: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.price:type_name -> openmarket.api.v1.FacebookMarketplacePriceObservation
+	8,  // 15: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.listing_location:type_name -> openmarket.api.v1.FacebookMarketplacePlaceObservation
+	9,  // 16: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.media:type_name -> openmarket.api.v1.FacebookMarketplaceMediaObservation
+	11, // 17: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.availability:type_name -> openmarket.api.v1.FacebookMarketplaceAvailabilityObservation
+	10, // 18: openmarket.api.v1.FacebookMarketplaceListingDetailObservation.seller:type_name -> openmarket.api.v1.FacebookMarketplaceSellerObservation
+	12, // 19: openmarket.api.v1.FacebookMarketplaceListingObservation.search:type_name -> openmarket.api.v1.FacebookMarketplaceSearchListingObservation
+	13, // 20: openmarket.api.v1.FacebookMarketplaceListingObservation.detail:type_name -> openmarket.api.v1.FacebookMarketplaceListingDetailObservation
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_openmarket_api_v1_listing_proto_init() }

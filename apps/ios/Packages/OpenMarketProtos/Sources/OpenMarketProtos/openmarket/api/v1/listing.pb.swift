@@ -310,9 +310,9 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplacePriceObservation:
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Facebook's decimal string, in major units (for example "40.00"). Keep the
-  /// source value: converting to minor units requires knowing the currency's
-  /// exponent, which a rendered card does not always reveal.
+  /// Facebook's decimal string, in major units (for example "40.00"). This is
+  /// the listing's price, and with `currency_code` it is the only pair that
+  /// converts to a storable number.
   public var amountDecimal: String {
     get {_amountDecimal ?? String()}
     set {_amountDecimal = newValue}
@@ -331,6 +331,8 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplacePriceObservation:
   /// Clears the value of `formattedAmount`. Subsequent reads from it will return its default value.
   public mutating func clearFormattedAmount() {self._formattedAmount = nil}
 
+  /// The strikethrough price, which carries a decimal of its own — measured
+  /// 2026-08-23: `"strikethrough_price":{"formatted_amount":"$150","amount":"150.00"}`.
   public var previousAmountDecimal: String {
     get {_previousAmountDecimal ?? String()}
     set {_previousAmountDecimal = newValue}
@@ -349,6 +351,16 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplacePriceObservation:
   /// Clears the value of `previousFormattedAmount`. Subsequent reads from it will return its default value.
   public mutating func clearPreviousFormattedAmount() {self._previousFormattedAmount = nil}
 
+  /// **Page-level, not per-listing.** The `listing_price` object carries no
+  /// currency at all; the search page publishes one for the whole marketplace at
+  /// `marketplace_settings.current_marketplace.primary_currency` (measured
+  /// 2026-08-23: `"primary_currency":"USD"` on a US search). Every card on a
+  /// page shares it, so the client reads it once and stamps it on each
+  /// observation.
+  ///
+  /// Without it there is no number: scaling major units to minor needs the
+  /// currency's exponent, and that is two places for most currencies, zero for
+  /// JPY and three for KWD.
   public var currencyCode: String {
     get {_currencyCode ?? String()}
     set {_currencyCode = newValue}
@@ -502,6 +514,10 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceSellerObservation
 
   /// Numeric id from /marketplace/profile/<id>. Stable on signed-in desktop item
   /// pages and preferable to clustering on name plus listing coordinates.
+  ///
+  /// Stored exactly as Facebook publishes it. This is a deliberate exception to
+  /// the preference for facts visible to signed-out accounts because it is the
+  /// only reliable way to group one seller's listings.
   public var facebookProfileID: String {
     get {_facebookProfileID ?? String()}
     set {_facebookProfileID = newValue}
@@ -645,15 +661,6 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceSearchListingObse
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var context: Openmarket_Api_V1_FacebookMarketplaceObservationContext {
-    get {_storage._context ?? Openmarket_Api_V1_FacebookMarketplaceObservationContext()}
-    set {_uniqueStorage()._context = newValue}
-  }
-  /// Returns true if `context` has been explicitly set.
-  public var hasContext: Bool {_storage._context != nil}
-  /// Clears the value of `context`. Subsequent reads from it will return its default value.
-  public mutating func clearContext() {_uniqueStorage()._context = nil}
-
   public var key: Openmarket_Api_V1_FacebookListingKey {
     get {_storage._key ?? Openmarket_Api_V1_FacebookListingKey()}
     set {_uniqueStorage()._key = newValue}
@@ -766,15 +773,6 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceListingDetailObse
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var context: Openmarket_Api_V1_FacebookMarketplaceObservationContext {
-    get {_storage._context ?? Openmarket_Api_V1_FacebookMarketplaceObservationContext()}
-    set {_uniqueStorage()._context = newValue}
-  }
-  /// Returns true if `context` has been explicitly set.
-  public var hasContext: Bool {_storage._context != nil}
-  /// Clears the value of `context`. Subsequent reads from it will return its default value.
-  public mutating func clearContext() {_uniqueStorage()._context = nil}
-
   public var key: Openmarket_Api_V1_FacebookListingKey {
     get {_storage._key ?? Openmarket_Api_V1_FacebookListingKey()}
     set {_uniqueStorage()._key = newValue}
@@ -867,6 +865,15 @@ public nonisolated struct Openmarket_Api_V1_FacebookMarketplaceListingDetailObse
   public var hasSeller: Bool {_storage._seller != nil}
   /// Clears the value of `seller`. Subsequent reads from it will return its default value.
   public mutating func clearSeller() {_uniqueStorage()._seller = nil}
+
+  /// True only when the capture settled: the gallery finished loading and the
+  /// seller re-poll completed (docs/logged-in-findings.md §7.4). An unsettled
+  /// capture may still add facts; it may never shrink a gallery
+  /// (docs/ingest-attribution.md §5.6).
+  public var captureSettled: Bool {
+    get {_storage._captureSettled}
+    set {_uniqueStorage()._captureSettled = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1028,7 +1035,7 @@ nonisolated extension Openmarket_Api_V1_FacebookListingKey: SwiftProtobuf.Messag
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplacePriceObservation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplacePriceObservation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}amount_decimal\0\u{3}formatted_amount\0\u{3}previous_amount_decimal\0\u{3}previous_formatted_amount\0\u{3}currency_code\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}amount_decimal\0\u{3}formatted_amount\0\u{3}previous_amount_decimal\0\u{3}previous_formatted_amount\0\u{3}currency_code\0\u{b}amount_minor\0\u{b}previous_amount_minor\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1308,10 +1315,9 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceAvailabilityObservati
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceSearchListingObservation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}key\0\u{1}title\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{3}primary_photo\0\u{3}listed_at\0\u{3}delivery_types\0\u{1}availability\0\u{3}facebook_category_id\0\u{3}created_with_seller_app\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}key\0\u{1}title\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{3}primary_photo\0\u{3}listed_at\0\u{3}delivery_types\0\u{1}availability\0\u{3}facebook_category_id\0\u{3}created_with_seller_app\0\u{c}\u{1}\u{1}")
 
   fileprivate class _StorageClass {
-    var _context: Openmarket_Api_V1_FacebookMarketplaceObservationContext? = nil
     var _key: Openmarket_Api_V1_FacebookListingKey? = nil
     var _title: String? = nil
     var _price: Openmarket_Api_V1_FacebookMarketplacePriceObservation? = nil
@@ -1333,7 +1339,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
     private init() {}
 
     init(copying source: _StorageClass) {
-      _context = source._context
       _key = source._key
       _title = source._title
       _price = source._price
@@ -1363,7 +1368,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
         // allocates stack space for every case branch when no optimizations are
         // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._context) }()
         case 2: try { try decoder.decodeSingularMessageField(value: &_storage._key) }()
         case 3: try { try decoder.decodeSingularStringField(value: &_storage._title) }()
         case 4: try { try decoder.decodeSingularMessageField(value: &_storage._price) }()
@@ -1387,9 +1391,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
       // allocates stack space for every if/case branch local when no optimizations
       // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
       // https://github.com/apple/swift-protobuf/issues/1182
-      try { if let v = _storage._context {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-      } }()
       try { if let v = _storage._key {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
       } }()
@@ -1432,7 +1433,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
       let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
         let _storage = _args.0
         let rhs_storage = _args.1
-        if _storage._context != rhs_storage._context {return false}
         if _storage._key != rhs_storage._key {return false}
         if _storage._title != rhs_storage._title {return false}
         if _storage._price != rhs_storage._price {return false}
@@ -1455,10 +1455,9 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceSearchListingObservat
 
 nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FacebookMarketplaceListingDetailObservation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{1}key\0\u{1}title\0\u{1}description\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{1}media\0\u{3}listed_at_text\0\u{3}delivery_types\0\u{1}availability\0\u{1}seller\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}key\0\u{1}title\0\u{1}description\0\u{1}price\0\u{3}listing_location\0\u{1}condition\0\u{1}media\0\u{3}listed_at_text\0\u{3}delivery_types\0\u{1}availability\0\u{1}seller\0\u{3}capture_settled\0\u{c}\u{1}\u{1}")
 
   fileprivate class _StorageClass {
-    var _context: Openmarket_Api_V1_FacebookMarketplaceObservationContext? = nil
     var _key: Openmarket_Api_V1_FacebookListingKey? = nil
     var _title: String? = nil
     var _description_p: String? = nil
@@ -1470,6 +1469,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
     var _deliveryTypes: [String] = []
     var _availability: Openmarket_Api_V1_FacebookMarketplaceAvailabilityObservation? = nil
     var _seller: Openmarket_Api_V1_FacebookMarketplaceSellerObservation? = nil
+    var _captureSettled: Bool = false
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -1480,7 +1480,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
     private init() {}
 
     init(copying source: _StorageClass) {
-      _context = source._context
       _key = source._key
       _title = source._title
       _description_p = source._description_p
@@ -1492,6 +1491,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
       _deliveryTypes = source._deliveryTypes
       _availability = source._availability
       _seller = source._seller
+      _captureSettled = source._captureSettled
     }
   }
 
@@ -1510,7 +1510,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
         // allocates stack space for every case branch when no optimizations are
         // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._context) }()
         case 2: try { try decoder.decodeSingularMessageField(value: &_storage._key) }()
         case 3: try { try decoder.decodeSingularStringField(value: &_storage._title) }()
         case 4: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
@@ -1522,6 +1521,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
         case 10: try { try decoder.decodeRepeatedStringField(value: &_storage._deliveryTypes) }()
         case 11: try { try decoder.decodeSingularMessageField(value: &_storage._availability) }()
         case 12: try { try decoder.decodeSingularMessageField(value: &_storage._seller) }()
+        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._captureSettled) }()
         default: break
         }
       }
@@ -1534,9 +1534,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
       // allocates stack space for every if/case branch local when no optimizations
       // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
       // https://github.com/apple/swift-protobuf/issues/1182
-      try { if let v = _storage._context {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-      } }()
       try { if let v = _storage._key {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
       } }()
@@ -1570,6 +1567,9 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
       try { if let v = _storage._seller {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
       } }()
+      if _storage._captureSettled != false {
+        try visitor.visitSingularBoolField(value: _storage._captureSettled, fieldNumber: 13)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1579,7 +1579,6 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
       let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
         let _storage = _args.0
         let rhs_storage = _args.1
-        if _storage._context != rhs_storage._context {return false}
         if _storage._key != rhs_storage._key {return false}
         if _storage._title != rhs_storage._title {return false}
         if _storage._description_p != rhs_storage._description_p {return false}
@@ -1591,6 +1590,7 @@ nonisolated extension Openmarket_Api_V1_FacebookMarketplaceListingDetailObservat
         if _storage._deliveryTypes != rhs_storage._deliveryTypes {return false}
         if _storage._availability != rhs_storage._availability {return false}
         if _storage._seller != rhs_storage._seller {return false}
+        if _storage._captureSettled != rhs_storage._captureSettled {return false}
         return true
       }
       if !storagesAreEqual {return false}

@@ -144,7 +144,7 @@ Two files are worth reading before changing anything in here:
 also the list the Railway service needs.
 
 The server refuses to boot rather than come up misconfigured: a missing signing
-key or Prelude key, an empty country allowlist, `JWT_SECRET` equal to
-`REFRESH_TOKEN_HMAC_KEY`, or `DEV_BYPASS_PHONE_NUMBERS` left set with
-`ENV=production` are all panics. That last one is the only way a code is accepted
-without Prelude having sent it, which is why it is the only override guarded.
+key or Prelude key, an empty country allowlist, or
+`DEV_BYPASS_PHONE_NUMBERS` left set with `ENV=production` are all panics. That
+last one is the only way a code is accepted without Prelude having sent it,
+which is why it is the only override guarded.

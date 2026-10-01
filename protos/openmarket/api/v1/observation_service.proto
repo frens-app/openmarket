@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+import "openmarket/api/v1/listing.proto";
+
+// Ingest for Facebook Marketplace observations.
+//
+// One call is one **batch**: everything one device parsed off one page at one
+// time. Capture context and the extractor that produced it are properties of
+// the page, so they are carried once here rather than on every card
+// (docs/ingest-attribution.md §2).
+//
+// The submitting device is taken from the authenticated session and never from
+// the request. What is persisted alongside the batch is not the device but a
+// per-epoch pseudonym derived from it (§4).
+service ObservationService {
+  rpc SubmitObservations(SubmitObservationsRequest) returns (SubmitObservationsResponse) {}
+}
+
+// What the client's extractor saw, as distinct from what it managed to parse.
+//
+// Without this, an extractor that drops every card on a page and a page with
+// nothing on it produce the identical server-side record. That is the failure
+// this whole ingest path is built to make loud, so the counts travel with the
+// batch even though nothing merges them into a listing.
+message ClientExtractionCounts {
+  // Candidate cards the extractor found before parsing. Never fewer than the
+  // number of observations in the request.
+  int32 cards_seen = 1 [(buf.validate.field).int32.gte = 0];
+  // Deduplicated reason tokens for what the client dropped, in the vocabulary
+  // its own logs use (docs/parsing-conventions.md §1). Free-form on purpose:
+  // an unrecognised reason is still legible, where an enum would collapse it.
+  repeated string drop_reasons = 2 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {max_len: 64}
+    }
+  }];
+}
+
+message SubmitObservationsRequest {
+  FacebookMarketplaceObservationContext context = 1 [(buf.validate.field).required = true];
+  // Query identity is deliberately outside this API. A public hash of a
+  // low-entropy search term is dictionary-reversible, and absence inference is
+  // not part of snapshot ingest. Reserve the old field so it cannot be reused.
+  reserved 2;
+  reserved "query";
+
+  // Identifies the parser, not the app. Debug builds pin the app build to 1
+  // (docs/data-model.md §2), so the app version alone cannot attribute a
+  // regression to the code that caused it.
+  string extractor_revision = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+
+  ClientExtractionCounts counts = 4 [(buf.validate.field).required = true];
+
+  // Hash of the sorted set of key paths the extractor saw in a structured
+  // payload, values excluded. A fingerprint nobody has seen before, arriving
+  // across many devices at once, is Facebook shipping a change — and it fires
+  // whether or not anything failed to parse (docs/ingest-attribution.md §3.4).
+  optional bytes shape_fingerprint = 5 [(buf.validate.field).bytes.len = 32];
+
+  repeated FacebookMarketplaceListingObservation observations = 6 [(buf.validate.field).repeated = {
+    max_items: 100
+  }];
+}
+
+// Why one observation in the batch was refused. A refusal is per card: a field
+// that is present and does not parse fails the whole card rather than being
+// nulled, because a null is indistinguishable from "this surface did not tell
+// us" (docs/ingest-attribution.md §3.1).
+enum ObservationRejectionReason {
+  OBSERVATION_REJECTION_REASON_UNSPECIFIED = 0;
+  // A field arrived in a shape the parser does not model.
+  OBSERVATION_REJECTION_REASON_MALFORMED_FIELD = 1;
+  // Well-formed and outside its envelope: a 1970 timestamp, a price of ten
+  // million, a coordinate in the wrong hemisphere (§3.2).
+  OBSERVATION_REJECTION_REASON_IMPLAUSIBLE_VALUE = 2;
+  // Two fields of one observation contradict each other, such as sold and
+  // pending both true.
+  OBSERVATION_REJECTION_REASON_CONTRADICTORY_FIELDS = 3;
+  // The same key appeared twice in one batch, or every card in the batch shares
+  // one key. Both are extractor collisions rather than real duplicates.
+  OBSERVATION_REJECTION_REASON_KEY_COLLISION = 4;
+  // The observation's shape does not match the batch's route: a detail
+  // observation in a search batch, or the reverse.
+  OBSERVATION_REJECTION_REASON_ROUTE_MISMATCH = 5;
+  // The key resolves to a native listing, which no Facebook observation may
+  // touch (docs/data-model.md §3).
+  OBSERVATION_REJECTION_REASON_ORIGIN_CONFLICT = 6;
+  // One alias claims a listing another alias has already claimed.
+  OBSERVATION_REJECTION_REASON_ALIAS_CONFLICT = 7;
+  // Nothing was wrong with this card. The circuit breaker is open for the
+  // surface it came from, so the whole batch was stored for diagnosis instead
+  // of merged (§3.3).
+  OBSERVATION_REJECTION_REASON_SOURCE_SUSPENDED = 8;
+}
+
+message ObservationRejection {
+  // Index into the request's observations, so the client can name the card in
+  // its own log without the server echoing any of its content back.
+  int32 index = 1;
+  ObservationRejectionReason reason = 2;
+  // Dotted path of the field that failed, empty when the whole observation did.
+  string field_path = 3;
+}
+
+message SubmitObservationsResponse {
+  string batch_id = 1;
+  int32 accepted = 2;
+  int32 quarantined = 3;
+  repeated ObservationRejection rejections = 4;
+
+  // The circuit breaker is open for this browser variant, page route,
+  // extraction method and extractor revision: the combination's quarantine rate
+  // crossed its threshold, so nothing from it is reaching canonical rows
+  // (docs/ingest-attribution.md §3.3). The batch was stored for diagnosis and
+  // the client should stop submitting from this surface until it updates.
+  bool source_suspended = 5;
+}

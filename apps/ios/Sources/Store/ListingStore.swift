@@ -1,4 +1,5 @@
 import Foundation
+import OpenMarketProtos
 import SwiftUI
 import os
 
@@ -48,6 +49,13 @@ final class ListingStore: ObservableObject {
     /// different answers from a different cache.
     private let distances = DistanceResolver.shared
     private var seenIDs = Set<String>()
+    /// Rendered listings already submitted for this live result set.
+    ///
+    /// Desktop virtualises and each pagination harvest overlaps the previous
+    /// window heavily. Keeping this separate from `seenIDs` matters because a
+    /// locally filtered listing was still observed, but should not be submitted
+    /// again on every subsequent screen.
+    private var observedRenderedIDs = Set<String>()
     /// True while the grid is showing last session's cards. They render on the
     /// first frame, but their `cardIndex` refers to a DOM that no longer
     /// exists, so nothing may tap through them until live cards replace them.
@@ -122,6 +130,7 @@ final class ListingStore: ObservableObject {
         resultsGeneration += 1
         listings = []
         seenIDs = []
+        observedRenderedIDs = []
         deepestVisibleIndexSeen = -1
         scrolledSinceLastPage = false
         paginationBuffer = []
@@ -147,7 +156,9 @@ final class ListingStore: ObservableObject {
         await ingest(payload: payload)
         // The payload covers the first page only; anything else already
         // rendered has to be read from the DOM.
-        await ingest(cards: await desktop.renderedCards())
+        let rendered = await desktop.renderedCards()
+        let renderedParse = await ingest(cards: rendered)
+        submitFeedObservations(payload: payload, rendered: renderedParse, query: query)
         isLoadingFirstPage = false
         isRefreshingSearch = false
         cache.saveResults(listings, for: query, session: session)
@@ -254,7 +265,7 @@ final class ListingStore: ObservableObject {
     /// way there. Everything gathered here is markup-only — timestamps, delivery
     /// types and sold state exist for the first page and nowhere else.
     func loadMore() async {
-        guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
+        guard let query, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
         isLoadingMore = true
         loadingPlaceholderCount = Self.loadingReservation
         paginationBuffer = []
@@ -274,7 +285,9 @@ final class ListingStore: ObservableObject {
             case .indeterminate:
                 break pagination
             }
-            await ingest(cards: await desktop.renderedCards(), stageForPagination: true)
+            let rendered = await desktop.renderedCards()
+            let parsed = await ingest(cards: rendered, stageForPagination: true)
+            submitPaginationObservations(parsed, query: query)
             publishReadyPaginationRows()
         }
         publishReadyPaginationRows(flush: true)
@@ -328,14 +341,24 @@ final class ListingStore: ObservableObject {
 
     /// The markup tail — everything past the first page, plus anything rendered
     /// that the payload didn't describe.
+    private struct RenderedParse {
+        let listings: [Listing]
+        let dropped: Int
+    }
+
+    @discardableResult
     private func ingest(
         cards: [DesktopRawCard],
         stageForPagination: Bool = false
-    ) async {
-        guard !cards.isEmpty else { return }
+    ) async -> RenderedParse {
+        guard !cards.isEmpty else { return RenderedParse(listings: [], dropped: 0) }
         var parsed: [Listing] = []
+        var dropped = 0
         for (index, card) in cards.enumerated() {
-            guard let listing = DesktopCardParser.parse(card, cardIndex: index) else { continue }
+            guard let listing = DesktopCardParser.parse(card, cardIndex: index) else {
+                dropped += 1
+                continue
+            }
             parsed.append(listing)
         }
         await absorb(
@@ -343,6 +366,7 @@ final class ListingStore: ObservableObject {
             replacingCache: isShowingCachedResults && !parsed.isEmpty,
             stageForPagination: stageForPagination
         )
+        return RenderedParse(listings: parsed, dropped: dropped)
     }
 
     /// Merges a batch into the grid: new listings append, known ones fill gaps.
@@ -616,7 +640,7 @@ final class ListingStore: ObservableObject {
             var updated = listing
             updated.detail = detailValue
             if updated.locationText == nil { updated.locationText = detailValue.locationText }
-            record(updated)
+            record(updated, variant: .desktop, method: .hybrid)
             onStage(updated)
             Logger.store.info("tap -> revalidated in \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
             return updated
@@ -633,7 +657,7 @@ final class ListingStore: ObservableObject {
             let updated = Self.merging(listing, harvest)
             metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: true)
             Logger.store.info("tap -> complete in \(String(format: "%.2f", Date().timeIntervalSince(started)))s (harvested in place)")
-            record(updated)
+            record(updated, variant: .mobile, method: .renderedDom)
             onStage(updated)
             return updated
         }
@@ -647,7 +671,7 @@ final class ListingStore: ObservableObject {
         guard let detailValue = await detail.loadDetail(id: updated.id, url: url) else { return nil }
         updated.detail = detailValue
         if updated.locationText == nil { updated.locationText = detailValue.locationText }
-        record(updated)
+        record(updated, variant: .desktop, method: .hybrid)
         onStage(updated)
         return updated
     }
@@ -655,10 +679,99 @@ final class ListingStore: ObservableObject {
     /// Writes a fully-read listing to both the grid and the profile store,
     /// tagged with the context it was read under so a later reader can tell
     /// "this seller has no rating" from "we had no session when we looked".
-    private func record(_ listing: Listing) {
-        guard listing.detail != nil else { return }
+    private func record(
+        _ listing: Listing,
+        variant: FacebookMarketplaceBrowserVariant,
+        method: FacebookMarketplaceExtractionMethod
+    ) {
+        guard let detail = listing.detail else { return }
         cache.store(listing, capture: capture)
         apply(listing)
+        // **The only mint point for an item observation, and deliberately so.**
+        // `enrich` stages from `ListingCache` before it revalidates and returns
+        // the cached value when the live read fails, so the returned listing
+        // cannot say where it came from. This function is reached from the live
+        // branches of `fetchLive` and from nowhere else, which is what keeps a
+        // cached detail from being submitted as a fresh observation
+        // (`docs/ingest-attribution.md` §2.4).
+        submitItemObservation(listing, detail: detail, variant: variant, method: method)
+    }
+
+    /// One search page, as it was read.
+    ///
+    /// Fire and forget: `ObservationSubmitter.submit` cannot throw, cannot
+    /// block, and returns nothing to wait on. A search has already produced its
+    /// results by the time this runs, and if the server is unreachable the
+    /// correct outcome is that nobody notices.
+    private func submitFeedObservations(payload: [PayloadListing], rendered: RenderedParse, query: SearchQuery) {
+        let seen = max(
+            desktop.coverage.rendered,
+            max(payload.count, rendered.listings.count + rendered.dropped)
+        )
+
+        guard let request = ObservationBatch.feed(
+            payload: payload,
+            cards: rendered.listings,
+            route: query.isBrowse ? .discover : .search,
+            session: session,
+            currency: desktop.lastMarketplaceCurrency,
+            cardsSeen: seen,
+            dropReasons: rendered.dropped > 0 ? ["card_unparseable"] : [],
+            shapeKeys: desktop.lastShapeKeys
+        ) else { return }
+        // The first page deliberately includes payload/DOM duplicates so the
+        // batch builder can cross-check their prices. Remember both sources
+        // only after that check; pagination can then omit virtualized overlap.
+        for (index, item) in payload.enumerated() {
+            observedRenderedIDs.insert(item.makeListing(cardIndex: index).id)
+        }
+        for listing in rendered.listings { observedRenderedIDs.insert(listing.id) }
+        ObservationSubmitter.shared.submit(request)
+    }
+
+    /// One markup-only pagination window, minus cards a previous window in this
+    /// result set already submitted. No query, position, or page number is sent.
+    private func submitPaginationObservations(_ rendered: RenderedParse, query: SearchQuery) {
+        let newlyObserved = rendered.listings.filter {
+            observedRenderedIDs.insert($0.id).inserted
+        }
+        let cardsSeen = newlyObserved.count + rendered.dropped
+        guard cardsSeen > 0,
+              let request = ObservationBatch.feed(
+                payload: [],
+                cards: newlyObserved,
+                route: query.isBrowse ? .discover : .search,
+                session: session,
+                currency: nil,
+                cardsSeen: cardsSeen,
+                dropReasons: rendered.dropped > 0 ? ["card_unparseable"] : [],
+                shapeKeys: []
+              ) else { return }
+        ObservationSubmitter.shared.submit(request)
+    }
+
+    /// One opened listing, from a live item-page read.
+    ///
+    /// `settled` is false because the detail poll returns as soon as the text
+    /// and gallery are there, and the seller block renders after both
+    /// (`docs/logged-in-findings.md` §7.4). The server treats an unsettled
+    /// capture as able to add facts and not to remove them, which is the honest
+    /// reading of a page we did not wait out.
+    private func submitItemObservation(
+        _ listing: Listing,
+        detail: ListingDetail,
+        variant: FacebookMarketplaceBrowserVariant,
+        method: FacebookMarketplaceExtractionMethod
+    ) {
+        guard let request = ObservationBatch.item(
+            listing: listing,
+            detail: detail,
+            session: session,
+            variant: variant,
+            method: method,
+            settled: false
+        ) else { return }
+        ObservationSubmitter.shared.submit(request)
     }
 
     /// Guarantees a saved listing has something behind it. The save control is

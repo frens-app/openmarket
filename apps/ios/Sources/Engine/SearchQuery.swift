@@ -42,6 +42,15 @@ struct SearchQuery: Equatable {
         case browse
     }
 
+    /// Facebook's own feed for a place, rather than a query against it. The
+    /// distinction reaches the ingest boundary as the page route: a browse card
+    /// carries no timestamp, no delivery types and no sold state on any page
+    /// (`docs/discover.md` §4.6), and the server ranks it accordingly.
+    var isBrowse: Bool {
+        if case .browse = kind { return true }
+        return false
+    }
+
     /// Verified against result sets, not just parameter survival.
     /// `creation_time_descend` is genuinely newest-first — the first and last of
     /// 24 results were listed one and nine hours ago.

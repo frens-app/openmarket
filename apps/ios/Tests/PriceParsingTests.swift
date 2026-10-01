@@ -222,6 +222,7 @@ final class PriceParsingTests: XCTestCase {
             creationTime: nil,
             priceAmount: "12.50",
             priceFormatted: current ?? market.current,
+            strikethroughAmount: nil,
             strikethroughFormatted: includeOriginal ? market.original : nil,
             photoURL: nil,
             photoID: nil,
@@ -230,6 +231,7 @@ final class PriceParsingTests: XCTestCase {
             cityPageID: nil,
             deliveryTypes: ["IN_PERSON"],
             isSold: false,
+            isPending: false,
             isLive: true,
             categoryID: nil,
             createdWithSellerApp: nil

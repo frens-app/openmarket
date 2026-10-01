@@ -198,17 +198,20 @@ struct PriceGuide: Equatable {
 
     /// Reads a price out of the text Facebook renders on a card.
     ///
-    /// The formatted string is parsed rather than the payload's numeric
-    /// `listing_price.amount`, deliberately. That field's unit is unverified —
-    /// Facebook's price objects carry both a major-unit `amount` and a
-    /// minor-unit `amount_with_offset`, and we have never confirmed which one
-    /// this extractor is reading. A hundredfold error in a price
-    /// recommendation is the worst bug this feature could have, and the
-    /// displayed text has no such ambiguity: it is what the user is looking at
-    /// on the card beside it.
+    /// The formatted string is parsed rather than the payload's numeric fields,
+    /// deliberately. `listing_price.amount` is major units and would need the
+    /// page's currency to scale — and `amount_with_offset_in_currency`, which
+    /// reads like minor units, is not the listing's price at all: on a Toronto
+    /// payload it was 5429 against an `amount` of "75.00". A hundredfold error
+    /// in a price recommendation is the worst bug this feature could have.
     ///
-    /// It is also the only price the markup fallback has, so parsing it keeps
-    /// one code path instead of two.
+    /// The rendered text has neither problem. It is what the user is looking at
+    /// on the card beside it, and it is the only price the markup fallback has
+    /// — so parsing it keeps one code path instead of two.
+    ///
+    /// Ingest is the other consumer and has the opposite need: it stores a
+    /// number, so it takes `amount` with the page's currency
+    /// (`docs/ingest-attribution.md` §5.5).
     static func parse(_ text: String?) -> Int? {
         guard let text else { return nil }
         if text.localizedCaseInsensitiveContains("free") { return 0 }

@@ -96,6 +96,179 @@ func (ns NullDevicePlatform) Value() (driver.Value, error) {
 	return string(ns.DevicePlatform), nil
 }
 
+type IngestTrustTier string
+
+const (
+	IngestTrustTierProbation IngestTrustTier = "probation"
+	IngestTrustTierNormal    IngestTrustTier = "normal"
+	IngestTrustTierTrusted   IngestTrustTier = "trusted"
+)
+
+func (e *IngestTrustTier) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = IngestTrustTier(s)
+	case string:
+		*e = IngestTrustTier(s)
+	default:
+		return fmt.Errorf("unsupported scan type for IngestTrustTier: %T", src)
+	}
+	return nil
+}
+
+type NullIngestTrustTier struct {
+	IngestTrustTier IngestTrustTier
+	Valid           bool // Valid is true if IngestTrustTier is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullIngestTrustTier) Scan(value interface{}) error {
+	if value == nil {
+		ns.IngestTrustTier, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.IngestTrustTier.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullIngestTrustTier) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.IngestTrustTier), nil
+}
+
+type ListedAtPrecision string
+
+const (
+	ListedAtPrecisionExact ListedAtPrecision = "exact"
+	ListedAtPrecisionDay   ListedAtPrecision = "day"
+	ListedAtPrecisionWeek  ListedAtPrecision = "week"
+	ListedAtPrecisionMonth ListedAtPrecision = "month"
+)
+
+func (e *ListedAtPrecision) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ListedAtPrecision(s)
+	case string:
+		*e = ListedAtPrecision(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ListedAtPrecision: %T", src)
+	}
+	return nil
+}
+
+type NullListedAtPrecision struct {
+	ListedAtPrecision ListedAtPrecision
+	Valid             bool // Valid is true if ListedAtPrecision is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullListedAtPrecision) Scan(value interface{}) error {
+	if value == nil {
+		ns.ListedAtPrecision, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ListedAtPrecision.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullListedAtPrecision) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ListedAtPrecision), nil
+}
+
+type ListingAvailability string
+
+const (
+	ListingAvailabilityUnknown   ListingAvailability = "unknown"
+	ListingAvailabilityAvailable ListingAvailability = "available"
+	ListingAvailabilityPending   ListingAvailability = "pending"
+	ListingAvailabilitySold      ListingAvailability = "sold"
+)
+
+func (e *ListingAvailability) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ListingAvailability(s)
+	case string:
+		*e = ListingAvailability(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ListingAvailability: %T", src)
+	}
+	return nil
+}
+
+type NullListingAvailability struct {
+	ListingAvailability ListingAvailability
+	Valid               bool // Valid is true if ListingAvailability is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullListingAvailability) Scan(value interface{}) error {
+	if value == nil {
+		ns.ListingAvailability, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ListingAvailability.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullListingAvailability) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ListingAvailability), nil
+}
+
+type ListingOrigin string
+
+const (
+	ListingOriginFacebook ListingOrigin = "facebook"
+	ListingOriginNative   ListingOrigin = "native"
+)
+
+func (e *ListingOrigin) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ListingOrigin(s)
+	case string:
+		*e = ListingOrigin(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ListingOrigin: %T", src)
+	}
+	return nil
+}
+
+type NullListingOrigin struct {
+	ListingOrigin ListingOrigin
+	Valid         bool // Valid is true if ListingOrigin is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullListingOrigin) Scan(value interface{}) error {
+	if value == nil {
+		ns.ListingOrigin, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ListingOrigin.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullListingOrigin) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ListingOrigin), nil
+}
+
 type LlmRunStage string
 
 const (
@@ -223,6 +396,156 @@ func (ns NullNotificationPermissionStatus) Value() (driver.Value, error) {
 	return string(ns.NotificationPermissionStatus), nil
 }
 
+type ObservationRejectionReason string
+
+const (
+	ObservationRejectionReasonMalformedField      ObservationRejectionReason = "malformed_field"
+	ObservationRejectionReasonImplausibleValue    ObservationRejectionReason = "implausible_value"
+	ObservationRejectionReasonContradictoryFields ObservationRejectionReason = "contradictory_fields"
+	ObservationRejectionReasonKeyCollision        ObservationRejectionReason = "key_collision"
+	ObservationRejectionReasonRouteMismatch       ObservationRejectionReason = "route_mismatch"
+	ObservationRejectionReasonOriginConflict      ObservationRejectionReason = "origin_conflict"
+	ObservationRejectionReasonAliasConflict       ObservationRejectionReason = "alias_conflict"
+	ObservationRejectionReasonSourceSuspended     ObservationRejectionReason = "source_suspended"
+)
+
+func (e *ObservationRejectionReason) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ObservationRejectionReason(s)
+	case string:
+		*e = ObservationRejectionReason(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ObservationRejectionReason: %T", src)
+	}
+	return nil
+}
+
+type NullObservationRejectionReason struct {
+	ObservationRejectionReason ObservationRejectionReason
+	Valid                      bool // Valid is true if ObservationRejectionReason is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullObservationRejectionReason) Scan(value interface{}) error {
+	if value == nil {
+		ns.ObservationRejectionReason, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ObservationRejectionReason.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullObservationRejectionReason) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ObservationRejectionReason), nil
+}
+
+type DeviceActivity struct {
+	DeviceID uuid.UUID
+	Day      pgtype.Date
+	Batches  int32
+	Cards    int32
+}
+
+type DeviceReputation struct {
+	DeviceID         uuid.UUID
+	BatchesAccepted  int64
+	CardsAccepted    int64
+	CardsQuarantined int64
+	ConflictsCaused  int64
+	Tier             IngestTrustTier
+	FirstSeenAt      pgtype.Timestamptz
+	LastSeenAt       pgtype.Timestamptz
+}
+
+type IngestEpochKey struct {
+	Epoch     pgtype.Date
+	Key       []byte
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
+type Listing struct {
+	ID                     uuid.UUID
+	Origin                 ListingOrigin
+	OwnerID                *uuid.UUID
+	FacebookListingID      *string
+	CoverPhotoFbid         *string
+	Title                  *string
+	Description            *string
+	Condition              *string
+	CategoryPath           []string
+	FacebookCategoryID     *string
+	PriceMinor             *int64
+	PriceCurrency          *string
+	PriceFormatted         *string
+	PreviousPriceMinor     *int64
+	PriceChangedAt         pgtype.Timestamptz
+	Availability           ListingAvailability
+	AvailabilityRaw        *string
+	SoldNotBefore          pgtype.Timestamptz
+	SoldNotAfter           pgtype.Timestamptz
+	DeliveryTypes          []string
+	ListingLocationText    *string
+	ListingCity            *string
+	ListingRegion          *string
+	ListingCountry         *string
+	FacebookPlaceID        *string
+	ListingApproxLat       *float64
+	ListingApproxLon       *float64
+	SellerID               *uuid.UUID
+	ListedAt               pgtype.Timestamptz
+	ListedAtText           *string
+	ListedAtPrecision      *ListedAtPrecision
+	FirstObservedAt        pgtype.Timestamptz
+	LastObservedAt         pgtype.Timestamptz
+	DetailObservedAt       pgtype.Timestamptz
+	ModerationState        *string
+	DeletedAt              pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	PriceObservedAt        pgtype.Timestamptz
+	AvailabilityObservedAt pgtype.Timestamptz
+}
+
+type ListingChange struct {
+	ID              uuid.UUID
+	ListingID       uuid.UUID
+	BatchID         *uuid.UUID
+	ObservedAt      pgtype.Timestamptz
+	RecordedAt      pgtype.Timestamptz
+	PriceMinor      *int64
+	PriceCurrency   *string
+	Availability    ListingAvailability
+	AvailabilityRaw *string
+	Changed         []string
+}
+
+type ListingMedium struct {
+	ID              uuid.UUID
+	ListingID       uuid.UUID
+	FacebookPhotoID *string
+	StorageKey      *string
+	Kind            string
+	Position        *int32
+	LastSourceUrl   *string
+	LastSourceUrlAt pgtype.Timestamptz
+	FirstObservedAt pgtype.Timestamptz
+	LastObservedAt  pgtype.Timestamptz
+}
+
+type ListingObservation struct {
+	ID         uuid.UUID
+	ListingID  uuid.UUID
+	BatchID    uuid.UUID
+	ObservedAt pgtype.Timestamptz
+	Payload    []byte
+}
+
 type LlmRun struct {
 	ID                uuid.UUID
 	PriceCheckID      *uuid.UUID
@@ -239,6 +562,39 @@ type LlmRun struct {
 	ErrorCode         *string
 	CreatedAt         pgtype.Timestamptz
 	ThoughtTokens     *int32
+}
+
+type ObservationBatch struct {
+	ID                          uuid.UUID
+	ObservedAt                  pgtype.Timestamptz
+	ReceivedAt                  pgtype.Timestamptz
+	SubmitterID                 []byte
+	Epoch                       pgtype.Date
+	SubmitterTrust              IngestTrustTier
+	FacebookBrowserVariant      string
+	FacebookPageRoute           string
+	ExtractionMethod            string
+	FacebookAuthenticationState string
+	ExtractorRevision           string
+	AppVersion                  *string
+	AppBuild                    *string
+	ShapeFingerprint            []byte
+	CardsSeen                   int32
+	CardsSubmitted              int32
+	CardsAccepted               int32
+	CardsQuarantined            int32
+	ClientDropReasons           []string
+	Suspended                   bool
+}
+
+type ObservationQuarantine struct {
+	ID               uuid.UUID
+	BatchID          uuid.UUID
+	ObservationIndex int32
+	Reason           ObservationRejectionReason
+	FieldPath        string
+	Payload          []byte
+	CreatedAt        pgtype.Timestamptz
 }
 
 type PriceCheck struct {
@@ -274,6 +630,21 @@ type PriceCheckPhoto struct {
 	Bytes        int32
 	Width        int32
 	Height       int32
+}
+
+type Seller struct {
+	ID                uuid.UUID
+	DisplayName       *string
+	Rating            *float32
+	JoinedText        *string
+	JoinedYear        *int32
+	RatingCount       *int32
+	HighlyRated       *bool
+	FirstObservedAt   pgtype.Timestamptz
+	LastObservedAt    pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	FacebookProfileID *string
 }
 
 type User struct {
