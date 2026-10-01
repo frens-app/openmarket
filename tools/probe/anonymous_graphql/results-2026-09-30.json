@@ -1,0 +1,316 @@
+{
+  "date": "2026-09-30",
+  "method": "Public query IDs and variables observed in a fresh nonpersistent macOS WKWebView. Direct requests use no cookies or CSRF tokens and a native OpenMarket UA. All pagination runs are sequential and bounded. Timings are single observations, not percentiles.",
+  "search_from_browser_cursor": [
+    {
+      "page": 0,
+      "status": 200,
+      "ms": 1119,
+      "bytes": 73995,
+      "edges": 28,
+      "listings": 28,
+      "new_ids": 28,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": null,
+      "other_error": null,
+      "field_coverage": {
+        "id": 28,
+        "marketplace_listing_title": 28,
+        "creation_time": 28,
+        "listing_price": 28,
+        "location": 28,
+        "delivery_types": 28,
+        "is_sold": 28,
+        "primary_listing_photo": 28
+      }
+    },
+    {
+      "page": 1,
+      "status": 200,
+      "ms": 542,
+      "bytes": 76767,
+      "edges": 29,
+      "listings": 29,
+      "new_ids": 29,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": null,
+      "other_error": null,
+      "field_coverage": {
+        "id": 29,
+        "marketplace_listing_title": 29,
+        "creation_time": 29,
+        "listing_price": 29,
+        "location": 29,
+        "delivery_types": 29,
+        "is_sold": 29,
+        "primary_listing_photo": 29
+      }
+    },
+    {
+      "page": 2,
+      "status": 200,
+      "ms": 1075,
+      "bytes": 76577,
+      "edges": 29,
+      "listings": 29,
+      "new_ids": 29,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": null,
+      "other_error": null,
+      "field_coverage": {
+        "id": 29,
+        "marketplace_listing_title": 29,
+        "creation_time": 29,
+        "listing_price": 29,
+        "location": 29,
+        "delivery_types": 29,
+        "is_sold": 29,
+        "primary_listing_photo": 29
+      }
+    },
+    {
+      "page": 3,
+      "status": 200,
+      "ms": 535,
+      "bytes": 73947,
+      "edges": 28,
+      "listings": 28,
+      "new_ids": 28,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": null,
+      "other_error": null,
+      "field_coverage": {
+        "id": 28,
+        "marketplace_listing_title": 28,
+        "creation_time": 28,
+        "listing_price": 28,
+        "location": 28,
+        "delivery_types": 28,
+        "is_sold": 28,
+        "primary_listing_photo": 28
+      }
+    }
+  ],
+  "search_from_null_cursor": [
+    {
+      "page": 0,
+      "status": 200,
+      "ms": 334,
+      "bytes": 40438,
+      "edges": 15,
+      "listings": 15,
+      "new_ids": 15,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": null,
+      "other_error": null,
+      "field_coverage": {
+        "id": 15,
+        "marketplace_listing_title": 15,
+        "creation_time": 15,
+        "listing_price": 15,
+        "location": 15,
+        "delivery_types": 15,
+        "is_sold": 15,
+        "primary_listing_photo": 15
+      }
+    },
+    {
+      "page": 1,
+      "status": 200,
+      "ms": 558,
+      "bytes": 73995,
+      "edges": 28,
+      "listings": 28,
+      "new_ids": 28,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": null,
+      "other_error": null,
+      "field_coverage": {
+        "id": 28,
+        "marketplace_listing_title": 28,
+        "creation_time": 28,
+        "listing_price": 28,
+        "location": 28,
+        "delivery_types": 28,
+        "is_sold": 28,
+        "primary_listing_photo": 28
+      }
+    }
+  ],
+  "browse_from_null_cursor": [
+    {
+      "page": 0,
+      "status": 200,
+      "ms": 3027,
+      "bytes": 78553,
+      "records": 7,
+      "listings": 25,
+      "new_ids": 25,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": [],
+      "field_coverage": {
+        "id": 25,
+        "marketplace_listing_title": 25,
+        "creation_time": 25,
+        "listing_price": 25,
+        "location": 25,
+        "delivery_types": 20,
+        "is_sold": 20,
+        "primary_listing_photo": 25
+      }
+    },
+    {
+      "page": 1,
+      "status": 200,
+      "ms": 277,
+      "bytes": 23591,
+      "records": 7,
+      "listings": 6,
+      "new_ids": 6,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": [],
+      "field_coverage": {
+        "id": 6,
+        "marketplace_listing_title": 6,
+        "creation_time": 6,
+        "listing_price": 6,
+        "location": 6,
+        "delivery_types": 0,
+        "is_sold": 0,
+        "primary_listing_photo": 6
+      }
+    },
+    {
+      "page": 2,
+      "status": 200,
+      "ms": 321,
+      "bytes": 23559,
+      "records": 7,
+      "listings": 6,
+      "new_ids": 6,
+      "duplicate_ids": 0,
+      "has_next_page": true,
+      "cursor_changed": true,
+      "errors": [],
+      "field_coverage": {
+        "id": 6,
+        "marketplace_listing_title": 6,
+        "creation_time": 6,
+        "listing_price": 6,
+        "location": 6,
+        "delivery_types": 0,
+        "is_sold": 0,
+        "primary_listing_photo": 6
+      }
+    }
+  ],
+  "ios_26_3_simulator_urlsession": [
+    {
+      "bytes": 40438,
+      "decode_ms": 0.6690025329589844,
+      "errors": null,
+      "has_next_page": true,
+      "listings": 15,
+      "network_ms": 340.008020401001,
+      "new_ids": 15,
+      "page": 0,
+      "status": 200
+    },
+    {
+      "bytes": 73995,
+      "decode_ms": 1.7060041427612305,
+      "errors": null,
+      "has_next_page": true,
+      "listings": 28,
+      "network_ms": 397.1608877182007,
+      "new_ids": 28,
+      "page": 1,
+      "status": 200
+    }
+  ],
+  "saved_html_extractor_mac_webkit": {
+    "htmlChars": 990265,
+    "listings": 15,
+    "resultChars": 13054,
+    "timesMS": [
+      4,
+      3,
+      3,
+      2,
+      3,
+      3,
+      2,
+      3,
+      2,
+      3
+    ]
+  },
+  "anonymous_search_coordinate_aba": [
+    {
+      "label": "downtown",
+      "latitude": 40.706,
+      "longitude": -74.009,
+      "status": 200,
+      "ms": 792,
+      "count": 15,
+      "cities": {
+        "Ridgewood": 1,
+        "Newark": 1,
+        "New York": 11,
+        "Bronx": 1,
+        "Brooklyn": 1
+      }
+    },
+    {
+      "label": "uptown",
+      "latitude": 40.807,
+      "longitude": -73.962,
+      "status": 200,
+      "ms": 695,
+      "count": 15,
+      "cities": {
+        "Ridgewood": 1,
+        "Newark": 1,
+        "Long Island City": 1,
+        "New York": 10,
+        "Bronx": 1,
+        "Jersey City": 1
+      }
+    },
+    {
+      "label": "downtown-repeat",
+      "latitude": 40.706,
+      "longitude": -74.009,
+      "status": 200,
+      "ms": 287,
+      "count": 15,
+      "cities": {
+        "Ridgewood": 1,
+        "Newark": 1,
+        "New York": 11,
+        "Bronx": 1,
+        "Brooklyn": 1
+      }
+    },
+    {
+      "downtown_vs_uptown_common": 11,
+      "downtown_repeat_common": 15
+    }
+  ]
+}

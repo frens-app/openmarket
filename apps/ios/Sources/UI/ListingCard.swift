@@ -32,12 +32,6 @@ struct ListingCard: View {
                 Text(listing.locationText ?? " ")
                     .lineLimit(1)
                 if listing.locationText != nil {
-                    // Measured from the listing's own point once it's a known
-                    // listing, and from its city's centroid until then — see
-                    // "Enriched known listings" in `DistanceResolver`. A card
-                    // the user has opened before therefore gets a sharper,
-                    // decimal distance than the ones around it, which is
-                    // information Facebook never shows at all.
                     if let distance = distances.bestDistanceText(for: listing) {
                         Text("·").foregroundStyle(.tertiary)
                         Text(distance)

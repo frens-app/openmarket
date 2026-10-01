@@ -72,6 +72,17 @@ extension WKWebViewConfiguration {
 /// or stores a password. This type only observes the result.
 @MainActor
 enum SessionState {
+    /// Account identity only, for rejecting a browser document from another
+    /// session. Session secrets remain in the WebKit cookie store.
+    static func facebookActor() async -> String? {
+        let cookies = await BrowserSession.dataStore.httpCookieStore.allCookies()
+            .filter { $0.domain == ".facebook.com" || $0.domain == "facebook.com" || $0.domain == "www.facebook.com" }
+        guard cookies.contains(where: { $0.name == "xs" }),
+              let actor = cookies.first(where: { $0.name == "c_user" })?.value,
+              actor != "0", !actor.isEmpty, actor.utf8.allSatisfy({ (48...57).contains($0) }) else { return nil }
+        return actor
+    }
+
     /// Facebook sets `c_user` (the account id) and `xs` (the session) on a
     /// successful login. Both present is the cheapest reliable signal, and it
     /// needs no request of our own.

@@ -2,26 +2,18 @@ import Foundation
 import CoreLocation
 import os
 
-/// Turns a listing's "Berkeley, CA" into "~6 mi away".
-///
-/// Facebook never gives a coordinate per listing, only a place name, so this
-/// geocodes the *place* (not the listing) once and caches the result across
-/// launches. Cities repeat constantly across listings, so a session's browsing
-/// costs a handful of lookups. Distances are approximate by construction —
-/// city centre to user — which the "~" is there to admit.
-///
-/// Geocoding and the user's location arrive independently and in either order,
-/// so neither one gates the other: places are resolved whenever they're seen,
-/// and a distance appears once both halves exist.
+/// Resolves city centers for filtering and approximate listing points for display.
+/// Numeric listing distances require a point supplied by the item's detail page.
 @MainActor
 final class DistanceResolver: ObservableObject {
     static let shared = DistanceResolver()
 
     @Published private(set) var placeCoordinates: [String: [Double]] {
-        didSet { UserDefaults.standard.set(placeCoordinates, forKey: Self.cacheKey) }
+        didSet { defaults.set(placeCoordinates, forKey: Self.cacheKey) }
     }
     @Published private(set) var userLocation: CLLocation?
 
+    private let defaults: UserDefaults
     private var queued: [String] = []
     private var known: Set<String> = []     // queued, resolved, or given up on
     private var isDraining = false
@@ -47,8 +39,9 @@ final class DistanceResolver: ObservableObject {
     /// but it is the failure this batch exists to avoid.
     private static let batchWidth = 8
 
-    init() {
-        placeCoordinates = UserDefaults.standard.dictionary(forKey: Self.cacheKey) as? [String: [Double]] ?? [:]
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        placeCoordinates = defaults.dictionary(forKey: Self.cacheKey) as? [String: [Double]] ?? [:]
     }
 
     func setUserLocation(_ coordinate: CLLocationCoordinate2D?) {
@@ -88,56 +81,15 @@ final class DistanceResolver: ObservableObject {
         return CLLocationCoordinate2D(latitude: pair[0], longitude: pair[1])
     }
 
-    /// Formatted distance, or nil until both the place and the user are known.
-    func distanceText(for place: String?) -> String? {
-        guard let key = normalize(place),
-              let pair = placeCoordinates[key], pair.count == 2 else { return nil }
-        return distanceText(to: CLLocationCoordinate2D(latitude: pair[0], longitude: pair[1]))
-    }
-
-    /// Distance to a coordinate the listing itself supplied. Item pages publish
-    /// an approximate point per listing, which is a much better anchor than the
-    /// city centroid above — same formatting, so the two are interchangeable at
-    /// the call site and the caller just passes the better one when it has it.
-    func distanceText(to coordinate: CLLocationCoordinate2D) -> String? {
-        guard let userLocation else { return nil }
-        let metres = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            .distance(from: userLocation)
-        let miles = metres / 1609.34
-        if miles < 1 { return "under 1 mi" }
-        return "~\(Int(miles.rounded())) mi"
-    }
-
-    // MARK: - Enriched known listings
-    //
-    // A listing the user has opened before is a *known* listing: its item page
-    // was read, and item pages — and only item pages — publish an approximate
-    // coordinate for the listing itself. That coordinate is cached with the
-    // rest of its detail and comes back with the card on every later search
-    // (`ListingStore.absorb` seeds from the profile store), so the grid already
-    // holds a better answer than the one it has been drawing.
-    //
-    // The difference is not cosmetic. Every other card measures from the
-    // *centroid of a city*, which for the sample listing sits ~4.5 km from
-    // where the listing actually is. Facebook itself never shows a distance at
-    // all — so for anything the user has looked at, this app can be more
-    // precise than the site it reads from.
-
-    /// Distance from the listing's **own** published point, or nil if we have
-    /// never opened it.
-    ///
-    /// Formatted a notch finer than the city-centroid version — one decimal
-    /// below ten miles, and no `~` — because it is a genuinely better number
-    /// and should read like one. It is still Facebook's *approximate* point,
-    /// deliberately fuzzed and labelled as such on the item page, so the
-    /// precision stops at a tenth of a mile rather than pretending to metres.
+    /// Straight-line distance from the search origin to Facebook's approximate
+    /// listing point. City centroids cannot establish an item's distance.
     func enrichedDistanceText(for listing: Listing) -> String? {
         guard let userLocation, let point = enrichedCoordinate(for: listing) else { return nil }
         let miles = CLLocation(latitude: point.latitude, longitude: point.longitude)
             .distance(from: userLocation) / 1609.34
-        if miles < 0.1 { return "here" }
-        if miles < 10 { return String(format: "%.1f mi", miles) }
-        return "\(Int(miles.rounded())) mi"
+        if miles < 0.1 { return "Nearby" }
+        if miles < 10 { return String(format: "~%.1f mi", miles) }
+        return "~\(Int(miles.rounded())) mi"
     }
 
     /// The listing's own approximate point, present only for listings whose
@@ -145,16 +97,14 @@ final class DistanceResolver: ObservableObject {
     func enrichedCoordinate(for listing: Listing) -> CLLocationCoordinate2D? {
         guard let latitude = listing.detail?.latitude,
               let longitude = listing.detail?.longitude else { return nil }
-        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        let point = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard latitude.isFinite, longitude.isFinite, CLLocationCoordinate2DIsValid(point) else { return nil }
+        return point
     }
 
-    /// The best distance available for a listing: measured from the listing
-    /// itself when it is known, and from the centroid of its city otherwise.
-    ///
-    /// One entry point so the grid, the saved shelf and the detail screen can
-    /// never disagree about how far away something is.
+    /// Shared by cards and detail; city-only listings show their place name.
     func bestDistanceText(for listing: Listing) -> String? {
-        enrichedDistanceText(for: listing) ?? distanceText(for: listing.locationText ?? listing.detail?.locationText)
+        enrichedDistanceText(for: listing)
     }
 
     /// Kilometres to a listing, preferring its own approximate point over the

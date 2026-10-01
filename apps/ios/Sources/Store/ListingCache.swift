@@ -66,6 +66,8 @@ struct CachedResults: Codable {
     var listings: [Listing]
     var savedAt: Date
     var session: BrowserSession?
+    var latitude: Double?
+    var longitude: Double?
 }
 
 /// On-device persistence for two things with two different lifetimes.
@@ -193,16 +195,19 @@ final class ListingCache {
     /// only for an unauthenticated read: it was necessarily captured without one.
     func results(for query: SearchQuery, session: BrowserSession) -> [Listing]? {
         guard let results, results.queryURL == query.url.absoluteString else { return nil }
-        guard (results.session ?? .unauthed) == session else { return nil }
+        guard (results.session ?? .unauthed) == session,
+              results.latitude == query.coordinate?.latitude,
+              results.longitude == query.coordinate?.longitude else { return nil }
         return results.listings.isEmpty ? nil : results.listings
     }
 
     func saveResults(_ listings: [Listing], for query: SearchQuery, session: BrowserSession) {
-        guard !listings.isEmpty else { return }
         results = CachedResults(queryURL: query.url.absoluteString,
                                 listings: listings,
                                 savedAt: Date(),
-                                session: session)
+                                session: session,
+                                latitude: query.coordinate?.latitude,
+                                longitude: query.coordinate?.longitude)
         scheduleSave()
     }
 

@@ -15,8 +15,7 @@ final class ListingStore: ObservableObject {
     @Published private(set) var isLoadingMore = false
     /// The first visible row expected from the active Search top-up.
     @Published private(set) var loadingPlaceholderCount = 0
-    /// True only after the hidden Facebook feed has remained at a valid,
-    /// unchanged bottom through an explicit confirmation window.
+    /// A server-declared end, or a confirmed bottom on the browser path.
     @Published private(set) var reachedEnd = false
     @Published private(set) var health = ParseHealth()
     @Published var query: SearchQuery?
@@ -31,18 +30,20 @@ final class ListingStore: ObservableObject {
     /// rather than an observer on `listings`.
     @Published private(set) var resultsGeneration = 0
 
-    /// The primary search path. Desktop is the only surface with working
-    /// filters and sorting, and the only one that embeds a structured payload —
-    /// see `docs/decision-desktop-primary.md`.
+    /// Browser host for authenticated GraphQL and fallback for unsupported queries.
     let desktop: DesktopFeedEngine
-    /// WebLite, kept and demoted. It is the only fallback if the desktop login
-    /// wall fires, whose frequency under sustained use is still unmeasured, and
-    /// the only surface that paginates without an account.
+    /// Retained for resolving mobile cards that lack a canonical URL.
     let feed: FeedEngine
     let detail: DetailEngine
     private let prefs: Preferences
     private let metrics: MetricsReporter
     private let cache: ListingCache
+    private let authenticated: any GraphQLFeedLoading
+    private let anonymous: any GraphQLFeedLoading
+    private var graphQLPagination: GraphQLFeedPagination?
+    private var graphQLRequest: Task<GraphQLFeedPage, Error>?
+    @Published private var graphQLState: FeedEngine.LoadState?
+    @Published private(set) var paginationError: String?
     /// The shared one, deliberately — the grid, the saved shelf and the detail
     /// screen all read distances from it, and a second instance would give them
     /// different answers from a different cache.
@@ -54,7 +55,7 @@ final class ListingStore: ObservableObject {
     private(set) var isShowingCachedResults = false
     /// Cached cards remain visible while their live page is loading. They must
     /// not paginate the previous DOM during that interval.
-    private var isRefreshingSearch = false
+    @Published private(set) var isRefreshingSearch = false
 
     /// Which context the current results were fetched under.
     ///
@@ -74,6 +75,16 @@ final class ListingStore: ObservableObject {
         desktop.session = session
         guard session != self.session else { return }
         self.session = session
+        resultsGeneration += 1
+        graphQLRequest?.cancel()
+        graphQLPagination = nil
+        graphQLState = nil
+        isLoadingMore = false
+        isLoadingFirstPage = false
+        isRefreshingSearch = false
+        paginationError = nil
+        loadingPlaceholderCount = 0
+        reachedEnd = true
         Logger.store.info("session -> \(session.rawValue, privacy: .public)")
     }
 
@@ -86,19 +97,24 @@ final class ListingStore: ObservableObject {
          detail: DetailEngine? = nil,
          prefs: Preferences = .shared,
          metrics: MetricsReporter = LocalMetrics.shared,
-         cache: ListingCache = .shared) {
+         cache: ListingCache = .shared,
+         anonymous: (any GraphQLFeedLoading)? = nil,
+         authenticated: (any GraphQLFeedLoading)? = nil) {
         self.desktop = desktop ?? DesktopFeedEngine()
         self.feed = feed ?? FeedEngine()
         self.detail = detail ?? DetailEngine()
         self.prefs = prefs
         self.metrics = metrics
         self.cache = cache
+        self.anonymous = anonymous ?? AnonymousFeedClient()
+        self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.desktop.webView)
     }
 
     /// The desktop engine's state, mapped onto the shape the UI already knows.
     /// `FeedEngine.LoadState` stays the vocabulary because both engines produce
     /// the same four outcomes and the views shouldn't care which ran.
     var feedState: FeedEngine.LoadState {
+        if let graphQLState { return graphQLState }
         switch desktop.state {
         case .idle: return .idle
         case .loading: return .loading
@@ -108,18 +124,32 @@ final class ListingStore: ObservableObject {
         }
     }
 
-    var canLoadMore: Bool { desktop.canLoadMore && !reachedEnd }
+    var canLoadMore: Bool {
+        !reachedEnd && (graphQLPagination?.hasNextPage ?? desktop.canLoadMore)
+    }
 
-    /// How much of the current grid has structured data behind it. The first
-    /// ~15 cards carry exact timestamps, delivery types and sold state; nothing
-    /// past them does, however far the feed is scrolled.
-    var payloadCoverage: DesktopFeedEngine.PayloadCoverage { desktop.coverage }
+    var requiresFacebookForMore: Bool {
+        guard case .ready = desktop.state else { return false }
+        return session == .unauthed && graphQLPagination == nil && graphQLState == nil
+    }
+
+    var payloadCoverage: DesktopFeedEngine.PayloadCoverage {
+        graphQLPagination == nil ? desktop.coverage
+            : .init(rendered: listings.count, withPayload: listings.count)
+    }
 
     // MARK: - Searching
 
     func run(_ query: SearchQuery) async {
+        graphQLRequest?.cancel()
         self.query = query
         resultsGeneration += 1
+        let generation = resultsGeneration
+        graphQLPagination = nil
+        graphQLState = nil
+        paginationError = nil
+        isLoadingMore = false
+        isShowingCachedResults = false
         listings = []
         seenIDs = []
         deepestVisibleIndexSeen = -1
@@ -143,13 +173,80 @@ final class ListingStore: ObservableObject {
             isLoadingFirstPage = true
         }
 
+        defer {
+            if generation == resultsGeneration {
+                isLoadingFirstPage = false
+                isRefreshingSearch = false
+                if scrolledSinceLastPage, paginationError == nil, !Task.isCancelled {
+                    Task {
+                        guard generation == resultsGeneration else { return }
+                        await topUpIfAtMargin()
+                    }
+                }
+            }
+        }
+        graphQLState = .loading
+        do {
+            var pagination = GraphQLFeedPagination()
+            // Facebook can return an empty first page with an advancing cursor.
+            for _ in 0..<3 {
+                let page = try await requestFeedPage(query, cursor: pagination.cursor)
+                guard generation == resultsGeneration, !Task.isCancelled else { return }
+                let payload = try pagination.accept(page)
+                graphQLPagination = pagination
+                graphQLState = .ready
+                await ingest(payload: payload)
+                guard generation == resultsGeneration, !Task.isCancelled else { return }
+                if (!isShowingCachedResults && !listings.isEmpty) || !pagination.hasNextPage { break }
+            }
+            // A verified empty response replaces stale cached results too.
+            if isShowingCachedResults {
+                listings = []
+                seenIDs = []
+                isShowingCachedResults = false
+            }
+            reachedEnd = !pagination.hasNextPage
+            cache.saveResults(listings, for: query, session: session)
+            return
+        } catch {
+            guard generation == resultsGeneration, !Task.isCancelled else { return }
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+            guard (error as? GraphQLFeedError)?.permitsBrowserFallback == true else {
+                graphQLState = graphQLPagination == nil ? .failed(error.localizedDescription) : .ready
+                paginationError = error.localizedDescription
+                return
+            }
+            graphQLPagination = nil
+            graphQLState = nil
+            Logger.store.info("GraphQL feed unavailable; using browser")
+        }
+        await loadBrowser(query, generation: generation)
+    }
+
+    private func requestFeedPage(_ query: SearchQuery, cursor: String?) async throws -> GraphQLFeedPage {
+        let client = session == .authed ? authenticated : anonymous
+        let task = Task { try await client.page(for: query, cursor: cursor) }
+        graphQLRequest = task
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func loadBrowser(_ query: SearchQuery, generation: Int) async {
         let payload = await desktop.load(query)
+        guard generation == resultsGeneration, !Task.isCancelled else { return }
+        if case .failed(let message) = desktop.state {
+            paginationError = message
+            return
+        }
         await ingest(payload: payload)
-        // The payload covers the first page only; anything else already
-        // rendered has to be read from the DOM.
-        await ingest(cards: await desktop.renderedCards())
-        isLoadingFirstPage = false
-        isRefreshingSearch = false
+        guard generation == resultsGeneration, !Task.isCancelled else { return }
+        let cards = await desktop.renderedCards()
+        guard generation == resultsGeneration, !Task.isCancelled else { return }
+        await ingest(cards: cards)
+        guard generation == resultsGeneration, !Task.isCancelled else { return }
         cache.saveResults(listings, for: query, session: session)
     }
 
@@ -197,19 +294,11 @@ final class ListingStore: ObservableObject {
     /// Parsed and geocoded pagination cards waiting for a visible row boundary.
     private var paginationBuffer: [Listing] = []
 
-    /// Called when the user drags the grid. See `scrolledSinceLastPage`.
-    ///
-    /// Arming must re-check the margin itself: the trigger card for page N+1 is
-    /// created the instant page N lands, inside the lazy stack's build-ahead,
-    /// when the gate has just closed. Without the re-check it announces itself
-    /// once to a closed gate and the grid stops paging for good. Re-arming while
-    /// already armed is a no-op.
+    /// Re-check even an armed drag: a cache refresh or filter may have changed
+    /// the margin without recreating the visible cells.
     func noteScroll(hiddenAsViewed: Set<String>) {
-        // ResultsView observes one outer ScrollView for both home and search, so
-        // a Discover drag reaches here too. The query gate keeps it from driving
-        // empty screens through the search webview (`prefetch: at -1 of 0`).
         paginationHiddenAsViewed = hiddenAsViewed
-        guard query != nil, !scrolledSinceLastPage else { return }
+        guard query != nil else { return }
         scrolledSinceLastPage = true
         Task { await topUpIfAtMargin() }
     }
@@ -222,7 +311,7 @@ final class ListingStore: ObservableObject {
     ) async {
         paginationHiddenAsViewed = hiddenAsViewed
         let visible = visibleListings(in: listings)
-        guard let index = visible.firstIndex(of: currentItem) else { return }
+        guard let index = visible.firstIndex(where: { $0.id == currentItem.id }) else { return }
         deepestVisibleIndexSeen = max(deepestVisibleIndexSeen, index)
         await topUpIfAtMargin()
     }
@@ -251,11 +340,21 @@ final class ListingStore: ObservableObject {
     ///
     /// Harvests *between* scrolls because the desktop feed virtualises: a single
     /// read at the bottom returns the last window, not everything loaded on the
-    /// way there. Everything gathered here is markup-only — timestamps, delivery
-    /// types and sold state exist for the first page and nowhere else.
+    /// way there. The native path consumes complete structured pages instead.
     func loadMore() async {
         guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
+        let generation = resultsGeneration
+        if graphQLPagination != nil {
+            await loadMoreGraphQL(generation: generation)
+            return
+        }
         isLoadingMore = true
+        defer {
+            if generation == resultsGeneration {
+                isLoadingMore = false
+                loadingPlaceholderCount = 0
+            }
+        }
         loadingPlaceholderCount = Self.loadingReservation
         paginationBuffer = []
         let beforeStored = listings.count
@@ -265,7 +364,9 @@ final class ListingStore: ObservableObject {
         pagination: while visiblePaginationCount - beforeVisible < Self.paginationTarget,
                           scrolls < Self.maxScrollsPerTopUp {
             scrolls += 1
-            switch await desktop.scrollOnce() {
+            let outcome = await desktop.scrollOnce()
+            guard generation == resultsGeneration, !Task.isCancelled else { return }
+            switch outcome {
             case .advanced:
                 break
             case .exhausted:
@@ -274,7 +375,10 @@ final class ListingStore: ObservableObject {
             case .indeterminate:
                 break pagination
             }
-            await ingest(cards: await desktop.renderedCards(), stageForPagination: true)
+            let cards = await desktop.renderedCards()
+            guard generation == resultsGeneration, !Task.isCancelled else { return }
+            await ingest(cards: cards, stageForPagination: true)
+            guard generation == resultsGeneration, !Task.isCancelled else { return }
             publishReadyPaginationRows()
         }
         publishReadyPaginationRows(flush: true)
@@ -305,6 +409,65 @@ final class ListingStore: ObservableObject {
         }
     }
 
+    private func loadMoreGraphQL(generation: Int) async {
+        guard let query else { return }
+        isLoadingMore = true
+        loadingPlaceholderCount = Self.loadingReservation
+        paginationError = nil
+        paginationBuffer = []
+        let before = visiblePaginationCount
+        defer {
+            if generation == resultsGeneration {
+                publishReadyPaginationRows(flush: true)
+                loadingPlaceholderCount = 0
+                isLoadingMore = false
+                if scrolledSinceLastPage, paginationError == nil, !Task.isCancelled {
+                    Task { await topUpIfAtMargin() }
+                }
+            }
+        }
+        // A page may be empty or entirely filtered while its cursor advances.
+        // Bound recovery work without declaring that the remote feed ended.
+        for _ in 0..<3 {
+            guard let pagination = graphQLPagination, pagination.hasNextPage else { break }
+            do {
+                let page = try await requestFeedPage(query, cursor: pagination.cursor)
+                guard generation == resultsGeneration, !Task.isCancelled else { return }
+                var next = pagination
+                let payload = try next.accept(page)
+                await ingest(payload: payload, stageForPagination: true)
+                guard generation == resultsGeneration, !Task.isCancelled else { return }
+                graphQLPagination = next
+                reachedEnd = !next.hasNextPage
+                publishReadyPaginationRows()
+                if reachedEnd || visiblePaginationCount - before >= Self.paginationTarget { break }
+            } catch {
+                guard generation == resultsGeneration, !Task.isCancelled else { return }
+                if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+                if (error as? GraphQLFeedError)?.permitsBrowserFallback == true {
+                    publishReadyPaginationRows(flush: true)
+                    graphQLPagination = nil
+                    graphQLState = nil
+                    await loadBrowser(query, generation: generation)
+                } else {
+                    paginationError = error.localizedDescription
+                }
+                return
+            }
+        }
+        if generation == resultsGeneration, !reachedEnd, visiblePaginationCount == before {
+            paginationError = "No new listings in this batch. Try loading more."
+        }
+    }
+
+    func retryLoadingMore() async {
+        if graphQLPagination == nil, case .failed = feedState {
+            await retry()
+        } else {
+            await loadMore()
+        }
+    }
+
     func retry() async {
         guard let query else { return }
         await run(query)
@@ -318,12 +481,13 @@ final class ListingStore: ObservableObject {
     /// Runs before `ingest(cards:)` on a fresh search so the richest version of
     /// each listing lands first and the DOM pass can only fill gaps, never
     /// overwrite. Both are idempotent on listing identity.
-    private func ingest(payload: [PayloadListing]) async {
+    private func ingest(payload: [PayloadListing], stageForPagination: Bool = false) async {
         guard !payload.isEmpty else { return }
         let listingsFromPayload = payload.enumerated().map { index, item in
             item.makeListing(cardIndex: index)
         }
-        await absorb(listingsFromPayload, replacingCache: isShowingCachedResults)
+        await absorb(listingsFromPayload, replacingCache: isShowingCachedResults,
+                     stageForPagination: stageForPagination)
     }
 
     /// The markup tail — everything past the first page, plus anything rendered
@@ -360,6 +524,7 @@ final class ListingStore: ObservableObject {
         // end. `listings` is `@Published` and the grid renders "Nothing found
         // nearby" on an empty array, so a clear-then-refill would tear down the
         // grid and pop any listing the user has open.
+        let generation = resultsGeneration
         var seen = replacingCache ? Set<String>() : seenIDs
 
         var counts = ParseHealth()
@@ -398,14 +563,16 @@ final class ListingStore: ObservableObject {
         // Before anything is published: everything below is an assignment to
         // `@Published` state, and so a frame the user sees.
         await distances.resolveAll(fresh.map(\.locationText))
+        guard generation == resultsGeneration, !Task.isCancelled else { return }
 
         if replacingCache {
             isShowingCachedResults = false
-            // Cached cells may have appeared while the live page was loading.
-            // Their indices describe the replaced array and must not arm the
-            // new result set's pagination.
-            deepestVisibleIndexSeen = -1
-            scrolledSinceLastPage = false
+            // SwiftUI retains cached cells with the same IDs without rerunning
+            // their appearance tasks. Remap observed IDs into the live order.
+            let observedIDs = Set(visibleListings(in: listings)
+                .prefix(deepestVisibleIndexSeen + 1).map(\.id))
+            deepestVisibleIndexSeen = visibleListings(in: fresh)
+                .lastIndex(where: { observedIDs.contains($0.id) }) ?? -1
             counts.rendered = fresh.count
             listings = fresh                       // one assignment, never empty
         } else if stageForPagination {

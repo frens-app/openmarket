@@ -1,5 +1,14 @@
 # Probe harness
 
+For the 2026-09-30 direct anonymous GraphQL experiment, use
+`anonymous_graphql/run.py`. It tests Search and Browse without WebKit or
+cookies; see [`docs/anonymous-graphql-2026-09-30.md`](../../docs/anonymous-graphql-2026-09-30.md).
+
+For signed-in session-backed requests, the opt-in
+[`authenticated_graphql/`](authenticated_graphql/README.md) probe exercises the
+production client inside Openmarket Dev's WebView. It is separate from the
+ordinary test suite and requires an existing Facebook session in the app.
+
 A disposable iOS app whose only job is to run JavaScript against Facebook's
 live surfaces from inside a real `WKWebView` and print what it finds. Every
 finding in `docs/` was measured with this.

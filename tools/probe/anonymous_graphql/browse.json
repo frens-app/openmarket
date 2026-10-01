@@ -1,0 +1,26 @@
+{
+  "observed_on": "2026-09-30",
+  "doc_id": "28036163469355579",
+  "operation": "MarketplaceCometBrowseFeedLightPaginationQuery",
+  "variables": {
+    "buyLocation": {
+      "latitude": 37.7793,
+      "longitude": -122.419
+    },
+    "count": 1,
+    "cursor": null,
+    "imageWidth": 256,
+    "mediaType": "image/jpeg",
+    "radius": 65000,
+    "scale": 2,
+    "sizing": "cover-fill-cropped",
+    "useSDFPath": true,
+    "__relay_internal__pv__CometMarketplaceShouldShowTopPicksStrikethroughrelayprovider": false,
+    "__relay_internal__pv__GHLShouldChangeMarketplaceSponsoredDataFieldNamerelayprovider": false,
+    "__relay_internal__pv__MarketplaceCometAdmodulerelayprovider": true,
+    "__relay_internal__pv__CometMarketplaceShouldShowFeedShippingIconrelayprovider": false,
+    "includePDPRelevantListings": false,
+    "pdpListingId": null,
+    "refinement": null
+  }
+}

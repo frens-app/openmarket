@@ -2,6 +2,10 @@
 
 **Status:** proposal; no listing persistence or ingest RPC is built.
 **Updated:** 2026-08-12.
+**Network-source addendum, 2026-09-30:** anonymous and authenticated Search GraphQL pagination
+supplies structured fields beyond the embedded first page; Browse GraphQL has
+two structured card shapes. The matrix below measures HTML/DOM extraction,
+not the network API. See [the direct pagination probe](anonymous-graphql-2026-09-30.md).
 **Related:** `embedded-payload.md`, `logged-in-findings.md`,
 `backend-platform.md` §4–§5, and
 `protos/openmarket/api/v1/listing.proto`.

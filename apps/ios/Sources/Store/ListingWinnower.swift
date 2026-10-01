@@ -33,8 +33,8 @@ enum ListingWinnower {
                 result.items.append(listing)
                 continue
             }
-            // Same precedence as the card's label: a known listing is filtered
-            // on its own point, everything else on its city's centroid.
+            // Filtering uses the city centroid until a listing point is known.
+            // Displayed distances require the listing point.
             let coordinate = distances.enrichedCoordinate(for: listing)
             if let km = distances.distanceKM(
                 for: listing.locationText,

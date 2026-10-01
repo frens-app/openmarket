@@ -5,6 +5,13 @@
 `WKWebView` (`tools/probe`, `runPayloadTests`)
 **Related:** `filter-parameters.md`, `surface-strategy.md`, `data-model.md`
 
+**Correction, 2026-09-30:** direct, cookie-free Search and Browse GraphQL
+pagination works, including a null starting cursor and an iOS `URLSession`.
+Later Search pages carry structured fields too. See
+[`anonymous-graphql-2026-09-30.md`](anonymous-graphql-2026-09-30.md) for the
+measured requests and reproducible probe. The original embedded-HTML findings
+below do not describe everything available on the network.
+
 The question was whether Facebook exposes a GraphQL API we could call for exact
 posting times and better filtering. The useful answer turned out to be that we
 don't need to call anything: **the desktop surface embeds the `MarketplaceSearch`
@@ -22,16 +29,12 @@ The mobile surface embeds none of it.
 | Public Marketplace API | Does not exist, and never has. Meta's incentive runs the other way — the whole product depends on keeping buyers and sellers inside Facebook. |
 | Commerce Platform API | Limited alpha, approved *seller* partners only. Built for managing your own inventory, not for reading other people's listings. |
 | Meta Content Library API | Real, and it does expose Marketplace listings with `SINCE`/`UNTIL` date filtering — but access is for approved researchers, running inside a Secure Research Environment or third-party cleanroom. Not a thing a consumer iOS app can ship against. |
-| Internal `/api/graphql/` | Reachable, but each query needs a `doc_id` (a precompiled-query hash that rotates every few weeks) plus a session-bound `fb_dtsg` CSRF token, and logged-out calls get bounced to a login wall. Reported rate limits are ~30–60 requests/hour/IP. |
+| Internal `/api/graphql/` | Direct anonymous Search and Browse pagination verified 2026-09-30. The measured native requests require a private `doc_id` but no cookies or CSRF tokens. Query-ID lifetime and rate limits were not established; the earlier claimed rotation cadence and requests/hour limit were not supported by this probe. |
 
-The internal endpoint is the only one that would work in principle, and it is a
-maintenance treadmill: a rotating `doc_id` means the app breaks on Facebook's
-schedule rather than ours. It is also a considerably more aggressive posture
-than loading pages — this app's whole premise is that it browses the public site
-the way a logged-out visitor does.
-
-Reading the payload out of the page we already load gets the same fields with
-none of that.
+Reading an already-loaded page remains a fallback. Direct requests can now
+avoid that page load, and their pagination responses retain structured fields
+that the HTML extractor never sees. Private query metadata still needs a
+refresh/failure strategy; the new investigation describes those limits.
 
 ## 2. What each card carries
 

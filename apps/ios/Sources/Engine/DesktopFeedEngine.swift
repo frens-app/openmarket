@@ -6,22 +6,8 @@ extension Logger {
     static let desktop = Logger(subsystem: "lol.frens.openmarket", category: "desktop")
 }
 
-/// Search on the desktop surface, reading the GraphQL payload Facebook embeds
-/// in the page it already serves.
-///
-/// The primary search path (`docs/decision-desktop-primary.md`). Separate from
-/// `FeedEngine` because almost nothing is shared: desktop has real listing
-/// anchors, an embedded payload, working filters and a hard result cap, where
-/// WebLite has none of those and paginates forever.
-///
-/// Three properties of this surface shape the design:
-///
-/// * **The payload covers only the first ~15 cards.** Everything past the first
-///   server-rendered page is markup, signed in or out — see `PayloadCoverage`.
-/// * **Results are capped without a session** at 15, behind a login overlay that
-///   allows exactly one dismissal. Signed in, the feed scrolls indefinitely.
-/// * **The feed virtualises.** Cards are recycled out of the DOM as they leave
-///   the viewport, so pagination has to harvest as it goes.
+/// Browser host for authenticated GraphQL and fallback feed extraction.
+/// Fallback pagination harvests each viewport because Facebook virtualizes cards.
 @MainActor
 final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate {
     enum LoadState: Equatable {

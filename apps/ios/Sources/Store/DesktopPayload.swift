@@ -1,25 +1,7 @@
 import Foundation
 
-/// The `MarketplaceSearch` GraphQL response, which desktop pages embed verbatim
-/// in the HTML they already serve us.
-///
-/// This is the whole reason search moves to desktop. One page load yields a
-/// structured object per card carrying an exact `creation_time`, a numeric
-/// price, `delivery_types`, sold state, the city's place id, the untruncated
-/// title, and the listing id — none of which the mobile surface has at any
-/// depth. See `docs/embedded-payload.md`.
-///
-/// Two limits are load-bearing and are enforced here rather than discovered
-/// later:
-///
-/// * **The payload covers only the first ~15 cards.** Anything past the first
-///   server-rendered page is markup, signed in or out, so `PayloadListing`
-///   describes a minority of a long result set and callers must cope with cards
-///   that have none.
-/// * **Nothing here is trustworthy without an id match.** Item pages carry ~20
-///   *other* listings' payload objects in the "Today's picks" rail, and reading
-///   the nearest one is how a neighbour's coordinates or timestamp end up
-///   attributed to the listing being viewed.
+/// Listing fields normalized from embedded HTML or direct GraphQL feed data.
+/// Missing fields remain unknown; item detail is fetched separately.
 struct PayloadListing: Decodable, Equatable {
     let id: String
     let title: String?
@@ -59,8 +41,7 @@ struct PayloadListing: Decodable, Equatable {
     var offersLocalPickup: Bool { deliveryTypes.contains("IN_PERSON") }
     var isShippingOnly: Bool { shipsToBuyer && !offersLocalPickup }
 
-    /// The same tokens as the model the screens read. Nil past the first
-    /// ~15 cards, where there is no payload to carry them.
+    /// Nil when this response shape supplies no delivery information.
     var fulfillment: Fulfillment? { Fulfillment(tokens: deliveryTypes) }
 
     /// The identity the rest of the app uses. Built from the fbcdn filename

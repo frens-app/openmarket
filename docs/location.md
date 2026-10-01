@@ -10,6 +10,14 @@ The two older documents are the raw session records and stay as they are:
 `mobile-location-radius-notes.md` (WebLite). Where they disagree with this
 file, this file is newer.
 
+**2026-09-30 network-path addendum:** the URL/picker findings below do not
+constrain direct GraphQL inputs. An anonymous Search A/B/A probe with explicit
+downtown/uptown Manhattan coordinates changed 4 of 15 results and reproduced
+the original 15 on the repeat. See
+[the direct-query investigation](anonymous-graphql-2026-09-30.md#follow-up-coordinates-and-authenticated-detail).
+This verifies coordinate-sensitive selection for the tested Search operation,
+not strict radius enforcement or per-listing location precision.
+
 ---
 
 ## 1. The one-paragraph version
@@ -612,6 +620,17 @@ favour of MapKit's reverse-geocoding request. The app still uses it in
   `PlaceChooser` is the only writer of a place segment in the app.
 
 ### Where distances are measured from
+
+Card and detail labels show a numeric distance only when the listing's own
+approximate point is available, and prefix it with `~`. City-only results show
+the city name. A city centroid can be less than one mile from the search origin
+while the item is several miles away, so it must not produce a listing distance
+label. The current anonymous search GraphQL response contains city-level
+`location.reverse_geocode`, not per-listing latitude/longitude (confirmed on
+all 15 cards in the captured `anthurium` response). Opening an item supplies
+its approximate point; cached detail can also supply it on later searches.
+Radius filtering still uses city centroids when no listing point is available,
+so that filtering remains approximate too.
 
 Browsing somewhere you are not breaks the assumption that "the user" and "the
 search" share a location. The rules:

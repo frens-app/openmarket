@@ -1,17 +1,9 @@
 import Foundation
 import CoreLocation
 
-/// A search, and the filters applied to it.
-///
-/// The filters are the reason search moved to the desktop surface: Facebook
-/// honours every one of them there and strips all of them on mobile
-/// (`docs/filter-parameters.md`). They are applied *server-side*, so the ~15
-/// structured results a desktop page returns are drawn from the whole filtered
-/// corpus rather than being the first 15 of an unfiltered list — which is what
-/// makes a 15-result surface viable as the primary search path.
-///
-/// Parameter names and values were read off Facebook's own controls rather than
-/// guessed, by driving them and watching `location.href`.
+/// Shared inputs for GraphQL feed requests and the browser fallback.
+/// URL parameter names come from Facebook's controls; GraphQL input mappings
+/// are recorded in docs/anonymous-graphql-2026-09-30.md.
 struct SearchQuery: Equatable {
     enum Kind: Equatable {
         case search(String)
@@ -214,8 +206,8 @@ struct SearchQuery: Equatable {
 
         // No latitude/longitude: Facebook discards them and falls back to the
         // IP-inferred place. The city slug in the path is what actually moves
-        // the result set; the user's coordinate is only needed locally, to
-        // compute distances.
+        // the result set on this URL path. Native GraphQL requests carry the
+        // coordinate separately, and local distance filtering uses it too.
         components.queryItems = items.isEmpty ? nil : items
         return components.url!
     }

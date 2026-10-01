@@ -1,19 +1,22 @@
 # Openmarket
 
 A native iOS app for browsing local Facebook Marketplace listings. SwiftUI
-renders everything the user sees; a hidden `WKWebView` is the data layer. Any
+renders everything the user sees. Guest Search and Discover use direct,
+cookie-free GraphQL pagination. Signed-in feeds make GraphQL requests inside
+an authenticated `WKWebView`, reusing its session without scrolling or harvesting
+page markup. Item detail and unsupported queries retain the browser path. Any
 action that needs an account — messaging, offers, saving on Facebook — hands off
 to the Facebook app via a universal link.
 
-**The app is built for a signed-in user.** A Facebook session is what makes
-sellers identifiable, keeps results loading past the first page, and lets
-Discover keep scrolling instead of stopping at the one page Facebook serves an
-anonymous session — the measurements are in `docs/logged-in-findings.md`.
+**Guests can keep scrolling Search and Discover without Facebook login.**
+A Facebook session still supplies richer seller information on item pages.
+The [2026-09-30 investigation](docs/anonymous-graphql-2026-09-30.md) records
+the direct requests, their limits, and the implementation. Category routes,
+date-window searches, and locations without saved coordinates retain the
+browser path; private-query schema failures also fall back to it.
 Signing in happens on Facebook's own page inside the app; there is no login form
 of this project's own, and there won't be. Browsing without an account still
-works and is worth shipping — search, distance, filters, saved listings and a
-one-page Discover all function — but it is the reduced version, and the app says
-so rather than selling it as the point.
+supports search, distance, filters, saved listings, and paginated Discover.
 
 Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
 describe something you own and it finds what similar things are listed for near
@@ -885,7 +888,8 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/surface-strategy.md` | Mobile vs. web trade-off, options, and recommendation |
 | `docs/mobile-location-radius-notes.md` | Why mobile's location and radius don't behave as the URL implies |
 | `docs/filter-parameters.md` | Every sort/filter parameter, which surface honours it, and what's measured |
-| `docs/embedded-payload.md` | The GraphQL response Facebook ships inside desktop pages, and why the API isnt worth calling |
+| `docs/embedded-payload.md` | Structured data embedded in desktop pages, with the direct-API correction |
+| `docs/anonymous-graphql-2026-09-30.md` | Direct anonymous Search/Discover pagination, iOS timing measurements, reproducible probe, and recommended feed architecture |
 | `docs/logged-in-findings.md` | What a signed-in session changes: seller identity yes, structured depth no — and §7, the *rendered* page differences that broke four things built logged out |
 | `docs/discover.md` | The home screen feed — Facebook's own, scrolled. How the paging works, why the search-seeded version it replaced is gone, its open issues, and what breaks if it ever holds older cards |
 | `docs/onboarding.md` | Optional account setup, required browsing location, Facebook connection, and notification permission |

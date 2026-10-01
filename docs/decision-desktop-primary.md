@@ -2,6 +2,13 @@
 
 **Date:** 2026-08-05
 **Status:** accepted, not yet implemented
+**2026-09-30 addendum:** Search and Browse now use structured GraphQL pages
+in both session states. Guests use cookie-free native HTTP; signed-in users use
+same-origin requests inside their existing persistent WebView session. The
+browser still supplies item detail and fallback for unsupported feed queries.
+See [the direct-query investigation](anonymous-graphql-2026-09-30.md).
+The session-isolation design below is historical; current `BrowserSession`
+cases share one persistent store, while the anonymous HTTP client rejects cookies.
 **Supersedes:** the "mobile feed, desktop resolve as fallback" arrangement in
 `surface-strategy.md` §5 (option B)
 **Evidence:** `filter-parameters.md`, `embedded-payload.md`,

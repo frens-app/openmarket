@@ -95,11 +95,12 @@ struct ResultsView: View {
                 // longer one, so both surfaces re-run rather than append.
                 // `loadIfNeeded` notices the session change on its own.
                 Task {
+                    let previous = store.session
                     store.setSession(await SessionState.isSignedIn() ? .authed : .unauthed)
-                    if surface == .search {
-                        await store.retry()
+                    if previous == store.session {
+                        if surface == .search { await store.retry() }
+                        await loadDiscover(force: true)
                     }
-                    await loadDiscover()
                 }
             }
         }
@@ -109,14 +110,17 @@ struct ResultsView: View {
                 namespace: surface == .discover ? discoverNamespace : searchNamespace
             )
         }
+        .onChange(of: store.session) {
+            Task {
+                if surface == .search { await store.retry() }
+                await loadDiscover()
+            }
+        }
         // A confirmed change of place, and both surfaces catch up.
         //
-        // The slug is watched rather than the switch finishing, because every
-        // route that can change a search's place ends here — onboarding and the
-        // filter sheet included — and it only changes on confirmation
-        // (`Preferences.setResolvedPlace`). Order matters: the search is what's
-        // on screen, so it goes first and Discover rebuilds behind it.
-        .onChange(of: prefs.locationSlug) {
+        // Observe the coordinate too: two selected points can share one slug.
+        // The search refreshes first, then Discover rebuilds behind it.
+        .onChange(of: prefs.resolvedPlace) {
             // The origin moves first, and synchronously. Every grid here is
             // filtered by distance from `DistanceResolver.userLocation`, so a
             // stale origin measures the new city's cards from the old one and
@@ -298,8 +302,11 @@ struct ResultsView: View {
             if store.isLoadingFirstPage {
                 SkeletonGrid()
             } else if store.listings.isEmpty {
-                InlineNotice(text: "Nothing found nearby.", actionTitle: nil, action: nil)
-                    .padding()
+                if store.canLoadMore {
+                    searchPaginationFooter(items: [])
+                } else {
+                    InlineNotice(text: "Nothing found nearby.", actionTitle: nil, action: nil).padding()
+                }
             } else {
                 searchGrid
             }
@@ -407,7 +414,7 @@ struct ResultsView: View {
     ///
     /// Runs to the bottom of the scroll — the other two sections are bounded by
     /// what the user has done to individual listings. "The bottom" is the bottom
-    /// of Facebook's feed: ~24 cards signed out, never yet observed signed in.
+    /// of the selected feed transport.
     @ViewBuilder
     private func discoverSection(_ w: WinnowedListings) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -427,7 +434,7 @@ struct ResultsView: View {
                 PaginatedListingGrid(
                     items: w.items,
                     namespace: discoverNamespace,
-                    loadingPlaceholderCount: discover.loadingPlaceholderCount,
+                    loadingPlaceholderCount: 0,
                     onSelect: { open($0, from: .discover, at: $1) },
                     onItemAppear: { await discover.loadMoreIfNeeded(currentItem: $0) }
                 ) {
@@ -435,25 +442,34 @@ struct ResultsView: View {
                     // empty one has no user action behind it to explain it.
                     if w.isEmptiedByDistance {
                         distanceNotice(w)
-                    } else {
-                        discoverFooter
                     }
+                    discoverFooter(items: w.items)
                 }
             }
         }
     }
 
-    /// What sits under Discover once there is nothing more to add. Deliberately
-    /// no offer to widen the radius: signed in, Facebook's own account radius is
-    /// a floor the app cannot raise, so it would change the number and not the
-    /// results (`docs/filter-parameters.md` §11).
-    @ViewBuilder
-    private var discoverFooter: some View {
-        // Signed out, the end of this feed is Facebook's ~24-card cap rather
-        // than evidence that the neighbourhood is exhausted. Signed-in harvest
-        // limits are retryable and deliberately have no terminal footer.
-        if discover.reachedEnd, discover.isAnonymous {
-            endOfResultsSignIn
+    private func discoverFooter(items: [Listing]) -> some View {
+        FeedPaginationFooter(
+            position: .init(generation: discover.generation, visibleCount: items.count,
+                            lastVisibleID: items.last?.id),
+            canLoadMore: surface == .discover && selected == nil && !discover.reachedEnd
+                && !discover.isLoading && discover.loadError == nil,
+            isLoading: discover.isLoadingMore
+        ) {
+            Task { await discover.retryLoadingMore() }
+        }
+    }
+
+    private func searchPaginationFooter(items: [Listing]) -> some View {
+        FeedPaginationFooter(
+            position: .init(generation: store.resultsGeneration, visibleCount: items.count,
+                            lastVisibleID: items.last?.id),
+            canLoadMore: surface == .search && selected == nil && store.canLoadMore
+                && !store.isRefreshingSearch && store.paginationError == nil,
+            isLoading: store.isLoadingMore
+        ) {
+            Task { await store.loadMore() }
         }
     }
 
@@ -495,7 +511,7 @@ struct ResultsView: View {
         return PaginatedListingGrid(
             items: winnowed.items,
             namespace: searchNamespace,
-            loadingPlaceholderCount: store.loadingPlaceholderCount,
+            loadingPlaceholderCount: 0,
             onSelect: { open($0, from: .search, at: $1) },
             onItemAppear: {
                 await store.loadMoreIfNeeded(
@@ -514,11 +530,12 @@ struct ResultsView: View {
             // and it is false when listings came back but measured out of view.
             if winnowed.isEmptiedByDistance {
                 distanceNotice(winnowed)
-            } else if store.session == .unauthed {
+            } else if store.requiresFacebookForMore {
                 if !winnowed.items.isEmpty { endOfResultsSignIn }
             } else if store.reachedEnd, !winnowed.items.isEmpty {
                 endOfSearchResults
             }
+            searchPaginationFooter(items: winnowed.items)
         }
     }
 
@@ -596,14 +613,10 @@ struct ResultsView: View {
         .padding(.vertical, showingNothing ? 40 : 24)
     }
 
-    /// The bottom of anything an anonymous session can see, which really is the
-    /// bottom: Facebook serves ~15 listings to a signed-out search and ~24 to
-    /// the browse feed, then blocks scrolling. Ends Discover as well as a result
-    /// set, making the same claim about the same ceiling. The offer alone
-    /// carries it — explaining the cap only draws attention to it.
+    /// The anonymous browser fallback cannot continue past its first page.
     private var endOfResultsSignIn: some View {
         VStack(spacing: 12) {
-            Text("Log in to keep scrolling, and to see who's selling.")
+            Text("Log in to see seller details and try more results.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -811,13 +824,45 @@ struct ResultsView: View {
             // filter is `visibleListings`.
             radiusKM: prefs.radiusKM == 0 ? 40 : prefs.radiusKM,
             citySlug: prefs.locationSlug ?? "sanfrancisco",
-            coordinate: location.coordinate,
+            coordinate: prefs.resolvedPlace?.coordinate,
             sort: prefs.sort,
             delivery: prefs.delivery,
             conditions: prefs.conditions,
             minPrice: prefs.minPrice,
             maxPrice: prefs.maxPrice
         )
+    }
+}
+
+private struct FeedPaginationFooter: View {
+    let position: PaginationDemand.Position
+    let canLoadMore: Bool
+    let isLoading: Bool
+    let loadMore: () -> Void
+    @State private var isNearBottom = false
+    @State private var demand = PaginationDemand()
+
+    private var state: PaginationDemand.State {
+        .init(position: position, isNearBottom: isNearBottom,
+              canLoadMore: canLoadMore, isLoading: isLoading)
+    }
+
+    var body: some View {
+        ZStack {
+            if isLoading {
+                ProgressView()
+                    .accessibilityLabel("Loading more listings")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 44)
+        .onGeometryChange(for: Bool.self) { proxy in
+            guard let viewport = proxy.bounds(of: .scrollView(axis: .vertical)) else { return false }
+            return viewport.maxY >= -160 && viewport.minY <= proxy.size.height
+        } action: { isNearBottom = $0 }
+        .onChange(of: state, initial: true) { _, state in
+            if demand.shouldLoad(state) { loadMore() }
+        }
     }
 }
 
