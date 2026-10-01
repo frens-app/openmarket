@@ -38,6 +38,8 @@ final class PricingService {
     private let session: AccountSession
     private lazy var client = PricingServiceClient(client: API.makeProtocolClient())
 
+    var accountID: String? { session.state.viewer?.id }
+
     init(session: AccountSession) {
         self.session = session
     }

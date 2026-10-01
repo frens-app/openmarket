@@ -17,7 +17,7 @@ import WebKit
 final class MarketCheckPool {
     /// Built up front, not on the first check. A webview has to be in the view
     /// hierarchy before it loads or WebKit takes a reduced rendering path and
-    /// the cards never fully render (`SignedInView`) — and a webview created at
+    /// the cards never fully render (`AppView`) — and a webview created at
     /// the moment of use is one SwiftUI render pass behind that.
     let searches: [ComparableSearch]
 

@@ -111,3 +111,50 @@ free.)
 - The keyword field carries competitor brand names by explicit decision (see
   Keywords above). If rejected under 2.3.7, swap in the generic fallback set
   and resubmit — keywords-only changes don't need a new binary.
+
+## Rejection: 5.1.1(v), and the build that answers it
+
+**Date:** 2026-09-01. Review rejected the submitted build under guideline
+5.1.1(v) — *"the app still requires users to register before browsing
+products. Registration can only be required for account-based features."*
+
+The finding was correct. `RootView` opened onboarding on `state == .signedOut`,
+which put phone verification in front of an app that did not need it: only
+`PricingService` — Price Check — ever called our authenticated API. Search,
+Discover, filters, distance, travel time, saves, viewing history and the
+buyer-side "is this a good price?" all run on the device against the user's own
+Facebook session.
+
+The current onboarding flow (`onboarding.md`):
+
+- Optionally verify a phone number, or tap "Not now — browse without an account".
+- Choose a supported city, using device location or manual city/ZIP search.
+- Optionally connect Facebook. The primary button is "Connect Facebook" and
+  the visible secondary action is "Browse without Facebook". Closing Facebook
+  login returns to that choice.
+- Verified accounts may enable notifications or tap "Not now". Guests skip
+  notification setup. Enter Browse; being signed out does not reopen onboarding.
+- Seller Price Check asks for phone verification and a Facebook connection at
+  submission. It stores checks against the Openmarket account. The gate is
+  dismissible and retains the draft. Phone verification comes first, followed by
+  Facebook login; existing sessions skip their step. No notification prompt
+  appears in this flow.
+
+**Release validation:** test the exact submitted build with empty Facebook
+cookies, no Openmarket credentials, and no cached listings. Verify manual city
+selection, skipping Facebook, real listing results, details, search, filters,
+and local saves. Confirm that a guest relaunch does not reopen onboarding.
+Facebook can restrict anonymous results; a skip button alone is not proof that
+guest browsing works. Match the rejected version/build to its source revision
+before assuming this flow was present in the rejected submission.
+
+**For the Review Notes field, after the release validation passes:**
+
+> Openmarket can be used without registration. Tap "Not now — browse without
+> an account" on the phone screen, choose a city, then tap "Browse without
+> Facebook" on the optional connection screen.
+> You can browse, search, filter, open listings, and save them without phone
+> verification or a Facebook login. Seller Price Check (Tools tab) requests an
+> Openmarket account at the point of use and stores checks in that account's
+> history; it also uses a connected Facebook session for comparable searches.
+> Its sign-in screen can be dismissed to return to browsing.

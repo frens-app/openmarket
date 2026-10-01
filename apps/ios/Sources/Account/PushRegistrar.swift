@@ -44,7 +44,7 @@ final class PushRegistrar: ObservableObject {
         Analytics.capture(.notificationPermissionAnswered, ["granted": granted])
 
         if granted {
-            UIApplication.shared.registerForRemoteNotifications()
+            registerIfAuthorized()
         } else {
             // Reported even though there is no token, so the server can tell a
             // device that said no from one that was never asked.
@@ -55,6 +55,11 @@ final class PushRegistrar: ObservableObject {
 
     func refreshStatus() async {
         status = await center.notificationSettings().authorizationStatus
+    }
+
+    func registerIfAuthorized() {
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+        UIApplication.shared.registerForRemoteNotifications()
     }
 
     /// Called by the app delegate when APNs hands over a token.

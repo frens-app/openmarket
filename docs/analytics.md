@@ -138,10 +138,10 @@ Person properties are `onboarding_completed` and `account_created_at` (the
 second `setOnce`, so a later sign-in can't rewrite somebody's cohort). The phone
 number is not among them.
 
-`personProfiles` is `.identifiedOnly`, so everything before the phone screen
-stays anonymous and no profile exists until there is a person to attach one to.
-PostHog merges the anonymous history at `identify`, which is what keeps the
-onboarding funnel intact across the step that creates the account.
+`personProfiles` is `.identifiedOnly`, so guest browsing uses an anonymous ID.
+Phone verification is optional in onboarding and available later through seller
+Price Check or Settings.
+PostHog merges the anonymous history at `identify` when an account is verified.
 
 `reset()` on sign-out and delete, so the next person on a shared phone starts a
 new anonymous id rather than inheriting the last one's profile.
@@ -176,10 +176,10 @@ enforces the casing so a hurried addition can't quietly split a funnel in two.
 | `account_signed_in` | `verify`, `isNewUser` false | — |
 | `account_signed_out` | before `reset`, so it lands on the profile that left | — |
 | `account_deleted` | same | — |
-| `onboarding_step_completed` | each step as it is passed | `step`, `step_index` |
+| `onboarding_step_completed` | each step as it is passed: phone (1), location (2), Facebook (3), notifications (4, when offered) | `step`, `step_index` |
 | `onboarding_completed` | `RootView.finish`, the one-way door | — |
 | `facebook_session_connected` | cookies appear while the sheet is open | `surface` |
-| `facebook_connect_declined` | "Not now" on the onboarding step | `surface` |
+| `facebook_connect_declined` | "Browse without Facebook" on the onboarding step | `surface` |
 | `notification_permission_answered` | `PushRegistrar`, which is the only thing that knows what the *system* said | `granted` |
 
 A launch that restores an existing session identifies but sends no event —

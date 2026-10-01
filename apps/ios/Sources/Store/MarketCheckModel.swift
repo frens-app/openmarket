@@ -29,7 +29,7 @@ final class MarketCheckModel: ObservableObject {
     }
 
     /// Must be in the view hierarchy for WebKit to keep rendering them — same
-    /// constraint as the browse engines, same fix in `SignedInView`.
+    /// constraint as the browse engines, same fix in `AppView`.
     var webViews: [WKWebView] { pool.webViews }
 
     func phase(for listing: Listing) -> MarketCheckPhase? { phases[listing.id] }

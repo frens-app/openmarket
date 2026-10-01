@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// Not to be confused with `SignInView`, which hands the user Facebook's own
 /// login page so the browsing engines get a session. They are unrelated: this
-/// one is our server and our account, and it is the gate the app opens behind.
+/// one verifies the account used by seller Price Check and its saved history.
 struct PhoneLoginView: View {
     @StateObject private var model = PhoneLoginModel()
     @FocusState private var focused: Field?
@@ -12,9 +12,9 @@ struct PhoneLoginView: View {
 
     private enum Field { case phone, code }
 
-    /// Called once a session exists. `isNewUser` decides whether onboarding
-    /// runs — asked of the server rather than inferred from an empty profile,
-    /// so a reinstall doesn't repeat it.
+    /// Why this feature needs an account.
+    var prompt = "We'll text you a code. It's how you get back into your account on a new phone."
+
     var onSignedIn: (_ isNewUser: Bool) -> Void = { _ in }
 
     var body: some View {
@@ -24,7 +24,7 @@ struct PhoneLoginView: View {
                     Text(model.step == .phone ? "What's your number?" : "Check your messages")
                         .font(.largeTitle.bold())
                     Text(model.step == .phone
-                         ? "We'll text you a code. It's how you get back into your account on a new phone."
+                         ? prompt
                          : "We sent a \(model.codeLength)-digit code to \(model.formattedPhoneNumber).")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)

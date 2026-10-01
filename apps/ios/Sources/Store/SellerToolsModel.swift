@@ -102,6 +102,7 @@ final class SellerToolsModel: ObservableObject {
     /// called, so a device-side copy would only disagree with it after the first
     /// reinstall.
     @Published private(set) var recent: [PastPriceCheck] = []
+    @Published private(set) var recentAccountID: String?
     /// True only for the first load, so an empty list can tell "nothing yet"
     /// from "we haven't looked". A refresh behind an already-populated list is
     /// silent — nobody needs a spinner over rows they can already read.
@@ -269,9 +270,17 @@ final class SellerToolsModel: ObservableObject {
     /// would interrupt somebody who came here to price a chair, about a
     /// convenience they had not asked for yet.
     func loadRecent() async {
+        let accountID = pricing.accountID
+        if recentAccountID != accountID {
+            recent = []
+            recentAccountID = accountID
+        }
+        guard let accountID else { return }
         if recent.isEmpty { isLoadingRecent = true }
         defer { isLoadingRecent = false }
-        guard let checks = try? await pricing.recentChecks() else { return }
+        guard let checks = try? await pricing.recentChecks(),
+              !Task.isCancelled, pricing.accountID == accountID,
+              recentAccountID == accountID else { return }
         recent = checks
     }
 

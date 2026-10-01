@@ -55,7 +55,8 @@ struct OpenMarketApp: App {
     /// the change landing (`PlaceChooser`).
     @StateObject private var chooser = PlaceChooser.shared
     /// The app's own account, distinct from the Facebook browsing session the
-    /// engines use. Owned at app level because the whole UI is gated on it.
+    /// engines use. Owned at app level because a sign-in reached from one tab
+    /// changes what the other one offers.
     @StateObject private var account = AccountSession.shared
     @Environment(\.scenePhase) private var scenePhase
 
@@ -111,12 +112,8 @@ struct OpenMarketApp: App {
     }
 }
 
-/// Decides which of the three things the app can be showing: nothing yet,
-/// onboarding, or the app.
-///
-/// Signing in is the *first step of onboarding* rather than a gate in front of
-/// it, so a first run is one flow with one beginning. `OnboardingView` owns all
-/// four questions; this view only decides whether any are outstanding.
+/// Browsing requires a chosen place, not an account. Account-based tools ask
+/// for phone verification at the point of use (`AccountGateView`).
 struct RootView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
@@ -134,15 +131,15 @@ struct RootView: View {
     var body: some View {
         Group {
             // `restore()` asks the server whether the stored session is still
-            // live, so there is a round trip between launch and knowing. Showing
-            // the login screen during it would flash it at every user who is
-            // already signed in.
+            // live, so there is a round trip between launch and knowing.
+            // Deciding during it would flash a first run at somebody who has
+            // been using the app for months.
             if account.state == .unknown || isOnboarding == nil {
                 LaunchView()
             } else if isOnboarding == true {
                 OnboardingView { finish() }
             } else {
-                SignedInView()
+                AppView()
             }
         }
         .task {
@@ -174,7 +171,17 @@ struct RootView: View {
                 prefs.lastAccountID = viewer.id
                 // After the reset, so the server's answer for the account that
                 // is actually signing in wins.
-                prefs.hasCompletedOnboarding = viewer.onboardingCompleted
+                //
+                // **Except when this install has already answered.** Onboarding
+                // can be finished without an account, and signing in afterwards
+                // then arrives carrying a server-side `false` that would throw
+                // the whole flow back over an app the person is in the middle of
+                // using. The local `true` was earned, so it goes up instead.
+                if prefs.hasCompletedOnboarding && !viewer.onboardingCompleted {
+                    Task { await account.markOnboardingComplete() }
+                } else {
+                    prefs.hasCompletedOnboarding = viewer.onboardingCompleted
+                }
             }
             openIfNeeded()
         }
@@ -188,24 +195,20 @@ struct RootView: View {
     /// to dismiss means the stricter answer wins at whatever moment it happens to
     /// change, mid-step.
     private func openIfNeeded() {
-        switch account.state {
-        case .unknown:
-            // Nothing is known yet, and guessing here is how you flash a login
-            // screen at somebody who is already signed in.
-            return
-        case .signedOut:
-            // The phone screen is the first step, so signing out — or being
-            // signed out by an expired session — starts the flow rather than
-            // dropping the user somewhere with no account.
+        // Nothing is known yet, and guessing here is how you flash a first run
+        // at somebody who is already signed in.
+        guard account.state != .unknown else { return }
+        // `signedOut` is not a reason on its own. An install that finished
+        // onboarding and then signed out — or was signed out by an expired
+        // session — keeps its place and its history, and has a working app to
+        // be dropped back into.
+        //
+        // First decision after launch settles it either way; after that this
+        // can only open.
+        if isOnboarding == nil {
+            isOnboarding = prefs.needsOnboarding
+        } else if prefs.needsOnboarding {
             isOnboarding = true
-        case .signedIn, .signedInOffline:
-            // First decision after launch settles it either way; after that this
-            // can only open.
-            if isOnboarding == nil {
-                isOnboarding = prefs.needsOnboarding
-            } else if prefs.needsOnboarding {
-                isOnboarding = true
-            }
         }
     }
 
@@ -232,7 +235,8 @@ private struct LaunchView: View {
     }
 }
 
-struct SignedInView: View {
+/// The app itself: two tabs and the webviews behind them.
+struct AppView: View {
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var seller: SellerToolsModel

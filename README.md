@@ -19,9 +19,11 @@ Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
 describe something you own and it finds what similar things are listed for near
 you, what has actually sold, and what to ask.
 
-Getting in requires an account: a phone number and a code by text. That is the
-app's own login, and it is unrelated to the Facebook session below — one is who
-you are, the other is how the browsing engines see listings.
+Onboarding offers skippable phone signup, asks for a city, and offers an optional
+Facebook connection. Verified accounts can also enable notifications. Browsing
+needs no Openmarket account. Seller Price Check requires phone verification and
+a Facebook connection; its history is saved to the Openmarket account. These
+are separate logins: one identifies the account, the other supplies listings.
 
 ```
 protos/         the API schema; one `make generate` writes both Go and Swift
@@ -886,7 +888,7 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/embedded-payload.md` | The GraphQL response Facebook ships inside desktop pages, and why the API isnt worth calling |
 | `docs/logged-in-findings.md` | What a signed-in session changes: seller identity yes, structured depth no — and §7, the *rendered* page differences that broke four things built logged out |
 | `docs/discover.md` | The home screen feed — Facebook's own, scrolled. How the paging works, why the search-seeded version it replaced is gone, its open issues, and what breaks if it ever holds older cards |
-| `docs/onboarding.md` | The two things the app requires before it will show a home screen, why neither can be skipped, and how the gate is written |
+| `docs/onboarding.md` | Optional account setup, required browsing location, Facebook connection, and notification permission |
 | **`docs/analytics.md`** | **The tracking plan.** Every PostHog event and its properties, why §8's "nothing leaves the device" no longer governs analytics and what is still held back anyway, and why Debug and Release must point at two different projects |
 | **`docs/location.md`** | **Everything about location, both surfaces — start here.** What Facebook accepts, why a refusal is silent, the coordinate route, the verification protocol, the fuzz lattice, and where distances are measured from |
 | `docs/location-targeting.md` | The raw desktop session record: slugs vs place ids, and the §5a/§5b correction that found the coordinate route |

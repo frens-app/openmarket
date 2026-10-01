@@ -58,7 +58,7 @@ dev: dev-infra tunnel-ensure api
 dev-infra:
 	@printf '$(BLUE)[docker]$(RESET) postgres up\n'
 	@$(COMPOSE) up -d --wait --remove-orphans db
-	@printf '$(GREEN)postgres :5432$(RESET)\n'
+	@printf '$(GREEN)postgres :5433$(RESET)\n'
 
 dev-infra-stop:
 	@$(COMPOSE) down

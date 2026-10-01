@@ -16,6 +16,8 @@ import UIKit
 /// tab owns one, and a second would nest.
 struct PriceCheckView: View {
     @EnvironmentObject private var model: SellerToolsModel
+    /// The only feature in the app that needs one. See `AccountGateView`.
+    @EnvironmentObject private var account: AccountSession
     /// The description being typed, held here rather than on the model — see
     /// `SellerToolsModel.input` for why the field must not be re-rendered from
     /// a `@Published` value while a run is publishing.
@@ -38,6 +40,15 @@ struct PriceCheckView: View {
     /// A past run being read. Separate from `isRunning` because they are
     /// different destinations, not two states of one.
     @State private var selectedPast: PastPriceCheck?
+
+    /// The Facebook browsing session, which the comparable search runs
+    /// against. Read rather than observed — it is a cookie jar, and nothing
+    /// publishes when it changes — so it is re-read whenever this screen or the
+    /// gate in front of it could have changed it.
+    @State private var facebookConnected = false
+    @State private var showGate = false
+    /// Set by the gate on its way out, and acted on once the sheet has gone.
+    @State private var gateSatisfied = false
 
     /// The first photo of the run in progress, held here because the strip it
     /// came from is cleared the moment the run starts. `PriceCheckRunView`
@@ -82,7 +93,29 @@ struct PriceCheckView: View {
             // ends — `SellerToolsModel` refreshes the list itself as the last
             // thing a successful run does, so by the time Back lands the new row
             // is already at the top.
-            .task { await model.loadRecent() }
+            .task {
+                facebookConnected = await SessionState.isSignedIn()
+            }
+            .task(id: account.state.viewer?.id) {
+                selectedPast = nil
+                await model.loadRecent()
+            }
+            .sheet(isPresented: $showGate) {
+                AccountGateView { gateSatisfied = true }
+            }
+            // The tap that opened the gate becomes the tap that runs, with the
+            // form still filled in behind it. Waited for rather than done in
+            // the gate's own callback: a push started while a sheet is still
+            // dismissing loses its transition.
+            .onChange(of: showGate) { _, showing in
+                guard !showing, gateSatisfied else { return }
+                gateSatisfied = false
+                Task {
+                    facebookConnected = await SessionState.isSignedIn()
+                    await model.loadRecent()
+                    submit()
+                }
+            }
             .onChange(of: isRunning) { _, running in
                 guard !running else { return }
                 restoreIfRunFailed()
@@ -118,6 +151,8 @@ struct PriceCheckView: View {
                 }
                 .padding(.top, 8)
 
+                gateNotice
+
                 photoStrip
 
                 VStack(alignment: .leading, spacing: 10) {
@@ -140,6 +175,60 @@ struct PriceCheckView: View {
         // way.
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded { isTyping = false })
+    }
+
+    /// Whether a run can actually happen. Both halves are needed and neither is
+    /// substitutable: `identifyItem` is called with the account's token, and
+    /// every step after it reads Marketplace through the user's own session.
+    private var isUnlocked: Bool { account.isSignedIn && facebookConnected }
+
+    /// Says what is missing before anything is typed, rather than after.
+    ///
+    /// The form stays live behind it on purpose. Someone who fills it in and
+    /// then meets the gate has lost nothing — the tap that opens it is the tap
+    /// that runs, once the requirements are met.
+    @ViewBuilder
+    private var gateNotice: some View {
+        if !isUnlocked {
+            Button { showGate = true } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "person.badge.key")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Sign in to check prices")
+                            .font(.subheadline.weight(.semibold))
+                        Text(missingRequirements)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+        }
+    }
+
+    private var missingRequirements: String {
+        switch (account.isSignedIn, facebookConnected) {
+        case (false, false):
+            return "Verify your number, then connect Facebook."
+        case (false, true):
+            return "Verify your phone number to continue."
+        case (true, false):
+            return "Connect Facebook to continue."
+        case (true, true):
+            return ""
+        }
     }
 
     /// The placeholder is the only instruction the field gets.
@@ -205,7 +294,8 @@ struct PriceCheckView: View {
     /// the screen with the least room for one.
     @ViewBuilder
     private var recentSection: some View {
-        if !model.recent.isEmpty {
+        if account.isSignedIn, let accountID = account.state.viewer?.id,
+           model.recentAccountID == accountID, !model.recent.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel("Recent")
 
@@ -295,6 +385,12 @@ struct PriceCheckView: View {
     private func submit() {
         guard canRun else { return }
         isTyping = false
+        // Before the form is cleared: the requirements are collected on a sheet
+        // over this screen, and the question has to still be here underneath.
+        guard isUnlocked else {
+            showGate = true
+            return
+        }
         model.start(draft, photos: photos.map(\.photo))
         submitted = (draft, photos)
         runThumbnail = photos.first?.preview

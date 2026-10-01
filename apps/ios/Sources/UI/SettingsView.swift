@@ -9,24 +9,28 @@ struct SettingsView: View {
     @EnvironmentObject private var account: AccountSession
     @Environment(\.dismiss) private var dismiss
     @State private var showSignIn = false
+    @State private var showPhoneLogin = false
     @State private var confirmingDelete = false
     @State private var deleteError: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                // This app's own account, and the first section because it is
-                // the one the app is gated on. The Facebook section below it is
-                // a different thing entirely — a browsing session, not an
-                // identity — and they were easy to confuse when there was only
-                // one of them.
                 Section("Your account") {
-                    LabeledContent("Phone", value: accountPhoneNumber)
-                    Button("Sign out") { Task { await account.signOut() } }
-                    Button("Delete account", role: .destructive) { confirmingDelete = true }
-                    Text("Deleting removes your account and releases your phone number, so you can sign up again with it later. It can't be undone.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if account.isSignedIn {
+                        LabeledContent("Phone", value: accountPhoneNumber)
+                        Button("Sign out") { Task { await account.signOut() } }
+                        Button("Delete account", role: .destructive) { confirmingDelete = true }
+                        Text("Deleting removes your account and releases your phone number, so you can sign up again with it later. It can't be undone.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        LabeledContent("Phone", value: "Not signed in")
+                        Button("Create an account") { showPhoneLogin = true }
+                        Text("Browsing needs no account. One is what Price Check runs under, and what keeps your past checks when you change phone.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Facebook account") {
@@ -92,20 +96,8 @@ struct SettingsView: View {
                     LabeledContent("Backend", value: API.environmentSummary)
                     LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
 
-                    // Onboarding is four screens that a given install sees
-                    // exactly once, which makes changing one of them tedious to
-                    // check: the alternatives are deleting the account, or
-                    // deleting the app and signing in again from scratch.
-                    //
-                    // Signing out is part of it rather than a separate step,
-                    // because the phone screen *is* the first step — resetting
-                    // the flags alone would reopen the flow on Facebook and skip
-                    // the thing most likely to be under test.
                     Button("Restart onboarding") {
-                        Task {
-                            prefs.resetOnboarding()
-                            await account.signOut()
-                        }
+                        prefs.resetOnboarding()
                     }
                 }
                 #endif
@@ -144,6 +136,19 @@ struct SettingsView: View {
                 Button("OK") { deleteError = nil }
             } message: {
                 Text(deleteError ?? "")
+            }
+            .sheet(isPresented: $showPhoneLogin) {
+                NavigationStack {
+                    PhoneLoginView(
+                        prompt: "We'll text you a code. An account is what Price Check runs under, and it's how your checks follow you to a new phone."
+                    ) { _ in showPhoneLogin = false }
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Cancel") { showPhoneLogin = false }
+                        }
+                    }
+                }
             }
             .sheet(isPresented: $showSignIn) {
                 SignInView(surface: .settings) {

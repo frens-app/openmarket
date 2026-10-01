@@ -1,61 +1,46 @@
 import SwiftUI
 import CoreLocation
 
-/// Everything between opening the app for the first time and using it.
-///
-/// Four steps, in the order the app needs the answers rather than the order
-/// they're easiest to ask:
-///
-/// 1. **Phone** — required. The account is the app; there is no signed-out
-///    version of a product whose listings belong to accounts.
-/// 2. **Facebook** — skippable, and pressed anyway. Everything measured about a
-///    signed-in session says it is the version worth having
-///    (`docs/logged-in-findings.md`).
-/// 3. **Location** — required. Every search is centred on a place and distance
-///    is applied on this device (`docs/filter-parameters.md` §3), so without one
-///    the app measures from a hardcoded city and pretends that's the user's.
-/// 4. **Notifications** — skippable, asked for price alerts specifically. A
-///    permission prompt with no stated purpose is the one people decline by
-///    reflex, and iOS only ever shows it once.
-///
-/// **The sequence is fixed, and it is a cursor.** It runs in that order every
-/// time, and each step advances it by being *completed* — never by a persisted
-/// flag going true. A position derived from state has as many ways to jump as it
-/// has inputs: a place resolving in the background skipped the rest of the run,
-/// a second account inherited the first's answers, a returning account's
-/// server-side `onboardingCompleted` dismissed the flow mid-step. The cost is
-/// resumability — quitting halfway starts the four screens over, two of which
-/// are one tap to pass.
 struct OnboardingView: View {
-    /// Called once every step has been answered or passed. Sets
-    /// `hasCompletedOnboarding`, which is what dismisses this.
     let done: () -> Void
 
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var chooser: PlaceChooser
     @EnvironmentObject private var account: AccountSession
+    @StateObject private var push = PushRegistrar.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Set the moment the last step is passed, so `finish`'s await doesn't leave
-    /// a live screen behind the spinner.
     @State private var isFinishing = false
-
-    /// Where the flow is. The only thing that decides which screen is showing.
+    @State private var hasStarted = false
     @State private var current: Step = .phone
 
     enum Step: Int, CaseIterable {
-        case phone, facebook, location, notifications
+        case phone, location, facebook, notifications
 
-        var next: Step { Step(rawValue: rawValue + 1) ?? .notifications }
-
-        /// Spelled out rather than derived from the case name, which a rename
-        /// would silently change into a second breakdown row.
         var analyticsName: String {
             switch self {
             case .phone: return "phone"
-            case .facebook: return "facebook"
             case .location: return "location"
+            case .facebook: return "facebook"
             case .notifications: return "notifications"
             }
+        }
+
+        func next(hasAccount: Bool, needsNotificationPermission: Bool) -> Step? {
+            switch self {
+            case .phone: return .location
+            case .location: return .facebook
+            case .facebook:
+                return hasAccount && needsNotificationPermission ? .notifications : nil
+            case .notifications: return nil
+            }
+        }
+    }
+
+    private var visibleSteps: [Step] {
+        Step.allCases.filter {
+            $0 != .notifications || (account.isSignedIn && push.status == .notDetermined)
+                || current == .notifications
         }
     }
 
@@ -65,107 +50,96 @@ struct OnboardingView: View {
             ZStack {
                 switch current {
                 case .phone:
-                    PhoneLoginView { _ in
-                        // Whether this account has been onboarded is read off
-                        // the viewer in `RootView`, not decided here. `isNewUser`
-                        // is close but not the same fact — an account that was
-                        // created and abandoned halfway is a returning user who
-                        // has never finished.
-                        Task { await account.reportFacebookConnection(await SessionState.isSignedIn()) }
-                        advance()
+                    VStack(spacing: 0) {
+                        PhoneLoginView(prompt: "Create an account to save your price checks. You can also browse without one.") { _ in
+                            guard current == .phone else { return }
+                            Task { await account.reportFacebookConnection(await SessionState.isSignedIn()) }
+                            advance(from: .phone)
+                        }
+                        Button("Not now — browse without an account") { advance(from: .phone) }
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .padding(.horizontal, 24)
                     }
                     .transition(.opacity)
-                case .facebook:
-                    FacebookPage { advance() }
-                        .transition(.opacity)
                 case .location:
-                    LocationPage { advance() }
+                    LocationPage { advance(from: .location) }
+                        .transition(.opacity)
+                case .facebook:
+                    FacebookPage(isFinishing: isFinishing,
+                                 continueTitle: account.isSignedIn && push.status == .notDetermined
+                                     ? "Continue" : "Start browsing") { advance(from: .facebook) }
                         .transition(.opacity)
                 case .notifications:
-                    NotificationsPage(isFinishing: isFinishing) { finish() }
+                    NotificationsPage(isFinishing: isFinishing) { advance(from: .notifications) }
                         .transition(.opacity)
                 }
             }
         }
         .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.22), value: current)
-        // The one concession to state, made once and never revisited: you cannot
-        // ask somebody for their phone number when they already have a session,
-        // so a flow that opened because the *place* went missing starts at the
-        // step after it. Read here rather than in `current` so that signing in
-        // later in this run can't retroactively move anything.
-        .onAppear { if account.isSignedIn { current = .facebook } }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: current)
+        .task {
+            guard !hasStarted else { return }
+            hasStarted = true
+            if account.isSignedIn { current = .location }
+            await push.refreshStatus()
+        }
     }
 
-    /// The only way forward, so the only place a step is counted. The flow is
-    /// not resumable: a step that never fires is one somebody quit on.
-    private func advance() {
+    private func advance(from step: Step) {
+        guard current == step, !isFinishing else { return }
         Analytics.capture(.onboardingStepCompleted, [
-            "step": current.analyticsName,
-            "step_index": current.rawValue + 1
+            "step": step.analyticsName,
+            "step_index": step.rawValue + 1
         ])
-        current = current.next
+        isFinishing = true
+        Task {
+            if step == .facebook {
+                await push.refreshStatus()
+                if account.isSignedIn { push.registerIfAuthorized() }
+            }
+            guard !Task.isCancelled else { return }
+            if let next = step.next(hasAccount: account.isSignedIn,
+                                    needsNotificationPermission: push.status == .notDetermined) {
+                current = next
+                isFinishing = false
+            } else {
+                await finish()
+            }
+        }
     }
 
-    /// A dot per step, and no back button: three of the four steps are answered
-    /// outside this flow — a verified phone number, a Facebook cookie jar, a
-    /// system permission — so a chevron would offer to return to questions that
-    /// are no longer askable. Settings is where a second thought belongs.
     private var header: some View {
         HStack(spacing: 6) {
-            ForEach(Step.allCases, id: \.rawValue) { dot in
+            ForEach(visibleSteps, id: \.rawValue) { dot in
                 Capsule()
                     .fill(dot == current ? Color.primary : Color(.tertiaryLabel))
                     .frame(width: dot == current ? 18 : 6, height: 6)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: current)
         .padding(.top, 14)
         .padding(.bottom, 4)
-        .accessibilityLabel("Step \(current.rawValue + 1) of \(Step.allCases.count)")
+        .accessibilityLabel("Step \((visibleSteps.firstIndex(of: current) ?? 0) + 1) of \(visibleSteps.count)")
     }
 
-    /// The one place in the app that waits for a location to be agreed.
-    ///
-    /// The location step is optimistic — its ten-second round trip runs while
-    /// the user reads the notifications screen — but a place that never landed
-    /// must not reach the app: `Preferences.needsOnboarding` re-checks it every
-    /// launch, so letting it through would just show onboarding again.
-    private func finish() {
-        // The last step finishes rather than advances, so it is counted here.
-        Analytics.capture(.onboardingStepCompleted, [
-            "step": Step.notifications.analyticsName,
-            "step_index": Step.notifications.rawValue + 1
-        ])
-        Task {
-            isFinishing = true
-            await chooser.settle()
-            isFinishing = false
-
-            guard prefs.hasBrowseablePlace else {
-                // The only backwards move in the flow, and it is an explicit
-                // one: the required answer isn't there, so return to the screen
-                // that asks for it — which is already showing the error.
-                current = .location
-                return
-            }
-            done()
+    private func finish() async {
+        // A place can still be resolving while the optional steps are visible.
+        await chooser.settle()
+        isFinishing = false
+        guard prefs.hasBrowseablePlace else {
+            current = .location
+            return
         }
+        done()
     }
 }
 
 // MARK: - 2. Facebook
 
-/// Asked for properly, and the only step here that can be passed without an
-/// answer the app stores.
-///
-/// Everything measured about a signed-in session says this is the version of the
-/// app worth having (`docs/logged-in-findings.md`): a stable seller id, results
-/// that keep loading, and ranking against a real account. So signing in is the
-/// primary action and "not now" is a text button underneath. The reduced app is
-/// genuinely usable, which is why this isn't a gate; Settings is where somebody
-/// who declines can change their mind.
 private struct FacebookPage: View {
+    let isFinishing: Bool
+    let continueTitle: String
     let done: () -> Void
 
     /// The session is the store's cache key, and signing in here happens while
@@ -200,54 +174,62 @@ private struct FacebookPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(isSignedIn ? "You're connected" : "Connect Facebook")
-                    .font(.largeTitle.weight(.bold))
-                Text(isSignedIn
-                     ? "Seller details, unlimited scrolling and Facebook's own picks are all switched on."
-                     : "Openmarket works best with your account. You'll sign in on Facebook's own page.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.top, 24)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(isSignedIn ? "You're connected" : "Connect Facebook")
+                            .font(.largeTitle.weight(.bold))
+                        Text(isSignedIn
+                             ? "Seller details, unlimited scrolling and Facebook's own picks are all switched on."
+                             : "Connect for more listings and seller details. You'll sign in on Facebook's own page, or you can browse without connecting.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 24)
 
-            VStack(alignment: .leading, spacing: 22) {
-                ForEach(perks.indices, id: \.self) { index in
-                    HStack(alignment: .top, spacing: 14) {
-                        Image(systemName: perks[index].symbol)
-                            .font(.title2)
-                            .foregroundStyle(isSignedIn ? Color.green : Color.accentColor)
-                            .frame(width: 30)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(perks[index].title)
-                                .font(.headline)
-                            Text(perks[index].body)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 22) {
+                        ForEach(perks.indices, id: \.self) { index in
+                            HStack(alignment: .top, spacing: 14) {
+                                Image(systemName: perks[index].symbol)
+                                    .font(.title2)
+                                    .foregroundStyle(isSignedIn ? Color.green : Color.accentColor)
+                                    .frame(width: 30)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(perks[index].title)
+                                        .font(.headline)
+                                    Text(perks[index].body)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
+                    .padding(.top, 32)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 24)
             }
-            .padding(.top, 32)
-
-            Spacer(minLength: 24)
+            .scrollBounceBehavior(.basedOnSize)
 
             if isSignedIn {
-                OnboardingButton(title: "Continue", isEnabled: true, action: done)
+                OnboardingButton(title: continueTitle, isEnabled: !isFinishing,
+                                 isBusy: isFinishing, action: done)
             } else {
-                OnboardingButton(title: "Sign in with Facebook", isEnabled: true) {
+                OnboardingButton(title: "Connect Facebook", isEnabled: !isFinishing) {
                     showSignIn = true
                 }
 
                 Button(action: decline) {
-                    Text("Not now — browse without it")
+                    Text("Browse without Facebook")
                         .font(.subheadline.weight(.medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(isFinishing)
+                if isFinishing { ProgressView("Preparing your marketplace…") }
             }
         }
         .padding(.horizontal, 24)
@@ -256,8 +238,8 @@ private struct FacebookPage: View {
         .sheet(isPresented: $showSignIn) {
             SignInView(surface: .onboarding) {
                 Task {
-                    isSignedIn = true
                     let connected = await SessionState.isSignedIn()
+                    isSignedIn = connected
                     store.setSession(connected ? .authed : .unauthed)
                     // Signing in doesn't change the scene phase, so without this
                     // the server's picture of the connection would wait for the
@@ -268,15 +250,13 @@ private struct FacebookPage: View {
         }
     }
 
-    /// "Not now" is a real answer, and the decline rate is the argument for or
-    /// against ever making this step a gate.
     private func decline() {
         Analytics.capture(.facebookConnectDeclined, ["surface": Analytics.Surface.onboarding.rawValue])
         done()
     }
 }
 
-// MARK: - 3. Location
+// MARK: - 1. Location
 
 /// Required, and required for a reason worth stating on the screen: distance is
 /// the app's organising idea, and it is applied on this device
@@ -487,18 +467,6 @@ private struct CitySearchSheet: View {
     }
 }
 
-// MARK: - 4. Notifications
-
-/// Skippable, and asked for one specific thing: price drops on saved listings.
-///
-/// A screen of our own rather than the system prompt fired straight at the user,
-/// because iOS shows that prompt exactly once and "don't allow" is recoverable
-/// only through Settings. A prompt with no stated purpose spends the single ask
-/// on a reflex. Price alerts specifically, since that is the notification this
-/// app can send well — it already tracks saved listings and parses price runs.
-///
-/// Declining still reports upward — see `AccountSession.registerPushToken`. An
-/// install that said no is a different thing from one that was never asked.
 private struct NotificationsPage: View {
     let isFinishing: Bool
     let done: () -> Void
@@ -506,98 +474,43 @@ private struct NotificationsPage: View {
     @StateObject private var push = PushRegistrar.shared
     @State private var isAsking = false
 
-    private struct Reason {
-        let symbol: String
-        let title: String
-        let body: String
-    }
-
-    private let reasons = [
-        Reason(symbol: "arrow.down.right.circle",
-               title: "Price drops on things you save",
-               body: "Save a listing and we'll tell you if the seller cuts the price — the one thing on Marketplace that's worth knowing about immediately."),
-        Reason(symbol: "clock.badge.checkmark",
-               title: "Before someone else gets there",
-               body: "Good listings go fast, and a price cut is when they go fastest. A notification is the difference between seeing it and seeing it sold."),
-        Reason(symbol: "hand.raised",
-               title: "Nothing else",
-               body: "No daily digests, no marketing, no re-engagement nudges. If it isn't about a listing you saved, we don't send it.")
-    ]
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Get price alerts")
-                    .font(.largeTitle.weight(.bold))
-                Text("Turn on notifications and we'll let you know when something you saved drops in price.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.tint)
+                        .padding(.bottom, 12)
+                    Text("Enable notifications")
+                        .font(.largeTitle.weight(.bold))
+                    Text("Allow notifications from Openmarket. You can change this anytime in Settings.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 32)
             }
-            .padding(.top, 24)
+            .scrollBounceBehavior(.basedOnSize)
 
-            VStack(alignment: .leading, spacing: 22) {
-                ForEach(reasons.indices, id: \.self) { index in
-                    HStack(alignment: .top, spacing: 14) {
-                        Image(systemName: reasons[index].symbol)
-                            .font(.title2)
-                            .foregroundStyle(.tint)
-                            .frame(width: 30)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(reasons[index].title)
-                                .font(.headline)
-                            Text(reasons[index].body)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+            OnboardingButton(title: "Turn on notifications", isEnabled: !isAsking && !isFinishing,
+                             isBusy: isAsking || isFinishing) {
+                isAsking = true
+                Task {
+                    await push.requestAuthorization()
+                    isAsking = false
+                    done()
                 }
             }
-            .padding(.top, 32)
-
-            Spacer(minLength: 24)
-
-            // Once the system has an answer there is nothing left to ask —
-            // requesting again returns the stored one without showing anything —
-            // so the button stops offering and starts finishing.
-            if push.status == .notDetermined {
-                OnboardingButton(title: "Turn on notifications",
-                                 isEnabled: !isAsking && !isFinishing,
-                                 isBusy: isAsking || isFinishing,
-                                 action: ask)
-
-                Button(action: done) {
-                    Text("Not now")
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+            Button("Not now", action: done)
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
                 .disabled(isAsking || isFinishing)
-
-            } else {
-                OnboardingButton(title: "Start browsing",
-                                 isEnabled: !isFinishing,
-                                 isBusy: isFinishing,
-                                 action: done)
-            }
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
-        .task { await push.refreshStatus() }
-    }
-
-    /// Asks, then leaves. Both answers move on — this step is skippable, and a
-    /// "don't allow" that stranded the user on the screen that caused it would
-    /// be the worst possible reading of optional.
-    private func ask() {
-        Task {
-            isAsking = true
-            await push.requestAuthorization()
-            isAsking = false
-            done()
-        }
     }
 }
 

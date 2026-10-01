@@ -133,6 +133,11 @@ enum Analytics {
         case accountDeleted = "account_deleted"
         case onboardingStepCompleted = "onboarding_step_completed"
         case onboardingCompleted = "onboarding_completed"
+        /// A signed-out user asked for something that needs the account. Its own
+        /// event rather than a `loginWallHit` property: that one is Facebook's
+        /// wall inside a browse, and this one is ours.
+        case accountGateOpened = "account_gate_opened"
+        case accountGateSatisfied = "account_gate_satisfied"
         /// The Facebook browsing session, which is not the app's own account.
         case facebookSessionConnected = "facebook_session_connected"
         case facebookConnectDeclined = "facebook_connect_declined"
@@ -191,6 +196,7 @@ enum Analytics {
         case priceCheckRun = "price_check_run"
         case priceCheckHistory = "price_check_history"
         case marketCheck = "market_check"
+        case accountGate = "account_gate"
     }
 
     /// Where a search term came from. Inferred by matching the recents and

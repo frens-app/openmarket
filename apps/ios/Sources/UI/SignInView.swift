@@ -19,10 +19,12 @@ struct SignInView: View {
     /// which prompt converts is worth knowing. Nothing here varies with it.
     let surface: Analytics.Surface
 
+    var onCancel: (() -> Void)? = nil
+
     /// Called once a session is detected, so the caller can re-run whatever the
     /// user was doing — the result set differs by authentication, not just the
     /// fields on it.
-    var onSignedIn: () -> Void = {}
+    var onSignedIn: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -54,7 +56,13 @@ struct SignInView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { dismiss() }
+                    Button(onCancel == nil ? "Done" : "Cancel") {
+                        if let onCancel {
+                            onCancel()
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
             }
             .task { await model.start() }

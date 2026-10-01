@@ -19,7 +19,9 @@ Then, from the repo root:
 make dev
 ```
 
-Starts Postgres in Docker and runs the API on `:8080`. The server applies
+Starts Postgres in Docker on host port `5433` (container port `5432`) and runs
+the API on `:8080`. This leaves the default Postgres port free for other projects.
+The server applies
 migrations at boot, so that is the whole setup.
 
 It also asserts a Tailscale Serve mapping on the way past, which is what lets a
