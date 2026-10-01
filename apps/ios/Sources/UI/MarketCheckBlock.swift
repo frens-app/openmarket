@@ -62,7 +62,7 @@ struct MarketCheckBlock: View {
 
     private var askButton: some View {
         Button { startCheck() } label: {
-            Label("Is this a good price?", systemImage: "chart.bar.xaxis")
+            Label("AI Price Comparison", systemImage: "chart.bar.xaxis")
                 .font(.subheadline.weight(.medium))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
