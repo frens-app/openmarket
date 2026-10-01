@@ -24,7 +24,8 @@ import (
 type Stage string
 
 const (
-	StageIdentify Stage = "IDENTIFY"
+	StageIdentify  Stage = "IDENTIFY"
+	StageRelevance Stage = "RELEVANCE"
 	// Nothing writes this. Defined so the rows already carrying it stay
 	// legible; dropping it from the Postgres enum would fail against them.
 	StagePrice Stage = "PRICE"

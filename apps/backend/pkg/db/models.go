@@ -99,8 +99,9 @@ func (ns NullDevicePlatform) Value() (driver.Value, error) {
 type LlmRunStage string
 
 const (
-	LlmRunStageIDENTIFY LlmRunStage = "IDENTIFY"
-	LlmRunStagePRICE    LlmRunStage = "PRICE"
+	LlmRunStageIDENTIFY  LlmRunStage = "IDENTIFY"
+	LlmRunStagePRICE     LlmRunStage = "PRICE"
+	LlmRunStageRELEVANCE LlmRunStage = "RELEVANCE"
 )
 
 func (e *LlmRunStage) Scan(src interface{}) error {

@@ -2,12 +2,7 @@ import Foundation
 
 /// What comparable listings are asking, reduced to numbers.
 ///
-/// Computed in Swift and handed to the model rather than left for it to work
-/// out. Language models are poor at arithmetic and excellent at prose, so the
-/// split is deliberate: this file decides *what the market looks like* and the
-/// model only decides where inside it to sit and how to say so. It is also the
-/// fallback — with no model on the device there is still a median, which is a
-/// defensible recommendation on its own.
+/// Calculated only from listings accepted by the server's relevance check.
 ///
 /// **These are asking prices, not sale prices.** Facebook exposes what sellers
 /// want, never what buyers paid, and nothing here can close that gap. Every
@@ -15,10 +10,7 @@ import Foundation
 struct PriceGuide: Equatable {
     /// Usable asking prices, ascending.
     let prices: [Int]
-    /// Comparables that carried no price we could read, or none worth counting
-    /// — free items and sold cards. Reported rather than silently dropped: a
-    /// guide built from four of fifteen listings is a different claim from one
-    /// built from all fifteen.
+    /// Results excluded by relevance or by the usable-price rules.
     let skipped: Int
 
     /// What the market quotes in, taken from the cards themselves.
@@ -69,7 +61,7 @@ struct PriceGuide: Equatable {
         return low...high
     }
 
-    /// Built from whatever the market search returned.
+    /// Built from the accepted market results.
     ///
     /// **Free and $0 listings are always excluded.** A giveaway is not a data
     /// point about what a thing is worth, and one of them in a sample of eight
@@ -88,7 +80,7 @@ struct PriceGuide: Equatable {
         var usable: [Int] = []
         var dropped = 0
         for comp in comps {
-            guard countingSold || !comp.isSold, let price = comp.price, price > 0 else {
+            guard comp.isComparable, countingSold || !comp.isSold, let price = comp.price, price > 0 else {
                 dropped += 1
                 continue
             }
@@ -96,7 +88,7 @@ struct PriceGuide: Equatable {
         }
         prices = usable.sorted()
         skipped = dropped
-        currency = Self.dominantCurrency(among: comps) ?? "$"
+        currency = Self.dominantCurrency(among: comps.filter(\.isComparable)) ?? "$"
     }
 
     /// A price written the way the comparables are written.

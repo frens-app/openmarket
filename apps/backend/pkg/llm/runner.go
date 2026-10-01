@@ -43,9 +43,11 @@ type Subject struct {
 // caller can forget to do, because the only way to reach the provider is
 // through here.
 type Runner struct {
-	provider Provider
-	store    Store
-	logger   *zap.Logger
+	provider   interface{ Name() string }
+	identifier Provider
+	evaluator  Evaluator
+	store      Store
+	logger     *zap.Logger
 
 	// Per user, per window. Calls rather than money: there is no rate table
 	// yet, and calls are the right unit for what this actually guards against
@@ -74,6 +76,7 @@ func NewRunner(provider Provider, store Store, logger *zap.Logger, cfg Config) *
 	}
 	return &Runner{
 		provider:        provider,
+		identifier:      provider,
 		store:           store,
 		logger:          logger,
 		maxCallsPerUser: cfg.MaxCallsPerUser,
@@ -86,10 +89,23 @@ func NewRunner(provider Provider, store Store, logger *zap.Logger, cfg Config) *
 // Provider names the configured vendor, for the handler's logs.
 func (r *Runner) Provider() string { return r.provider.Name() }
 
-// Identify runs the vision call — the only model call this feature makes.
+// Identify runs the vision call.
 func (r *Runner) Identify(ctx context.Context, sub Subject, in IdentifyInput) (IdentifiedItem, error) {
 	return call(ctx, r, StageIdentify, sub, func(ctx context.Context) (IdentifiedItem, Usage, error) {
-		return r.provider.Identify(ctx, in)
+		return r.identifier.Identify(ctx, in)
+	})
+}
+
+func NewEvaluationRunner(evaluator Evaluator, store Store, logger *zap.Logger, cfg Config) *Runner {
+	r := NewRunner(nil, store, logger, cfg)
+	r.provider = evaluator
+	r.evaluator = evaluator
+	return r
+}
+
+func (r *Runner) Evaluate(ctx context.Context, sub Subject, in EvaluationInput) ([]Decision, error) {
+	return call(ctx, r, StageRelevance, sub, func(ctx context.Context) ([]Decision, Usage, error) {
+		return r.evaluator.Evaluate(ctx, in)
 	})
 }
 

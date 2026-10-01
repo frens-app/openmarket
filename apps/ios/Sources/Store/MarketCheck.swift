@@ -29,7 +29,7 @@ struct MarketCheck: Equatable {
     init(term: String, price: Int, comps: [MarketComp], sold: SoldSignal, marketName: String) {
         self.term = term
         self.price = price
-        self.comps = comps
+        self.comps = MarketComp.comparableFirst(comps)
         self.sold = sold
         self.marketName = marketName
         guide = PriceGuide(comps: comps)

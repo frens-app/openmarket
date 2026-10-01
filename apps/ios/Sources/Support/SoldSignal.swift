@@ -29,18 +29,19 @@ import Foundation
 /// sell are exactly the ones missing, so nothing here can tell a seller a price
 /// is *too high* — only that certain prices worked.
 struct SoldSignal: Equatable {
-    /// Sold comparables, newest listing first.
+    /// All sold search results: accepted listings first, newest first within each group.
     let comps: [MarketComp]
     /// Prices of the sold ones, free items excluded.
     let guide: PriceGuide
 
     init(comps: [MarketComp]) {
-        self.comps = comps.sorted { ($0.daysListed ?? .max) < ($1.daysListed ?? .max) }
+        self.comps = MarketComp.comparableFirst(comps.sorted { ($0.daysListed ?? .max) < ($1.daysListed ?? .max) })
         guide = PriceGuide(comps: comps, countingSold: true)
     }
 
-    var isEmpty: Bool { comps.isEmpty }
-    var count: Int { comps.count }
+    var comparableComps: [MarketComp] { comps.filter(\.isComparable) }
+    var isEmpty: Bool { count == 0 }
+    var count: Int { comparableComps.count }
 
     /// Typical days between listing and disappearing, across the sold set.
     ///
@@ -48,7 +49,7 @@ struct SoldSignal: Equatable {
     /// nine that went in under three would drag an average into describing
     /// nothing that happened.
     var medianDaysToSell: Int? {
-        let ages = comps.compactMap(\.daysListed).sorted()
+        let ages = comparableComps.compactMap(\.daysListed).sorted()
         guard !ages.isEmpty else { return nil }
         let middle = ages.count / 2
         return ages.count.isMultiple(of: 2) ? (ages[middle - 1] + ages[middle]) / 2 : ages[middle]
@@ -57,7 +58,7 @@ struct SoldSignal: Equatable {
     /// One line for the transcript. Leads with the speed, because that is the
     /// part the active board cannot tell you at all.
     var summary: String {
-        guard !comps.isEmpty else { return "Nothing similar has sold nearby lately" }
+        guard !isEmpty else { return "Nothing similar has sold nearby lately" }
         let sold = "\(count) sold in the last month"
         guard let days = medianDaysToSell else { return sold }
         return days <= 1
@@ -75,7 +76,7 @@ struct SoldSignal: Equatable {
     /// Nil below three sold listings: "sells within a day" off a sample of one
     /// is not a pattern, it is a coincidence with a confident voice.
     var speed: String? {
-        guard comps.count >= 3, let days = medianDaysToSell else { return nil }
+        guard count >= 3, let days = medianDaysToSell else { return nil }
         switch days {
         case ..<2: return "Similar ones usually sell within a day."
         case 2...4: return "Similar ones usually sell in a few days."

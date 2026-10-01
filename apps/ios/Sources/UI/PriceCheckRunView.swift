@@ -10,15 +10,7 @@ import UIKit
 /// what I asked": `PriceCheckView` is still on the stack behind this, photos
 /// and description intact, and running again is an edit rather than a restart.
 ///
-/// While it runs this is a **transcript**. Four things happen — the item is
-/// identified, the market is searched, the sold listings are checked, the prices
-/// are read — and they take a few seconds between them. Naming each as it
-/// happens is not decoration: the claim this feature makes is "this price comes
-/// from real listings near you", and a spinner followed by a number asks the
-/// user to take that on faith. Watching it go and look is the evidence.
-///
-/// When it finishes the transcript is replaced rather than kept. It was
-/// progress, and progress that has finished is just a receipt above the answer.
+/// Progress names each search and relevance check before showing the result.
 struct PriceCheckRunView: View {
     @EnvironmentObject private var model: SellerToolsModel
     /// The first photo, passed down rather than re-derived: this screen shows it
@@ -43,13 +35,13 @@ struct PriceCheckRunView: View {
 
     var body: some View {
         Group {
-            if model.hasResult {
+            if model.hasResult || model.phase == .done {
                 answer
             } else {
                 progress
             }
         }
-        .navigationTitle(model.hasResult ? "Price check" : "Checking…")
+        .navigationTitle(model.hasResult || model.phase == .done ? "Price check" : "Checking…")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selected) { listing in
             DetailView(listing: listing, namespace: heroNamespace)
@@ -132,6 +124,10 @@ struct PriceCheckRunView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 identifiedHeader
+                if model.guide?.isEmpty == true {
+                    Text("No comparable listings with usable prices were found. You can still review the search results below.")
+                        .foregroundStyle(.secondary)
+                }
                 priceBlock
                 evidenceRow
                 listingBlock
@@ -277,7 +273,7 @@ struct PriceCheckRunView: View {
     /// that matters to keep the part that is merely interesting.
     @ViewBuilder
     private var evidenceRow: some View {
-        if !model.comps.isEmpty {
+        if !model.comps.isEmpty || !model.sold.comps.isEmpty {
             Button {
                 isShowingEvidence = true
                 // Whether anybody checks the working.
@@ -308,7 +304,7 @@ struct PriceCheckRunView: View {
     }
 
     private var evidenceSummary: String {
-        var parts = ["\(model.comps.count) nearby listing\(model.comps.count == 1 ? "" : "s")"]
+        var parts = ["\(model.guide?.count ?? 0) of \(model.comps.count) nearby results used"]
         if model.sold.count > 0 {
             parts.append("\(model.sold.count) sold last month")
         }

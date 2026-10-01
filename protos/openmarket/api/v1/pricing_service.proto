@@ -4,33 +4,8 @@ package openmarket.api.v1;
 
 import "buf/validate/validate.proto";
 
-// **One model call, and then arithmetic.**
-//
-//   IdentifyItem        photo + description -> what this is, what to search,
-//                                              and the listing to paste
-//   (device)            ComparableSearch    -> the market, in a WKWebView
-//   (device)            PriceGuide          -> the price, from those numbers
-//   CompletePriceCheck  what it found       -> the row
-//
-// Two things force this shape. The market search cannot leave the phone: it
-// runs against the user's own Facebook session (docs/decision-desktop-primary.md)
-// and the server has no cookie jar to borrow. And the price is a median, which
-// is arithmetic — the one thing a language model is measurably bad at and Swift
-// is exact at.
-//
-// So the model does the part it is good at, once: look at a photograph, say
-// what the object is, and write two paragraphs about it. Everything numeric
-// belongs to `PriceGuide`.
-//
-// There used to be a second call that picked the price and wrote the copy with
-// the comparables in front of it. It was removed for two reasons, in this
-// order of importance. **It could see the comparables**, which is the setup for
-// the worst failure this feature has on record — a model taking the item's
-// identity from the market, titling a stroller "IKEA Malm 4 Drawer Dresser
-// White" on three runs of three (README, "The on-device writer"). And on runs
-// where the seller wrote nothing about condition it returned the median, which
-// Swift already had: 1,350 tokens and four seconds to reproduce a number that
-// was sitting in a variable.
+// Item identification and comparable relevance run on the server. Marketplace
+// search stays on the phone; price and sold-time statistics remain arithmetic.
 
 // What the seller is holding, as the model reads it.
 message IdentifyItemRequest {
@@ -335,8 +310,36 @@ message ListPriceChecksResponse {
   repeated PriceCheckSummary checks = 1;
 }
 
+message ComparisonItem {
+  string title = 1 [(buf.validate.field).string = {min_len: 1, max_len: 500}];
+  string description = 2 [(buf.validate.field).string.max_len = 2000];
+  string condition = 3 [(buf.validate.field).string.max_len = 200];
+}
+
+message ComparisonCandidate {
+  string id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+  ComparisonItem item = 2 [(buf.validate.field).required = true];
+}
+
+message EvaluateComparablesRequest {
+  ComparisonItem target = 1 [(buf.validate.field).required = true];
+  repeated ComparisonCandidate candidates = 2 [(buf.validate.field).repeated = {min_items: 1, max_items: 30}];
+}
+
+message ComparableDecision {
+  string id = 1;
+  bool use_in_comparison = 2;
+  double probability = 3;
+}
+
+message EvaluateComparablesResponse {
+  repeated ComparableDecision decisions = 1;
+}
+
 service PricingService {
-  // The only call that reaches a model.
+  rpc EvaluateComparables(EvaluateComparablesRequest) returns (EvaluateComparablesResponse);
+
+  // Identifies the target before any market results are available.
   rpc IdentifyItem(IdentifyItemRequest) returns (IdentifyItemResponse);
 
   // Recording, not pricing — see the request.

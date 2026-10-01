@@ -144,6 +144,21 @@ func main() {
 		logger: logger.Named("pricing"),
 	}
 
+	gatewayKey := cfg.AIGatewayAPIKey
+	if gatewayKey == "" && cfg.LLMProvider == config.LLMProviderVercel {
+		gatewayKey = cfg.LLMAPIKey
+	}
+	if gatewayKey != "" {
+		pricingSvc.relevance = llm.NewEvaluationRunner(llm.NewJevEvaluator(gatewayKey), queries, logger.Named("relevance"), llm.Config{
+			MaxCallsPerUser: cfg.LLMMaxCallsPerUser,
+			Window:          cfg.LLMCallWindow,
+			MaxAttempts:     cfg.LLMMaxAttempts,
+			Timeout:         10 * time.Second,
+		})
+	} else {
+		logger.Warn("listing relevance unavailable: configure AI_GATEWAY_API_KEY or a Vercel LLM_API_KEY")
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))

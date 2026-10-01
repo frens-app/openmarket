@@ -1,4 +1,5 @@
 import Foundation
+import OpenMarketProtos
 import SwiftUI
 import WebKit
 
@@ -9,26 +10,12 @@ import WebKit
 /// to Browse and back. Someone pricing a dresser is very likely to go and look
 /// at the dressers.
 ///
-/// The run is four steps — identify, search, check what sold, read the prices —
-/// and exactly one of them leaves this device to reach a model. The search
-/// cannot move off the phone at all: it is a `WKWebView` against the user's own
-/// Facebook session.
-///
-/// The model is deliberately kept away from the arithmetic (README, "The
-/// on-device writer"). It is never shown a comparable: `PriceGuide` computes the
-/// numbers and picks the median, and the item is named and the listing written
-/// from the photo alone, before any comparable exists. Nothing needs clamping to
-/// the observed range, because the median is inside it by construction.
+/// The server identifies the target before search and checks candidate relevance
+/// afterwards. Marketplace stays in the phone's session; Swift computes prices.
 @MainActor
 final class SellerToolsModel: ObservableObject {
-    /// One line of the transcript.
-    ///
-    /// The work is four distinct things — understand, search, check what sold,
-    /// price — and each takes long enough to be worth naming. A single spinner
-    /// for the whole run would hide that the app went and looked at the actual
-    /// market, which is the part worth trusting.
     struct Step: Identifiable, Equatable {
-        enum Kind: Hashable { case identify, search, sold, price }
+        enum Kind: Hashable { case identify, search, sold, relevance, price }
         enum State: Equatable { case running, done, failed }
 
         let kind: Kind
@@ -369,10 +356,13 @@ final class SellerToolsModel: ObservableObject {
         // "found 14 listings" is not. Load-bearing — no query, no search.
         begin(.identify, Self.identifyStepText(photoCount: photos.count))
         let term: String
+        let target: OpenMarketProtos.ComparisonItem
         do {
             let identified = try await pricing.identify(description: item, photos: photos)
             guard !Task.isCancelled else { return }
             priceCheckID = identified.priceCheckID
+            target = ComparisonRelevance.item(title: identified.name,
+                                               description: ([item] + identified.keyAttributes).joined(separator: "\n"))
             identifiedName = identified.name.isEmpty ? nil : identified.name
             // An empty term is not a weak search, it is a search for the entire
             // marketplace, so a photo-only run with no server query stops here.
@@ -432,18 +422,31 @@ final class SellerToolsModel: ObservableObject {
                                                       radiusKM: prefs.radiusKM)
         guard !Task.isCancelled else { return }
         if case .success(let found) = soldResult { sold = SoldSignal(comps: found) }
-        finish(.sold, sold.summary)
+        finish(.sold, "Found \(sold.comps.count) recently sold listings")
 
-        // 4 — arithmetic, in Swift, instantly, and this is the answer. No model:
-        // asked for a number it returned this same median four seconds and 1300
-        // tokens later, moving ±10–20% only where the seller had written
-        // something about condition — a judgement the user can make from the
-        // range on screen and this code cannot check.
+        begin(.relevance, "Checking which listings are comparable")
+        do {
+            let activeCount = comps.count
+            let evaluated = try await pricing.evaluate(target: target, comps: comps + sold.comps)
+            guard !Task.isCancelled else { return }
+            comps = MarketComp.comparableFirst(Array(evaluated.prefix(activeCount)))
+            sold = SoldSignal(comps: Array(evaluated.dropFirst(activeCount)))
+            finish(.relevance, "\(comps.filter(\.isComparable).count) of \(comps.count) nearby listings are comparable")
+            finish(.sold, sold.summary)
+        } catch {
+            guard !Task.isCancelled else { return }
+            let message = "Couldn't check which listings are comparable. " + Self.message(for: error)
+            fail(.relevance, message)
+            phase = .failed(message)
+            captureRunFailed(.relevance, reason: Self.reason(for: error), startedAt: startedAt)
+            return
+        }
+
         begin(.price, "Reading the prices")
         let computed = PriceGuide(comps: comps)
         guide = computed
         guard let median = computed.median else {
-            fail(.price, "None of them had a price to compare")
+            finish(.price, "No comparable listings with usable prices were found")
             phase = .done
             // Completed, not failed — `phase` agrees. Comparables with no
             // readable price is a fact about the listings. `has_price` splits it
@@ -531,6 +534,7 @@ final class SellerToolsModel: ObservableObject {
         case .identify: return "identify"
         case .search: return "search"
         case .sold: return "sold"
+        case .relevance: return "relevance"
         case .price: return "price"
         }
     }

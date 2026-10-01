@@ -943,6 +943,274 @@ func (x *ListPriceChecksResponse) GetChecks() []*PriceCheckSummary {
 	return nil
 }
 
+type ComparisonItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Condition     string                 `protobuf:"bytes,3,opt,name=condition,proto3" json:"condition,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComparisonItem) Reset() {
+	*x = ComparisonItem{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComparisonItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComparisonItem) ProtoMessage() {}
+
+func (x *ComparisonItem) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComparisonItem.ProtoReflect.Descriptor instead.
+func (*ComparisonItem) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ComparisonItem) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ComparisonItem) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ComparisonItem) GetCondition() string {
+	if x != nil {
+		return x.Condition
+	}
+	return ""
+}
+
+type ComparisonCandidate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Item          *ComparisonItem        `protobuf:"bytes,2,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComparisonCandidate) Reset() {
+	*x = ComparisonCandidate{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComparisonCandidate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComparisonCandidate) ProtoMessage() {}
+
+func (x *ComparisonCandidate) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComparisonCandidate.ProtoReflect.Descriptor instead.
+func (*ComparisonCandidate) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ComparisonCandidate) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ComparisonCandidate) GetItem() *ComparisonItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+type EvaluateComparablesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *ComparisonItem        `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Candidates    []*ComparisonCandidate `protobuf:"bytes,2,rep,name=candidates,proto3" json:"candidates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EvaluateComparablesRequest) Reset() {
+	*x = EvaluateComparablesRequest{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EvaluateComparablesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EvaluateComparablesRequest) ProtoMessage() {}
+
+func (x *EvaluateComparablesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EvaluateComparablesRequest.ProtoReflect.Descriptor instead.
+func (*EvaluateComparablesRequest) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *EvaluateComparablesRequest) GetTarget() *ComparisonItem {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *EvaluateComparablesRequest) GetCandidates() []*ComparisonCandidate {
+	if x != nil {
+		return x.Candidates
+	}
+	return nil
+}
+
+type ComparableDecision struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UseInComparison bool                   `protobuf:"varint,2,opt,name=use_in_comparison,json=useInComparison,proto3" json:"use_in_comparison,omitempty"`
+	Probability     float64                `protobuf:"fixed64,3,opt,name=probability,proto3" json:"probability,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ComparableDecision) Reset() {
+	*x = ComparableDecision{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComparableDecision) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComparableDecision) ProtoMessage() {}
+
+func (x *ComparableDecision) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComparableDecision.ProtoReflect.Descriptor instead.
+func (*ComparableDecision) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ComparableDecision) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ComparableDecision) GetUseInComparison() bool {
+	if x != nil {
+		return x.UseInComparison
+	}
+	return false
+}
+
+func (x *ComparableDecision) GetProbability() float64 {
+	if x != nil {
+		return x.Probability
+	}
+	return 0
+}
+
+type EvaluateComparablesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Decisions     []*ComparableDecision  `protobuf:"bytes,1,rep,name=decisions,proto3" json:"decisions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EvaluateComparablesResponse) Reset() {
+	*x = EvaluateComparablesResponse{}
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EvaluateComparablesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EvaluateComparablesResponse) ProtoMessage() {}
+
+func (x *EvaluateComparablesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_pricing_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EvaluateComparablesResponse.ProtoReflect.Descriptor instead.
+func (*EvaluateComparablesResponse) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *EvaluateComparablesResponse) GetDecisions() []*ComparableDecision {
+	if x != nil {
+		return x.Decisions
+	}
+	return nil
+}
+
 var File_openmarket_api_v1_pricing_service_proto protoreflect.FileDescriptor
 
 const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
@@ -1014,8 +1282,30 @@ const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"\x13listing_description\x18\v \x01(\tR\x12listingDescriptionB\x1a\n" +
 	"\x18_recommended_price_minor\"W\n" +
 	"\x17ListPriceChecksResponse\x12<\n" +
-	"\x06checks\x18\x01 \x03(\v2$.openmarket.api.v1.PriceCheckSummaryR\x06checks2\xcd\x04\n" +
-	"\x0ePricingService\x12_\n" +
+	"\x06checks\x18\x01 \x03(\v2$.openmarket.api.v1.PriceCheckSummaryR\x06checks\"\x86\x01\n" +
+	"\x0eComparisonItem\x12 \n" +
+	"\x05title\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x05title\x12*\n" +
+	"\vdescription\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fR\vdescription\x12&\n" +
+	"\tcondition\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\tcondition\"p\n" +
+	"\x13ComparisonCandidate\x12\x1a\n" +
+	"\x02id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\x02id\x12=\n" +
+	"\x04item\x18\x02 \x01(\v2!.openmarket.api.v1.ComparisonItemB\x06\xbaH\x03\xc8\x01\x01R\x04item\"\xb3\x01\n" +
+	"\x1aEvaluateComparablesRequest\x12A\n" +
+	"\x06target\x18\x01 \x01(\v2!.openmarket.api.v1.ComparisonItemB\x06\xbaH\x03\xc8\x01\x01R\x06target\x12R\n" +
+	"\n" +
+	"candidates\x18\x02 \x03(\v2&.openmarket.api.v1.ComparisonCandidateB\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x10\x1eR\n" +
+	"candidates\"r\n" +
+	"\x12ComparableDecision\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
+	"\x11use_in_comparison\x18\x02 \x01(\bR\x0fuseInComparison\x12 \n" +
+	"\vprobability\x18\x03 \x01(\x01R\vprobability\"b\n" +
+	"\x1bEvaluateComparablesResponse\x12C\n" +
+	"\tdecisions\x18\x01 \x03(\v2%.openmarket.api.v1.ComparableDecisionR\tdecisions2\xc3\x05\n" +
+	"\x0ePricingService\x12t\n" +
+	"\x13EvaluateComparables\x12-.openmarket.api.v1.EvaluateComparablesRequest\x1a..openmarket.api.v1.EvaluateComparablesResponse\x12_\n" +
 	"\fIdentifyItem\x12&.openmarket.api.v1.IdentifyItemRequest\x1a'.openmarket.api.v1.IdentifyItemResponse\x12q\n" +
 	"\x12CompletePriceCheck\x12,.openmarket.api.v1.CompletePriceCheckRequest\x1a-.openmarket.api.v1.CompletePriceCheckResponse\x12\x83\x01\n" +
 	"\x18SubmitPriceCheckFeedback\x122.openmarket.api.v1.SubmitPriceCheckFeedbackRequest\x1a3.openmarket.api.v1.SubmitPriceCheckFeedbackResponse\x12w\n" +
@@ -1035,7 +1325,7 @@ func file_openmarket_api_v1_pricing_service_proto_rawDescGZIP() []byte {
 	return file_openmarket_api_v1_pricing_service_proto_rawDescData
 }
 
-var file_openmarket_api_v1_pricing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_openmarket_api_v1_pricing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_openmarket_api_v1_pricing_service_proto_goTypes = []any{
 	(*IdentifyItemRequest)(nil),              // 0: openmarket.api.v1.IdentifyItemRequest
 	(*IdentifyItemResponse)(nil),             // 1: openmarket.api.v1.IdentifyItemResponse
@@ -1049,25 +1339,36 @@ var file_openmarket_api_v1_pricing_service_proto_goTypes = []any{
 	(*ListPriceChecksRequest)(nil),           // 9: openmarket.api.v1.ListPriceChecksRequest
 	(*PriceCheckSummary)(nil),                // 10: openmarket.api.v1.PriceCheckSummary
 	(*ListPriceChecksResponse)(nil),          // 11: openmarket.api.v1.ListPriceChecksResponse
+	(*ComparisonItem)(nil),                   // 12: openmarket.api.v1.ComparisonItem
+	(*ComparisonCandidate)(nil),              // 13: openmarket.api.v1.ComparisonCandidate
+	(*EvaluateComparablesRequest)(nil),       // 14: openmarket.api.v1.EvaluateComparablesRequest
+	(*ComparableDecision)(nil),               // 15: openmarket.api.v1.ComparableDecision
+	(*EvaluateComparablesResponse)(nil),      // 16: openmarket.api.v1.EvaluateComparablesResponse
 }
 var file_openmarket_api_v1_pricing_service_proto_depIdxs = []int32{
 	2,  // 0: openmarket.api.v1.CompletePriceCheckRequest.stats:type_name -> openmarket.api.v1.MarketStats
 	10, // 1: openmarket.api.v1.ListPriceChecksResponse.checks:type_name -> openmarket.api.v1.PriceCheckSummary
-	0,  // 2: openmarket.api.v1.PricingService.IdentifyItem:input_type -> openmarket.api.v1.IdentifyItemRequest
-	3,  // 3: openmarket.api.v1.PricingService.CompletePriceCheck:input_type -> openmarket.api.v1.CompletePriceCheckRequest
-	5,  // 4: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:input_type -> openmarket.api.v1.SubmitPriceCheckFeedbackRequest
-	7,  // 5: openmarket.api.v1.PricingService.RecordPriceCheckCopy:input_type -> openmarket.api.v1.RecordPriceCheckCopyRequest
-	9,  // 6: openmarket.api.v1.PricingService.ListPriceChecks:input_type -> openmarket.api.v1.ListPriceChecksRequest
-	1,  // 7: openmarket.api.v1.PricingService.IdentifyItem:output_type -> openmarket.api.v1.IdentifyItemResponse
-	4,  // 8: openmarket.api.v1.PricingService.CompletePriceCheck:output_type -> openmarket.api.v1.CompletePriceCheckResponse
-	6,  // 9: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:output_type -> openmarket.api.v1.SubmitPriceCheckFeedbackResponse
-	8,  // 10: openmarket.api.v1.PricingService.RecordPriceCheckCopy:output_type -> openmarket.api.v1.RecordPriceCheckCopyResponse
-	11, // 11: openmarket.api.v1.PricingService.ListPriceChecks:output_type -> openmarket.api.v1.ListPriceChecksResponse
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	12, // 2: openmarket.api.v1.ComparisonCandidate.item:type_name -> openmarket.api.v1.ComparisonItem
+	12, // 3: openmarket.api.v1.EvaluateComparablesRequest.target:type_name -> openmarket.api.v1.ComparisonItem
+	13, // 4: openmarket.api.v1.EvaluateComparablesRequest.candidates:type_name -> openmarket.api.v1.ComparisonCandidate
+	15, // 5: openmarket.api.v1.EvaluateComparablesResponse.decisions:type_name -> openmarket.api.v1.ComparableDecision
+	14, // 6: openmarket.api.v1.PricingService.EvaluateComparables:input_type -> openmarket.api.v1.EvaluateComparablesRequest
+	0,  // 7: openmarket.api.v1.PricingService.IdentifyItem:input_type -> openmarket.api.v1.IdentifyItemRequest
+	3,  // 8: openmarket.api.v1.PricingService.CompletePriceCheck:input_type -> openmarket.api.v1.CompletePriceCheckRequest
+	5,  // 9: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:input_type -> openmarket.api.v1.SubmitPriceCheckFeedbackRequest
+	7,  // 10: openmarket.api.v1.PricingService.RecordPriceCheckCopy:input_type -> openmarket.api.v1.RecordPriceCheckCopyRequest
+	9,  // 11: openmarket.api.v1.PricingService.ListPriceChecks:input_type -> openmarket.api.v1.ListPriceChecksRequest
+	16, // 12: openmarket.api.v1.PricingService.EvaluateComparables:output_type -> openmarket.api.v1.EvaluateComparablesResponse
+	1,  // 13: openmarket.api.v1.PricingService.IdentifyItem:output_type -> openmarket.api.v1.IdentifyItemResponse
+	4,  // 14: openmarket.api.v1.PricingService.CompletePriceCheck:output_type -> openmarket.api.v1.CompletePriceCheckResponse
+	6,  // 15: openmarket.api.v1.PricingService.SubmitPriceCheckFeedback:output_type -> openmarket.api.v1.SubmitPriceCheckFeedbackResponse
+	8,  // 16: openmarket.api.v1.PricingService.RecordPriceCheckCopy:output_type -> openmarket.api.v1.RecordPriceCheckCopyResponse
+	11, // 17: openmarket.api.v1.PricingService.ListPriceChecks:output_type -> openmarket.api.v1.ListPriceChecksResponse
+	12, // [12:18] is the sub-list for method output_type
+	6,  // [6:12] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_openmarket_api_v1_pricing_service_proto_init() }
@@ -1084,7 +1385,7 @@ func file_openmarket_api_v1_pricing_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openmarket_api_v1_pricing_service_proto_rawDesc), len(file_openmarket_api_v1_pricing_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

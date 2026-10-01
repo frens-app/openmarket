@@ -8,6 +8,15 @@ extension Logger {
 
 /// One listing being used as evidence about price.
 struct MarketComp: Identifiable, Equatable {
+    enum Relevance: Equatable { case unchecked, included, excluded }
+    var relevance: Relevance = .unchecked
+    var relevanceProbability: Double?
+    var isComparable: Bool { relevance == .included }
+
+    static func comparableFirst(_ comps: [MarketComp]) -> [MarketComp] {
+        comps.filter(\.isComparable) + comps.filter { !$0.isComparable }
+    }
+
     var listing: Listing
     /// Whole dollars, parsed from the displayed price. Nil when the card had no
     /// readable price at all.

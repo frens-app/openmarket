@@ -10,20 +10,21 @@ import WebKit
 /// engines, their scroll position, or their in-flight navigation is touched,
 /// because the searches run on `MarketCheckPool`'s own webviews.
 ///
-/// No model is involved anywhere. The query is `SearchTerm`, the comparison is
-/// `PriceGuide` and `SoldSignal`, and every number shown was read off a card.
+/// Jev checks relevance before `PriceGuide` and `SoldSignal` read the prices.
 @MainActor
 final class MarketCheckModel: ObservableObject {
     @Published private(set) var phases: [String: MarketCheckPhase] = [:]
 
     private let pool: MarketCheckPool
     private let prefs: Preferences
+    private let pricing: PricingService
     /// Insertion order, for eviction. A check holds up to thirty comparables
     /// with their thumbnails, and a long browse session opens a lot of listings.
     private var order: [String] = []
     private static let capacity = 40
 
-    init(pool: MarketCheckPool? = nil, prefs: Preferences = .shared) {
+    init(pool: MarketCheckPool? = nil, prefs: Preferences = .shared, pricing: PricingService? = nil) {
+        self.pricing = pricing ?? PricingService(session: .shared)
         self.pool = pool ?? MarketCheckPool()
         self.prefs = prefs
     }
@@ -57,6 +58,7 @@ final class MarketCheckModel: ObservableObject {
         case .running, .done: return
         case .failed, nil: break
         }
+        set(listing.id, .running("Starting comparison"))
         Task { await run(listing, price: price, term: term) }
     }
 
@@ -73,7 +75,7 @@ final class MarketCheckModel: ObservableObject {
 
         let citySlug = prefs.locationSlug ?? "sanfrancisco"
         let radiusKM = prefs.radiusKM
-        let outcome = await pool.withSearch { search -> Result<([MarketComp], SoldSignal), ComparableSearch.Failure> in
+        let outcome = await pool.withSearch { search -> Result<([MarketComp], [MarketComp]), ComparableSearch.Failure> in
             self.set(listing.id, .running("Checking what similar things are listed for"))
             let active = await search.comparables(to: term, citySlug: citySlug, radiusKM: radiusKM)
             switch active {
@@ -86,7 +88,7 @@ final class MarketCheckModel: ObservableObject {
                 // nothing sold near you in a month, and that is a fact about
                 // the item rather than a broken run.
                 let sold = (try? soldResult.get()) ?? []
-                return .success((found, SoldSignal(comps: sold)))
+                return .success((found, sold))
             }
         }
 
@@ -98,8 +100,21 @@ final class MarketCheckModel: ObservableObject {
                 "reason": SellerToolsModel.reason(for: error),
                 "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000)
             ])
-        case .success(let (found, sold)):
-            let comps = found.filter { !Self.isSameListing($0, as: listing) }
+        case .success(let (found, soldFound)):
+            let active = found.filter { !Self.isSameListing($0, as: listing) }
+            let soldCandidates = soldFound.filter { !Self.isSameListing($0, as: listing) }
+            set(listing.id, .running("Checking which listings are comparable"))
+            let evaluated: [MarketComp]
+            do {
+                evaluated = try await pricing.evaluate(target: ComparisonRelevance.item(for: listing),
+                                                       comps: active + soldCandidates)
+            } catch {
+                set(listing.id, .failed("Couldn't check which listings are comparable. " + SellerToolsModel.message(for: error)))
+                Analytics.capture(.marketCheckFailed, ["listing_id": listing.id, "reason": "relevance_failed"])
+                return
+            }
+            let comps = Array(evaluated.prefix(active.count))
+            let sold = SoldSignal(comps: Array(evaluated.dropFirst(active.count)))
             let check = MarketCheck(term: term,
                                     price: price,
                                     comps: comps,

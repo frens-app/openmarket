@@ -65,18 +65,32 @@ pkg/db/           sqlc output — generated, do not edit
 deployments/      migrations (goose), queries (sqlc), compose, railway
 ```
 
-`pkg/llm` makes **one call**: photo and description in, item name, search queries
-and the listing out. Everything numeric — the median, the quartiles, the price
-itself — is computed on the device by `PriceGuide` and only reported here. The
-model never sees a comparable, which is what makes the failure this feature is
-built around (taking the item's identity from the market) unreachable rather
-than prompted against.
+`pkg/llm` identifies the seller's item before search and evaluates candidate
+relevance afterwards. `EvaluateComparables` uses Jev through Vercel's
+`POST /v1/evaluate`, with one boolean question per candidate and a fixed target.
+The phone computes all prices and sold-time statistics from accepted listings.
+Rejected results remain visible at the end of the evidence carousels.
 
-`pkg/llm` has a **stub provider**, and it is the whole local-development story
-for Price Check: `.env.development` ships `LLM_PROVIDER=stub`, which answers
-in-process with no key, no network and no bill. The feature runs end to end
-against it — including the recording — so the iOS side can be built and re-run
-without spending anything.
+Jev uses `AI_GATEWAY_API_KEY`, falling back to `LLM_API_KEY` when
+`LLM_PROVIDER=vercel`. Google identification can therefore coexist with Jev by
+setting a separate gateway key. Missing credentials disable relevance checks
+with an explicit error; the identification stub never fabricates relevance.
+The comparison endpoint requires an OpenMarket account, accepts at most 30
+candidates, uses a 10-second per-attempt deadline, and shares the existing model
+call ceiling. Migration 00013 adds `RELEVANCE` to `llm_runs`; each attempt records
+model, token usage and latency without storing candidate text.
+
+The initial acceptance probability is 0.8. This is a conservative starting
+policy, not a measured accuracy guarantee; validate it on labeled Marketplace
+pairs before tuning. Candidate descriptions are sent only when already loaded.
+Jev receives text and condition, not photos or numeric prices. A failed or
+incomplete evaluation stops the comparison instead of using unfiltered prices.
+
+`.env.development` ships `LLM_PROVIDER=stub` for item identification, which
+answers in-process with no key or network. Relevance still needs the gateway
+key above; unit tests use synthetic gateway responses without spending money.
+For an opt-in billed smoke test using synthetic listings, run
+`JEV_LIVE_API_KEY=… go test ./pkg/llm -run '^TestJevLive$' -v -count=1`.
 
 Two real providers sit behind the same interface, chosen with `LLM_PROVIDER` in
 `.env.local`:
@@ -87,8 +101,7 @@ Two real providers sit behind the same interface, chosen with `LLM_PROVIDER` in
 | Model | `google/gemini-3.6-flash` — vendor-prefixed | `gemini-3.6-flash` |
 | Why | one key for every model, one invoice to reconcile `llm_runs` against | one fewer hop, and a free tier |
 
-The Gateway offers three surfaces — Chat Completions, OpenAI Responses and
-Anthropic Messages. This uses Chat Completions because the point of a gateway is
+Item identification uses the Gateway’s Chat Completions surface because the point of a gateway is
 changing models without changing code, and that is the shape every model behind
 it maps onto. It carries what this package needs: JSON-Schema structured output,
 and reasoning tokens reported separately. The one gap is that its `reasoning`

@@ -16,7 +16,6 @@ import UIKit
 /// tab owns one, and a second would nest.
 struct PriceCheckView: View {
     @EnvironmentObject private var model: SellerToolsModel
-    /// The only feature in the app that needs one. See `AccountGateView`.
     @EnvironmentObject private var account: AccountSession
     /// The description being typed, held here rather than on the model — see
     /// `SellerToolsModel.input` for why the field must not be re-rendered from
@@ -651,13 +650,15 @@ struct CompCard: View {
                         }
                     }
                 }
+                .saturation(comp.isComparable ? 1 : 0)
+                .opacity(comp.isComparable ? 1 : 0.45)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(alignment: .topLeading) {
                     if comp.isSold { soldTag }
                 }
             Text(comp.listing.priceText ?? "—")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(comp.isSold ? .secondary : .primary)
+                .foregroundStyle(comp.isSold || !comp.isComparable ? .secondary : .primary)
             if let title = comp.listing.title {
                 Text(title)
                     .font(.caption)
@@ -665,7 +666,14 @@ struct CompCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
-            if let footnote {
+            if !comp.isComparable {
+                Label(comp.relevance == .excluded ? "Not used in comparison" : "Not checked",
+                      systemImage: "minus.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let footnote, comp.isComparable {
                 Text(footnote)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.tint)

@@ -2,20 +2,7 @@ import Connect
 import Foundation
 import OpenMarketProtos
 
-/// The server half of Price Check.
-///
-/// **One call that thinks, and one that writes things down.** `identify` sends
-/// the photo and the description to a model and gets back what the item is,
-/// what to search for, and the listing to paste. Everything after that happens
-/// on this device: `ComparableSearch` finds the market — it has to, because it
-/// runs in a `WKWebView` against the user's own Facebook session and the server
-/// cannot reach that — and `PriceGuide` turns it into a price. `complete` then
-/// reports what happened, and calls nothing.
-///
-/// Separate from `AccountSession` deliberately. That object is the account —
-/// tokens, device, sign-in state — and every screen holds it. Price Check is
-/// one feature that happens to need a token, and folding its calls in would put
-/// its failures inside the object that decides whether the user is signed in.
+/// Identifies seller items, evaluates candidate relevance, and records price checks.
 @MainActor
 final class PricingService {
     /// Everything the model produced, plus the id that ties the rest of the run
@@ -70,6 +57,19 @@ final class PricingService {
             listingTitle: message.listingTitle,
             listingBody: message.listingDescription
         )
+    }
+
+    func evaluate(target: ComparisonItem, comps: [MarketComp]) async throws -> [MarketComp] {
+        let candidates = ComparisonRelevance.candidates(from: comps)
+        guard !candidates.isEmpty else {
+            return try ComparisonRelevance.apply([], to: comps, candidates: candidates)
+        }
+        var request = EvaluateComparablesRequest()
+        request.target = target
+        request.candidates = candidates
+        let response = await client.evaluateComparables(request: request, headers: try await session.authorizedHeaders())
+        let message = try unwrap(response)
+        return try ComparisonRelevance.apply(message.decisions, to: comps, candidates: candidates)
     }
 
     /// Reports what the market held and what this device recommended.

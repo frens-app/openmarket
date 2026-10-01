@@ -14,6 +14,9 @@ struct MarketCheckBlock: View {
     let canAsk: Bool
 
     @EnvironmentObject private var checks: MarketCheckModel
+    @EnvironmentObject private var account: AccountSession
+    @State private var showSignIn = false
+    @State private var resumeAfterSignIn = false
 
     var body: some View {
         Group {
@@ -25,14 +28,40 @@ struct MarketCheckBlock: View {
             case .done(let check):
                 answer(check)
             case .failed(let message):
-                InlineNotice(text: message, actionTitle: "Try again") { checks.check(listing) }
+                InlineNotice(text: message, actionTitle: "Try again") { startCheck() }
             }
         }
         .animation(.easeOut(duration: 0.2), value: checks.phase(for: listing))
+        .sheet(isPresented: $showSignIn, onDismiss: {
+            if resumeAfterSignIn {
+                resumeAfterSignIn = false
+                checks.check(listing)
+            }
+        }) {
+            NavigationStack {
+                PhoneLoginView(prompt: "Sign in to compare this item with similar listings.") { _ in
+                    resumeAfterSignIn = true
+                    showSignIn = false
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showSignIn = false }
+                    }
+                }
+            }
+        }
+    }
+
+    private func startCheck() {
+        if account.isSignedIn {
+            checks.check(listing)
+        } else {
+            showSignIn = true
+        }
     }
 
     private var askButton: some View {
-        Button { checks.check(listing) } label: {
+        Button { startCheck() } label: {
             Label("Is this a good price?", systemImage: "chart.bar.xaxis")
                 .font(.subheadline.weight(.medium))
                 .frame(maxWidth: .infinity)
@@ -90,7 +119,7 @@ struct MarketCheckBlock: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
-            if !check.comps.isEmpty || !check.sold.isEmpty {
+            if !check.comps.isEmpty || !check.sold.comps.isEmpty {
                 NavigationLink {
                     PriceEvidenceView(comps: check.comps,
                                       sold: check.sold,

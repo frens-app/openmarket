@@ -11,7 +11,10 @@ import SwiftProtobuf
 
 public protocol Openmarket_Api_V1_PricingServiceClientInterface: Sendable {
 
-    /// The only call that reaches a model.
+    @available(iOS 13, *)
+    func `evaluateComparables`(request: Openmarket_Api_V1_EvaluateComparablesRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_EvaluateComparablesResponse>
+
+    /// Identifies the target before any market results are available.
     @available(iOS 13, *)
     func `identifyItem`(request: Openmarket_Api_V1_IdentifyItemRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_IdentifyItemResponse>
 
@@ -46,6 +49,11 @@ public final class Openmarket_Api_V1_PricingServiceClient: Openmarket_Api_V1_Pri
     }
 
     @available(iOS 13, *)
+    public func `evaluateComparables`(request: Openmarket_Api_V1_EvaluateComparablesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_EvaluateComparablesResponse> {
+        return await self.client.unary(path: "/openmarket.api.v1.PricingService/EvaluateComparables", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `identifyItem`(request: Openmarket_Api_V1_IdentifyItemRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_IdentifyItemResponse> {
         return await self.client.unary(path: "/openmarket.api.v1.PricingService/IdentifyItem", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -72,6 +80,7 @@ public final class Openmarket_Api_V1_PricingServiceClient: Openmarket_Api_V1_Pri
 
     public enum Metadata {
         public enum Methods {
+            public static let evaluateComparables = Connect.MethodSpec(name: "EvaluateComparables", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let identifyItem = Connect.MethodSpec(name: "IdentifyItem", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let completePriceCheck = Connect.MethodSpec(name: "CompletePriceCheck", service: "openmarket.api.v1.PricingService", type: .unary)
             public static let submitPriceCheckFeedback = Connect.MethodSpec(name: "SubmitPriceCheckFeedback", service: "openmarket.api.v1.PricingService", type: .unary)

@@ -26,20 +26,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// pricingServer implements Price Check's half of the work.
-//
-// The other half is on the phone, and cannot move here: the comparable search
-// runs in a WKWebView against the user's own Facebook session, so between
-// IdentifyItem and PriceItem this service is not waiting on anything — it has
-// returned, and the client comes back when it has a market.
-//
-// That is why the price check row is written by the first call rather than the
-// second. A run that dies in between is a real outcome, and one worth being
-// able to count.
+// Marketplace search and price arithmetic run on the phone; model calls run here.
 type pricingServer struct {
-	queries *db.Queries
-	runner  *llm.Runner
-	logger  *zap.Logger
+	queries   *db.Queries
+	runner    *llm.Runner
+	relevance *llm.Runner
+	logger    *zap.Logger
 }
 
 func (s *pricingServer) IdentifyItem(

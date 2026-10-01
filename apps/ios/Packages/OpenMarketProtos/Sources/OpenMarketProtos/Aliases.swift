@@ -44,3 +44,8 @@ public typealias PriceCheckSummary = Openmarket_Api_V1_PriceCheckSummary
 // `ProtoComparable`: a plain `Comparable` alias shadows the Swift standard
 // library protocol across every file importing this module, including the `<`
 // operators the app's own sorts rely on.
+
+public typealias ComparisonItem = Openmarket_Api_V1_ComparisonItem
+public typealias ComparisonCandidate = Openmarket_Api_V1_ComparisonCandidate
+public typealias ComparableDecision = Openmarket_Api_V1_ComparableDecision
+public typealias EvaluateComparablesRequest = Openmarket_Api_V1_EvaluateComparablesRequest

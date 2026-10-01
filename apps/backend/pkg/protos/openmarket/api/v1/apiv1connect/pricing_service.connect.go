@@ -33,6 +33,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// PricingServiceEvaluateComparablesProcedure is the fully-qualified name of the PricingService's
+	// EvaluateComparables RPC.
+	PricingServiceEvaluateComparablesProcedure = "/openmarket.api.v1.PricingService/EvaluateComparables"
 	// PricingServiceIdentifyItemProcedure is the fully-qualified name of the PricingService's
 	// IdentifyItem RPC.
 	PricingServiceIdentifyItemProcedure = "/openmarket.api.v1.PricingService/IdentifyItem"
@@ -52,7 +55,8 @@ const (
 
 // PricingServiceClient is a client for the openmarket.api.v1.PricingService service.
 type PricingServiceClient interface {
-	// The only call that reaches a model.
+	EvaluateComparables(context.Context, *connect.Request[v1.EvaluateComparablesRequest]) (*connect.Response[v1.EvaluateComparablesResponse], error)
+	// Identifies the target before any market results are available.
 	IdentifyItem(context.Context, *connect.Request[v1.IdentifyItemRequest]) (*connect.Response[v1.IdentifyItemResponse], error)
 	// Recording, not pricing — see the request.
 	CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error)
@@ -80,6 +84,12 @@ func NewPricingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 	baseURL = strings.TrimRight(baseURL, "/")
 	pricingServiceMethods := v1.File_openmarket_api_v1_pricing_service_proto.Services().ByName("PricingService").Methods()
 	return &pricingServiceClient{
+		evaluateComparables: connect.NewClient[v1.EvaluateComparablesRequest, v1.EvaluateComparablesResponse](
+			httpClient,
+			baseURL+PricingServiceEvaluateComparablesProcedure,
+			connect.WithSchema(pricingServiceMethods.ByName("EvaluateComparables")),
+			connect.WithClientOptions(opts...),
+		),
 		identifyItem: connect.NewClient[v1.IdentifyItemRequest, v1.IdentifyItemResponse](
 			httpClient,
 			baseURL+PricingServiceIdentifyItemProcedure,
@@ -115,11 +125,17 @@ func NewPricingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // pricingServiceClient implements PricingServiceClient.
 type pricingServiceClient struct {
+	evaluateComparables      *connect.Client[v1.EvaluateComparablesRequest, v1.EvaluateComparablesResponse]
 	identifyItem             *connect.Client[v1.IdentifyItemRequest, v1.IdentifyItemResponse]
 	completePriceCheck       *connect.Client[v1.CompletePriceCheckRequest, v1.CompletePriceCheckResponse]
 	submitPriceCheckFeedback *connect.Client[v1.SubmitPriceCheckFeedbackRequest, v1.SubmitPriceCheckFeedbackResponse]
 	recordPriceCheckCopy     *connect.Client[v1.RecordPriceCheckCopyRequest, v1.RecordPriceCheckCopyResponse]
 	listPriceChecks          *connect.Client[v1.ListPriceChecksRequest, v1.ListPriceChecksResponse]
+}
+
+// EvaluateComparables calls openmarket.api.v1.PricingService.EvaluateComparables.
+func (c *pricingServiceClient) EvaluateComparables(ctx context.Context, req *connect.Request[v1.EvaluateComparablesRequest]) (*connect.Response[v1.EvaluateComparablesResponse], error) {
+	return c.evaluateComparables.CallUnary(ctx, req)
 }
 
 // IdentifyItem calls openmarket.api.v1.PricingService.IdentifyItem.
@@ -149,7 +165,8 @@ func (c *pricingServiceClient) ListPriceChecks(ctx context.Context, req *connect
 
 // PricingServiceHandler is an implementation of the openmarket.api.v1.PricingService service.
 type PricingServiceHandler interface {
-	// The only call that reaches a model.
+	EvaluateComparables(context.Context, *connect.Request[v1.EvaluateComparablesRequest]) (*connect.Response[v1.EvaluateComparablesResponse], error)
+	// Identifies the target before any market results are available.
 	IdentifyItem(context.Context, *connect.Request[v1.IdentifyItemRequest]) (*connect.Response[v1.IdentifyItemResponse], error)
 	// Recording, not pricing — see the request.
 	CompletePriceCheck(context.Context, *connect.Request[v1.CompletePriceCheckRequest]) (*connect.Response[v1.CompletePriceCheckResponse], error)
@@ -173,6 +190,12 @@ type PricingServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	pricingServiceMethods := v1.File_openmarket_api_v1_pricing_service_proto.Services().ByName("PricingService").Methods()
+	pricingServiceEvaluateComparablesHandler := connect.NewUnaryHandler(
+		PricingServiceEvaluateComparablesProcedure,
+		svc.EvaluateComparables,
+		connect.WithSchema(pricingServiceMethods.ByName("EvaluateComparables")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pricingServiceIdentifyItemHandler := connect.NewUnaryHandler(
 		PricingServiceIdentifyItemProcedure,
 		svc.IdentifyItem,
@@ -205,6 +228,8 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 	)
 	return "/openmarket.api.v1.PricingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case PricingServiceEvaluateComparablesProcedure:
+			pricingServiceEvaluateComparablesHandler.ServeHTTP(w, r)
 		case PricingServiceIdentifyItemProcedure:
 			pricingServiceIdentifyItemHandler.ServeHTTP(w, r)
 		case PricingServiceCompletePriceCheckProcedure:
@@ -223,6 +248,10 @@ func NewPricingServiceHandler(svc PricingServiceHandler, opts ...connect.Handler
 
 // UnimplementedPricingServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPricingServiceHandler struct{}
+
+func (UnimplementedPricingServiceHandler) EvaluateComparables(context.Context, *connect.Request[v1.EvaluateComparablesRequest]) (*connect.Response[v1.EvaluateComparablesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.EvaluateComparables is not implemented"))
+}
 
 func (UnimplementedPricingServiceHandler) IdentifyItem(context.Context, *connect.Request[v1.IdentifyItemRequest]) (*connect.Response[v1.IdentifyItemResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.PricingService.IdentifyItem is not implemented"))

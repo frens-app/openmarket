@@ -28,7 +28,7 @@ struct PriceEvidenceView: View {
             VStack(alignment: .leading, spacing: 24) {
                 summary
                 if !comps.isEmpty { strip("What's listed nearby", comps, footnote: nil) }
-                if !sold.isEmpty {
+                if !sold.comps.isEmpty {
                     strip("Recently sold nearby", sold.comps, footnote: soldFootnote)
                 }
                 caveats
@@ -57,6 +57,13 @@ struct PriceEvidenceView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Text("\(guide.count) of \(comps.count) nearby results used for the price comparison.")
+                .font(.subheadline)
+            if comps.contains(where: { !$0.isComparable }) || sold.comps.contains(where: { !$0.isComparable }) {
+                Text("Muted listings were returned in search but weren't similar enough to use in the comparison.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             Text(sold.rationale(for: price, against: guide))
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
@@ -69,7 +76,7 @@ struct PriceEvidenceView: View {
                 .font(.headline)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { position, comp in
+                    ForEach(Array(MarketComp.comparableFirst(items).enumerated()), id: \.element.id) { position, comp in
                         CompCard(comp: comp, footnote: footnote?(comp))
                             .onTapGesture { open(comp, at: position) }
                     }
