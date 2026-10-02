@@ -4,6 +4,18 @@ SwiftUI. The Xcode project is **generated** — `project.yml` is the source of
 truth and `make ios-generate` writes `OpenMarket.xcodeproj` from it. Anything
 typed into Xcode's own panes survives exactly until the next regenerate.
 
+Project generation requires **XcodeGen 2.44.1 or newer** and the generated
+project requires **Xcode 16 or newer**. `Sources` and `Tests` use synchronized
+buildable folders, so Xcode follows added and removed Swift files on disk when
+switching branches.
+
+If an older generated project reports `Build input files cannot be found`
+for files from another branch (for example, `ShoppingModel.swift`), run
+`make ios-generate` once, then build again. If Xcode still shows the old file
+list, close and reopen `apps/ios/OpenMarket.xcodeproj`. Regenerate whenever
+`project.yml` or build configuration changes; the `make ios-build*` commands
+already do this before building.
+
 ## Two builds
 
 | | Debug | Release |

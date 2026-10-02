@@ -1,5 +1,7 @@
 name: OpenMarket
 options:
+  minimumXcodeGenVersion: "2.44.1"
+  xcodeVersion: "16.0"
   bundleIdPrefix: lol.frens
   deploymentTarget:
     iOS: "17.0"
@@ -50,7 +52,12 @@ targets:
     # `Resources` holds the asset catalog and nothing else so far. Listed
     # separately rather than folded into `Sources`, so it stays obvious that one
     # of these is compiled and the other is copied.
-    sources: [Sources, Resources]
+    # Buildable folders follow files on disk after branch switches, without
+    # retaining explicit references to files from the previous branch.
+    sources:
+      - path: Sources
+        type: syncedFolder
+      - path: Resources
     dependencies:
       - package: OpenMarketProtos
       - package: PostHog
@@ -163,7 +170,9 @@ targets:
   OpenMarketTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [Tests]
+    sources:
+      - path: Tests
+        type: syncedFolder
     dependencies:
       - target: OpenMarket
     settings:
