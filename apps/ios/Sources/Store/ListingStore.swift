@@ -13,6 +13,7 @@ final class ListingStore: ObservableObject {
     @Published private(set) var listings: [Listing] = []
     @Published private(set) var isLoadingFirstPage = false
     @Published private(set) var isLoadingMore = false
+    @Published private(set) var paginationPaused = false
     /// The first visible row expected from the active Search top-up.
     @Published private(set) var loadingPlaceholderCount = 0
     /// A server-declared end, or a confirmed bottom on the browser path.
@@ -47,7 +48,8 @@ final class ListingStore: ObservableObject {
     /// The shared one, deliberately — the grid, the saved shelf and the detail
     /// screen all read distances from it, and a second instance would give them
     /// different answers from a different cache.
-    private let distances = DistanceResolver.shared
+    private let distances: DistanceResolver
+    private let paginationTimeBudget: Duration
     private var seenIDs = Set<String>()
     /// True while the grid is showing last session's cards. They render on the
     /// first frame, but their `cardIndex` refers to a DOM that no longer
@@ -85,6 +87,9 @@ final class ListingStore: ObservableObject {
         isLoadingFirstPage = false
         isRefreshingSearch = false
         paginationError = nil
+        paginationPaused = false
+        paginationBuffer = []
+        scrolledSinceLastPage = false
         loadingPlaceholderCount = 0
         reachedEnd = true
         Logger.store.info("session -> \(session.rawValue, privacy: .public)")
@@ -101,7 +106,9 @@ final class ListingStore: ObservableObject {
          metrics: MetricsReporter = LocalMetrics.shared,
          cache: ListingCache = .shared,
          anonymous: (any GraphQLFeedLoading)? = nil,
-         authenticated: (any GraphQLFeedLoading)? = nil) {
+         authenticated: (any GraphQLFeedLoading)? = nil,
+         distances: DistanceResolver = .shared,
+         paginationTimeBudget: Duration = .seconds(8)) {
         self.desktop = desktop ?? DesktopFeedEngine()
         self.feed = feed ?? FeedEngine()
         self.detail = detail ?? DetailEngine()
@@ -111,6 +118,8 @@ final class ListingStore: ObservableObject {
         self.cache = cache
         self.anonymous = anonymous ?? AnonymousFeedClient()
         self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.desktop.webView)
+        self.distances = distances
+        self.paginationTimeBudget = paginationTimeBudget
     }
 
     /// The desktop engine's state, mapped onto the shape the UI already knows.
@@ -143,7 +152,7 @@ final class ListingStore: ObservableObject {
 
     // MARK: - Searching
 
-    func run(_ query: SearchQuery) async {
+    func run(_ query: SearchQuery, hiddenAsViewed: Set<String> = []) async {
         graphQLRequest?.cancel()
         self.query = query
         resultsGeneration += 1
@@ -151,6 +160,8 @@ final class ListingStore: ObservableObject {
         graphQLPagination = nil
         graphQLState = nil
         paginationError = nil
+        paginationPaused = false
+        paginationHiddenAsViewed = hiddenAsViewed
         isLoadingMore = false
         isShowingCachedResults = false
         listings = []
@@ -191,8 +202,10 @@ final class ListingStore: ObservableObject {
         graphQLState = .loading
         do {
             var pagination = GraphQLFeedPagination()
-            // Facebook can return an empty first page with an advancing cursor.
-            for _ in 0..<3 {
+            let started = ContinuousClock.now
+            for index in 0..<Self.graphQLPageBudget {
+                if index > 0, started.duration(to: .now) >= paginationTimeBudget { break }
+                let pageStarted = ContinuousClock.now
                 let page = try await requestFeedPage(query, cursor: pagination.cursor)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 let payload = try pagination.accept(page)
@@ -200,7 +213,8 @@ final class ListingStore: ObservableObject {
                 graphQLState = .ready
                 await ingest(payload: payload)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
-                if (!isShowingCachedResults && !listings.isEmpty) || !pagination.hasNextPage { break }
+                logPagePublication(started: pageStarted)
+                if (!isShowingCachedResults && !visibleListings(in: listings).isEmpty) || !pagination.hasNextPage { break }
             }
             // A verified empty response replaces stale cached results too.
             if isShowingCachedResults {
@@ -209,6 +223,7 @@ final class ListingStore: ObservableObject {
                 isShowingCachedResults = false
             }
             reachedEnd = !pagination.hasNextPage
+            paginationPaused = !reachedEnd && visibleListings(in: listings).isEmpty
             cache.saveResults(listings, for: query, session: session)
             return
         } catch {
@@ -268,11 +283,10 @@ final class ListingStore: ObservableObject {
     /// for too long. This buys enough runway for the cards to arrive first.
     static let prefetchMargin = 10
 
-    /// Enough cards for the next visible screen. A top-up stops as soon as one
-    /// screen of genuinely new cards is in the grid; `maxScrollsPerTopUp` is the
-    /// recovery ceiling for sparse or duplicate windows. Reaching the ceiling
-    /// pauses this attempt, and does not prove the result set ended.
+    /// Count visible cards toward the target. Exhausting a request or scroll
+    /// budget pauses recovery without declaring the upstream feed ended.
     private static let paginationTarget = 6
+    static let graphQLPageBudget = 6
     private static let maxScrollsPerTopUp = 3
     private static let loadingReservation = 2
     private static let progressivePublishSize = 2
@@ -296,6 +310,10 @@ final class ListingStore: ObservableObject {
     private var paginationHiddenAsViewed = Set<String>()
     /// Parsed and geocoded pagination cards waiting for a visible row boundary.
     private var paginationBuffer: [Listing] = []
+
+    func updateHiddenAsViewed(_ hidden: Set<String>) {
+        paginationHiddenAsViewed = hidden
+    }
 
     /// Re-check even an armed drag: a cache refresh or filter may have changed
     /// the margin without recreating the visible cells.
@@ -325,16 +343,15 @@ final class ListingStore: ObservableObject {
     private func topUpIfAtMargin() async {
         let visibleCount = visibleListings(in: listings).count
         guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore,
-              scrolledSinceLastPage,
-              deepestVisibleIndexSeen >= 0,
+              scrolledSinceLastPage, paginationError == nil,
+              (visibleCount == 0 || deepestVisibleIndexSeen >= 0),
               deepestVisibleIndexSeen >= visibleCount - Self.prefetchMargin else { return }
-        scrolledSinceLastPage = false
         Logger.store.info("""
             prefetch: at visible \(self.deepestVisibleIndexSeen, privacy: .public) \
             of \(visibleCount, privacy: .public) \
             (\(self.listings.count, privacy: .public) stored)
             """)
-        await loadMore()
+        await performTopUp()
     }
 
     /// Scrolls the desktop feed one screen at a time, harvesting after each,
@@ -345,7 +362,14 @@ final class ListingStore: ObservableObject {
     /// read at the bottom returns the last window, not everything loaded on the
     /// way there. The native path consumes complete structured pages instead.
     func loadMore() async {
+        guard !paginationPaused, paginationError == nil else { return }
+        await performTopUp()
+    }
+
+    private func performTopUp() async {
         guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
+        paginationPaused = false
+        scrolledSinceLastPage = false
         let generation = resultsGeneration
         if graphQLPagination != nil {
             await loadMoreGraphQL(generation: generation)
@@ -354,6 +378,7 @@ final class ListingStore: ObservableObject {
         isLoadingMore = true
         defer {
             if generation == resultsGeneration {
+                if Task.isCancelled, !reachedEnd { paginationPaused = true }
                 isLoadingMore = false
                 loadingPlaceholderCount = 0
             }
@@ -364,8 +389,10 @@ final class ListingStore: ObservableObject {
         let beforeVisible = visibleListings(in: listings).count
         var scrolls = 0
         var confirmedEnd = false
+        let started = ContinuousClock.now
         pagination: while visiblePaginationCount - beforeVisible < Self.paginationTarget,
                           scrolls < Self.maxScrollsPerTopUp {
+            if scrolls > 0, started.duration(to: .now) >= paginationTimeBudget { break }
             scrolls += 1
             let outcome = await desktop.scrollOnce()
             guard generation == resultsGeneration, !Task.isCancelled else { return }
@@ -401,6 +428,7 @@ final class ListingStore: ObservableObject {
             reachedEnd = true
             Logger.store.info("loadMore: confirmed end of search results")
         }
+        paginationPaused = !reachedEnd && addedVisible < Self.paginationTarget
         isLoadingMore = false
 
         // Preserve one drag made while the current page was loading. Without
@@ -419,21 +447,33 @@ final class ListingStore: ObservableObject {
         paginationError = nil
         paginationBuffer = []
         let before = visiblePaginationCount
+        let started = ContinuousClock.now
+        var pages = 0
         defer {
             if generation == resultsGeneration {
                 publishReadyPaginationRows(flush: true)
+                if Task.isCancelled, !reachedEnd { paginationPaused = true }
                 loadingPlaceholderCount = 0
                 isLoadingMore = false
+                let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
+                let added = visiblePaginationCount - before
+                Logger.store.info("search top-up: pages=\(pages, privacy: .public) visible_added=\(added, privacy: .public) elapsed_ms=\(elapsed, privacy: .public) paused=\(self.paginationPaused, privacy: .public) end=\(self.reachedEnd, privacy: .public)")
                 if scrolledSinceLastPage, paginationError == nil, !Task.isCancelled {
-                    Task { await topUpIfAtMargin() }
+                    Task {
+                        guard generation == resultsGeneration else { return }
+                        await topUpIfAtMargin()
+                    }
                 }
             }
         }
         // A page may be empty or entirely filtered while its cursor advances.
         // Bound recovery work without declaring that the remote feed ended.
-        for _ in 0..<3 {
+        for _ in 0..<Self.graphQLPageBudget {
+            if pages > 0, started.duration(to: .now) >= paginationTimeBudget { break }
             guard let pagination = graphQLPagination, pagination.hasNextPage else { break }
             do {
+                pages += 1
+                let pageStarted = ContinuousClock.now
                 let page = try await requestFeedPage(query, cursor: pagination.cursor)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 var next = pagination
@@ -443,6 +483,7 @@ final class ListingStore: ObservableObject {
                 graphQLPagination = next
                 reachedEnd = !next.hasNextPage
                 publishReadyPaginationRows()
+                logPagePublication(started: pageStarted)
                 if reachedEnd || visiblePaginationCount - before >= Self.paginationTarget { break }
             } catch {
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
@@ -452,28 +493,36 @@ final class ListingStore: ObservableObject {
                     graphQLPagination = nil
                     graphQLState = nil
                     await loadBrowser(query, generation: generation)
+                    guard generation == resultsGeneration, !Task.isCancelled else { return }
+                    paginationPaused = canLoadMore && visiblePaginationCount - before < Self.paginationTarget
                 } else {
                     paginationError = error.localizedDescription
                 }
                 return
             }
         }
-        if generation == resultsGeneration, !reachedEnd, visiblePaginationCount == before {
-            paginationError = "No new listings in this batch. Try loading more."
-        }
+        paginationPaused = !reachedEnd && visiblePaginationCount - before < Self.paginationTarget
     }
 
     func retryLoadingMore() async {
+        guard !isRefreshingSearch, !isLoadingMore else { return }
         if graphQLPagination == nil, case .failed = feedState {
             await retry()
         } else {
-            await loadMore()
+            paginationError = nil
+            await performTopUp()
         }
     }
 
     func retry() async {
         guard let query else { return }
-        await run(query)
+        await run(query, hiddenAsViewed: paginationHiddenAsViewed)
+    }
+
+    private func logPagePublication(started: ContinuousClock.Instant) {
+        let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
+        let visible = visibleListings(in: listings).count
+        Logger.store.info("search page processed: request_to_publish_ms=\(elapsed, privacy: .public) published_visible=\(visible, privacy: .public) staged=\(self.paginationBuffer.count, privacy: .public)")
     }
 
     // MARK: - Ingestion
@@ -565,8 +614,11 @@ final class ListingStore: ObservableObject {
 
         // Before anything is published: everything below is an assignment to
         // `@Published` state, and so a frame the user sees.
+        let resolving = ContinuousClock.now
         await distances.resolveAll(fresh.map(\.locationText))
         guard generation == resultsGeneration, !Task.isCancelled else { return }
+        let geocodeMS = Int(resolving.duration(to: .now) / .milliseconds(1))
+        Logger.store.info("search distance resolution: cards=\(fresh.count, privacy: .public) geocode_ms=\(geocodeMS, privacy: .public)")
 
         if replacingCache {
             isShowingCachedResults = false

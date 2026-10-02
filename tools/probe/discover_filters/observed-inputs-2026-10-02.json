@@ -1,0 +1,436 @@
+{
+  "observed_on": "2026-10-02",
+  "session": "anonymous",
+  "queries": [
+    {
+      "name": "MarketplaceCometBrowseFeedLightPaginationQuery.graphql",
+      "id": "28036163469355579",
+      "kind": "query",
+      "args": [
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "buyLocation"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "count"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "cursor"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "imageWidth"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "includePDPRelevantListings"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "mediaType"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "pdpListingId"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "radius"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "refinement"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "scale"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "sizing"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "useSDFPath"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__CometMarketplaceShouldShowTopPicksStrikethroughrelayprovider"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__GHLShouldChangeMarketplaceSponsoredDataFieldNamerelayprovider"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__MarketplaceCometAdmodulerelayprovider"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__CometMarketplaceShouldShowFeedShippingIconrelayprovider"
+        }
+      ],
+      "root": [
+        {
+          "name": "marketplace_home_feed",
+          "args": [
+            {
+              "kind": "Variable",
+              "name": "after",
+              "variableName": "cursor"
+            },
+            {
+              "kind": "Variable",
+              "name": "buy_location",
+              "variableName": "buyLocation"
+            },
+            {
+              "kind": "Variable",
+              "name": "first",
+              "variableName": "count"
+            },
+            {
+              "kind": "Variable",
+              "name": "radius",
+              "variableName": "radius"
+            },
+            {
+              "kind": "Variable",
+              "name": "refinement",
+              "variableName": "refinement"
+            },
+            {
+              "kind": "Variable",
+              "name": "use_sdf_light_path",
+              "variableName": "useSDFPath"
+            }
+          ]
+        },
+        {
+          "name": "marketplace_home_feed",
+          "args": [
+            {
+              "kind": "Variable",
+              "name": "after",
+              "variableName": "cursor"
+            },
+            {
+              "kind": "Variable",
+              "name": "buy_location",
+              "variableName": "buyLocation"
+            },
+            {
+              "kind": "Variable",
+              "name": "first",
+              "variableName": "count"
+            },
+            {
+              "kind": "Variable",
+              "name": "radius",
+              "variableName": "radius"
+            },
+            {
+              "kind": "Variable",
+              "name": "refinement",
+              "variableName": "refinement"
+            },
+            {
+              "kind": "Variable",
+              "name": "use_sdf_light_path",
+              "variableName": "useSDFPath"
+            }
+          ]
+        }
+      ],
+      "fragmentArgs": [
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "buyLocation"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "count"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "cursor"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "imageWidth"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "includePDPRelevantListings"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "mediaType"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "pdpListingId"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "radius"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "refinement"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "scale"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "sizing"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "useSDFPath"
+        }
+      ]
+    },
+    {
+      "name": "MarketplaceCometBrowseFeedLightContainerQuery.graphql",
+      "id": "28053535904279798",
+      "kind": "query",
+      "args": [
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "buyLocation"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "count"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "cursor"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "imageWidth"
+        },
+        {
+          "defaultValue": false,
+          "kind": "LocalArgument",
+          "name": "includePDPRelevantListings"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "mediaType"
+        },
+        {
+          "defaultValue": "",
+          "kind": "LocalArgument",
+          "name": "pdpListingId"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "radius"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "scale"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "sizing"
+        },
+        {
+          "defaultValue": false,
+          "kind": "LocalArgument",
+          "name": "useSDFPath"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__CometMarketplaceShouldShowTopPicksStrikethroughrelayprovider"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__GHLShouldChangeMarketplaceSponsoredDataFieldNamerelayprovider"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__MarketplaceCometAdmodulerelayprovider"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "__relay_internal__pv__CometMarketplaceShouldShowFeedShippingIconrelayprovider"
+        }
+      ],
+      "root": [
+        {
+          "name": "marketplace_home_feed",
+          "args": [
+            {
+              "kind": "Variable",
+              "name": "after",
+              "variableName": "cursor"
+            },
+            {
+              "kind": "Variable",
+              "name": "buy_location",
+              "variableName": "buyLocation"
+            },
+            {
+              "kind": "Variable",
+              "name": "first",
+              "variableName": "count"
+            },
+            {
+              "kind": "Variable",
+              "name": "radius",
+              "variableName": "radius"
+            },
+            {
+              "kind": "Variable",
+              "name": "use_sdf_light_path",
+              "variableName": "useSDFPath"
+            }
+          ]
+        },
+        {
+          "name": "marketplace_home_feed",
+          "args": [
+            {
+              "kind": "Variable",
+              "name": "after",
+              "variableName": "cursor"
+            },
+            {
+              "kind": "Variable",
+              "name": "buy_location",
+              "variableName": "buyLocation"
+            },
+            {
+              "kind": "Variable",
+              "name": "first",
+              "variableName": "count"
+            },
+            {
+              "kind": "Variable",
+              "name": "radius",
+              "variableName": "radius"
+            },
+            {
+              "kind": "Variable",
+              "name": "use_sdf_light_path",
+              "variableName": "useSDFPath"
+            }
+          ]
+        }
+      ],
+      "fragmentArgs": [
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "buyLocation"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "count"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "cursor"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "imageWidth"
+        },
+        {
+          "defaultValue": false,
+          "kind": "LocalArgument",
+          "name": "includePDPRelevantListings"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "mediaType"
+        },
+        {
+          "defaultValue": "",
+          "kind": "LocalArgument",
+          "name": "pdpListingId"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "radius"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "scale"
+        },
+        {
+          "defaultValue": null,
+          "kind": "LocalArgument",
+          "name": "sizing"
+        },
+        {
+          "defaultValue": false,
+          "kind": "LocalArgument",
+          "name": "useSDFPath"
+        }
+      ]
+    }
+  ],
+  "refinement_fields": [
+    "locality",
+    "max_price_cents",
+    "min_price_cents",
+    "text"
+  ],
+  "refinement_source": "MarketplaceCometBrowseFeedLight.react",
+  "locality_values": "Not established from loaded modules"
+}

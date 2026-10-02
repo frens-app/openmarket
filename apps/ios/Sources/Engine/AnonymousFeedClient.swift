@@ -21,10 +21,12 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
     func page(for query: SearchQuery, cursor: String?) async throws -> GraphQLFeedPage {
         let request = try Self.request(for: query, cursor: cursor)
         try Task.checkCancellation()
+        let waiting = ContinuousClock.now
         guard await pacer.waitForSlot() else { throw GraphQLFeedError.paused }
         try Task.checkCancellation()
         let started = ContinuousClock.now
         let (data, response) = try await session.data(for: request)
+        let received = ContinuousClock.now
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw GraphQLFeedError.invalidResponse }
         if http.statusCode == 403 || http.statusCode == 429 {
@@ -37,11 +39,15 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
         }
         do {
             let page = try GraphQLFeedDecoder.decode(data, kind: query.kind)
+            let decoded = ContinuousClock.now
             await pacer.recordSuccess()
             let milliseconds = Int(started.duration(to: .now) / .milliseconds(1))
             let surface = query.kind == .browse ? "browse" : "search"
+            let waitMS = Int(waiting.duration(to: started) / .milliseconds(1))
+            let requestMS = Int(started.duration(to: received) / .milliseconds(1))
+            let decodeMS = Int(received.duration(to: decoded) / .milliseconds(1))
             Logger(subsystem: "lol.frens.openmarket", category: "anonymous-feed")
-                .info("\(surface, privacy: .public): \(page.listings.count, privacy: .public) cards in \(milliseconds, privacy: .public)ms, more=\(page.hasNextPage, privacy: .public)")
+                .info("\(surface, privacy: .public): \(page.listings.count, privacy: .public) cards in \(milliseconds, privacy: .public)ms, wait_ms=\(waitMS, privacy: .public) graphql_ms=\(requestMS, privacy: .public) decode_ms=\(decodeMS, privacy: .public) more=\(page.hasNextPage, privacy: .public)")
             return page
         } catch GraphQLFeedError.blocked {
             await pacer.recordBlock()
@@ -96,12 +102,14 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
             ]
         case .browse:
             guard !query.hasActiveFilters else { throw GraphQLFeedError.unsupportedQuery }
+            let radiusMetres = SearchQuery.discoverRadiusKM(query.radiusKM) * 1000
             operation = "MarketplaceCometBrowseFeedLightPaginationQuery"
             documentID = "28036163469355579"
             variables = [
                 "buyLocation": ["latitude": point.latitude, "longitude": point.longitude],
-                "count": 1, "cursor": cursor as Any? ?? NSNull(),
-                "imageWidth": 256, "mediaType": "image/jpeg", "radius": 65000,
+                // Count 5 returned 29–30 cards; higher values added none (docs/discover-count-2026-10-02.md).
+                "count": cursor == nil ? 1 : 5, "cursor": cursor as Any? ?? NSNull(),
+                "imageWidth": 256, "mediaType": "image/jpeg", "radius": radiusMetres,
                 "scale": 2, "sizing": "cover-fill-cropped", "useSDFPath": true,
                 "includePDPRelevantListings": false, "pdpListingId": NSNull(), "refinement": NSNull(),
                 provider: false,

@@ -161,6 +161,7 @@ struct ResultsView: View {
         .onChange(of: prefs.hideViewed) { _, isOn in
             withAnimation(.easeOut(duration: 0.2)) {
                 hiddenAsViewed = isOn ? viewed.allIDs : []
+                store.updateHiddenAsViewed(hiddenAsViewed)
             }
         }
         .task {
@@ -329,7 +330,7 @@ struct ResultsView: View {
             .filter { !saved.contains($0) }
             .prefix(ViewedListings.recentStripLength)
         let recentItems = store.listings(for: Array(recentIDs))
-        let discovered = winnowed(discover.listings, hidingViewed: false)
+        let discovered = winnowed(discover.listings, hidingViewed: false, radiusKM: discover.radiusKM)
 
         return VStack(alignment: .leading, spacing: 24) {
             if !recentSearchShortcuts.isEmpty {
@@ -450,27 +451,58 @@ struct ResultsView: View {
     }
 
     private func discoverFooter(items: [Listing]) -> some View {
-        FeedPaginationFooter(
-            position: .init(generation: discover.generation, visibleCount: items.count,
-                            lastVisibleID: items.last?.id),
-            canLoadMore: surface == .discover && selected == nil && !discover.reachedEnd
-                && !discover.isLoading && discover.loadError == nil,
-            isLoading: discover.isLoadingMore
-        ) {
-            Task { await discover.retryLoadingMore() }
+        VStack(spacing: 8) {
+            FeedPaginationFooter(
+                position: .init(generation: discover.generation, visibleCount: items.count,
+                                lastVisibleID: items.last?.id),
+                canLoadMore: surface == .discover && selected == nil && !discover.reachedEnd
+                    && !discover.isLoading && discover.loadError == nil && !discover.paginationPaused,
+                isLoading: discover.isLoading || discover.isLoadingMore,
+                loadingMessage: "Finding more nearby listings…"
+            ) {
+                Task { await discover.loadMore() }
+            }
+            if !discover.isLoading && !discover.isLoadingMore {
+                if let error = discover.loadError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Try again") { Task { await discover.retryLoadingMore() } }
+                        .buttonStyle(.bordered)
+                }
+            }
         }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 
     private func searchPaginationFooter(items: [Listing]) -> some View {
-        FeedPaginationFooter(
-            position: .init(generation: store.resultsGeneration, visibleCount: items.count,
-                            lastVisibleID: items.last?.id),
-            canLoadMore: surface == .search && selected == nil && store.canLoadMore
-                && !store.isRefreshingSearch && store.paginationError == nil,
-            isLoading: store.isLoadingMore
-        ) {
-            Task { await store.loadMore() }
+        VStack(spacing: 8) {
+            FeedPaginationFooter(
+                position: .init(generation: store.resultsGeneration, visibleCount: items.count,
+                                lastVisibleID: items.last?.id),
+                canLoadMore: surface == .search && selected == nil && store.canLoadMore
+                    && !store.isRefreshingSearch && store.paginationError == nil && !store.paginationPaused,
+                isLoading: store.isLoadingMore,
+                loadingMessage: "Finding more matching listings…"
+            ) {
+                Task {
+                    store.updateHiddenAsViewed(hiddenAsViewed)
+                    await store.loadMore()
+                }
+            }
+            if !store.isRefreshingSearch && !store.isLoadingMore, let error = store.paginationError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Try again") { Task { await store.retryLoadingMore() } }
+                    .buttonStyle(.bordered)
+            }
         }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 
     /// The grid, after the two filters Facebook won't apply for us — and what
@@ -495,13 +527,14 @@ struct ResultsView: View {
     /// marker on each card already says which ones have been opened.
     private func winnowed(
         _ listings: [Listing],
-        hidingViewed: Bool = true
+        hidingViewed: Bool = true,
+        radiusKM: Int? = nil
     ) -> WinnowedListings {
         ListingWinnower.apply(
             to: listings,
             hiddenAsViewed: hiddenAsViewed,
             hidingViewed: hidingViewed,
-            radiusKM: prefs.radiusKM,
+            radiusKM: radiusKM ?? prefs.radiusKM,
             distances: distances
         )
     }
@@ -759,7 +792,7 @@ struct ResultsView: View {
     /// for as long as those results are on screen.
     private func run(_ kind: SearchQuery.Kind) async {
         hiddenAsViewed = prefs.hideViewed ? viewed.allIDs : []
-        await store.run(makeQuery(kind))
+        await store.run(makeQuery(kind), hiddenAsViewed: hiddenAsViewed)
     }
 
     /// Currently unreachable: the category pills that called it are gone, and
@@ -838,6 +871,7 @@ private struct FeedPaginationFooter: View {
     let position: PaginationDemand.Position
     let canLoadMore: Bool
     let isLoading: Bool
+    var loadingMessage: String? = nil
     let loadMore: () -> Void
     @State private var isNearBottom = false
     @State private var demand = PaginationDemand()
@@ -850,8 +884,15 @@ private struct FeedPaginationFooter: View {
     var body: some View {
         ZStack {
             if isLoading {
-                ProgressView()
-                    .accessibilityLabel("Loading more listings")
+                HStack {
+                    ProgressView()
+                        .accessibilityLabel("Loading more listings")
+                    if let loadingMessage {
+                        Text(loadingMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity)

@@ -1,0 +1,150 @@
+{
+  "session": "anonymous",
+  "results": [
+    {
+      "label": "alternate_baseline",
+      "radius": 65000,
+      "refinement": null,
+      "use_sdf_path": false,
+      "page": 0,
+      "status": 200,
+      "ms": 2244,
+      "listings": 25,
+      "new": 25,
+      "cities": {
+        "Santa Clara": 1,
+        "Oakland": 4,
+        "Novato": 1,
+        "Alamo": 1,
+        "Dublin": 1,
+        "Fairfield": 1,
+        "Livermore": 2,
+        "Walnut Creek": 1,
+        "Concord": 2,
+        "Hayward": 2,
+        "San Rafael": 2,
+        "Alameda": 1,
+        "San Francisco": 2,
+        "Vallejo": 1,
+        "Petaluma": 1,
+        "Napa": 1,
+        "Mill Valley": 1
+      },
+      "delivery_types": {
+        "IN_PERSON+PUBLIC_MEETUP+SHIPPING_ONSITE": 1,
+        "IN_PERSON": 14,
+        "IN_PERSON+PUBLIC_MEETUP": 1,
+        "DOOR_PICKUP+IN_PERSON": 3,
+        "DOOR_DROPOFF+DOOR_PICKUP+IN_PERSON+PUBLIC_MEETUP": 1,
+        "unknown": 5
+      },
+      "location_shapes": {
+        "reverse_geocode": 25
+      },
+      "has_next_page": true,
+      "price_coverage": 25,
+      "prices_above_10": 22,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": null
+    },
+    {
+      "label": "alternate_baseline",
+      "radius": 65000,
+      "refinement": null,
+      "use_sdf_path": false,
+      "page": 1,
+      "status": 200,
+      "ms": 197,
+      "listings": 6,
+      "new": 6,
+      "cities": {
+        "San Leandro": 1,
+        "Dublin": 1,
+        "Vallejo": 2,
+        "Oakland": 1,
+        "San Rafael": 1
+      },
+      "delivery_types": {
+        "unknown": 6
+      },
+      "location_shapes": {
+        "reverse_geocode": 6
+      },
+      "has_next_page": true,
+      "price_coverage": 6,
+      "prices_above_10": 4,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": null
+    },
+    {
+      "label": "alternate_small",
+      "radius": 8000,
+      "refinement": null,
+      "use_sdf_path": false,
+      "page": 0,
+      "status": 200,
+      "ms": 3305,
+      "listings": 25,
+      "new": 25,
+      "cities": {
+        "San Francisco": 20,
+        "San Leandro": 1,
+        "Oakland": 3,
+        "Berkeley": 1
+      },
+      "delivery_types": {
+        "IN_PERSON+SHIPPING_ONSITE": 1,
+        "IN_PERSON": 15,
+        "IN_PERSON+PUBLIC_MEETUP": 1,
+        "DOOR_PICKUP+IN_PERSON": 3,
+        "unknown": 5
+      },
+      "location_shapes": {
+        "reverse_geocode": 25
+      },
+      "has_next_page": true,
+      "price_coverage": 25,
+      "prices_above_10": 21,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 2
+    },
+    {
+      "label": "alternate_small",
+      "radius": 8000,
+      "refinement": null,
+      "use_sdf_path": false,
+      "page": 1,
+      "status": 200,
+      "ms": 277,
+      "listings": 6,
+      "new": 6,
+      "cities": {
+        "San Leandro": 1,
+        "Burlingame": 1,
+        "El Sobrante": 1,
+        "Oakland": 1,
+        "Vallejo": 1,
+        "El Cerrito": 1
+      },
+      "delivery_types": {
+        "unknown": 6
+      },
+      "location_shapes": {
+        "reverse_geocode": 6
+      },
+      "has_next_page": true,
+      "price_coverage": 6,
+      "prices_above_10": 3,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 3
+    }
+  ]
+}

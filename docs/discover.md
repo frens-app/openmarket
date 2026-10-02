@@ -11,6 +11,75 @@ horizontal rail each and both read from disk, then **Discover**, which runs to
 the bottom of the scroll. Either rail disappears when empty, so a new install
 lands directly in Discover.
 
+## Current GraphQL pagination (2026-10-02)
+
+Both session types use GraphQL when available. Browser extraction is the
+fallback; the anonymous one-page restriction described below applies to that
+fallback, not to anonymous GraphQL.
+
+The first request uses `count: 1`, and cursor requests use `count: 5`. Discover
+uses a local radius of at most 20 miles (32 km), honoring tighter selected
+distances. If the search distance filter is off, Discover uses 20 miles;
+an untouched preference retains the app's 10-mile default. This radius is
+sent in meters, enforced during harvesting and display, and shown in the
+caption. Search keeps its independent wider or disabled distance setting.
+Local filtering remains necessary:
+[live measurements](discover-filters-2026-10-02.md) found that smaller radii
+improve the first page but do not constrain later pages. The
+[count comparison](discover-count-2026-10-02.md) measured roughly 29–30 raw
+cards per cursor request at count 5, versus 5–6 at count 1. Those live
+measurements were anonymous; signed-in behavior still needs live validation.
+
+A GraphQL top-up aims to add 12 usable cards, continuing through empty,
+duplicate, shipping-only, and distant pages without another drag. It stops
+after six requests or when eight seconds have elapsed before starting another
+request. An in-flight request or geocoding batch completes, so eight seconds
+is not a hard wall-clock timeout. Cards append after each filtered page.
+
+An unmet target with more upstream pages sets `paginationPaused`, separately
+from `loadError` and `reachedEnd`. The next scroll near the end resumes the
+current cursor with a fresh budget; a drag during a running top-up is queued.
+The stationary footer does not continuously retry a paused attempt. Errors
+show **Try again**. While fetching, the footer says **Finding more nearby listings…**.
+Browser top-ups retain their scroll budgets and resume from the browser's
+current position when the user scrolls again.
+
+Timing logs separate request pacing (`wait_ms`), the GraphQL fetch and response
+transfer (`graphql_ms`), response processing (`decode_ms`), city geocoding
+(`geocode_ms`), and elapsed time from requesting a page to appending its cards
+(`request_to_publish_ms`). Signed-in logs also report WebView preparation
+(`prepare_ms`); their fetch span includes the JavaScript bridge and their
+processing span includes the session recheck. Publication timing does not
+measure the first rendered frame or thumbnail downloads.
+
+Regression coverage lives in `DiscoverPaginationTests` and the existing
+anonymous feed tests: mixed filtered pages, initial-fill continuation, bounded
+pauses, scroll continuation, explicit error retries, server end, concurrent demand, and refreshes
+that discard stale responses. The request builder is shared by both sessions.
+
+### Search pagination
+
+Search uses the same bounded recovery approach, retaining its own selected
+distance and `count: 24` requests. Initial loading continues past pages with
+no visible matches. Subsequent top-ups aim for six additional visible cards,
+skipping duplicates and cards hidden by distance or the current **Only new**
+snapshot. Both attempts allow up to six GraphQL requests and stop starting
+requests after eight seconds; ongoing requests and geocoding finish normally.
+Browser top-ups retain their three-scroll limit and also check elapsed time.
+
+A sparse attempt pauses without producing an error. Scrolling near the end
+resumes from the current cursor, including when every loaded card is hidden;
+one scroll during a running attempt can trigger a continuation. The footer
+says **Finding more matching listings…** while loading and offers **Try again**
+for actual failures. Partial rows are retained when an attempt stops.
+
+Search logs geocoding and page processing time alongside the shared request
+timings. `request_to_publish_ms` includes processing through the page's current
+publication step; a staged final odd row may publish at the end of the attempt.
+`SearchPaginationTests` cover filtered recovery, count/time limits, scroll
+continuation, filter snapshot updates, partial results on errors, explicit
+retries, concurrent demand, and stale responses after a new search.
+
 Discover exists because the home screen used to be entirely local. That is the
 right content for someone coming *back*, and nothing at all for someone
 arriving: a new install saw an empty state and a search field, and had to think

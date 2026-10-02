@@ -10,6 +10,7 @@ final class DiscoverFeed: ObservableObject {
     @Published private(set) var isLoading = false
     /// Scrolling for more, with cards already on screen.
     @Published private(set) var isLoadingMore = false
+    @Published private(set) var paginationPaused = false
     /// Slots reserved for the first row of the top-up currently being harvested.
     ///
     /// Each filtered WebView window can contain only one nearby card. Reducing
@@ -34,6 +35,7 @@ final class DiscoverFeed: ObservableObject {
     /// likes, and one measured load returned 20 cards across 11 cities of which
     /// a 6 mi radius kept 9.
     static let browseTarget = 12
+    static let graphQLPageBudget = 6
     /// The UI reserves one two-column row, not the whole harvest target —
     /// `browseTarget` is an effort goal, not a promise that twelve survive.
     private static let loadingReservation = 2
@@ -61,6 +63,7 @@ final class DiscoverFeed: ObservableObject {
     private let authenticated: any GraphQLFeedLoading
     private let anonymous: any GraphQLFeedLoading
     private let currentSession: @MainActor () async -> BrowserSession
+    private let paginationTimeBudget: Duration
     private var graphQLPagination: GraphQLFeedPagination?
     private var graphQLRequest: Task<GraphQLFeedPage, Error>?
     private var activeQuery: SearchQuery?
@@ -84,11 +87,14 @@ final class DiscoverFeed: ObservableObject {
     /// Must be in the view hierarchy for WebKit to render it — see `RootView`.
     var webViews: [WKWebView] { [engine.webView] }
 
+    var radiusKM: Int { SearchQuery.discoverRadiusKM(prefs.radiusKM) }
+
     init(engine: DesktopFeedEngine? = nil,
          prefs: Preferences = .shared,
          distances: DistanceResolver = .shared,
          anonymous: (any GraphQLFeedLoading)? = nil,
          authenticated: (any GraphQLFeedLoading)? = nil,
+         paginationTimeBudget: Duration = .seconds(8),
          currentSession: @escaping @MainActor () async -> BrowserSession = {
              await SessionState.isSignedIn() ? .authed : .unauthed
          }) {
@@ -98,6 +104,7 @@ final class DiscoverFeed: ObservableObject {
         self.anonymous = anonymous ?? AnonymousFeedClient()
         self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.engine.webView)
         self.currentSession = currentSession
+        self.paginationTimeBudget = paginationTimeBudget
     }
 
     /// Fills once per launch. `force` is the pull-to-refresh path. Also refills
@@ -107,7 +114,7 @@ final class DiscoverFeed: ObservableObject {
         let beforeSession = generation
         let session = await currentSession()
         guard beforeSession == generation else { return }
-        let query = SearchQuery(kind: .browse, radiusKM: prefs.radiusKM,
+        let query = SearchQuery(kind: .browse, radiusKM: radiusKM,
                                 citySlug: citySlug,
                                 coordinate: prefs.resolvedPlace?.segment == citySlug
                                     ? prefs.resolvedPlace?.coordinate : nil)
@@ -121,6 +128,7 @@ final class DiscoverFeed: ObservableObject {
         graphQLPagination = nil
         usesBrowserFallback = false
         loadError = nil
+        paginationPaused = false
         isLoading = true
         isLoadingMore = false
         loadingPlaceholderCount = 0
@@ -153,7 +161,7 @@ final class DiscoverFeed: ObservableObject {
             "is_anonymous": isAnonymous,
             "reached_end": reachedEnd,
             "is_refresh": isRefresh,
-            "radius_km": prefs.radiusKM
+            "radius_km": query.radiusKM
         ])
     }
 
@@ -163,6 +171,7 @@ final class DiscoverFeed: ObservableObject {
         isAnonymous = session == .unauthed
         engine.session = session
         do {
+            let pageStarted = ContinuousClock.now
             let page = try await requestFeedPage(query, cursor: nil)
             guard current == generation, !Task.isCancelled else { return }
             var pagination = GraphQLFeedPagination()
@@ -170,7 +179,7 @@ final class DiscoverFeed: ObservableObject {
             let batch = await nearby(payload: payload)
             guard current == generation, !Task.isCancelled else { return }
             graphQLPagination = pagination
-            listings = batch.kept
+            publish(batch.kept, replacing: true, started: pageStarted)
             reachedEnd = !pagination.hasNextPage
             if !reachedEnd, listings.count < Self.browseTarget {
                 loadingPlaceholderCount = Self.loadingReservation
@@ -229,6 +238,7 @@ final class DiscoverFeed: ObservableObject {
             )
             guard current == generation, !Task.isCancelled else { return }
             collected += harvest
+            paginationPaused = harvest.count < wanted
             loadingPlaceholderCount = 0
         }
         if !publishesProgressively {
@@ -241,11 +251,8 @@ final class DiscoverFeed: ObservableObject {
 
     /// Whether the user has moved the feed since the last batch landed.
     ///
-    /// The gate on the read-ahead. `prefetchMargin` alone would re-arm the
-    /// instant a batch arrived — the card that triggered it is still within ten
-    /// of the new end — so the feed would page forever under a screen nobody is
-    /// touching. One fresh drag per batch keeps it to one page ahead, and only
-    /// for someone still reading.
+    /// Gates card-based read-ahead. The visible footer can request a bounded
+    /// top-up without a drag; scrolling rearms an attempt that used its budget.
     private var scrolledSinceLastTopUp = false
 
     /// How far down the feed the user has been, as an index into `listings`.
@@ -273,27 +280,41 @@ final class DiscoverFeed: ObservableObject {
     /// One bounded top-up for a reader approaching the end.
     private func topUpIfAtMargin() async {
         guard !reachedEnd, !isLoading, !isLoadingMore,
+              loadError == nil,
               scrolledSinceLastTopUp,
               deepestIndexSeen >= listings.count - Self.prefetchMargin else { return }
 
-        isLoadingMore = true
-        loadingPlaceholderCount = Self.loadingReservation
-        // Spent here rather than on completion: the next batch has to be earned
-        // by scrolling through this one.
-        scrolledSinceLastTopUp = false
         Logger.discover.info("""
             top-up: at \(self.deepestIndexSeen, privacy: .public) \
             of \(self.listings.count, privacy: .public)
             """)
 
+        await performTopUp()
+    }
+
+    func loadMore() async {
+        guard !paginationPaused, loadError == nil else { return }
+        await performTopUp()
+    }
+
+    private func performTopUp() async {
+        guard activeQuery != nil, !reachedEnd, !isLoading, !isLoadingMore else { return }
+        isLoadingMore = true
+        paginationPaused = false
+        loadingPlaceholderCount = Self.loadingReservation
+        scrolledSinceLastTopUp = false
+
         let current = generation
         if graphQLPagination != nil {
             await loadMoreGraphQL(wanted: Self.browseTarget, generation: current)
         } else {
-            await scrollForMore(wanted: Self.browseTarget, publishAsHarvested: true)
+            let harvest = await scrollForMore(wanted: Self.browseTarget, publishAsHarvested: true)
+            guard current == generation else { return }
+            paginationPaused = harvest.count < Self.browseTarget
         }
         guard current == generation else { return }
         loadingPlaceholderCount = 0
+        if Task.isCancelled, !reachedEnd { paginationPaused = true }
         isLoadingMore = false
 
         // A drag during the harvest is a queued request, not a no-op:
@@ -312,8 +333,8 @@ final class DiscoverFeed: ObservableObject {
     /// at the bottom returns the last window rather than the feed
     /// (`docs/logged-in-findings.md` §3).
     ///
-    /// Every stop condition ends only this attempt; the next user drag may try
-    /// again from the current position. This is the browser pagination path.
+    /// Every stop condition ends only this attempt; scrolling can
+    /// retry from the current position. This is the browser pagination path.
     /// - Parameter publishAsHarvested: Publishes enough cards to replace the
     ///   reserved skeletons immediately, then coalesces later sparse windows
     ///   into complete grid rows. Refreshes instead collect in memory and
@@ -408,10 +429,17 @@ final class DiscoverFeed: ObservableObject {
     private func loadMoreGraphQL(wanted: Int, generation current: Int) async {
         guard let query = activeQuery else { return }
         loadError = nil
+        paginationPaused = false
         var added = 0
-        for _ in 0..<3 {
+        let started = ContinuousClock.now
+        var pages = 0
+        for _ in 0..<Self.graphQLPageBudget {
+            // Finish an in-flight request/geocode, but do not start another past the budget.
+            if pages > 0, started.duration(to: .now) >= paginationTimeBudget { break }
             guard let pagination = graphQLPagination, pagination.hasNextPage else { break }
             do {
+                pages += 1
+                let pageStarted = ContinuousClock.now
                 let page = try await requestFeedPage(query, cursor: pagination.cursor)
                 guard current == generation, !Task.isCancelled else { return }
                 var next = pagination
@@ -420,7 +448,7 @@ final class DiscoverFeed: ObservableObject {
                 guard current == generation, !Task.isCancelled else { return }
                 graphQLPagination = next
                 reachedEnd = !next.hasNextPage
-                listings.append(contentsOf: batch.kept)
+                publish(batch.kept, started: pageStarted)
                 added += batch.kept.count
                 loadingPlaceholderCount = max(0, loadingPlaceholderCount - batch.kept.count)
                 if reachedEnd || added >= wanted { break }
@@ -440,28 +468,32 @@ final class DiscoverFeed: ObservableObject {
                     guard current == generation, !Task.isCancelled else { return }
                     listings.append(contentsOf: batch.kept)
                     reachedEnd = isAnonymous
+                    paginationPaused = !reachedEnd
                 } else {
                     loadError = error.localizedDescription
                 }
                 return
             }
         }
-        if !reachedEnd, added == 0 { loadError = "No nearby listings in this batch. Try loading more." }
+        paginationPaused = !reachedEnd && added < wanted
+        let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
+        Logger.discover.info("top-up: pages=\(pages, privacy: .public) kept=\(added, privacy: .public) elapsed_ms=\(elapsed, privacy: .public) paused=\(self.paginationPaused, privacy: .public) end=\(self.reachedEnd, privacy: .public)")
     }
 
     func retryLoadingMore() async {
         guard !isLoading, !isLoadingMore, !reachedEnd else { return }
-        if graphQLPagination == nil {
+        if graphQLPagination == nil, loadError != nil {
             if let query = activeQuery { await loadIfNeeded(citySlug: query.citySlug, force: true) }
             return
         }
-        isLoadingMore = true
-        loadingPlaceholderCount = Self.loadingReservation
-        let current = generation
-        await loadMoreGraphQL(wanted: Self.browseTarget, generation: current)
-        guard current == generation else { return }
-        loadingPlaceholderCount = 0
-        isLoadingMore = false
+        loadError = nil
+        await performTopUp()
+    }
+
+    private func publish(_ cards: [Listing], replacing: Bool = false, started: ContinuousClock.Instant) {
+        if replacing { listings = cards } else if !cards.isEmpty { listings.append(contentsOf: cards) }
+        let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
+        Logger.discover.info("cards published: count=\(cards.count, privacy: .public) replace=\(replacing, privacy: .public) request_to_publish_ms=\(elapsed, privacy: .public)")
     }
 
     private func nearby(payload: [PayloadListing]) async -> (kept: [Listing], newCards: Int) {
@@ -480,12 +512,14 @@ final class DiscoverFeed: ObservableObject {
     }
 
     private func withinRadius(_ parsed: [Listing]) async -> (kept: [Listing], newCards: Int) {
+        let started = ContinuousClock.now
         await distances.resolveAll(parsed.map(\.locationText))
-        guard prefs.radiusKM > 0 else { return (parsed, parsed.count) }
+        let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
+        Logger.discover.info("distance resolution: cards=\(parsed.count, privacy: .public) geocode_ms=\(elapsed, privacy: .public)")
         let kept = parsed.filter { listing in
             guard let km = distances.distanceKM(for: listing.locationText,
                                                 coordinate: distances.enrichedCoordinate(for: listing)) else { return false }
-            return km <= Double(prefs.radiusKM)
+            return km <= Double(radiusKM)
         }
         return (kept, parsed.count)
     }
@@ -555,6 +589,7 @@ final class DiscoverFeed: ObservableObject {
         hasLoaded = false
         isLoading = false
         isLoadingMore = false
+        paginationPaused = false
         graphQLPagination = nil
         loadingPlaceholderCount = 0
         reachedEnd = true
@@ -564,8 +599,7 @@ final class DiscoverFeed: ObservableObject {
     /// disclosure of the distance filter, so it names the radius.
     var caption: String {
         let place = prefs.locationName ?? "you"
-        guard prefs.radiusKM > 0 else { return "Facebook Marketplace, near \(place)" }
-        return "Facebook Marketplace, within \(SearchQuery.kilometresToMiles(prefs.radiusKM)) mi of \(place)"
+        return "Facebook Marketplace, within \(SearchQuery.kilometresToMiles(radiusKM)) mi of \(place)"
     }
 }
 

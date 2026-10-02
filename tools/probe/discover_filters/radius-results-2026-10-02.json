@@ -1,0 +1,266 @@
+{
+  "session": "anonymous",
+  "results": [
+    {
+      "label": "baseline",
+      "radius": 65000,
+      "page": 0,
+      "status": 200,
+      "ms": 2243,
+      "listings": 25,
+      "new": 25,
+      "cities": {
+        "Santa Clara": 1,
+        "Oakland": 4,
+        "Novato": 1,
+        "Alamo": 1,
+        "Livermore": 3,
+        "Pittsburg": 1,
+        "Dublin": 1,
+        "Suisun City": 2,
+        "Fairfield": 1,
+        "Walnut Creek": 1,
+        "Pleasanton": 1,
+        "Concord": 2,
+        "Alameda": 1,
+        "Petaluma": 1,
+        "San Francisco": 2,
+        "Mill Valley": 1,
+        "Hayward": 1
+      },
+      "delivery_types": {
+        "IN_PERSON+PUBLIC_MEETUP+SHIPPING_ONSITE": 1,
+        "IN_PERSON": 13,
+        "DOOR_PICKUP+IN_PERSON": 4,
+        "IN_PERSON+PUBLIC_MEETUP": 2,
+        "unknown": 5
+      },
+      "location_shapes": {
+        "reverse_geocode": 25
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": null
+    },
+    {
+      "label": "baseline",
+      "radius": 65000,
+      "page": 1,
+      "status": 200,
+      "ms": 195,
+      "listings": 6,
+      "new": 6,
+      "cities": {
+        "San Leandro": 1,
+        "El Cerrito": 1,
+        "Dublin": 1,
+        "San Francisco": 1,
+        "Vallejo": 1,
+        "San Rafael": 1
+      },
+      "delivery_types": {
+        "unknown": 6
+      },
+      "location_shapes": {
+        "reverse_geocode": 6
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": null
+    },
+    {
+      "label": "small",
+      "radius": 8000,
+      "page": 0,
+      "status": 200,
+      "ms": 5888,
+      "listings": 25,
+      "new": 25,
+      "cities": {
+        "San Francisco": 20,
+        "San Leandro": 1,
+        "Berkeley": 1,
+        "Oakland": 2,
+        "Burlingame": 1
+      },
+      "delivery_types": {
+        "IN_PERSON+SHIPPING_ONSITE": 1,
+        "IN_PERSON": 15,
+        "IN_PERSON+PUBLIC_MEETUP": 1,
+        "DOOR_PICKUP+IN_PERSON": 3,
+        "unknown": 5
+      },
+      "location_shapes": {
+        "reverse_geocode": 25
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 1
+    },
+    {
+      "label": "small",
+      "radius": 8000,
+      "page": 1,
+      "status": 200,
+      "ms": 278,
+      "listings": 6,
+      "new": 6,
+      "cities": {
+        "Oakland": 1,
+        "San Leandro": 1,
+        "Vallejo": 1,
+        "Dublin": 1,
+        "El Sobrante": 1,
+        "El Cerrito": 1
+      },
+      "delivery_types": {
+        "unknown": 6
+      },
+      "location_shapes": {
+        "reverse_geocode": 6
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 4
+    },
+    {
+      "label": "tiny",
+      "radius": 2000,
+      "page": 0,
+      "status": 200,
+      "ms": 2246,
+      "listings": 25,
+      "new": 25,
+      "cities": {
+        "San Francisco": 20,
+        "Oakland": 2,
+        "Berkeley": 1,
+        "San Leandro": 1,
+        "Vallejo": 1
+      },
+      "delivery_types": {
+        "IN_PERSON": 13,
+        "DOOR_PICKUP+IN_PERSON": 3,
+        "IN_PERSON+SHIPPING_ONSITE": 1,
+        "DOOR_PICKUP+IN_PERSON+PUBLIC_MEETUP": 1,
+        "DOOR_DROPOFF+DOOR_PICKUP+IN_PERSON": 1,
+        "IN_PERSON+PUBLIC_MEETUP": 1,
+        "unknown": 5
+      },
+      "location_shapes": {
+        "reverse_geocode": 25
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 1
+    },
+    {
+      "label": "tiny",
+      "radius": 2000,
+      "page": 1,
+      "status": 200,
+      "ms": 178,
+      "listings": 6,
+      "new": 6,
+      "cities": {
+        "San Francisco": 1,
+        "El Cerrito": 1,
+        "Dublin": 1,
+        "Oakland": 1,
+        "El Sobrante": 1,
+        "San Rafael": 1
+      },
+      "delivery_types": {
+        "unknown": 6
+      },
+      "location_shapes": {
+        "reverse_geocode": 6
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 3
+    },
+    {
+      "label": "repeat",
+      "radius": 65000,
+      "page": 0,
+      "status": 200,
+      "ms": 4542,
+      "listings": 25,
+      "new": 25,
+      "cities": {
+        "Santa Clara": 1,
+        "Pittsburg": 1,
+        "Novato": 1,
+        "Oakland": 4,
+        "Alamo": 1,
+        "Livermore": 3,
+        "Dublin": 1,
+        "Fairfield": 1,
+        "Suisun City": 2,
+        "Pleasanton": 1,
+        "Walnut Creek": 1,
+        "Concord": 2,
+        "San Francisco": 2,
+        "Alameda": 1,
+        "San Rafael": 2,
+        "Hayward": 1
+      },
+      "delivery_types": {
+        "IN_PERSON+PUBLIC_MEETUP+SHIPPING_ONSITE": 1,
+        "IN_PERSON+PUBLIC_MEETUP": 2,
+        "IN_PERSON": 14,
+        "DOOR_PICKUP+IN_PERSON": 3,
+        "unknown": 5
+      },
+      "location_shapes": {
+        "reverse_geocode": 25
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 23
+    },
+    {
+      "label": "repeat",
+      "radius": 65000,
+      "page": 1,
+      "status": 200,
+      "ms": 202,
+      "listings": 6,
+      "new": 6,
+      "cities": {
+        "Vallejo": 1,
+        "San Leandro": 1,
+        "San Rafael": 1,
+        "San Francisco": 1,
+        "El Cerrito": 1,
+        "Dublin": 1
+      },
+      "delivery_types": {
+        "unknown": 6
+      },
+      "location_shapes": {
+        "reverse_geocode": 6
+      },
+      "has_next_page": true,
+      "distance_coverage": 0,
+      "outside_8km": null,
+      "max_distance_km": null,
+      "overlap_with_baseline": 5
+    }
+  ]
+}

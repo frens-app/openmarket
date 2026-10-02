@@ -125,6 +125,39 @@ final class AnonymousFeedDecoderTests: XCTestCase {
         XCTAssertThrowsError(try AnonymousFeedClient.request(for: query, cursor: nil))
     }
 
+    func testDiscoverRequestsSelectedRadiusAndLargerCursorPages() throws {
+        var query = testQuery()
+        query.kind = .browse
+        for (radius, expectedMetres) in [(8, 8000), (16, 16000), (0, 32000), (161, 32000), (Int.max, 32000)] {
+            query.radiusKM = radius
+            for cursor in [nil, "next"] as [String?] {
+                let request = try AnonymousFeedClient.request(for: query, cursor: cursor)
+                let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+                let fields = try XCTUnwrap(URLComponents(string: "?" + body)?.queryItems)
+                let text = try XCTUnwrap(fields.first { $0.name == "variables" }?.value)
+                let variables = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+                XCTAssertEqual(variables["count"] as? Int, cursor == nil ? 1 : 5)
+                XCTAssertEqual(variables["radius"] as? Int, expectedMetres)
+                XCTAssertEqual(variables["cursor"] as? String, cursor)
+            }
+        }
+    }
+
+    func testSearchRequestsKeepTheirWideOrDisabledRadiusBehavior() throws {
+        for (radius, expected) in [(161, 161), (0, 65)] {
+            var query = testQuery()
+            query.radiusKM = radius
+            let request = try AnonymousFeedClient.request(for: query, cursor: nil)
+            let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+            let fields = try XCTUnwrap(URLComponents(string: "?" + body)?.queryItems)
+            let text = try XCTUnwrap(fields.first { $0.name == "variables" }?.value)
+            let variables = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+            let params = try XCTUnwrap(variables["params"] as? [String: Any])
+            let browse = try XCTUnwrap(params["browse_request_params"] as? [String: Any])
+            XCTAssertEqual(browse["filter_radius_km"] as? Int, expected)
+        }
+    }
+
     private func searchResponse() -> Data {
         Data(#"for (;;);{"data":{"marketplace_search":{"feed_units":{"edges":[{"node":{"listing":{"id":"101","marketplace_listing_title":"Desk with \"drawers\"","creation_time":1790817303,"listing_price":{"amount":"20","formatted_amount":"$20"}}}}],"page_info":{"end_cursor":"next","has_next_page":true}}}}}"#.utf8)
     }
@@ -191,10 +224,10 @@ final class AnonymousFeedStoreTests: XCTestCase {
         prefs.radiusKM = 0
         prefs.setResolvedPlace(.init(name: "New York", segment: "nyc",
                                      coordinate: testQuery().coordinate!, origin: .searchedCity))
-        let authenticated = StubFeed([.success(testPage((100..<112).map(String.init), cursor: "auth-A")),
-                                      .success(testPage(["202"], cursor: nil))])
+        let authenticated = StubFeed([.success(testPage((100..<112).map(String.init), cursor: "auth-A", city: "New York")),
+                                      .success(testPage(["202"], cursor: nil, city: "New York"))])
         let anonymous = StubFeed([])
-        let discover = DiscoverFeed(prefs: prefs, anonymous: anonymous, authenticated: authenticated,
+        let discover = DiscoverFeed(prefs: prefs, distances: makeDiscoverDistances(), anonymous: anonymous, authenticated: authenticated,
                                      currentSession: { .authed })
         await discover.loadIfNeeded(citySlug: "nyc")
         XCTAssertFalse(discover.isAnonymous)
@@ -311,21 +344,29 @@ final class AnonymousFeedStoreTests: XCTestCase {
     }
 
     func testInitialEmptyRecoveryIsBoundedAndCanResume() async {
-        let client = StubFeed([.success(testPage([], cursor: "A")),
-                               .success(testPage([], cursor: "B")),
-                               .success(testPage([], cursor: "C")),
-                               .success(testPage(["202"], cursor: nil))])
+        var responses: [Result<GraphQLFeedPage, GraphQLFeedError>] = (0..<ListingStore.graphQLPageBudget).map {
+            .success(testPage([], cursor: "P\($0)"))
+        }
+        responses.append(.success(testPage(["202"], cursor: nil)))
+        let client = StubFeed(responses)
         let store = makeStore(client)
         await store.run(testQuery())
         let initialCursors = await client.cursors
-        XCTAssertEqual(initialCursors, [nil, "A", "B"])
+        XCTAssertEqual(initialCursors.count, ListingStore.graphQLPageBudget)
         XCTAssertTrue(store.canLoadMore)
+        XCTAssertTrue(store.paginationPaused)
+        XCTAssertNil(store.paginationError)
         XCTAssertFalse(store.isLoadingFirstPage)
         await store.loadMore()
+        let idleCursors = await client.cursors
+        XCTAssertEqual(idleCursors, initialCursors)
+        store.noteScroll(hiddenAsViewed: [])
+        await waitForCards(1, in: store)
         XCTAssertEqual(store.listings.count, 1)
         XCTAssertTrue(store.reachedEnd)
+        XCTAssertFalse(store.paginationPaused)
         let cursors = await client.cursors
-        XCTAssertEqual(cursors, [nil, "A", "B", "C"])
+        XCTAssertEqual(cursors.last!, "P\(ListingStore.graphQLPageBudget - 1)")
     }
 
     func testInitialEmptyRecoveryStopsOnBlockAndPreservesCursor() async {
@@ -401,9 +442,9 @@ final class AnonymousFeedStoreTests: XCTestCase {
         prefs.setResolvedPlace(.init(name: "New York", segment: "nyc",
                                      coordinate: testQuery().coordinate!, origin: .searchedCity))
         let first = (100..<112).map(String.init)
-        let client = StubFeed([.success(testPage(first, cursor: "A")),
-                               .success(testPage(["202"], cursor: nil))])
-        let discover = DiscoverFeed(prefs: prefs, anonymous: client, currentSession: { .unauthed })
+        let client = StubFeed([.success(testPage(first, cursor: "A", city: "New York")),
+                               .success(testPage(["202"], cursor: nil, city: "New York"))])
+        let discover = DiscoverFeed(prefs: prefs, distances: makeDiscoverDistances(), anonymous: client, currentSession: { .unauthed })
         await discover.loadIfNeeded(citySlug: "nyc")
         XCTAssertTrue(discover.isAnonymous)
         XCTAssertFalse(discover.reachedEnd)
@@ -432,8 +473,8 @@ final class AnonymousFeedStoreTests: XCTestCase {
         prefs.radiusKM = 0
         prefs.setResolvedPlace(.init(name: "New York", segment: "nyc",
                                      coordinate: testQuery().coordinate!, origin: .searchedCity))
-        let client = SuspendedFeed()
-        let discover = DiscoverFeed(prefs: prefs, anonymous: client, currentSession: { .unauthed })
+        let client = SuspendedFeed(city: "New York")
+        let discover = DiscoverFeed(prefs: prefs, distances: makeDiscoverDistances(), anonymous: client, currentSession: { .unauthed })
         let first = Task { await discover.loadIfNeeded(citySlug: "nyc") }
         await client.waitUntilRequested()
         await discover.loadIfNeeded(citySlug: "nyc", force: true)
@@ -442,6 +483,14 @@ final class AnonymousFeedStoreTests: XCTestCase {
         XCTAssertEqual(discover.listings.map(\.title), ["202"])
         XCTAssertTrue(discover.reachedEnd)
         XCTAssertFalse(discover.isLoading)
+    }
+
+    private func makeDiscoverDistances() -> DistanceResolver {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defaults.set(["New York, NY": [40.706, -74.009]], forKey: "placeCoordinates")
+        let distances = DistanceResolver(defaults: defaults)
+        distances.setUserLocation(testQuery().coordinate)
+        return distances
     }
 
     private func makeStore(_ client: any GraphQLFeedLoading) -> ListingStore {
@@ -498,6 +547,8 @@ private actor CachedRefreshFeed: GraphQLFeedLoading {
 }
 
 private actor SuspendedFeed: GraphQLFeedLoading {
+    private let city: String?
+    init(city: String? = nil) { self.city = city }
     var requests = 0
     var pending: CheckedContinuation<GraphQLFeedPage, Never>?
     var waiter: CheckedContinuation<Void, Never>?
@@ -510,13 +561,13 @@ private actor SuspendedFeed: GraphQLFeedLoading {
                 waiter = nil
             }
         }
-        return testPage(["202"], cursor: nil)
+        return testPage(["202"], cursor: nil, city: city)
     }
     func waitUntilRequested() async {
         if pending != nil { return }
         await withCheckedContinuation { waiter = $0 }
     }
-    func finishOld() { pending?.resume(returning: testPage(["101"], cursor: "old")); pending = nil }
+    func finishOld() { pending?.resume(returning: testPage(["101"], cursor: "old", city: city)); pending = nil }
 }
 
 private func testQuery(_ term: String = "desk") -> SearchQuery {
@@ -524,15 +575,15 @@ private func testQuery(_ term: String = "desk") -> SearchQuery {
                 coordinate: CLLocationCoordinate2D(latitude: 40.706, longitude: -74.009))
 }
 
-private func testPayload(_ id: String) -> PayloadListing {
+private func testPayload(_ id: String, city: String? = nil) -> PayloadListing {
     PayloadListing(id: id, title: id, creationTime: nil, priceAmount: "20", priceFormatted: "$20",
-                   strikethroughFormatted: nil, photoURL: nil, photoID: nil, city: nil, state: nil,
+                   strikethroughFormatted: nil, photoURL: nil, photoID: nil, city: city, state: city == nil ? nil : "NY",
                    cityPageID: nil, deliveryTypes: [], isSold: nil, isLive: nil, categoryID: nil,
                    createdWithSellerApp: nil)
 }
 
-private func testPage(_ ids: [String], cursor: String?) -> GraphQLFeedPage {
-    GraphQLFeedPage(listings: ids.map(testPayload), endCursor: cursor, hasNextPage: cursor != nil)
+private func testPage(_ ids: [String], cursor: String?, city: String? = nil) -> GraphQLFeedPage {
+    GraphQLFeedPage(listings: ids.map { testPayload($0, city: city) }, endCursor: cursor, hasNextPage: cursor != nil)
 }
 
 final class AnonymousFeedHTTPTests: XCTestCase {

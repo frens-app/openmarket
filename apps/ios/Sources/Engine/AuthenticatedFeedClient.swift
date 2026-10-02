@@ -28,8 +28,10 @@ final class AuthenticatedFeedClient: GraphQLFeedLoading {
         try Task.checkCancellation()
         guard cursor == nil || cursorActor == actor else { throw GraphQLFeedError.sessionChanged }
         if cursor == nil { cursorActor = actor }
+        let preparing = ContinuousClock.now
         try await prepare(query, operation: operation, actor: actor)
         try Task.checkCancellation()
+        let waiting = ContinuousClock.now
         guard await pacer.waitForSlot() else { throw GraphQLFeedError.paused }
         try Task.checkCancellation()
 
@@ -53,12 +55,17 @@ final class AuthenticatedFeedClient: GraphQLFeedLoading {
             try Task.checkCancellation()
             throw GraphQLFeedError.invalidResponse
         }
+        let received = ContinuousClock.now
         try Task.checkCancellation()
         guard await SessionState.facebookActor() == actor else { throw GraphQLFeedError.sessionChanged }
         let page = try await Self.decode(result, kind: query.kind, pacer: pacer)
         let milliseconds = Int(started.duration(to: .now) / .milliseconds(1))
+        let prepareMS = Int(preparing.duration(to: waiting) / .milliseconds(1))
+        let waitMS = Int(waiting.duration(to: started) / .milliseconds(1))
+        let requestMS = Int(started.duration(to: received) / .milliseconds(1))
+        let decodeMS = Int(received.duration(to: .now) / .milliseconds(1))
         Logger(subsystem: "lol.frens.openmarket", category: "authenticated-feed")
-            .info("\(operation, privacy: .public): \(page.listings.count, privacy: .public) cards in \(milliseconds, privacy: .public)ms, more=\(page.hasNextPage, privacy: .public)")
+            .info("\(operation, privacy: .public): \(page.listings.count, privacy: .public) cards in \(milliseconds, privacy: .public)ms, prepare_ms=\(prepareMS, privacy: .public) wait_ms=\(waitMS, privacy: .public) graphql_ms=\(requestMS, privacy: .public) decode_ms=\(decodeMS, privacy: .public) more=\(page.hasNextPage, privacy: .public)")
         return page
     }
 

@@ -226,6 +226,11 @@ struct SearchQuery: Equatable {
         Int((Double(km) * 0.621371).rounded())
     }
 
+    static func discoverRadiusKM(_ selectedRadiusKM: Int) -> Int {
+        let localLimit = milesToKilometres(20)
+        return selectedRadiusKM > 0 ? min(selectedRadiusKM, localLimit) : localLimit
+    }
+
     /// The inverse, for the places that think in miles because the user does.
     ///
     /// Round-trips stably across the range in use — 10 mi → 16 km → 10 mi,
