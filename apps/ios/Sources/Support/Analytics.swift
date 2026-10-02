@@ -196,6 +196,7 @@ enum Analytics {
         case discover
         case search
         case aiSearch = "ai_search"
+        case priceAlerts = "price_alerts"
         case recentlyViewed = "recently_viewed"
         case saved
         case priceCheckEvidence = "price_check_evidence"

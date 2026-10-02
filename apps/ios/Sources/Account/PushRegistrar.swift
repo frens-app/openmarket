@@ -53,8 +53,11 @@ final class PushRegistrar: ObservableObject {
         return granted
     }
 
+    var isEnabled: Bool { status == .authorized || status == .provisional || status == .ephemeral }
+
     func refreshStatus() async {
         status = await center.notificationSettings().authorizationStatus
+        if !isEnabled { await AccountSession.shared.registerPushToken(nil, granted: false) }
     }
 
     func registerIfAuthorized() {

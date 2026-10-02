@@ -176,3 +176,11 @@ the Sign in with Apple entitlement from `project.yml`.
 The sign-in UI offers Apple and Google. Phone login and signup remain supported
 by the backend for older app versions, and existing phone sessions keep working.
 SMS configuration is covered in [docs/phone-login.md](../../docs/phone-login.md).
+
+## Price alerts
+
+The Alerts tab requires an OpenMarket account, a Facebook session on this device,
+and notifications enabled. Background pushes resume paginated searches, while
+Jev matching and visible notifications run on the backend. See
+[`docs/price-alerts.md`](../../docs/price-alerts.md) for deployment setup and iOS
+background-delivery limits.
