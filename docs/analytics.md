@@ -301,3 +301,13 @@ only moment it means anything.
    list in §2 goes at all.
 4. Add the row to §5. A tracking plan nobody updates becomes a list of events
    somebody has to reverse-engineer from a dashboard.
+
+## AI Search
+
+AI Search does not send chat text, tool arguments, or inspected descriptions to
+PostHog. The backend's existing `llm_runs` records model identity, token usage,
+attempts, status, and latency under `SHOPPING` or `RELEVANCE`; RPC logging records
+method and duration without message bodies. Chat transcripts and observations
+remain in temporary server memory. The existing account gate and manual product
+opening still emit their established events. Dedicated AI Search funnel events
+and retention analysis are deferred.

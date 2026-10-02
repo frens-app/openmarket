@@ -18,7 +18,10 @@ Signing in happens on Facebook's own page inside the app; there is no login form
 of this project's own, and there won't be. Browsing without an account still
 supports search, distance, filters, saved listings, and paginated Discover.
 
-Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
+Three tabs. **Browse** searches and reads listings. **AI Search** is a temporary
+shopping chat that searches and inspects products on the phone, with query-based
+Jev filtering and backend model orchestration. It requires both sign-ins.
+**Tools** goes the other way:
 describe something you own and it finds what similar things are listed for near
 you, what has actually sold, and what to ask.
 
@@ -882,6 +885,7 @@ item — several of these are harder or easier than they look. Items marked
 | `docs/backend-platform.md` | The platform evaluation behind it: why Postgres, why Connect rather than gRPC, and the listing-schema questions still open |
 | `docs/data-model.md` | Proposed schema for storing listings across devices |
 | `docs/status.md` | What's built and verified, and the open gaps |
+| `docs/ai-search.md` | AI Search design and implementation notes: temporary shopping chat, frontend tools, query-based Jev filtering, and pagination |
 | `docs/messaging.md` | The product language: the three pillars, taglines, and the observation-then-improvement pattern for talking about Marketplace |
 | **`docs/content-standards.md`** | **How anything published on the site gets written** — the sourcing and substantiation rules for writing about a competitor, the phrasings to avoid, the pre-publish risk checklist, the article shape, and the backlog |
 | `docs/app-store.md` | App Store listing copy, ready to paste, with the review-risk notes |

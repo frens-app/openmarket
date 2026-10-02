@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct AccountGateView: View {
+    enum Feature { case priceCheck, shopping }
+    var feature: Feature = .priceCheck
     let done: () -> Void
 
     @EnvironmentObject private var account: AccountSession
@@ -44,7 +46,7 @@ struct AccountGateView: View {
                 ZStack {
                     switch step {
                     case .phone:
-                        PhoneLoginView(prompt: "Verify your number to save your price checks.") { _ in
+                        PhoneLoginView(prompt: feature == .shopping ? "Verify your number to use AI Search." : "Verify your number to save your price checks.") { _ in
                             Task { await advance() }
                         }
                         .transition(.opacity)
@@ -59,7 +61,7 @@ struct AccountGateView: View {
             }
             .background(Color(.systemBackground))
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: step)
-            .navigationTitle("Price Check")
+            .navigationTitle(feature == .shopping ? "AI Search" : "Price Check")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -94,15 +96,15 @@ struct AccountGateView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Connect Facebook")
                             .font(.largeTitle.weight(.bold))
-                        Text("One more step to check your price.")
+                        Text(feature == .shopping ? "One more step to find what you need." : "One more step to check your price.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.top, 24)
 
                     VStack(alignment: .leading, spacing: 22) {
-                        facebookBenefit("magnifyingglass", title: "Compare nearby listings",
-                                        detail: "Use Marketplace listings to find a price for your item.")
+                        facebookBenefit("magnifyingglass", title: feature == .shopping ? "Find nearby products" : "Compare nearby listings",
+                                        detail: feature == .shopping ? "Search Marketplace and inspect products that fit your request." : "Use Marketplace listings to find a price for your item.")
                         facebookBenefit("lock.shield", title: "Sign in with Facebook",
                                         detail: "You'll sign in on Facebook's own page.")
                     }

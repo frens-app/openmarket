@@ -52,6 +52,7 @@ struct OpenMarketApp: App {
     /// back to a finished answer.
     @StateObject private var marketChecks = MarketCheckModel()
     @StateObject private var amazonChecks = AmazonCheckModel()
+    @StateObject private var shopping = ShoppingModel()
     /// App-level because a location switch outlives the sheet that starts it:
     /// the sheet dismisses on the tap and the results screen behind it shows
     /// the change landing (`PlaceChooser`).
@@ -77,6 +78,7 @@ struct OpenMarketApp: App {
                 .environmentObject(discover)
                 .environmentObject(marketChecks)
                 .environmentObject(amazonChecks)
+                .environmentObject(shopping)
                 .environmentObject(chooser)
                 .onAppear { store.detail.browseWebView = discover.webViews.first }
         }
@@ -89,6 +91,7 @@ struct OpenMarketApp: App {
         // expiry — and a stale belief about being signed in would have the
         // store keying its cache under the wrong context.
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background { shopping.pause() }
             if phase == .active {
                 Task {
                     // A failed launch-time check keeps the local account signed
@@ -240,7 +243,7 @@ private struct LaunchView: View {
     }
 }
 
-/// The app itself: two tabs and the webviews behind them.
+/// App navigation and the webviews backing its tools.
 struct AppView: View {
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
@@ -248,17 +251,16 @@ struct AppView: View {
     @EnvironmentObject private var discover: DiscoverFeed
     @EnvironmentObject private var marketChecks: MarketCheckModel
     @EnvironmentObject private var amazonChecks: AmazonCheckModel
+    @EnvironmentObject private var shopping: ShoppingModel
     @EnvironmentObject private var account: AccountSession
 
     var body: some View {
         ZStack {
-            // Two things this app does: find what other people are selling, and
-            // work out things about a listing of your own. They share a
-            // location, a session and a pacer, and nothing else — which is
-            // exactly what a tab boundary is for.
             TabView {
                 ResultsView()
                     .tabItem { Label("Browse", systemImage: "magnifyingglass") }
+                ShoppingView()
+                    .tabItem { Label("AI Search", systemImage: "sparkle.magnifyingglass") }
                 ToolsView()
                     .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
             }
@@ -282,6 +284,7 @@ struct AppView: View {
                 .offset(x: 3000)
             HiddenWebViewHost(webView: seller.webView)
                 .offset(x: 3000)
+            ShoppingWebViews(tools: shopping.tools)
             // One per Discover search — they run at the same time, and an
             // engine is one webview with one in-flight navigation.
             ForEach(discover.webViews, id: \.self) { webView in
@@ -296,6 +299,22 @@ struct AppView: View {
                 HiddenWebViewHost(webView: webView)
                     .offset(x: 3000)
             }
+        }
+        .onChange(of: account.state.viewer?.id) { _, _ in shopping.accountChanged() }
+        .onChange(of: prefs.locationSlug) { _, _ in shopping.locationChanged() }
+        .onChange(of: prefs.radiusKM) { _, _ in shopping.locationChanged() }
+        .onChange(of: prefs.resolvedPlace) { _, _ in shopping.locationChanged() }
+        .onChange(of: store.session) { _, session in
+            if session != .authed { shopping.pause() }
+        }
+    }
+}
+
+private struct ShoppingWebViews: View {
+    @ObservedObject var tools: ShoppingTools
+    var body: some View {
+        ForEach(tools.webViews, id: \.self) { webView in
+            HiddenWebViewHost(webView: webView).offset(x: 3000)
         }
     }
 }

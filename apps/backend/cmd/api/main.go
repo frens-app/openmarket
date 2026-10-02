@@ -159,10 +159,42 @@ func main() {
 		logger.Warn("listing relevance unavailable: configure AI_GATEWAY_API_KEY or a Vercel LLM_API_KEY")
 	}
 
+	var shoppingRunner *llm.Runner
+	if gatewayKey != "" {
+		provider, err := llm.NewGatewayProvider(llm.GatewayOptions{APIKey: gatewayKey, Model: cfg.ShoppingModel})
+		if err != nil {
+			logger.Fatal("configure shopping provider", zap.Error(err))
+		}
+		shoppingRunner = llm.NewShoppingRunner(provider, queries, logger.Named("shopping"), llm.Config{
+			MaxCallsPerUser: cfg.LLMMaxCallsPerUser, Window: cfg.LLMCallWindow,
+			MaxAttempts: 2, Timeout: cfg.LLMTimeout,
+		})
+	}
+	shoppingSvc := newShoppingServer(nil, nil, queries)
+	if shoppingRunner != nil && pricingSvc.relevance != nil {
+		shoppingSvc.planner = shoppingRunner
+		shoppingSvc.evaluator = pricingSvc.relevance
+	}
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				shoppingSvc.mu.Lock()
+				shoppingSvc.prune()
+				shoppingSvc.mu.Unlock()
+			}
+		}
+	}()
+
 	mux := http.NewServeMux()
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, handlerOptions...))
+	mux.Handle(apiv1connect.NewShoppingServiceHandler(shoppingSvc, interceptors, connect.WithReadMaxBytes(300000)))
 	mux.HandleFunc("/health", healthHandler(pool))
 
 	// Reflection is for grpcurl against a local server. Off in production:
@@ -173,6 +205,7 @@ func main() {
 			apiv1connect.AuthServiceName,
 			apiv1connect.UserServiceName,
 			apiv1connect.PricingServiceName,
+			apiv1connect.ShoppingServiceName,
 		)
 		mux.Handle(grpcreflect.NewHandlerV1(reflector))
 		mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
