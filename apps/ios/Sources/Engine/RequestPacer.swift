@@ -11,7 +11,7 @@ actor RequestPacer {
     /// each other; and **backoff stops propagating**, leaving the detail engine
     /// at full speed while Facebook is blocking the feed engine. Backoff only
     /// one code path observes isn't backoff — the *session* has to go quiet,
-    /// which matters all the more now every request shares one cookie jar.
+    /// across both signed-in browsing and anonymous comparison traffic.
     static let shared = RequestPacer()
 
     private var consecutiveBlocks = 0
@@ -21,8 +21,14 @@ actor RequestPacer {
     /// 30s → 2m → 10m → stop, per spec.
     private static let backoffLadder: [TimeInterval] = [30, 120, 600]
     private static let sessionRequestCap = 300
-    private static let minimumGap: TimeInterval = 0.4
+    /// Jitter request starts by 100–300 ms. Reserve each slot before sleeping
+    /// so simultaneous callers cannot all select the same departure time.
+    private let nextGap: @Sendable () -> TimeInterval
     private var lastRequest: Date?
+
+    init(nextGap: @escaping @Sendable () -> TimeInterval = { .random(in: 0.1...0.3) }) {
+        self.nextGap = nextGap
+    }
 
     var isStopped: Bool { consecutiveBlocks > Self.backoffLadder.count }
 
@@ -33,8 +39,10 @@ actor RequestPacer {
         if let blockedUntil, blockedUntil > Date() {
             let wait = blockedUntil.timeIntervalSinceNow
             guard wait < 15 else { return false }   // don't hold the UI on a long backoff
-            try? await Task.sleep(for: .seconds(wait))
+            do { try await Task.sleep(for: .seconds(wait)) }
+            catch { return false }
         }
+        guard requestCount < Self.sessionRequestCap, !isStopped else { return false }
         // The slot is claimed *before* the wait, not after it.
         //
         // Sleeping first and stamping afterwards works for one caller at a time
@@ -49,11 +57,18 @@ actor RequestPacer {
         // Reserving the time up front makes each caller queue behind the last
         // reservation instead of behind the last departure.
         let now = Date()
-        let slot = max(now, lastRequest?.addingTimeInterval(Self.minimumGap) ?? now)
+        let gap = nextGap()
+        let slot = max(now, lastRequest?.addingTimeInterval(gap) ?? now)
         lastRequest = slot
         requestCount += 1
         let wait = slot.timeIntervalSince(now)
-        if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+        if wait > 0 {
+            do { try await Task.sleep(for: .seconds(wait)) }
+            catch { return false }
+        }
+        // Another engine may have encountered a block while this slot slept.
+        guard !Task.isCancelled, !isStopped,
+              blockedUntil.map({ $0 <= Date() }) ?? true else { return false }
         return true
     }
 

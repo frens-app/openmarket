@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-02",
+  "device": "iPhone 17 Pro Simulator",
+  "os": "iOS 26.3",
+  "scope": "Search retrieval only; excludes Jev",
+  "query": {
+    "term": "desk",
+    "latitude": 37.779379,
+    "longitude": -122.418433,
+    "radius_km": 8,
+    "delivery": "local_pick_up",
+    "sold_age_days": 30
+  },
+  "preliminary_untouched_main_ms": {
+    "active": 2801,
+    "sold": 1318,
+    "total": 4119
+  },
+  "final_session_ms": {
+    "browser_serial_defaults": 2108,
+    "browser_serial_shorter_waits": 1409,
+    "browser_parallel_shorter_waits_400ms": 1409,
+    "anonymous_parallel_first_use": 1002,
+    "anonymous_parallel_warm": [
+      344,
+      486
+    ],
+    "production_anonymous_new_pool": 602,
+    "production_anonymous_warm": 453,
+    "six_slots_fixed_400ms": 2002,
+    "six_slots_random_100_300ms": 1066,
+    "detail_gallery": 662,
+    "detail_complete": 1049
+  },
+  "exploratory_authenticated_production_ms": {
+    "new_pool": 2682,
+    "warm": 404
+  },
+  "anonymous_result_counts": {
+    "active": 15,
+    "sold": 6,
+    "oldest_sold_listing_days": 27
+  },
+  "limitations": [
+    "Small fixed-order samples; network and cache effects confound per-change attribution.",
+    "New pool does not flush operating system or server caches.",
+    "Signed-in and anonymous searches can return different inventories.",
+    "The original detail probe did not record whether the first text callback already had photos; publication lead is not proven incremental savings."
+  ]
+}

@@ -3,8 +3,10 @@ import WebKit
 
 /// Which auth state a piece of data came from.
 ///
-/// **This is a label, not a sandbox.** There is one `WKWebsiteDataStore` and
-/// both cases share it. A per-case store would isolate only the place resolver —
+/// **This is a label, not a sandbox.** Both cases use the persistent browsing
+/// store. Price comparisons separately use cookie-free HTTP and an isolated
+/// fallback WebView because their native queries carry coordinates explicitly.
+/// A per-case store would isolate only the place resolver —
 /// every other engine runs on the persistent store either way — and there it is
 /// actively harmful: Facebook keeps the coordinate fed to its location picker in
 /// session state rather than the URL, and ranks by proximity to it, so two ends

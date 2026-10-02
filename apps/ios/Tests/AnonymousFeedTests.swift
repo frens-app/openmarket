@@ -118,9 +118,6 @@ final class AnonymousFeedDecoderTests: XCTestCase {
 
     func testUnsupportedQueryFallsBackRatherThanLosingFiltersOrGuessingLocation() {
         var query = testQuery()
-        query.age = .day
-        XCTAssertThrowsError(try AnonymousFeedClient.request(for: query, cursor: nil))
-        query.age = .any
         query.coordinate = nil
         XCTAssertThrowsError(try AnonymousFeedClient.request(for: query, cursor: nil))
         query = testQuery()

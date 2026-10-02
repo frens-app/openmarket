@@ -317,6 +317,12 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         // page that already produced a seller, or a login wall, has nothing to
         // gain.
         var best = raw
+        // The initial callback may have contained text only. Publish the
+        // validated gallery before spending up to three seconds on the seller.
+        if raw.matches(expectedID), !raw.loginWall {
+            onPartial(raw.listingDetail)
+        }
+        let galleryPublishedAt = Date()
         if best.sellerName == nil, best.sellerProfileID == nil, !best.loginWall {
             // **Merged, never swapped.** Taking the later snapshot wholesale
             // regressed the description: this read happens seconds later and
@@ -352,6 +358,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         }
         await pacer.recordSuccess()
 
+        Logger.detail.info("detail stages: gallery_ms=\(Int(galleryPublishedAt.timeIntervalSince(started) * 1000), privacy: .public) seller_wait_ms=\(Int(Date().timeIntervalSince(galleryPublishedAt) * 1000), privacy: .public)")
         metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: true)
         return best.listingDetail
     }

@@ -56,10 +56,12 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// `setSession`, and the two wrong guesses are not equally wrong. Guessing
     /// signed-in paginates against a wall; guessing signed-out declines to
     /// paginate for a few hundred milliseconds and then corrects itself.
-    init(session: BrowserSession = .unauthed, pacer: RequestPacer = .shared) {
+    init(session: BrowserSession = .unauthed, pacer: RequestPacer = .shared,
+         dataStore: WKWebsiteDataStore? = nil) {
         self.session = session
         self.pacer = pacer
         let config = WKWebViewConfiguration.make()
+        if let dataStore { config.websiteDataStore = dataStore }
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 900),
                             configuration: config)
         super.init()
@@ -70,7 +72,9 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     // MARK: - Loading
 
-    func load(_ query: SearchQuery) async -> [PayloadListing] {
+    func load(_ query: SearchQuery,
+              locationTimeout: Duration = .milliseconds(2500),
+              markupGrace: Duration? = nil) async -> [PayloadListing] {
         guard await pacer.waitForSlot() else {
             state = .failed("Paused — too many requests. Try again shortly.")
             return []
@@ -81,9 +85,18 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
         // Both values hydrate independently after the document commits. Reading
         // them together avoids adding the location pill's wait to the payload's
         // wait on every search.
-        async let payloadRead = harvest()
-        async let locationRead = readLocation()
-        let (payload, located) = await (payloadRead, locationRead)
+        async let payloadRead = harvest(markupGrace: markupGrace)
+        // Comparison searches only need a diagnostic snapshot. Take it after
+        // the payload is ready so a zero timeout doesn't read a half-built page.
+        let payload: [PayloadListing]
+        let located: DesktopPageLocation
+        if locationTimeout == .zero {
+            payload = await payloadRead
+            located = await readLocation(pillTimeout: .zero)
+        } else {
+            async let locationRead = readLocation(pillTimeout: locationTimeout)
+            (payload, located) = await (payloadRead, locationRead)
+        }
         // Logged every search: a refused place is otherwise invisible, since the
         // grid fills with healthy-looking listings for a city nobody asked for.
         Logger.desktop.info("location: \(located.summary, privacy: .public)")
@@ -145,9 +158,10 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
     /// waiting for the document to finish spends roughly half the time on
     /// images and third-party chrome nobody is going to look at. Search pages
     /// behave the same way.
-    private func harvest(timeout: Duration = .seconds(20)) async -> [PayloadListing] {
+    func harvest(timeout: Duration = .seconds(20), markupGrace: Duration? = nil) async -> [PayloadListing] {
         let deadline = ContinuousClock.now.advanced(by: timeout)
         var last: [PayloadListing] = []
+        var markupSeenAt: ContinuousClock.Instant?
 
         while ContinuousClock.now < deadline {
             guard let json = await evaluate(DesktopScripts.extractSearchPayload),
@@ -159,6 +173,7 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
             if result.loginWall {
                 state = .loginWall
                 Logger.desktop.info("login wall on search")
+                await pacer.recordBlock()
                 return []
             }
 
@@ -173,6 +188,16 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
                 await pacer.recordSuccess()
                 Logger.desktop.info("payload \(result.payloadCount)/\(result.renderedCount) cards")
                 return result.listings
+            }
+            // A comparison can use rendered titles/prices. Give structured
+            // data a short head start, then fall back without a 20-second stall.
+            if result.renderedCount > 0, let markupGrace {
+                if markupSeenAt == nil { markupSeenAt = .now }
+                if let markupSeenAt, markupSeenAt.duration(to: .now) >= markupGrace {
+                    break
+                }
+            } else {
+                markupSeenAt = nil
             }
             try? await Task.sleep(for: .milliseconds(150))
         }

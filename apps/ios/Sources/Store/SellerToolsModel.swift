@@ -396,7 +396,10 @@ final class SellerToolsModel: ObservableObject {
         begin(.search, "Checking what similar things are listed for in \(marketName)")
         let result = await search.comparables(to: term,
                                               citySlug: prefs.locationSlug ?? "sanfrancisco",
-                                              radiusKM: prefs.radiusKM)
+                                              radiusKM: prefs.radiusKM,
+                                              coordinate: prefs.resolvedPlace.flatMap {
+                                                  $0.segment == prefs.locationSlug ? $0.coordinate : nil
+                                              })
         guard !Task.isCancelled else { return }
         switch result {
         case .failure(let error):
@@ -419,7 +422,10 @@ final class SellerToolsModel: ObservableObject {
         begin(.sold, "Checking what's actually been selling")
         let soldResult = await search.soldComparables(to: term,
                                                       citySlug: prefs.locationSlug ?? "sanfrancisco",
-                                                      radiusKM: prefs.radiusKM)
+                                                      radiusKM: prefs.radiusKM,
+                                                      coordinate: prefs.resolvedPlace.flatMap {
+                                                          $0.segment == prefs.locationSlug ? $0.coordinate : nil
+                                                      })
         guard !Task.isCancelled else { return }
         if case .success(let found) = soldResult { sold = SoldSignal(comps: found) }
         finish(.sold, "Found \(sold.comps.count) recently sold listings")
@@ -621,7 +627,7 @@ final class SellerToolsModel: ObservableObject {
     static func message(for error: ComparableSearch.Failure) -> String {
         switch error {
         case .loginWall:
-            return "Facebook won't show these results without a login. Sign in on the Browse tab and try again."
+            return "Facebook isn't showing comparison results right now. Try again later."
         case .nothingFound:
             return "Nothing similar is listed nearby, so there's no market to price against."
         case .engine(let message):

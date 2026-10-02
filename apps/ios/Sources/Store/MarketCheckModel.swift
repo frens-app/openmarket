@@ -1,5 +1,6 @@
 import Foundation
 import WebKit
+import os
 
 /// Runs "is this a good price?" for any listing the user asks about.
 ///
@@ -63,56 +64,66 @@ final class MarketCheckModel: ObservableObject {
     }
 
     private func run(_ listing: Listing, price: Int, term: String) async {
-        let startedAt = Date()
+        let startedAt = ContinuousClock.now
         var started: [String: Any] = ["listing_id": listing.id, "price": price]
         started["search_term"] = Analytics.text(term.lowercased())
         started["title"] = Analytics.text(listing.title)
         Analytics.capture(.marketCheckStarted, started)
 
         set(listing.id, .running(pool.hasFreeSearch
-                                 ? "Checking what similar things are listed for"
+                                 ? "Checking active and recently sold listings"
                                  : "Queued behind another check"))
 
         let citySlug = prefs.locationSlug ?? "sanfrancisco"
         let radiusKM = prefs.radiusKM
-        let outcome = await pool.withSearch { search -> Result<([MarketComp], [MarketComp]), ComparableSearch.Failure> in
-            self.set(listing.id, .running("Checking what similar things are listed for"))
-            let active = await search.comparables(to: term, citySlug: citySlug, radiusKM: radiusKM)
-            switch active {
-            case .failure(let error):
-                return .failure(error)
-            case .success(let found):
-                self.set(listing.id, .running("Checking what's actually been selling"))
-                let soldResult = await search.soldComparables(to: term, citySlug: citySlug, radiusKM: radiusKM)
-                // Non-fatal, as in `SellerToolsModel`: plenty of things have
-                // nothing sold near you in a month, and that is a fact about
-                // the item rather than a broken run.
-                let sold = (try? soldResult.get()) ?? []
-                return .success((found, sold))
-            }
+        let coordinate = prefs.resolvedPlace.flatMap { $0.segment == citySlug ? $0.coordinate : nil }
+        let pair = await pool.comparables(to: term, citySlug: citySlug, radiusKM: radiusKM,
+                                         coordinate: coordinate) {
+            self.set(listing.id, .running("Checking active and recently sold listings"))
+        }
+        var timings = pair.timings
+        timings["searches_ms"] = Int(startedAt.duration(to: .now) / .milliseconds(1))
+        defer {
+            timings["duration_ms"] = Int(startedAt.duration(to: .now) / .milliseconds(1))
+            Logger.seller.info("comparison timings: \(String(describing: timings), privacy: .public)")
         }
 
-        switch outcome {
+        switch pair.active.result {
         case .failure(let error):
             set(listing.id, .failed(Self.message(for: error)))
-            Analytics.capture(.marketCheckFailed, [
+            var failed: [String: Any] = [
                 "listing_id": listing.id,
                 "reason": SellerToolsModel.reason(for: error),
-                "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000)
-            ])
-        case .success(let (found, soldFound)):
+                "duration_ms": Int(startedAt.duration(to: .now) / .milliseconds(1))
+            ]
+            failed.merge(timings) { _, new in new }
+            Analytics.capture(.marketCheckFailed, failed)
+        case .success(let found):
+            // Sold-search failure remains nonfatal. Record it separately so
+            // failed searches aren't counted as healthy empty markets in timing data.
+            let soldFound = (try? pair.sold.result.get()) ?? []
+            if case .failure(let error) = pair.sold.result {
+                timings["sold_search_outcome"] = SellerToolsModel.reason(for: error)
+            } else { timings["sold_search_outcome"] = "success" }
             let active = found.filter { !Self.isSameListing($0, as: listing) }
             let soldCandidates = soldFound.filter { !Self.isSameListing($0, as: listing) }
             set(listing.id, .running("Checking which listings are comparable"))
             let evaluated: [MarketComp]
+            let relevanceStarted = ContinuousClock.now
             do {
                 evaluated = try await pricing.evaluate(target: ComparisonRelevance.item(for: listing),
                                                        comps: active + soldCandidates)
             } catch {
                 set(listing.id, .failed("Couldn't check which listings are comparable. " + SellerToolsModel.message(for: error)))
-                Analytics.capture(.marketCheckFailed, ["listing_id": listing.id, "reason": "relevance_failed"])
+                timings["relevance_ms"] = Int(relevanceStarted.duration(to: .now) / .milliseconds(1))
+                var failed = timings
+                failed["listing_id"] = listing.id
+                failed["reason"] = "relevance_failed"
+                failed["duration_ms"] = Int(startedAt.duration(to: .now) / .milliseconds(1))
+                Analytics.capture(.marketCheckFailed, failed)
                 return
             }
+            timings["relevance_ms"] = Int(relevanceStarted.duration(to: .now) / .milliseconds(1))
             let comps = Array(evaluated.prefix(active.count))
             let sold = SoldSignal(comps: Array(evaluated.dropFirst(active.count)))
             let check = MarketCheck(term: term,
@@ -127,7 +138,7 @@ final class MarketCheckModel: ObservableObject {
                 "price": price,
                 "comps_found": comps.count,
                 "sold_count": sold.count,
-                "duration_ms": Int(Date().timeIntervalSince(startedAt) * 1000),
+                "duration_ms": Int(startedAt.duration(to: .now) / .milliseconds(1)),
                 // Whether the check could place the price at all. A run with
                 // comparables that all had unreadable prices completed and
                 // answered nothing, and the average shouldn't hide it.
@@ -135,6 +146,7 @@ final class MarketCheckModel: ObservableObject {
             ]
             if let standing = check.standing { completed["standing"] = Self.name(of: standing) }
             completed["search_term"] = Analytics.text(term.lowercased())
+            completed.merge(timings) { _, new in new }
             Analytics.capture(.marketCheckCompleted, completed)
         }
     }
@@ -169,13 +181,12 @@ final class MarketCheckModel: ObservableObject {
         return url.pathComponents.last { !$0.isEmpty && $0 != "/" }
     }
 
-    /// Its own copy rather than `SellerToolsModel.message(for:)`, because the
-    /// thing to do next differs: a seller is told to go and sign in on Browse,
-    /// and this reader is already there.
+    /// Comparison retrieval is anonymous, so signing into Browse cannot fix a
+    /// wall on this isolated surface.
     private static func message(for error: ComparableSearch.Failure) -> String {
         switch error {
         case .loginWall:
-            return "Facebook won't show these results without a login. Sign in and try again."
+            return "Facebook isn't showing comparison results right now. Try again later."
         case .nothingFound:
             return "Nothing similar is listed nearby to compare this against."
         case .engine(let message):

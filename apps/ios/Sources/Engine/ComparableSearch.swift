@@ -1,6 +1,7 @@
 import Foundation
 import WebKit
 import os
+import CoreLocation
 
 extension Logger {
     static let seller = Logger(subsystem: "lol.frens.openmarket", category: "seller")
@@ -66,7 +67,7 @@ struct MarketComp: Identifiable, Equatable {
     }
 }
 
-/// Runs the market search behind the seller tab.
+/// Searches for price evidence using GraphQL, with browser extraction as fallback.
 ///
 /// **Its own engine, deliberately.** Sharing the browse tab's `DesktopFeedEngine`
 /// would mean drafting a listing navigated the results the user was reading out
@@ -78,8 +79,11 @@ struct MarketComp: Identifiable, Equatable {
 /// so this engine's loads count against the same session cap and obey the same
 /// backoff as every other request the app makes.
 ///
-/// **One page load per draft, and no item pages.** Comparables are read from
-/// the search results only — title, price, photo, city. Opening fifteen item
+/// Comparables come from one nonempty search page (up to three requests if
+/// Facebook returns empty pages with advancing cursors), never item pages.
+/// Native requests use coordinates and no Facebook cookies or browser warmup.
+/// The fallback browser has its own nonpersistent, signed-out cookie store.
+/// Search results supply title, price, photo, and city. Opening fifteen item
 /// pages to price a dresser is exactly the automation-shaped traffic the app
 /// removed everywhere else (`docs/decision-desktop-primary.md`). If the user
 /// taps a comparable, that opens it, because a person asked.
@@ -96,13 +100,18 @@ final class ComparableSearch {
     }
 
     private let engine: DesktopFeedEngine
+    private let client: any GraphQLFeedLoading
+    private(set) var lastTransport = "anonymous_graphql"
 
     /// Has to be in the view hierarchy for WebKit to render it — see
     /// `RootView`. Same constraint as the browse engines.
     var webView: WKWebView { engine.webView }
 
-    init(engine: DesktopFeedEngine? = nil) {
-        self.engine = engine ?? DesktopFeedEngine()
+    init(engine: DesktopFeedEngine? = nil,
+         client: (any GraphQLFeedLoading)? = nil) {
+        let engine = engine ?? DesktopFeedEngine(dataStore: .nonPersistent())
+        self.engine = engine
+        self.client = client ?? AnonymousFeedClient()
     }
 
     /// The first page of results for a term, as evidence.
@@ -117,13 +126,14 @@ final class ComparableSearch {
     func comparables(to term: String,
                      citySlug: String,
                      radiusKM: Int,
+                     coordinate: CLLocationCoordinate2D? = nil,
                      limit: Int = 15) async -> Result<[MarketComp], Failure> {
         let query = SearchQuery(
             kind: .search(term),
-            // Sent for shape only; no surface honours it (`SearchQuery.url`).
+            // Native queries carry the radius; browser URLs may ignore it.
             radiusKM: radiusKM == 0 ? 40 : radiusKM,
             citySlug: citySlug,
-            coordinate: nil,
+            coordinate: coordinate,
             sort: .bestMatch,
             delivery: .localPickup
         )
@@ -154,12 +164,13 @@ final class ComparableSearch {
     func soldComparables(to term: String,
                          citySlug: String,
                          radiusKM: Int,
+                         coordinate: CLLocationCoordinate2D? = nil,
                          limit: Int = 15) async -> Result<[MarketComp], Failure> {
         let query = SearchQuery(
             kind: .search(term),
             radiusKM: radiusKM == 0 ? 40 : radiusKM,
             citySlug: citySlug,
-            coordinate: nil,
+            coordinate: coordinate,
             sort: .bestMatch,
             delivery: .localPickup,
             age: .month,
@@ -175,7 +186,37 @@ final class ComparableSearch {
     }
 
     private func run(_ query: SearchQuery, limit: Int) async -> Result<[MarketComp], Failure> {
-        let payload = await engine.load(query)
+        let started = ContinuousClock.now
+        var transport = "anonymous_graphql"
+        defer {
+            lastTransport = transport
+            let ms = Int(started.duration(to: .now) / .milliseconds(1))
+            Logger.seller.info("comparison fetch: transport=\(transport, privacy: .public) availability=\(query.availability.rawValue, privacy: .public) ms=\(ms, privacy: .public)")
+        }
+        do {
+            var pagination = GraphQLFeedPagination()
+            // Empty edges with an advancing cursor are not an empty market.
+            // Match the feed's bounded first-page recovery, without crawling.
+            for _ in 0..<3 {
+                let page = try await client.page(for: query, cursor: pagination.cursor)
+                let payload = try pagination.accept(page)
+                if !payload.isEmpty {
+                    return .success(payload.prefix(limit).enumerated().map {
+                        MarketComp(payload: $0.element, cardIndex: $0.offset)
+                    })
+                }
+                if !pagination.hasNextPage { return .failure(.nothingFound) }
+            }
+            return .failure(.engine("Couldn't load comparable listings. Try again shortly."))
+        } catch {
+            // A block, cancellation, network failure, or changed account must
+            // not trigger a second request through another transport.
+            guard (error as? GraphQLFeedError)?.permitsBrowserFallback == true else {
+                return .failure(.engine(error.localizedDescription))
+            }
+            transport = "browser"
+        }
+        let payload = await engine.load(query, locationTimeout: .zero, markupGrace: .milliseconds(600))
         if case .loginWall = engine.state { return .failure(.loginWall) }
 
         var comps = payload.prefix(limit).enumerated().map { index, item in

@@ -51,7 +51,7 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
 
     // Query metadata and variables measured from the public desktop surface:
     // docs/anonymous-graphql-2026-09-30.md. Schema failures use the browser path.
-    static func request(for query: SearchQuery, cursor: String?) throws -> URLRequest {
+    static func request(for query: SearchQuery, cursor: String?, now: Date = Date()) throws -> URLRequest {
         guard let point = query.coordinate, CLLocationCoordinate2DIsValid(point),
               point.latitude.isFinite, point.longitude.isFinite else {
             throw GraphQLFeedError.unsupportedQuery
@@ -62,9 +62,6 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
         let provider = "__relay_internal__pv__GHLShouldChangeMarketplaceSponsoredDataFieldNamerelayprovider"
         switch query.kind {
         case .search(let term):
-            // The age window uses Facebook's server date; keep the browser's
-            // implementation until its timezone/rollover behavior is verified.
-            guard query.age == .any else { throw GraphQLFeedError.unsupportedQuery }
             operation = "CometMarketplaceSearchContentPaginationQuery"
             documentID = "27212616558440397"
             var browse: [String: Any] = [
@@ -74,7 +71,7 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
                 "commerce_search_and_rp_category_id": [],
                 "commerce_search_and_rp_condition": query.conditions.isEmpty
                     ? NSNull() : query.conditions.map(\.rawValue).joined(separator: ",") as Any,
-                "commerce_search_and_rp_ctime_days": NSNull(),
+                "commerce_search_and_rp_ctime_days": creationDays(age: query.age, now: now) as Any? ?? NSNull(),
                 "filter_location_latitude": point.latitude,
                 "filter_location_longitude": point.longitude,
                 "filter_price_lower_bound": try priceBound(query.minPrice, defaultValue: 0),
@@ -135,6 +132,16 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
         request.setValue("OpenMarket/0.0.1 (iOS)", forHTTPHeaderField: "User-Agent")
         request.httpShouldHandleCookies = false
         return request
+    }
+
+    /// Facebook's desktop search sends UTC epoch days, newest first, including
+    /// both endpoints (Last month = today through today - 30, i.e. 31 values).
+    /// Verified against the rendered search's Relay variables on 2026-10-02.
+    /// UTC arithmetic keeps this independent of device timezone and DST.
+    static func creationDays(age: SearchQuery.Age, now: Date) -> String? {
+        guard age != .any else { return nil }
+        let today = Int(floor(now.timeIntervalSince1970 / 86_400))
+        return (0...age.rawValue).map { String(today - $0) }.joined(separator: ";")
     }
 
     private static func priceBound(_ price: Int?, defaultValue: Int) throws -> Int {

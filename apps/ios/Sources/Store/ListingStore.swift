@@ -732,7 +732,7 @@ final class ListingStore: ObservableObject {
     ///     an answer — price drops and sold status are exactly what changes
     ///     while a listing sits in a cache.
     ///
-    /// `onStage` therefore fires up to three times. Every stage is built from
+    /// `onStage` can publish cache, text, gallery, then complete details. Each is built from
     /// the original card rather than accumulated, so a late partial can't
     /// interleave with an earlier one into a state neither described.
     func enrich(_ listing: Listing, onStage: @escaping @MainActor (Listing) -> Void = { _ in }) async -> Listing {
@@ -777,7 +777,7 @@ final class ListingStore: ObservableObject {
                     staged.detail = partial
                     if staged.locationText == nil { staged.locationText = partial.locationText }
                     onStage(staged)
-                    Logger.store.info("tap -> text in \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
+                    Logger.store.info("tap -> detail stage in \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
                 }
             ) else { return nil }
             var updated = listing
