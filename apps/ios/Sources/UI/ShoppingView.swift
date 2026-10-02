@@ -34,18 +34,19 @@ struct ShoppingView: View {
                                     }
                                     if message.hasDisplay {
                                         if !message.display.title.isEmpty { Text(message.display.title).font(.headline) }
-                                        ForEach(message.display.products, id: \.listingID) { product in
-                                            if let listing = shopping.tools.listings[product.listingID] {
-                                                NavigationLink {
-                                                    DetailView(listing: listing, namespace: namespace)
-                                                } label: {
-                                                    VStack(alignment: .leading, spacing: 8) {
-                                                        ListingCard(listing: listing, namespace: namespace)
-                                                        if !product.reason.isEmpty { Text(product.reason).font(.subheadline) }
-                                                        if !product.caveat.isEmpty { Text(product.caveat).font(.caption).foregroundStyle(.secondary) }
-                                                    }.padding(12).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-                                                }.buttonStyle(.plain)
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(alignment: .top, spacing: 12) {
+                                                ForEach(message.display.products, id: \.listingID) { product in
+                                                    if let listing = shopping.tools.listings[product.listingID] {
+                                                        NavigationLink {
+                                                            DetailView(listing: listing, namespace: namespace)
+                                                        } label: {
+                                                            ShoppingProductCard(listing: listing, recommendation: product)
+                                                        }.buttonStyle(.plain)
+                                                    }
+                                                }
                                             }
+                                            .padding(.horizontal, 2)
                                         }
                                     }
                                 }.id(message.id)
@@ -125,5 +126,31 @@ struct ShoppingView: View {
             draft = ""
             shopping.send(text, area: area)
         }
+    }
+}
+
+private struct ShoppingProductCard: View {
+    let listing: Listing
+    let recommendation: ShoppingRecommendation
+
+    private var product: MarketComp {
+        var value = MarketComp(listing: listing)
+        value.relevance = .included
+        return value
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            CompCard(comp: product, footnote: listing.locationText, side: 160)
+            if !recommendation.reason.isEmpty {
+                Text(recommendation.reason).font(.caption)
+            }
+            if !recommendation.caveat.isEmpty {
+                Text(recommendation.caveat).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 160, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .contentShape(Rectangle())
     }
 }

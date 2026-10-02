@@ -20,6 +20,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	shoppingPlanningCalls = 5
+	shoppingSearchPages   = 2
+	shoppingInspections   = 3
+	shoppingActiveTime    = 60 * time.Second
+)
+
 type shoppingPlanner interface {
 	Shop(context.Context, llm.Subject, llm.ShoppingInput) (llm.ShoppingMessage, error)
 }
@@ -50,6 +57,8 @@ type shoppingSession struct {
 	outcomes                     map[string]string
 	touched, started, pausedAt   time.Time
 	calls, searches, inspections int
+	displayed                    bool
+	searched, inspected          map[string]bool
 	cancel                       context.CancelFunc
 }
 
@@ -180,6 +189,9 @@ func (s *shoppingServer) SendShoppingMessage(ctx context.Context, req *connect.R
 	x.calls = 0
 	x.searches = 0
 	x.inspections = 0
+	x.displayed = false
+	x.searched = map[string]bool{}
+	x.inspected = map[string]bool{}
 	x.cursors = map[string]string{}
 	x.results = map[string]bool{}
 	x.view.Messages = append(x.view.Messages, &v1.ShoppingMessage{Id: m.RequestId, Role: "user", Text: m.Text})
@@ -256,7 +268,7 @@ func (s *shoppingServer) plan(x *shoppingSession) {
 		x.view.Status = "waiting_to_plan"
 		return
 	}
-	if x.calls >= 9 {
+	if x.calls >= shoppingPlanningCalls+1 {
 		s.finish(x, "Search limit reached. You can refine your request to continue.")
 		return
 	}
@@ -265,18 +277,29 @@ func (s *shoppingServer) plan(x *shoppingSession) {
 		s.finish(x, "This chat has reached its context limit. Start a new chat.")
 		return
 	}
-	allow := x.calls < 8 && s.now().Sub(x.started) < 120*time.Second
+	retrieval := x.calls < shoppingPlanningCalls && s.now().Sub(x.started) < shoppingActiveTime
+	allowed := []string{}
+	if retrieval && x.searches < shoppingSearchPages {
+		allowed = append(allowed, "search")
+	}
+	if retrieval && x.inspections < shoppingInspections && len(x.known) > 0 {
+		allowed = append(allowed, "inspect_product")
+	}
+	if len(x.known) > 0 {
+		allowed = append(allowed, "display_products")
+	}
+	allow := len(allowed) > 0
 	x.calls++
 	x.view.Status = "planning"
 	x.view.Progress = "Thinking about your request"
 	messages := append([]llm.ShoppingMessage(nil), x.transcript...)
-	messages = append(messages, llm.ShoppingMessage{Role: "system", Content: fmt.Sprintf("Remaining source pages: %d. Remaining inspections: %d. Tools enabled: %t. Conclude when no useful work remains.", 6-x.searches, 8-x.inspections, allow)})
+	messages = append(messages, llm.ShoppingMessage{Role: "system", Content: fmt.Sprintf("Remaining source pages: %d. Remaining inspections: %d. Available tools: %v. These are ceilings, not targets. Prefer a useful shortlist now; batch necessary inspections. If only display_products is available, display your best supported options with caveats or finish with a clarification. Display ends the run.", shoppingSearchPages-x.searches, shoppingInspections-x.inspections, allowed)})
 	run := x.view.RunId
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	x.cancel = cancel
 	go func() {
 		defer cancel()
-		msg, err := s.planner.Shop(ctx, llm.Subject{UserID: x.owner}, llm.ShoppingInput{Messages: messages, AllowTools: allow})
+		msg, err := s.planner.Shop(ctx, llm.Subject{UserID: x.owner}, llm.ShoppingInput{Messages: messages, AllowTools: allow, AllowedTools: allowed})
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if !s.current(x, run) {
@@ -303,7 +326,28 @@ func (s *shoppingServer) plan(x *shoppingSession) {
 		x.outcomes = map[string]string{}
 		x.view.PendingCalls = nil
 		for _, c := range msg.ToolCalls {
-			call, err := s.parseCall(x, c)
+			if c.Function.Name == "display_products" {
+				if call, err := s.parseCall(x, c); err == nil {
+					x.view.PendingCalls = []*v1.ShoppingToolCall{call}
+					for _, other := range msg.ToolCalls {
+						if other.ID != c.ID {
+							x.outcomes[other.ID] = `{"error":"Shortlist ready; additional work was skipped"}`
+						}
+					}
+					x.view.Status = "awaiting_client"
+					x.view.Progress = "Showing your options"
+					return
+				}
+			}
+		}
+		for _, c := range msg.ToolCalls {
+			var call *v1.ShoppingToolCall
+			var err error
+			if !slices.Contains(allowed, c.Function.Name) {
+				err = errors.New("This tool is no longer available; display current options or conclude")
+			} else {
+				call, err = s.parseCall(x, c)
+			}
 			if err != nil {
 				x.outcomes[c.ID] = jsonText(map[string]string{"error": err.Error()})
 			} else {
@@ -344,7 +388,7 @@ func (s *shoppingServer) parseCall(x *shoppingSession, c llm.ShoppingCall) (*v1.
 	if x.results[c.ID] {
 		return nil, errors.New("Tool call ID was already used")
 	}
-	if !x.started.IsZero() && s.now().Sub(x.started) > 120*time.Second {
+	if c.Function.Name != "display_products" && !x.started.IsZero() && s.now().Sub(x.started) > shoppingActiveTime {
 		return nil, errors.New("Active search time limit reached; conclude with current evidence")
 	}
 	switch c.Function.Name {
@@ -374,9 +418,17 @@ func (s *shoppingServer) parseCall(x *shoppingSession, c llm.ShoppingCall) (*v1.
 		if q.Cursor != "" && x.cursors[q.Cursor] != searchKey(q) {
 			return nil, errors.New("Invalid cursor; restart at page one")
 		}
-		if x.searches >= 6 {
+		if x.searches >= shoppingSearchPages {
 			return nil, errors.New("Search page limit reached")
 		}
+		key := searchKey(q) + "|" + q.Cursor
+		if x.searched[key] {
+			return nil, errors.New("This search page was already requested; use current results or a different page")
+		}
+		if x.searched == nil {
+			x.searched = map[string]bool{}
+		}
+		x.searched[key] = true
 		x.searches++
 		out.Action = &v1.ShoppingToolCall_Search{Search: q}
 	case "inspect_product":
@@ -384,9 +436,16 @@ func (s *shoppingServer) parseCall(x *shoppingSession, c llm.ShoppingCall) (*v1.
 		if protojson.Unmarshal([]byte(c.Function.Arguments), q) != nil || x.known[q.ListingId] == nil {
 			return nil, errors.New("Inspect requires an observed listing ID")
 		}
-		if x.inspections >= 8 {
+		if x.inspections >= shoppingInspections {
 			return nil, errors.New("Inspection limit reached")
 		}
+		if x.inspected[q.ListingId] {
+			return nil, errors.New("This product was already inspected in this run; use its existing evidence")
+		}
+		if x.inspected == nil {
+			x.inspected = map[string]bool{}
+		}
+		x.inspected[q.ListingId] = true
 		x.inspections++
 		out.Action = &v1.ShoppingToolCall_Inspect{Inspect: q}
 	case "display_products":
@@ -418,6 +477,11 @@ func (s *shoppingServer) completeBatch(x *shoppingSession) {
 	x.batch = nil
 	x.outcomes = nil
 	x.view.PendingCalls = nil
+	if x.displayed {
+		x.view.Status = "completed"
+		x.view.Progress = ""
+		return
+	}
 	s.plan(x)
 }
 func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *connect.Request[v1.SubmitShoppingToolResultRequest]) (*connect.Response[v1.SubmitShoppingToolResultResponse], error) {
@@ -521,6 +585,12 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 			return
 		}
 		if r.Error != "" {
+			if q := call.GetSearch(); q != nil {
+				delete(x.searched, searchKey(q)+"|"+q.Cursor)
+			}
+			if q := call.GetInspect(); q != nil {
+				delete(x.inspected, q.ListingId)
+			}
 			x.outcomes[r.CallId] = jsonText(map[string]string{"error": r.Error})
 		} else {
 			incoming := make(map[string]*v1.ShoppingListing, len(x.known)+len(filtered))
@@ -552,6 +622,7 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 			result.Listings = filtered
 			x.outcomes[r.CallId] = fmt.Sprintf(`{"result":%s,"fetched":%d,"rejected":%d}`, protoText(result), len(r.Listings), rejected)
 			if display := call.GetDisplay(); display != nil {
+				x.displayed = true
 				x.view.Messages = append(x.view.Messages, &v1.ShoppingMessage{Id: call.Id, Role: "assistant", Display: display})
 			}
 			x.view.Listings = nil

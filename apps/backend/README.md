@@ -180,8 +180,11 @@ restart. Use one backend replica for this first version; multiple replicas need
 session affinity. No chat tables are created. Migration 00014 adds only the
 `SHOPPING` model-accounting stage; existing usage ceilings include these calls.
 Tool responses are capped at 256 KB before processing, and each Jev batch at 30
-candidates. The model has at most eight planning calls plus a closing response,
-six source-page actions and eight inspections per user message.
+candidates. The model has at most five planning calls plus a closing response restricted to
+display or text, two source-page actions and three inspections per user message.
+Retrieval stops after 60 seconds; displaying existing evidence remains possible.
+Successful product display finishes the run without another model call. Repeated
+identical pages and repeated inspections within a run are rejected.
 
 Run `go test -race ./cmd/api ./pkg/llm` for the scripted frontend/tool loop, account
 isolation, pagination binding, cancellation, filtering failure, and Gateway tests.

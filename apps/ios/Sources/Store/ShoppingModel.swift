@@ -151,6 +151,7 @@ final class ShoppingModel: ObservableObject {
         status = value.progress
     }
     private func loop(_ token: UUID) async throws {
+        var pollMilliseconds = 500
         while let current = session {
             try check(token)
             guard area == ShoppingTools.Area(prefs: .shared) else {
@@ -161,6 +162,7 @@ final class ShoppingModel: ObservableObject {
             case "completed", "cancelled", "ready": busy = false; paused = false; return
             case "failed": busy = false; paused = false; error = current.error; return
             case "awaiting_client":
+                pollMilliseconds = 500
                 guard let call = current.pendingCalls.first else { throw APIError.message("The assistant returned no executable action.") }
                 try await ensureSignedIn()
                 try check(token)
@@ -194,9 +196,12 @@ final class ShoppingModel: ObservableObject {
                 let response = try await service.submit(session: current, result: result)
                 try check(token); apply(response)
             default:
-                try await Task.sleep(for: .milliseconds(500))
+                try await Task.sleep(for: .milliseconds(pollMilliseconds))
                 let response = try await service.get(current.id)
-                try check(token); apply(response)
+                try check(token)
+                pollMilliseconds = response.status == current.status && response.progress == current.progress
+                    ? min(pollMilliseconds + 500, 2000) : 500
+                apply(response)
             }
         }
     }
