@@ -201,3 +201,47 @@ live signed-in operation measurements above remain the network evidence.
 The opt-in tests were removed from the normal Xcode test sources after the
 runs. Aggregate anonymous results are in
 [`anonymous-results-2026-10-02.json`](../tools/probe/detail_graphql/anonymous-results-2026-10-02.json).
+
+
+## Can details and gallery use one request?
+
+A bounded anonymous experiment on the separate Openmarket Detail QA Simulator
+found **no working single-request replacement** for the current concurrent
+core and gallery requests. No production behavior changed.
+
+- The loaded listing page exposed separate core and gallery persisted queries;
+  no combined operation was found among its loaded PDP/detail queries.
+- On the inspected listing, the core response contained none of the gallery's
+  two photo IDs or image URLs and had no `target.listing_photos` field. Dropping
+  the gallery request would therefore lose those photos.
+- A two-operation `queries` envelope sent to `/api/graphql/` was invalid.
+  `/api/graphqlbatch/` rejected it with error 1675002 and the explicit reason:
+  **“GraphQLBatch only accepts a single doc_id across all queries.”** Core and
+  gallery have different document IDs.
+- A control batching the same gallery document for two listings also returned
+  error 1675002. Its assertion of two decoded results failed (zero returned),
+  so the experiment did not establish a working anonymous batch of any kind.
+- The loaded Relay request builder identified `doc` as its raw-query field.
+  One cookie-free request containing the trivial read-only document
+  `query MarketplaceCombinedDetailCapabilityProbe { __typename }` returned
+  error 1675040: **“Execution of this query is blocked.”** No further custom
+  query attempts were made; this blocked probe is not retained for replay.
+
+These responses were HTTP 200 with application errors, not successful data
+loads. Their short response times must not be counted as speed improvements.
+The current production client control returned two photos in 1,423 ms in this
+run; a single sample is not a new performance estimate. Discovery and mixed
+batch observation tests passed; the same-document capability control failed
+as described above. No fresh live authenticated combination test was run.
+This does not prove an undiscovered combined persisted query cannot exist.
+
+The verified approach remains two overlapping requests, subject to shared
+pacing. Rendering does not wait for image downloads: the page uses listing
+card data immediately, and image views download their files asynchronously.
+There is still an avoidable staging delay: if gallery URLs arrive before core
+details, `DetailGraphQLClient` holds them until core is available. Publishing
+those URLs independently could start image loading earlier without combining
+requests. That optimization has not been implemented or benchmarked here.
+
+Aggregate evidence:
+[`combined-results-2026-10-02.json`](../tools/probe/detail_graphql/combined-results-2026-10-02.json).

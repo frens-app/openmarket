@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-02",
+  "scope": "Anonymous Openmarket Detail QA Simulator; bounded capability experiment, not a latency benchmark",
+  "production_changes": false,
+  "operations": {
+    "core": {
+      "name": "MarketplacePDPContainerQuery",
+      "doc_id": "38856723643971385"
+    },
+    "gallery": {
+      "name": "MarketplacePDPC2CMediaViewerWithImagesQuery",
+      "doc_id": "10059604367394414"
+    }
+  },
+  "discovery": {
+    "combined_operation_found": false,
+    "scope": "Loaded listing-page PDP/detail query modules and preload metadata"
+  },
+  "core_overlap": {
+    "gallery_photos": 2,
+    "gallery_ids_found_in_core": 0,
+    "core_image_paths": 0,
+    "target_has_listing_photos": false
+  },
+  "current_concurrent_client_control": {
+    "ms": 1423,
+    "photos": 2
+  },
+  "mixed_batch": [
+    {
+      "path": "/api/graphql/",
+      "http_status": 200,
+      "error_code": 1675002,
+      "description": "The query provided was invalid.",
+      "valid_both": false
+    },
+    {
+      "path": "/api/graphqlbatch/",
+      "http_status": 200,
+      "error_code": 1675002,
+      "debug_info": "GraphQLBatch only accepts a single doc_id across all queries.",
+      "valid_both": false
+    }
+  ],
+  "same_document_batch_control": {
+    "path": "/api/graphqlbatch/",
+    "http_status": 200,
+    "error_code": 1675002,
+    "valid_targets": 0,
+    "expected_targets": 2,
+    "test_passed": false
+  },
+  "custom_document": {
+    "document": "query MarketplaceCombinedDetailCapabilityProbe { __typename }",
+    "document_field": "doc",
+    "http_status": 200,
+    "error_code": 1675040,
+    "description": "Execution of this query is blocked.",
+    "data_keys": [],
+    "retained_for_replay": false
+  },
+  "limitations": [
+    "No live authenticated combined-query test",
+    "No proof that an undiscovered combined persisted operation cannot exist",
+    "Rejected request durations are not speed improvements",
+    "Same-document control did not establish any working anonymous batch"
+  ]
+}

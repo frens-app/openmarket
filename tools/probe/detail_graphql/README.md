@@ -59,3 +59,24 @@ not require their absence. Private rating values are not printed.
 
 Limitations and field mappings are documented in
 [`docs/detail-graphql-2026-10-02.md`](../../../docs/detail-graphql-2026-10-02.md).
+
+
+## Single-request capability investigation
+
+`combined-results-2026-10-02.json` records the anonymous investigation. No
+working combined request was found. Mixed document IDs were explicitly
+rejected by the batch endpoint, the same-document control also failed, and
+custom query text was blocked. Do not repeatedly replay rejected requests.
+The blocked custom-document probe is deliberately not retained for replay.
+
+`CombinedDetailProbeTests.swift` retains the discovery/coverage inspection and
+bounded batch experiments as opt-in diagnostic source. It is excluded from
+normal tests. The same-document test asserts two decoded results and **failed**
+on the observed endpoint; it is a capability check, not an app regression.
+Its cleaned-up source was syntax-checked after the live runs, not rerun live.
+If new evidence justifies a future investigation, copy it temporarily into
+`apps/ios/Tests/`, regenerate, and select only the required method using
+`-only-testing:OpenMarketTests/CombinedDetailProbeTests/<method>` with explicit
+QA destination `platform=iOS Simulator,id=09ACC966-0D21-478F-84AB-141EDA94E883`
+and `-parallel-testing-enabled NO`. Remove the copy and regenerate afterward.
+Logs contain operation metadata and aggregate comparisons, not session tokens.
