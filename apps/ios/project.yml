@@ -94,6 +94,7 @@ targets:
         POSTHOG_API_KEY: $(POSTHOG_API_KEY)
         POSTHOG_HOSTNAME: $(POSTHOG_HOSTNAME)
         POSTHOG_CAPTURE_EVENTS: $(POSTHOG_CAPTURE_EVENTS)
+        UIBackgroundModes: [remote-notification]
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

@@ -1,13 +1,8 @@
 import SwiftUI
 import WebKit
+import UserNotifications
 
-/// Exists for one callback: APNs hands the device token to the app delegate and
-/// nowhere else, so a SwiftUI-only app has no way to receive it.
-///
-/// Everything it does is forwarded to `PushRegistrar`, which owns the permission
-/// and the reporting. Nothing else should accumulate here — an app delegate is a
-/// grab bag by nature, and this one has a single reason to exist.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Says which backend this build is talking to, once, at launch.
     ///
     /// Two builds now install side by side with near-identical UI, so "which
@@ -20,8 +15,43 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         print("[openmarket] \(Bundle.main.bundleIdentifier ?? "?") → \(API.baseURL)")
         // Not a `.task`: `$application_opened` has to be captured for the
         // launch that is happening, and a SwiftUI task runs after it.
+        UNUserNotificationCenter.current().delegate = self
         Analytics.start()
         return true
+    }
+
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard userInfo["kind"] as? String == "price_alert_check" else { completionHandler(.noData); return }
+        Task { @MainActor in
+            var finished = false
+            let work = Task { await PriceAlertCoordinator.shared.perform() }
+            let deadline = Task { @MainActor in
+                do { try await Task.sleep(for: .seconds(25)) } catch { return }
+                work.cancel()
+                if !finished { finished = true; completionHandler(.failed) }
+            }
+            let updated = await work.value
+            deadline.cancel()
+            if !finished { finished = true; completionHandler(updated ? .newData : .noData) }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let info = response.notification.request.content.userInfo
+        if info["kind"] as? String == "price_alert_match", let id = info["alert_id"] as? String {
+            Task { @MainActor in PriceAlertCoordinator.shared.open(id) }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
     }
 
     func application(_ application: UIApplication,
@@ -101,6 +131,8 @@ struct OpenMarketApp: App {
                     // `reportFacebookConnection` dedupes, so the usual
                     // foreground costs nothing.
                     await account.reportFacebookConnection(connected)
+                    await PushRegistrar.shared.refreshStatus()
+                    PushRegistrar.shared.registerIfAuthorized()
                 }
             } else {
                 Task { await ListingCache.shared.writeToDisk() }
@@ -235,8 +267,10 @@ private struct LaunchView: View {
     }
 }
 
-/// The app itself: two tabs and the webviews behind them.
+/// The app tabs and the webviews behind them.
 struct AppView: View {
+    @ObservedObject private var alerts = PriceAlertCoordinator.shared
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var seller: SellerToolsModel
@@ -246,15 +280,13 @@ struct AppView: View {
 
     var body: some View {
         ZStack {
-            // Two things this app does: find what other people are selling, and
-            // work out things about a listing of your own. They share a
-            // location, a session and a pacer, and nothing else — which is
-            // exactly what a tab boundary is for.
-            TabView {
+            TabView(selection: $alerts.selectedTab) {
                 ResultsView()
-                    .tabItem { Label("Browse", systemImage: "magnifyingglass") }
+                    .tabItem { Label("Browse", systemImage: "magnifyingglass") }.tag(0)
                 ToolsView()
-                    .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
+                    .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(1)
+                PriceAlertsView()
+                    .tabItem { Label("Alerts", systemImage: "bell") }.tag(2)
             }
 
             // The engines' webviews must be in the hierarchy or WebKit
@@ -268,6 +300,9 @@ struct AppView: View {
             // same reason. A tab that isn't selected is torn down, and Price
             // Check's search would then be running in a webview SwiftUI had
             // just removed from the hierarchy.
+            if let webView = alerts.webView {
+                HiddenWebViewHost(webView: webView).offset(x: 3000)
+            }
             HiddenWebViewHost(webView: store.desktop.webView)
                 .offset(x: 3000)
             HiddenWebViewHost(webView: store.feed.webView)
@@ -287,6 +322,14 @@ struct AppView: View {
             ForEach(marketChecks.webViews, id: \.self) { webView in
                 HiddenWebViewHost(webView: webView)
                     .offset(x: 3000)
+            }
+        }
+        .onChange(of: account.state.viewer?.id) { _, _ in alerts.cancel() }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                if account.isSignedIn { _ = await alerts.perform() }
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
             }
         }
     }

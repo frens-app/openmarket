@@ -11,7 +11,8 @@ final class AuthenticatedFeedClient: GraphQLFeedLoading {
     private var bootstrap: Task<Void, Error>?
     private var cursorActor: String?
 
-    init(webView: WKWebView, pacer: RequestPacer = .shared) {
+    init(webView: WKWebView, pacer: RequestPacer = .shared, cursorActor: String? = nil) {
+        self.cursorActor = cursorActor
         self.webView = webView
         self.pacer = pacer
     }

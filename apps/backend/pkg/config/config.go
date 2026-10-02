@@ -58,11 +58,15 @@ func init() {
 	// an app release.
 	pflag.Duration("verification_resend_cooldown", 60*time.Second, "resend countdown reported to the client")
 
-	// Push. The topic and environment are properties of a deployment rather than
-	// of a stored token, which is why they are config and not columns on
-	// user_devices — see the comment in migration 00003. Nothing reads them yet;
-	// they are what the APNs sender will need when it exists.
+	// One deployment serves one APNs topic and environment.
 	pflag.String("apns_bundle_id", "", "APNs topic (apns-topic header) used when sending pushes")
+
+	pflag.Bool("price_alerts_enabled", false, "enable price alerts and the recurring worker")
+	pflag.Duration("price_alerts_interval", 30*time.Second, "minimum time between staggered alert dispatches")
+	pflag.String("apns_key_id", "", "Apple APNs signing key ID")
+	pflag.String("apns_team_id", "", "Apple developer team ID")
+	pflag.String("apns_private_key", "", "APNs .p8 key contents (PEM)")
+	pflag.String("apns_environment", "development", "APNs environment: development or production")
 
 	// The model calls behind Price Check.
 	//
@@ -110,7 +114,13 @@ type ServiceConfig struct {
 	VerificationSendWindow     time.Duration `mapstructure:"verification_send_window"`
 	VerificationResendCooldown time.Duration `mapstructure:"verification_resend_cooldown"`
 
-	APNSBundleID string `mapstructure:"apns_bundle_id"`
+	PriceAlertsEnabled  bool          `mapstructure:"price_alerts_enabled"`
+	PriceAlertsInterval time.Duration `mapstructure:"price_alerts_interval"`
+	APNSKeyID           string        `mapstructure:"apns_key_id"`
+	APNSTeamID          string        `mapstructure:"apns_team_id"`
+	APNSPrivateKey      string        `mapstructure:"apns_private_key"`
+	APNSEnvironment     string        `mapstructure:"apns_environment"`
+	APNSBundleID        string        `mapstructure:"apns_bundle_id"`
 
 	AIGatewayAPIKey    string        `mapstructure:"ai_gateway_api_key"`
 	LLMProvider        string        `mapstructure:"llm_provider"`
@@ -244,6 +254,17 @@ func requireAPIValues(cfg ServiceConfig) {
 	}
 	if cfg.LLMCallWindow <= 0 {
 		panic("llm_call_window must be positive")
+	}
+	if cfg.PriceAlertsEnabled {
+		if cfg.PriceAlertsInterval < 10*time.Second {
+			panic("price_alerts_interval must be at least 10s")
+		}
+		if cfg.APNSKeyID == "" || cfg.APNSTeamID == "" || cfg.APNSPrivateKey == "" || cfg.APNSBundleID == "" {
+			panic("price alerts require APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY, APNS_BUNDLE_ID")
+		}
+		if cfg.AIGatewayAPIKey == "" && !(cfg.LLMProvider == LLMProviderVercel && cfg.LLMAPIKey != "") {
+			panic("price alerts require AI_GATEWAY_API_KEY (or LLM_API_KEY with LLM_PROVIDER=vercel)")
+		}
 	}
 	if cfg.JWTSecret == cfg.RefreshTokenHMACKey {
 		panic("jwt_secret and refresh_token_hmac_key must differ; rotating one should not invalidate the other")

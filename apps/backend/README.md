@@ -1,6 +1,6 @@
 # Backend
 
-Go + Connect RPC + Postgres. Accounts and phone login; nothing else yet.
+Go + Connect RPC + Postgres. Accounts, phone login, price checks, and price alerts.
 
 **Full write-up: [`docs/backend.md`](../../docs/backend.md).** The platform
 evaluation that led here is [`docs/backend-platform.md`](../../docs/backend-platform.md).
@@ -161,3 +161,9 @@ key or Prelude key, an empty country allowlist, `JWT_SECRET` equal to
 `REFRESH_TOKEN_HMAC_KEY`, or `DEV_BYPASS_PHONE_NUMBERS` left set with
 `ENV=production` are all panics. That last one is the only way a code is accepted
 without Prelude having sent it, which is why it is the only override guarded.
+
+## Price alerts
+
+The API hosts the staggered daily alert worker and APNs sender. Setup, delivery
+constraints, database/API behavior, and device verification are documented in
+[`docs/price-alerts.md`](../../docs/price-alerts.md).

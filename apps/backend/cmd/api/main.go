@@ -18,6 +18,7 @@ import (
 	"frens.lol/openmarket/backend/pkg/llm"
 	"frens.lol/openmarket/backend/pkg/phone"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
+	"frens.lol/openmarket/backend/pkg/push"
 	"frens.lol/openmarket/backend/pkg/verify"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -159,7 +160,21 @@ func main() {
 		logger.Warn("listing relevance unavailable: configure AI_GATEWAY_API_KEY or a Vercel LLM_API_KEY")
 	}
 
+	alertsSvc := &alertsServer{pool: pool, queries: queries, jwtSecret: cfg.JWTSecret, logger: logger.Named("alerts")}
+	if cfg.PriceAlertsEnabled {
+		alertsSvc.evaluator = llm.NewEvaluationRunner(llm.NewJevEvaluator(gatewayKey), queries, logger.Named("alert-matching"), llm.Config{
+			MaxAttempts: cfg.LLMMaxAttempts,
+			Timeout:     10 * time.Second,
+		})
+		alertsSvc.push, err = push.New(cfg.APNSPrivateKey, cfg.APNSKeyID, cfg.APNSTeamID, cfg.APNSBundleID, cfg.APNSEnvironment)
+		if err != nil {
+			logger.Fatal("configure APNs", zap.Error(err))
+		}
+		go alertsSvc.run(ctx, cfg.PriceAlertsInterval)
+	}
+
 	mux := http.NewServeMux()
+	mux.Handle("/v1/price-alerts/", alertsSvc)
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, handlerOptions...))

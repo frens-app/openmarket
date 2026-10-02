@@ -154,3 +154,11 @@ make tunnel           # expose the API on the tailnet — `make dev` does this t
 make tunnel-status    # what's registered, and the xcconfig lines for it
 make tunnel-stop
 ```
+
+## Price alerts
+
+The Alerts tab requires an OpenMarket account, a Facebook session on this device,
+and notifications enabled. Background pushes resume paginated searches, while
+Jev matching and visible notifications run on the backend. See
+[`docs/price-alerts.md`](../../docs/price-alerts.md) for deployment setup and iOS
+background-delivery limits.

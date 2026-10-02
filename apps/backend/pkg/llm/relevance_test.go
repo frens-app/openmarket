@@ -118,3 +118,25 @@ func TestEvaluationRunnerRecordsStageAndEnforcesCeiling(t *testing.T) {
 		t.Fatal("ceiling must prevent spending")
 	}
 }
+
+func TestJevAlertRequirementsDoNotUseComparableRelaxations(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req evaluationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+			return
+		}
+		question := req.Questions["candidate_0"]
+		if !strings.Contains(question.Criteria["true"], "price limits") || !strings.Contains(question.Instructions, "explicit requirements") || strings.Contains(question.Criteria["true"], "Ignore price") {
+			t.Errorf("wrong alert criteria: %+v", question)
+		}
+		_, _ = w.Write([]byte(`{"answers":{"candidate_0":{"type":"boolean","probability":0.9}}}`))
+	}))
+	defer server.Close()
+	evaluator := NewJevEvaluator("test-key")
+	evaluator.baseURL = server.URL
+	_, _, err := evaluator.Evaluate(context.Background(), EvaluationInput{Requirements: true, Target: ComparisonItem{Title: "Switch OLED under $200"}, Candidates: []Candidate{{ID: "1", Item: ComparisonItem{Title: "Switch OLED", Description: "Price: $150"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AccountGateView: View {
     let done: () -> Void
+    var featureName = "Price Check"
 
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var store: ListingStore
@@ -44,7 +45,7 @@ struct AccountGateView: View {
                 ZStack {
                     switch step {
                     case .phone:
-                        PhoneLoginView(prompt: "Verify your number to save your price checks.") { _ in
+                        PhoneLoginView(prompt: "Verify your number to use \(featureName.lowercased()).") { _ in
                             Task { await advance() }
                         }
                         .transition(.opacity)
@@ -59,7 +60,7 @@ struct AccountGateView: View {
             }
             .background(Color(.systemBackground))
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: step)
-            .navigationTitle("Price Check")
+            .navigationTitle(featureName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
