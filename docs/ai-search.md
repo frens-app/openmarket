@@ -30,7 +30,7 @@ The tab is labeled **AI Search** and sits alongside Browse and Tools. A signed-o
 
 An empty chat shows a composer, the device's current search area, and sample requests. For example: “Find a solid wood desk under $150, at least 48 inches wide.” A user message starts a run: the model and tool calls needed to answer that message. Follow-ups keep context within the temporary session. **New chat** clears the current conversation; there is no history list or cross-device sync in v1.
 
-Show concise progress such as “Searching for desks,” “Filtering results,” and “Checking dimensions,” plus a Stop control. The UI receives structured tool actions and useful status text, not private model reasoning. `display_products` renders one or more native product cards inline. Cards use observed title, price, currency display, image, location, availability when known, and a supported recommendation reason. Important unknowns remain visible. Tapping a card opens the existing detail screen without losing the chat position.
+Show concise progress such as “Searching for desks,” “Filtering results,” and “Checking dimensions,” plus a Stop control. The UI receives structured tool actions and useful status text, not private model reasoning. `display_products` renders a horizontal carousel of compact product cards, matching the Price Check evidence strip. Reasons and caveats appear below each card. Cards use observed title, price, currency display, image, location, availability when known, and a supported recommendation reason. Important unknowns remain visible. Tapping a card opens the existing detail screen without losing the chat position.
 
 The assistant can finish with a shortlist, ask a question, or explain that it found no suitable options in the results checked. It must not claim a limited search is exhaustive. Plausible products with unresolved details can be shown as possibilities, with the missing facts clearly stated.
 
@@ -58,7 +58,7 @@ Names and wire types are proposed. Define typed protobuf messages and generate G
 |---|---|---|---|
 | `search` | `query`, individual optional fields below, optional `cursor` | Fetch one page using the existing search path, apply supported filters and device search area, and upload card observations. | Run binary Jev filtering against `query`; return matching cards, counts, applied settings, and pagination metadata. |
 | `inspect_product` | Known `listing_id` | Run the same detail loading and parsing path used when the user taps that listing, in the background. | Return the parsed details and their observation time to the assistant for assessment against the full request. |
-| `display_products` | Ordered known listing IDs, reasons, caveats, optional group title | Render native cards from observed listing data and acknowledge the rendered IDs. | Return a display acknowledgement so the assistant can continue or finish. |
+| `display_products` | Ordered known listing IDs, reasons, caveats, optional group title | Render native cards from observed listing data and acknowledge the rendered IDs. | Acknowledge the displayed cards and complete the run without another model call. |
 
 Clarifications and final answers are normal assistant messages. A display acknowledgement means cards were rendered, not that the user saw or accepted them. Inspection and display only accept listing IDs already observed in this session; navigation uses app-resolved listing URLs.
 
@@ -133,9 +133,9 @@ Existing account storage and model-usage accounting remain useful and stay in pl
 
 ## Limits and failure handling
 
-Proposed initial limits per user message are 8 model planning calls plus one tool-free closing response, 6 source page fetches across queries, 8 detail fetches, and 6 cards per displayed group. Jev batches contain at most 30 candidates. Allow one retry for a transient failure, counting it against applicable limits. Cap active run time at 120 seconds, excluding paused time. These are starting values to measure, not performance promises.
+Limits per user message are 5 model planning calls plus one closing response restricted to displaying known products or text, 2 source page fetches across queries, 3 detail fetches, and 6 cards per displayed group. Jev batches contain at most 30 candidates. Allow one retry for a transient failure, counting it against applicable limits. Cap active retrieval time at 60 seconds, excluding paused time. These are ceilings, not targets. Normally use one search, a batch of up to three necessary inspections, then a shortlist. A second page is a fallback for poor results. Successful display ends the run immediately; requests for more options start a new user turn. Repeated identical search pages and repeated inspections within a run are rejected. Status polling backs off from 0.5 to 2 seconds while progress is unchanged.
 
-Apply the existing model usage ceiling to conversation and Jev calls. Enforce run limits in the backend and source limits in the client. At a limit, return useful partial results and explain what remains unchecked. Reserve capacity for a closing response; if it fails, keep existing cards and show a deterministic stop reason.
+Apply the existing model usage ceiling to conversation and Jev calls. Enforce run limits in the backend and source limits in the client. At a limit, return useful partial results and explain what remains unchecked. Reserve capacity to display existing evidence even after the retrieval limit; if it fails, keep existing cards and show a deterministic stop reason.
 
 | Condition | Behavior |
 |---|---|

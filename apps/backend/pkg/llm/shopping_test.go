@@ -67,3 +67,31 @@ func TestShoppingJevUsesOnlyQueryAsTarget(t *testing.T) {
 		t.Fatalf("%v %v", d, err)
 	}
 }
+
+func TestShoppingGatewayOnlyOffersAllowedTools(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Tools []struct {
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			} `json:"tools"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		if len(request.Tools) != 1 || request.Tools[0].Function.Name != "display_products" {
+			t.Errorf("unexpected tools: %+v", request.Tools)
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"No further matches."}}]}`))
+	}))
+	defer server.Close()
+	p, err := NewGatewayProvider(GatewayOptions{APIKey: "test", Model: "test/model", BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = p.Shop(context.Background(), ShoppingInput{Messages: []ShoppingMessage{{Role: "user", Content: "desk"}}, AllowTools: true, AllowedTools: []string{"display_products"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

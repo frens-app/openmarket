@@ -141,7 +141,7 @@ func TestShoppingFullFrontendLoop(t *testing.T) {
 	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
 	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "d", DisplayedIds: []string{"desk"}})
 	x = waitShopping(t, s, ctx, x.Id, "completed")
-	if len(x.Messages) != 3 || x.Messages[1].GetDisplay() == nil {
+	if len(x.Messages) != 2 || x.Messages[1].GetDisplay() == nil {
 		t.Fatalf("missing display or duplicate message: %v", x.Messages)
 	}
 	e.mu.Lock()
@@ -151,7 +151,7 @@ func TestShoppingFullFrontendLoop(t *testing.T) {
 	e.mu.Unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.inputs) != 4 {
+	if len(p.inputs) != 3 {
 		t.Fatalf("duplicate continuation: %d", len(p.inputs))
 	}
 	for _, in := range p.inputs {
@@ -271,4 +271,84 @@ func TestShoppingPauseBlocksContinuationUntilResume(t *testing.T) {
 	}
 	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "s", PaginationStatus: "exhausted"})
 	waitShopping(t, s, ctx, x.Id, "completed")
+}
+
+func TestShoppingReducedBudgetsAndDuplicateWork(t *testing.T) {
+	s, _, v := setupShopping(t, &scriptedShopper{}, &queryEvaluator{})
+	x := s.sessions[v.Id]
+	x.started = time.Now()
+	search := action("s1", "search", `{"query":"desk"}`).ToolCalls[0]
+	if _, err := s.parseCall(x, search); err != nil {
+		t.Fatal(err)
+	}
+	search.ID = "s2"
+	if _, err := s.parseCall(x, search); err == nil {
+		t.Fatal("duplicate page would refetch Marketplace")
+	}
+	if _, err := s.parseCall(x, action("s3", "search", `{"query":"writing desk"}`).ToolCalls[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.parseCall(x, action("s4", "search", `{"query":"office desk"}`).ToolCalls[0]); err == nil {
+		t.Fatal("third source page was allowed")
+	}
+	for _, id := range []string{"a", "b", "c", "d"} {
+		x.known[id] = observation(id, "Desk")
+	}
+	for _, id := range []string{"a", "b", "c"} {
+		if _, err := s.parseCall(x, action("inspect-"+id, "inspect_product", `{"listing_id":"`+id+`"}`).ToolCalls[0]); err != nil {
+			t.Fatal(err)
+		}
+		if id == "a" {
+			if _, err := s.parseCall(x, action("repeat", "inspect_product", `{"listing_id":"a"}`).ToolCalls[0]); err == nil {
+				t.Fatal("repeated inspection allowed")
+			}
+		}
+	}
+	if _, err := s.parseCall(x, action("extra", "inspect_product", `{"listing_id":"d"}`).ToolCalls[0]); err == nil {
+		t.Fatal("fourth inspection was allowed")
+	}
+	x.started = time.Now().Add(-2 * time.Minute)
+	if _, err := s.parseCall(x, action("display", "display_products", `{"products":[{"listing_id":"a"}]}`).ToolCalls[0]); err != nil {
+		t.Fatalf("time limit prevented displaying existing evidence: %v", err)
+	}
+}
+
+func TestShoppingClosingCallCanOnlyDisplay(t *testing.T) {
+	p := &scriptedShopper{}
+	s, ctx, v := setupShopping(t, p, &queryEvaluator{})
+	s.mu.Lock()
+	x := s.sessions[v.Id]
+	x.view.RunId = "run"
+	x.calls = shoppingPlanningCalls
+	x.started = time.Now()
+	x.known["desk"] = observation("desk", "Desk")
+	s.plan(x)
+	s.mu.Unlock()
+	waitShopping(t, s, ctx, v.Id, "completed")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.inputs) != 1 || len(p.inputs[0].AllowedTools) != 1 || p.inputs[0].AllowedTools[0] != "display_products" {
+		t.Fatalf("closing call can retrieve more products: %+v", p.inputs)
+	}
+}
+
+func TestShoppingDisplaySkipsAdditionalRequestsInSameBatch(t *testing.T) {
+	display := action("display", "display_products", `{"products":[{"listing_id":"desk"}]}`)
+	display.ToolCalls = append(display.ToolCalls, action("extra", "search", `{"query":"writing desk"}`).ToolCalls[0])
+	p := &scriptedShopper{replies: []llm.ShoppingMessage{action("search", "search", `{"query":"desk"}`), display}}
+	s, ctx, x := setupShopping(t, p, &queryEvaluator{})
+	x = sendShopping(t, s, ctx, x)
+	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
+	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "search", Listings: []*v1.ShoppingListing{observation("desk", "Desk")}, PaginationStatus: "exhausted"})
+	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
+	if len(x.PendingCalls) != 1 || x.PendingCalls[0].GetDisplay() == nil {
+		t.Fatalf("unnecessary search queued: %v", x.PendingCalls)
+	}
+	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "display", DisplayedIds: []string{"desk"}})
+	waitShopping(t, s, ctx, x.Id, "completed")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.inputs) != 2 {
+		t.Fatal("model called again after display")
+	}
 }
