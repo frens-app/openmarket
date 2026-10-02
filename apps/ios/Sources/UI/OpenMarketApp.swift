@@ -74,6 +74,7 @@ struct OpenMarketApp: App {
                 .environmentObject(discover)
                 .environmentObject(marketChecks)
                 .environmentObject(chooser)
+                .onAppear { store.detail.browseWebView = discover.webViews.first }
         }
         // Cache writes are coalesced on a 2s debounce, which is right for a
         // burst of writes and wrong for an app about to be killed. Leaving

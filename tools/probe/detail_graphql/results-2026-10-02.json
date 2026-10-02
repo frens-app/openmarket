@@ -1,0 +1,244 @@
+{
+  "date": "2026-10-02",
+  "device": "iPhone 17 Pro Simulator",
+  "os": "iOS 26.3",
+  "signed_in": true,
+  "cases": [
+    {
+      "label": "active_1",
+      "browser_complete_ms": 2125,
+      "direct_pair_ms": 350,
+      "comparison": {
+        "targetIDsMatch": true,
+        "comparisons": {
+          "description": "equal",
+          "descriptionNormalized": "equal",
+          "photoIDs": "equal",
+          "condition": "browser_missing",
+          "locationText": "equal",
+          "fulfillment": "equal",
+          "highlyRated": "graphql_missing",
+          "latitude": "equal",
+          "longitude": "equal",
+          "sold": "equal",
+          "pending": "equal",
+          "sellerName": "equal",
+          "sellerID": "equal",
+          "joinedYear": "equal",
+          "sellerRating": "browser_missing",
+          "sellerRatingCount": "browser_missing",
+          "combinedRating": "browser_missing",
+          "combinedRatingCount": "browser_missing"
+        },
+        "photoCounts": {
+          "graphql": 2,
+          "browser": 2
+        },
+        "photoSizes": [
+          {
+            "width": 960,
+            "height": 720
+          },
+          {
+            "width": 720,
+            "height": 960
+          }
+        ],
+        "descriptionLengths": {
+          "graphql": 109,
+          "browser": 109
+        },
+        "descriptionContainsBrowser": true,
+        "hasCreationTime": true,
+        "sellerRatingsPrivate": true,
+        "combinedRatingsPrivate": true
+      }
+    },
+    {
+      "label": "active_2",
+      "direct_pair_ms": 491,
+      "browser_complete_ms": 2045,
+      "comparison": {
+        "targetIDsMatch": true,
+        "comparisons": {
+          "description": "equal",
+          "descriptionNormalized": "equal",
+          "photoIDs": "equal",
+          "condition": "browser_missing",
+          "locationText": "equal",
+          "fulfillment": "equal",
+          "highlyRated": "equal",
+          "latitude": "equal",
+          "longitude": "equal",
+          "sold": "equal",
+          "pending": "equal",
+          "sellerName": "equal",
+          "sellerID": "equal",
+          "joinedYear": "equal",
+          "sellerRating": "equal",
+          "sellerRatingCount": "equal",
+          "combinedRating": "equal",
+          "combinedRatingCount": "different"
+        },
+        "photoCounts": {
+          "graphql": 3,
+          "browser": 3
+        },
+        "photoSizes": [
+          {
+            "width": 613,
+            "height": 960
+          },
+          {
+            "width": 960,
+            "height": 949
+          },
+          {
+            "width": 909,
+            "height": 960
+          }
+        ],
+        "descriptionLengths": {
+          "graphql": 68,
+          "browser": 68
+        },
+        "descriptionContainsBrowser": true,
+        "hasCreationTime": true,
+        "sellerRatingsPrivate": false,
+        "combinedRatingsPrivate": false
+      }
+    },
+    {
+      "label": "sold_1",
+      "direct_pair_ms": 488,
+      "browser_complete_ms": 1574,
+      "comparison": {
+        "targetIDsMatch": true,
+        "comparisons": {
+          "description": "different",
+          "descriptionNormalized": "different",
+          "photoIDs": "equal",
+          "condition": "browser_missing",
+          "locationText": "equal",
+          "fulfillment": "equal",
+          "highlyRated": "equal",
+          "latitude": "browser_missing",
+          "longitude": "browser_missing",
+          "sold": "equal",
+          "pending": "equal",
+          "sellerName": "equal",
+          "sellerID": "equal",
+          "joinedYear": "equal",
+          "sellerRating": "browser_missing",
+          "sellerRatingCount": "browser_missing",
+          "combinedRating": "browser_missing",
+          "combinedRatingCount": "browser_missing"
+        },
+        "photoCounts": {
+          "graphql": 3,
+          "browser": 3
+        },
+        "photoSizes": [
+          {
+            "width": 720,
+            "height": 960
+          },
+          {
+            "width": 442,
+            "height": 960
+          },
+          {
+            "width": 442,
+            "height": 960
+          }
+        ],
+        "descriptionLengths": {
+          "graphql": 754,
+          "browser": 145
+        },
+        "descriptionContainsBrowser": true,
+        "hasCreationTime": true,
+        "sellerRatingsPrivate": true,
+        "combinedRatingsPrivate": true
+      }
+    }
+  ],
+  "anonymous": [
+    {
+      "http_status": 200,
+      "elapsed_ms": 115,
+      "operationName": "MarketplacePDPC2CMediaViewerWithImagesQuery",
+      "bytes": 2714,
+      "records": 1,
+      "errors": [],
+      "errorCodes": [],
+      "errorDescriptions": [],
+      "targetPresent": true,
+      "photoCount": 2,
+      "sellerPresent": false
+    },
+    {
+      "http_status": 200,
+      "elapsed_ms": 1513,
+      "operationName": "MarketplacePDPContainerQuery",
+      "bytes": 457183,
+      "records": 1,
+      "errors": [],
+      "errorCodes": [],
+      "errorDescriptions": [],
+      "targetPresent": true,
+      "sellerPresent": false
+    }
+  ],
+  "anonymous_comparison": {
+    "targetIDsMatch": true,
+    "comparisons": {
+      "description": "equal",
+      "descriptionNormalized": "equal",
+      "photoIDs": "equal",
+      "condition": "browser_missing",
+      "locationText": "equal",
+      "fulfillment": "equal",
+      "highlyRated": "graphql_missing",
+      "latitude": "equal",
+      "longitude": "equal",
+      "sold": "equal",
+      "pending": "equal",
+      "sellerName": "graphql_missing",
+      "sellerID": "graphql_missing",
+      "joinedYear": "graphql_missing",
+      "sellerRating": "both_missing",
+      "sellerRatingCount": "both_missing",
+      "combinedRating": "both_missing",
+      "combinedRatingCount": "both_missing"
+    },
+    "photoCounts": {
+      "graphql": 2,
+      "browser": 2
+    },
+    "photoSizes": [
+      {
+        "width": 960,
+        "height": 720
+      },
+      {
+        "width": 720,
+        "height": 960
+      }
+    ],
+    "descriptionLengths": {
+      "graphql": 109,
+      "browser": 109
+    },
+    "descriptionContainsBrowser": true,
+    "hasCreationTime": true
+  },
+  "limitations": [
+    "Small sequential sample, not production percentiles or a cold-cache benchmark.",
+    "Signed-in direct pairs use an already-loaded authenticated item document; bootstrap is excluded.",
+    "Request spacing is included in direct pair times; image downloads and UI rendering are excluded.",
+    "Anonymous tested on one active listing; comparison baseline is authenticated.",
+    "Query metadata was discovered from a signed-in page; no cookie or CSRF token was exported.",
+    "No production transport or UI changes."
+  ]
+}

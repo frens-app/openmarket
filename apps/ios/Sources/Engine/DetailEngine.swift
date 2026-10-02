@@ -6,31 +6,24 @@ extension Logger {
     static let detail = Logger(subsystem: "lol.frens.openmarket", category: "detail")
 }
 
-/// Webview B — the fallback path to an item page, plus the session cache.
-///
-/// Not the usual path: tapping a card lands `FeedEngine` on the item page with
-/// the full document already in its DOM, and loading it a second time here costs
-/// ~4.4s of a ~6.5s tap for nothing. What remains is the route for cards the tap
-/// can't reach — resolve the id by searching the desktop surface, then load the
-/// page — and the cache both paths write into.
-///
-/// Detail pages are ordinary documents: description, condition, posted date,
-/// photos and location all render logged out (seller identity does not).
+/// Direct listing queries, with an item-page fallback for unsupported responses.
 @MainActor
 final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
     let webView: WKWebView
     private let metrics: MetricsReporter
     private let pacer: RequestPacer
-
-
-    /// The desktop surface is used here, not the mobile one. It caps search
-    /// results at 15 with no pagination — irrelevant for a lookup — but unlike
-    /// mobile it exposes real `/marketplace/item/{id}` anchors, which is the
-    /// only reliable way to learn a listing's canonical URL. Its detail pages
-    /// are also the richer ones.
-    /// Item pages are loaded with the *mobile* UA: it is the only surface that
-    /// publishes the seller's name, join date and rating. `resolveItemURL` still
-    /// needs the desktop UA, which is why the agent is set per load, not once.
+    private let actorProvider: () async -> String?
+    private let injectedClient: (any GraphQLDetailLoading)?
+    weak var authenticatedWebView: WKWebView?
+    weak var browseWebView: WKWebView?
+    private lazy var graphQL: any GraphQLDetailLoading = injectedClient ?? DetailGraphQLClient(
+        pacer: pacer, webViews: { [weak self] in
+            guard let self else { return [] }
+            return [self.webView, self.authenticatedWebView, self.browseWebView].compactMap { $0 }
+        }, currentActor: actorProvider)
+    private var activeRequest: Task<ListingDetail?, Never>?
+    private var generation = 0
+    private(set) var lastTransport: String?
     static let mobileUserAgent =
         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 " +
         "(KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1"
@@ -39,18 +32,22 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 " +
         "(KHTML, like Gecko) Version/18.7 Safari/605.1.15"
 
-    let session: BrowserSession
+    var session: BrowserSession
 
     /// Shares a store with the feed engine rather than getting its own, so a
     /// detail load reuses the scripts, stylesheets and fonts the search page in
     /// the next webview just downloaded — and, signed in, the session cookies,
     /// without which the page has no seller data to render.
-    init(session: BrowserSession = .authed,
+    init(session: BrowserSession = .unauthed,
          metrics: MetricsReporter = LocalMetrics.shared,
-         pacer: RequestPacer = .shared) {
+         pacer: RequestPacer = .shared,
+         graphQL: (any GraphQLDetailLoading)? = nil,
+         actorProvider: @escaping () async -> String? = { await SessionState.facebookActor() }) {
         self.session = session
         self.metrics = metrics
         self.pacer = pacer
+        self.injectedClient = graphQL
+        self.actorProvider = actorProvider
         let config = WKWebViewConfiguration.make()
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 900), configuration: config)
         super.init()
@@ -201,7 +198,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
                                     // second of pure waiting to every open.
                                     interval: Duration = .milliseconds(40),
                                     firstReady: ((T) -> Bool)? = nil,
-                                    onFirst: (@MainActor (T) -> Void)? = nil) async -> T? {
+                                    onFirst: (@MainActor (T) async -> Void)? = nil) async -> T? {
         // Yields null while the outgoing document is still in place, so a
         // half-navigated webview can never hand us the previous listing.
         let guarded = "(function(){ if (window.__mpStale) return null; return \(script); })()"
@@ -210,13 +207,14 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         var latest: T?
         var firedFirst = false
         while clock.now < deadline {
+            guard !Task.isCancelled else { return nil }
             if let json = try? await webView.evaluateJavaScript(guarded) as? String,
                let data = json.data(using: .utf8),
                let decoded = try? JSONDecoder().decode(type, from: data) {
                 latest = decoded
                 if !firedFirst, firstReady?(decoded) == true {
                     firedFirst = true
-                    onFirst?(decoded)
+                    await onFirst?(decoded)
                 }
                 if isReady(decoded) { return decoded }
             }
@@ -225,23 +223,62 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         return latest
     }
 
-    /// The preview is the screen; this only ever enhances it. Failure is
-    /// quiet and the caller keeps showing what it already had.
-    ///
-    /// Deliberately uncached. Caching moved to `ListingCache`, which persists
-    /// across launches — and every call that reaches here is now a *revalidation*,
-    /// asked for precisely because the caller already has a cached copy and
-    /// wants to know whether the price or the sold status has moved.
-    /// `onPartial` fires as soon as the *text* is readable, which is well before
-    /// the gallery is.
-    ///
-    /// Photos are not in the payload — measured: 25 rendered `<img>` against
-    /// zero image URIs in the listing's own JSON — so they can only be read once
-    /// the page has actually rendered them. Waiting for that before showing
-    /// anything is what made an open feel like three seconds when the
-    /// description was ready in well under one.
+    func cancel() {
+        generation += 1
+        activeRequest?.cancel()
+        activeRequest = nil
+        webView.stopLoading()
+    }
+
     func loadDetail(id: String, url: URL,
                     onPartial: @escaping @MainActor (ListingDetail) -> Void = { _ in }) async -> ListingDetail? {
+        cancel()
+        lastTransport = nil
+        let current = generation
+        let request = Task { @MainActor in
+            let started = Date()
+            let actor = await actorProvider()
+            guard !Task.isCancelled, generation == current, session != .authed || actor != nil,
+                  let itemID = url.marketplaceItemID else { return nil as ListingDetail? }
+            let isCurrent: @MainActor () async -> Bool = { [weak self] in
+                guard let self else { return false }
+                let liveActor = await self.actorProvider()
+                return !Task.isCancelled && self.generation == current && liveActor == actor
+            }
+            let publish: @MainActor (ListingDetail) -> Void = { [weak self] value in
+                guard !Task.isCancelled, self?.generation == current else { return }
+                onPartial(value)
+            }
+            do {
+                let result = try await graphQL.load(itemID: itemID, actor: actor, onPartial: publish)
+                guard await isCurrent() else { return nil }
+                lastTransport = actor == nil ? "anonymous_graphql" : "authenticated_graphql"
+                metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: true)
+                Logger.detail.info("detail transport=\(self.lastTransport ?? "unknown", privacy: .public) ms=\(Int(Date().timeIntervalSince(started) * 1000), privacy: .public)")
+                return result
+            } catch {
+                guard await isCurrent() else { return nil }
+                guard (error as? GraphQLFeedError)?.permitsBrowserFallback == true else {
+                    metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: false)
+                    return nil
+                }
+                lastTransport = "browser"
+                let result = await loadBrowserDetail(id: id, url: url, onPartial: { value in
+                    if await isCurrent() { publish(value) }
+                })
+                guard await isCurrent() else { return nil }
+                if let result { publish(result) }
+                return result
+            }
+        }
+        activeRequest = request
+        let result = await withTaskCancellationHandler { await request.value } onCancel: { request.cancel() }
+        if generation == current { activeRequest = nil }
+        return Task.isCancelled ? nil : result
+    }
+
+    func loadBrowserDetail(id: String, url: URL,
+                           onPartial: @escaping @MainActor (ListingDetail) async -> Void = { _ in }) async -> ListingDetail? {
         let started = Date()
         guard await pacer.waitForSlot() else { return nil }
 
@@ -274,10 +311,10 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         guard let raw = await poll(script, as: RawDetail.self,
                                    until: { $0.loginWall || ($0.description != nil && !$0.photoURLs.isEmpty) },
                                    timeout: .seconds(8),
-                                   firstReady: { $0.hasText },
+                                   firstReady: { $0.hasText && $0.matches(expectedID) && !$0.loginWall },
                                    onFirst: { partial in
                                        textAt = Date()
-                                       onPartial(partial.listingDetail)
+                                       await onPartial(partial.listingDetail)
                                    }) else {
             Logger.detail.warning("detail parse failed for \(url.absoluteString, privacy: .public)")
             metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: false)
@@ -320,7 +357,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
         // The initial callback may have contained text only. Publish the
         // validated gallery before spending up to three seconds on the seller.
         if raw.matches(expectedID), !raw.loginWall {
-            onPartial(raw.listingDetail)
+            await onPartial(raw.listingDetail)
         }
         let galleryPublishedAt = Date()
         if best.sellerName == nil, best.sellerProfileID == nil, !best.loginWall {

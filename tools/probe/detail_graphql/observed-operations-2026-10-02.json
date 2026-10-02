@@ -1,0 +1,35 @@
+[
+  {
+    "operation": "MarketplacePDPC2CMediaViewerWithImagesQuery",
+    "doc_id": "10059604367394414",
+    "variables": {}
+  },
+  {
+    "operation": "MarketplacePDPContainerQuery",
+    "doc_id": "38856723643971385",
+    "variables": {
+      "feedbackSource": 56,
+      "feedLocation": "MARKETPLACE_MEGAMALL",
+      "referralSurfaceString": null,
+      "scale": 3,
+      "useDefaultActor": false,
+      "__relay_internal__pv__MarketplacePDPCometSimilarListingsrelayprovider": false,
+      "__relay_internal__pv__MarketplacePDPShouldShowRelatedSearchesrelayprovider": true,
+      "__relay_internal__pv__MarketplacePDPShouldShowLoggedOutSellerTrustrelayprovider": false,
+      "__relay_internal__pv__ShouldUpdateMarketplaceBoostListingBoostedStatusrelayprovider": false,
+      "__relay_internal__pv__CometUFIShareActionMigrationrelayprovider": true,
+      "__relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider": true,
+      "__relay_internal__pv__GHLShouldChangeAdIdFieldNamerelayprovider": true,
+      "__relay_internal__pv__CometUFI_dedicated_comment_routable_dialog_gkrelayprovider": true,
+      "__relay_internal__pv__CometUFICommentAutoTranslationTyperelayprovider": "AUTO_TRANSLATE",
+      "__relay_internal__pv__CometUFICommentAvatarStickerAnimatedImagerelayprovider": false,
+      "__relay_internal__pv__CometUFICommentActionLinksRewriteEnabledrelayprovider": true,
+      "__relay_internal__pv__IsWorkUserrelayprovider": false,
+      "__relay_internal__pv__CometUFIReactionsEnableShortNamerelayprovider": false,
+      "__relay_internal__pv__CometUFISingleLineUFIrelayprovider": true,
+      "__relay_internal__pv__MarketplacePDPShouldShowBSGRecommendationsrelayprovider": false,
+      "__relay_internal__pv__MarketplacePDPJobShouldShowSharedGroupsSectionrelayprovider": false,
+      "__relay_internal__pv__MarketplacePDPJobIsShareToGroupsEnabledOnCometrelayprovider": false
+    }
+  }
+]

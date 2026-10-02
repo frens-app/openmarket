@@ -73,7 +73,9 @@ final class ListingStore: ObservableObject {
         // Before the guard: an injected engine can start out of step with this
         // object, and the call that would correct it is the one returning early.
         desktop.session = session
+        detail.session = session
         guard session != self.session else { return }
+        detail.cancel()
         self.session = session
         resultsGeneration += 1
         graphQLRequest?.cancel()
@@ -103,6 +105,7 @@ final class ListingStore: ObservableObject {
         self.desktop = desktop ?? DesktopFeedEngine()
         self.feed = feed ?? FeedEngine()
         self.detail = detail ?? DetailEngine()
+        self.detail.authenticatedWebView = self.desktop.webView
         self.prefs = prefs
         self.metrics = metrics
         self.cache = cache
