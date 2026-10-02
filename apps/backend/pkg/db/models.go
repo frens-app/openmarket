@@ -102,6 +102,7 @@ const (
 	LlmRunStageIDENTIFY  LlmRunStage = "IDENTIFY"
 	LlmRunStagePRICE     LlmRunStage = "PRICE"
 	LlmRunStageRELEVANCE LlmRunStage = "RELEVANCE"
+	LlmRunStageSHOPPING  LlmRunStage = "SHOPPING"
 )
 
 func (e *LlmRunStage) Scan(src interface{}) error {

@@ -1,6 +1,6 @@
 # Backend
 
-Go + Connect RPC + Postgres. Accounts and phone login; nothing else yet.
+Go + Connect RPC + Postgres. Accounts, phone login, Price Check, and AI Search.
 
 **Full write-up: [`docs/backend.md`](../../docs/backend.md).** The platform
 evaluation that led here is [`docs/backend-platform.md`](../../docs/backend-platform.md).
@@ -161,3 +161,28 @@ key or Prelude key, an empty country allowlist, `JWT_SECRET` equal to
 `REFRESH_TOKEN_HMAC_KEY`, or `DEV_BYPASS_PHONE_NUMBERS` left set with
 `ENV=production` are all panics. That last one is the only way a code is accepted
 without Prelude having sent it, which is why it is the only override guarded.
+
+## AI Search
+
+`ShoppingService` runs an authenticated, temporary shopping conversation. Both
+Openmarket and the device's reported Facebook connection are required. Configure
+`AI_GATEWAY_API_KEY` (or `LLM_API_KEY` with `LLM_PROVIDER=vercel`) and optionally
+`SHOPPING_MODEL`, which defaults to `google/gemini-3.6-flash`. AI Search uses the
+Gateway independently of Price Check's configured identification provider. Missing
+credentials disable AI Search explicitly; there are no fabricated shopping results.
+
+The phone executes search, inspection, and display actions. Jev evaluates search
+cards against the broad query only; the conversation model evaluates full user
+requirements after receiving parsed details. See [the spec](../../docs/ai-search.md).
+
+Sessions expire after 30 minutes without client activity and are lost on process
+restart. Use one backend replica for this first version; multiple replicas need
+session affinity. No chat tables are created. Migration 00014 adds only the
+`SHOPPING` model-accounting stage; existing usage ceilings include these calls.
+Tool responses are capped at 256 KB before processing, and each Jev batch at 30
+candidates. The model has at most eight planning calls plus a closing response,
+six source-page actions and eight inspections per user message.
+
+Run `go test -race ./cmd/api ./pkg/llm` for the scripted frontend/tool loop, account
+isolation, pagination binding, cancellation, filtering failure, and Gateway tests.
+These tests use synthetic provider responses and do not spend model credits.

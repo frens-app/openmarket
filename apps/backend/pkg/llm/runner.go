@@ -46,6 +46,7 @@ type Runner struct {
 	provider   interface{ Name() string }
 	identifier Provider
 	evaluator  Evaluator
+	shopper    Shopper
 	store      Store
 	logger     *zap.Logger
 
