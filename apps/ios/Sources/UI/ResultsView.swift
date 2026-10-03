@@ -20,7 +20,7 @@ struct ResultsView: View {
     @FocusState private var isSearching: Bool
     /// Search is a temporary surface over the home feed, not the owner of it.
     /// Keeping this separate from `store.query` lets Search retain its results
-    /// while Cancel reveals the exact Discover view underneath.
+    /// while clearing the field reveals the exact Discover view underneath.
     @State private var surface: Surface = .discover
     @State private var selected: Listing?
     @State private var showSettings = false
@@ -147,7 +147,7 @@ struct ResultsView: View {
         .onChange(of: location.coordinate?.latitude) {
             distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace, deviceFix: location.coordinate))
         }
-        // Clear and Cancel both mean "back to what I was browsing." Discover
+        // Clearing the field means "back to what I was browsing." Discover
         // remains mounted underneath Search, so this is only a surface switch:
         // no feed reset, no network request, and no lost scroll position.
         .onChange(of: searchText) { _, text in
@@ -267,9 +267,10 @@ struct ResultsView: View {
                     .autocorrectionDisabled()
                     .onSubmit(submitSearch)
                     .accessibilityIdentifier("browse-search-field")
-                if !searchText.isEmpty {
+                if !searchText.isEmpty || isSearching {
                     Button {
-                        searchText = ""
+                        isSearching = false
+                        returnToDiscover()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -279,7 +280,7 @@ struct ResultsView: View {
                 }
             }
             .padding(.leading, 12)
-            .padding(.trailing, searchText.isEmpty ? 12 : 0)
+            .padding(.trailing, searchText.isEmpty && !isSearching ? 12 : 0)
             .frame(minHeight: 44)
             .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
@@ -287,19 +288,11 @@ struct ResultsView: View {
                 .frame(width: 44, height: 44)
                 .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
-            if isSearching || surface == .search {
-                Button("Cancel") {
-                    isSearching = false
-                    returnToDiscover()
-                }
-                .font(.subheadline)
-                .fixedSize()
-                .frame(minHeight: 44)
-            }
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .padding(.bottom, surface == .search && !isSearching ? 0 : 8)
     }
 
     private var savedButton: some View {
@@ -706,7 +699,7 @@ struct ResultsView: View {
 
     /// Runs a term from search suggestions. The field is filled first so
     /// Search opens in the state it would be in had the term been typed, and
-    /// Cancel and Clear mean what they always mean.
+    /// clearing the field returns to Discover.
     private func replaySearch(_ term: String) {
         isSearching = false
         searchText = term

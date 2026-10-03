@@ -24,30 +24,28 @@ struct ActiveFilterBar: View {
     let onRerun: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
                 locationReadout
                 sortReadout
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
             }
             if !chips.isEmpty {
                 chipRow
             }
             switchNotice
         }
-        .padding(.horizontal, 16)
-        // Tight to the search field above. The bar reads as belonging to it —
-        // where, how sorted, what else — so the two want to look like one
-        // block rather than two stacked controls with air between them.
-        .padding(.top, 2)
-        .padding(.bottom, 10)
-        .background(.bar)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
+        // The search header supplies one shared background for both rows.
     }
 
     // MARK: - Readouts
 
     private var locationReadout: some View {
         Button(action: onLocation) {
-            readout(caption: "LOCATION", value: locationValue,
+            readout(icon: "mappin", value: locationValue,
                     isPending: chooser.switching != nil)
         }
         .buttonStyle(.plain)
@@ -74,40 +72,35 @@ struct ActiveFilterBar: View {
                 }
             }
         } label: {
-            readout(caption: "SORT", value: prefs.sort.label)
+            readout(icon: "arrow.up.arrow.down", value: prefs.sort.label)
         }
         // A `Menu` tints its label with the accent colour, which made the two
         // halves of the bar look like different kinds of thing — one a value,
         // one a link — when they are the same kind of control.
         .tint(Color.primary)
+        .buttonStyle(.plain)
         .accessibilityLabel("Sort, \(prefs.sort.label). Change")
     }
 
-    /// Caption above value, both always legible. The caption is what makes the
-    /// pair readable at a glance — two bare strings side by side don't say
-    /// which is the place and which is the order.
-    private func readout(caption: String, value: String,
+    /// Content-sized pills keep the readouts secondary to search. The visible
+    /// capsule stays small while the transparent hit area remains 44pt tall.
+    private func readout(icon: String, value: String,
                          isPending: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(caption)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
-            HStack(spacing: 6) {
-                Text(value)
-                    .font(.subheadline.weight(.medium))
-                    // Dimmed while unconfirmed, which is the cheapest honest
-                    // signal available: the name is what the user asked for,
-                    // not yet what the results are.
-                    .foregroundStyle(isPending ? .secondary : .primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if isPending { ProgressView().controlSize(.mini) }
-            }
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(isPending ? .secondary : .primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if isPending { ProgressView().controlSize(.mini) }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(.secondarySystemFill), in: Capsule())
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 
