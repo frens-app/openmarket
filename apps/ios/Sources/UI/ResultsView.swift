@@ -17,9 +17,7 @@ struct ResultsView: View {
     @EnvironmentObject private var discover: DiscoverFeed
 
     @State private var searchText = ""
-    /// Whether the search field is presented. Only needed to tell a deliberate
-    /// clear from the field simply closing — see the `searchText` handler.
-    @State private var isSearching = false
+    @FocusState private var isSearching: Bool
     /// Search is a temporary surface over the home feed, not the owner of it.
     /// Keeping this separate from `store.query` lets Search retain its results
     /// while Cancel reveals the exact Discover view underneath.
@@ -27,6 +25,7 @@ struct ResultsView: View {
     @State private var selected: Listing?
     @State private var showSettings = false
     @State private var showFilters = false
+    @State private var showSaved = false
     @State private var showLocationPicker = false
 
     @State private var showSignIn = false
@@ -67,23 +66,29 @@ struct ResultsView: View {
     /// what the type checker will accept in one expression.
     private var results: some View {
         browseSurfaces
-        // Pinned rather than scrolled with the results, so what shaped this
-        // result set stays readable while reading it. Only over results — on the
-        // home screen there is no query for a sort to order.
         .safeAreaInset(edge: .top, spacing: 0) {
-            if surface == .search {
-                ActiveFilterBar(
-                    onLocation: { showLocationPicker = true },
-                    onRerun: { Task { await rerunCurrentQuery() } }
-                )
+            VStack(spacing: 0) {
+                searchBar
+                if surface == .search && !isSearching {
+                    ActiveFilterBar(
+                        onLocation: { showLocationPicker = true },
+                        onRerun: { Task { await rerunCurrentQuery() } }
+                    )
+                }
             }
+            .background(.bar)
         }
         .sheet(isPresented: $showLocationPicker) {
             LocationPickerSheet()
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { profileButton }
-            ToolbarItem(placement: .topBarTrailing) { filtersButton }
+            ToolbarItem(placement: .topBarTrailing) { savedButton }
+        }
+        .sheet(isPresented: $showSaved) {
+            SavedListingsSheet { listing, position in
+                recordListingOpen(listing, from: .saved, at: position)
+            }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showFilters) {
@@ -195,25 +200,20 @@ struct ResultsView: View {
         ZStack {
             discoverSurface
                 .opacity(surface == .discover ? 1 : 0)
-                .allowsHitTesting(surface == .discover)
-                .accessibilityHidden(surface != .discover)
+                .allowsHitTesting(surface == .discover && !isSearching)
+                .accessibilityHidden(surface != .discover || isSearching)
 
             searchSurface
                 .opacity(surface == .search ? 1 : 0)
-                .allowsHitTesting(surface == .search)
-                .accessibilityHidden(surface != .search)
+                .allowsHitTesting(surface == .search && !isSearching)
+                .accessibilityHidden(surface != .search || isSearching)
+
+            if isSearching {
+                SearchSuggestions(onSelect: replaySearch)
+            }
         }
         .navigationTitle("Openmarket")
         .navigationBarTitleDisplayMode(.inline)
-        // Pinned under the title rather than left to `.automatic`, which on
-        // iOS 26 floats it at the bottom, away from the filters that shape it.
-        .searchable(text: $searchText,
-                    isPresented: $isSearching,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search local listings")
-        .searchSuggestions { SearchSuggestions() }
-        .keepToolbarDuringSearch()
-        .onSubmit(of: .search, submitSearch)
     }
 
     private var discoverSurface: some View {
@@ -254,6 +254,64 @@ struct ResultsView: View {
 
     // MARK: - Pieces
 
+    /// An explicit row keeps filters beside the field on every supported iOS
+    /// version, including while the keyboard and search suggestions are open.
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search local listings", text: $searchText)
+                    .focused($isSearching)
+                    .submitLabel(.search)
+                    .autocorrectionDisabled()
+                    .onSubmit(submitSearch)
+                    .accessibilityIdentifier("browse-search-field")
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, searchText.isEmpty ? 12 : 0)
+            .frame(minHeight: 44)
+            .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+            filtersButton
+                .frame(width: 44, height: 44)
+                .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+            if isSearching || surface == .search {
+                Button("Cancel") {
+                    isSearching = false
+                    returnToDiscover()
+                }
+                .font(.subheadline)
+                .fixedSize()
+                .frame(minHeight: 44)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private var savedButton: some View {
+        Button {
+            isSearching = false
+            showSaved = true
+        } label: {
+            Image(systemName: "bookmark")
+        }
+        .accessibilityLabel("Saved listings")
+    }
+
     /// Account and settings. Shows whether a session exists, because that
     /// changes what the app can see — seller identity, and how far the results
     /// go — so it is worth being able to tell at a glance.
@@ -270,7 +328,10 @@ struct ResultsView: View {
     /// filled and unfilled variants of this glyph differ by 1 pixel out of
     /// 30,301 at toolbar size, so the affordance communicated nothing.
     private var filtersButton: some View {
-        Button { showFilters = true } label: {
+        Button {
+            isSearching = false
+            showFilters = true
+        } label: {
             Image(systemName: "line.3.horizontal.decrease")
                 .foregroundStyle(prefs.hasNonDefaultFilters ? Color.accentColor : Color.primary)
                 .overlay(alignment: .topTrailing) {
@@ -282,6 +343,7 @@ struct ResultsView: View {
                     }
                 }
                 .padding(.trailing, 3)      // room for the badge to sit in
+                .frame(width: 44, height: 44)
         }
         .accessibilityLabel(prefs.hasNonDefaultFilters ? "Filters, active" : "Filters")
     }
@@ -314,70 +376,12 @@ struct ResultsView: View {
         }
     }
 
-    /// With an empty search bar: what the user came back for, then something to
-    /// scroll.
-    ///
-    /// The two personal sections are entirely local — every card comes out of
-    /// the profile store — and both are one row deep, which is what makes them
-    /// affordable above the fold. Either disappears when empty rather than
-    /// showing a placeholder, so a new install lands directly on Discover and
-    /// the screen fills in from the top as the app gets used.
+    /// Saved listings have their own sheet; Discover leads with the feed.
     private var home: some View {
-        let savedItems = store.listings(for: saved.ids)
-        // Saved listings are excluded from the recent strip: the same card in
-        // two adjacent rails is clutter rather than information.
-        let recentIDs = viewed.ids
-            .filter { !saved.contains($0) }
-            .prefix(ViewedListings.recentStripLength)
-        let recentItems = store.listings(for: Array(recentIDs))
         let discovered = winnowed(discover.listings, hidingViewed: false, radiusKM: discover.radiusKM)
 
-        return VStack(alignment: .leading, spacing: 24) {
-            if !recentSearchShortcuts.isEmpty {
-                recentSearchRail
-            }
-            if !recentItems.isEmpty {
-                strip("Recently viewed", items: recentItems, surface: .recentlyViewed)
-            }
-            if !savedItems.isEmpty {
-                strip("Saved", items: savedItems, surface: .saved)
-            }
-            discoverSection(discovered)
-        }
-        .padding(.top, 4)
-    }
-
-    /// The last few searches, as one-tap shortcuts. The same terms are in the
-    /// search field's suggestion list, but only once it is focused. Above the
-    /// listing strips because it is the least specific way back — a query rather
-    /// than a particular listing — and shorter than the suggestion list, since a
-    /// horizontal rail is scanned rather than read.
-    private var recentSearchShortcuts: [String] {
-        Array(prefs.recentSearches.prefix(Self.recentSearchShortcutCount))
-    }
-
-    private static let recentSearchShortcutCount = 6
-
-    private var recentSearchRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(recentSearchShortcuts, id: \.self) { term in
-                    Button {
-                        replaySearch(term)
-                    } label: {
-                        Label(term, systemImage: "arrow.clockwise")
-                            .font(.subheadline)
-                            .lineLimit(1)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(.secondarySystemFill), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                }
-            }
-            .padding(.horizontal, 12)
-        }
+        return discoverSection(discovered)
+            .padding(.top, 16)
     }
 
     private func sectionTitle(_ text: String) -> some View {
@@ -386,36 +390,9 @@ struct ResultsView: View {
             .padding(.horizontal, 12)
     }
 
-    /// A one-row rail of listings the app already has on disk. Both personal
-    /// sections use it: a rail says "a way back to a specific listing" where a
-    /// grid says "start here", which is Discover's job.
-    ///
-    /// `RecentCard` rather than `ListingCard` keeps transition ids unique across
-    /// the screen, which the zoom transition requires — a saved listing may also
-    /// appear in Discover, and two cards claiming one source id leave the push
-    /// nothing single to zoom out of.
-    private func strip(_ title: String,
-                       items: [Listing],
-                       surface: Analytics.Surface) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle(title)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { position, listing in
-                        RecentCard(listing: listing)
-                            .onTapGesture { open(listing, from: surface, at: position) }
-                    }
-                }
-                .padding(.horizontal, 12)
-            }
-        }
-    }
-
     /// Facebook's own Marketplace feed for this place, cut to the user's radius.
     ///
-    /// Runs to the bottom of the scroll — the other two sections are bounded by
-    /// what the user has done to individual listings. "The bottom" is the bottom
-    /// of the selected feed transport.
+    /// Runs to the bottom of the selected feed transport.
     @ViewBuilder
     private func discoverSection(_ w: WinnowedListings) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -683,19 +660,13 @@ struct ResultsView: View {
 
     // MARK: - Actions
 
-    /// Opens a listing, and records which of the four ways in was used.
-    ///
-    /// Every route to a listing on this screen goes through here, which is the
-    /// point: two personal rails and a feed compete for the same thumb above
-    /// the fold, and until this existed nothing said which one wins — or
-    /// whether the rails, which cost two rows on every home screen, are worth
-    /// the space.
-    ///
-    /// The single way into a listing from this screen, so no route can be added
-    /// without being counted.
     private func open(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
         selected = listing
+        recordListingOpen(listing, from: surface, at: position)
+    }
 
+    /// The Saved sheet owns its navigation, but shares the same tap analytics.
+    private func recordListingOpen(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
         var properties: [String: Any] = [
             "surface": surface.rawValue,
             "position": position,
@@ -727,15 +698,17 @@ struct ResultsView: View {
     private func submitSearch() {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return }
+        isSearching = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                                         to: nil, from: nil, for: nil)
         Task { await search(term) }
     }
 
-    /// Runs a term from the recent-searches rail. The field is filled first so
+    /// Runs a term from search suggestions. The field is filled first so
     /// Search opens in the state it would be in had the term been typed, and
     /// Cancel and Clear mean what they always mean.
     private func replaySearch(_ term: String) {
+        isSearching = false
         searchText = term
         Task { await search(term) }
     }
@@ -957,96 +930,34 @@ private struct PaginatedListingGrid<Footer: View>: View {
     }
 }
 
-/// What the search field offers while it has focus: what you looked for
-/// before, or somewhere to start if you never have.
-///
-/// Uses `.searchCompletion` rather than buttons: a button has to call
-/// `dismissSearch()`, which clears the field, and the empty value then trips the
-/// "emptied the field, go home" handler. A completion puts the term in the field
-/// and submits it.
-///
-/// Categories run as ordinary searches — the desktop payload extractor is
-/// verified only on `/search/` paths.
+/// Suggestions stay above the mounted feeds while the search field has focus.
 private struct SearchSuggestions: View {
     @EnvironmentObject private var prefs: Preferences
+    let onSelect: (String) -> Void
 
     var body: some View {
-        if !prefs.recentSearches.isEmpty {
-            Section("Recent") {
-                ForEach(prefs.recentSearches, id: \.self) { term in
-                    Label(term, systemImage: "clock.arrow.circlepath")
-                        .searchCompletion(term)
-                }
-            }
-        }
-        // The user's own interests rather than a fixed list of five. Since
-        // Discover stopped being built from them, this is the only thing they
-        // do — the standing answer to "what would you search for", offered
-        // where searching happens.
-        //
-        // The completion is the interest's search *term*, not its label —
-        // running a search for "Home & garden" would find nothing, because
-        // Marketplace matches listing text.
-        Section(prefs.recentSearches.isEmpty ? "Try" : "Your interests") {
-            ForEach(prefs.chosenInterests) { interest in
-                Label(interest.label, systemImage: "square.grid.2x2")
-                    .searchCompletion(interest.term)
-            }
-        }
-    }
-}
-
-private extension View {
-    /// Stops an active search from emptying the navigation bar.
-    ///
-    /// By default iOS hands the whole bar to the search field while a search is
-    /// in progress, taking the title and both toolbar buttons with it — which
-    /// is why the filters button used to disappear the moment anyone searched.
-    @ViewBuilder
-    func keepToolbarDuringSearch() -> some View {
-        if #available(iOS 17.1, *) {
-            searchPresentationToolbarBehavior(.avoidHidingContent)
-        } else {
-            self
-        }
-    }
-}
-
-/// A listing at strip size: square photo, price, one line of title.
-///
-/// Not a `ListingCard` — that one is built for a two-column grid and marks
-/// itself as a zoom-transition source, which would collide with the grid above
-/// if the same listing appeared in both.
-private struct RecentCard: View {
-    let listing: Listing
-
-    private static let side: CGFloat = 128
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Color(.tertiarySystemFill)
-                .frame(width: Self.side, height: Self.side)
-                .overlay {
-                    RemoteImage(url: listing.thumbnailURL) { phase in
-                        if let image = phase.image {
-                            image.resizable().scaledToFill()
-                        } else if phase.hasFailed {
-                            MissingPhoto()
+        List {
+            if !prefs.recentSearches.isEmpty {
+                Section("Recent") {
+                    ForEach(prefs.recentSearches, id: \.self) { term in
+                        Button { onSelect(term) } label: {
+                            Label(term, systemImage: "clock.arrow.circlepath")
+                                .foregroundStyle(.primary)
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            Text(listing.priceText ?? "—")
-                .font(.subheadline.weight(.semibold))
-            if let title = listing.title {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            }
+            Section(prefs.recentSearches.isEmpty ? "Try" : "Your interests") {
+                ForEach(prefs.chosenInterests) { interest in
+                    Button { onSelect(interest.term) } label: {
+                        Label(interest.label, systemImage: "square.grid.2x2")
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
         }
-        .frame(width: Self.side, alignment: .leading)
-        .contentShape(Rectangle())
+        .listStyle(.plain)
+        .background(Color(.systemBackground))
     }
 }
 

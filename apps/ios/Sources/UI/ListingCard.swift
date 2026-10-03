@@ -24,7 +24,8 @@ struct ListingCard: View {
             Text(listing.title ?? " ")
                 .font(.subheadline)
                 .foregroundStyle(.primary)
-                .lineLimit(2, reservesSpace: true)
+                .lineLimit(1, reservesSpace: true)
+                .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
             // Location and distance are the point of a *local* browser,
             // so they get their own line whenever the surface provides them.
