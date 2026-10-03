@@ -26,7 +26,7 @@ struct SellerView: View {
         }
         .task(id: filter) {
             guard await validateAccess() else { return }
-            await inventory.load(profile: profile, filter: filter)
+            await inventory.loadIfNeeded(profile: profile, filter: filter)
         }
         .onChange(of: store.session) { _, session in
             if session == .unauthed { revokeAccess() }

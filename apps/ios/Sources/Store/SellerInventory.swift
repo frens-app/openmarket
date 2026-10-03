@@ -37,9 +37,16 @@ final class SellerInventory: ObservableObject {
     private let loader: SellerInventoryLoading
     @Published private(set) var generation = 0
     private var loaded = false
+    private var loadedProfileID: String?
+    private var loadedFilter: SellerListingFilter?
     var webView: WKWebView { loader.webView }
 
     init(loader: SellerInventoryLoading? = nil) { self.loader = loader ?? SellerProfileClient() }
+
+    func loadIfNeeded(profile: SellerProfile, filter: SellerListingFilter) async {
+        guard !loaded || loadedProfileID != profile.id || loadedFilter != filter else { return }
+        await load(profile: profile, filter: filter)
+    }
 
     func load(profile: SellerProfile, filter: SellerListingFilter) async {
         cancel()
@@ -57,6 +64,8 @@ final class SellerInventory: ObservableObject {
             guard request == generation, !Task.isCancelled else { return }
             accept(page)
             loaded = true
+            loadedProfileID = profile.id
+            loadedFilter = filter
         } catch {
             guard request == generation, !Task.isCancelled else { return }
             failure(error)
@@ -101,6 +110,7 @@ final class SellerInventory: ObservableObject {
             needsSignIn = true
             items = []
             canLoadMore = false
+            loaded = false
         } else if case GraphQLFeedError.sessionChanged = error {
             items = []
             canLoadMore = false
