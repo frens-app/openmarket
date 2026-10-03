@@ -118,3 +118,30 @@ func TestEvaluationRunnerRecordsStageAndEnforcesCeiling(t *testing.T) {
 		t.Fatal("ceiling must prevent spending")
 	}
 }
+
+func TestRetailAlternativeUsesReplacementCriteria(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req evaluationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		question := req.Questions["candidate_0"]
+		if !strings.Contains(question.Instructions, "new retail alternative") ||
+			!strings.Contains(question.Criteria["true"], "Exact model identity is not required") ||
+			!strings.Contains(question.Criteria["false"], "refurbished") {
+			t.Errorf("missing retail replacement policy: %+v", question)
+		}
+		_, _ = w.Write([]byte(`{"answers":{"candidate_0":{"type":"boolean","probability":0.9}}}`))
+	}))
+	defer server.Close()
+	evaluator := NewJevEvaluator("test-key")
+	evaluator.baseURL = server.URL
+	decisions, _, err := evaluator.Evaluate(context.Background(), EvaluationInput{
+		RetailAlternative: true,
+		Target:            ComparisonItem{Title: "Old desk", Condition: "Used"},
+		Candidates:        []Candidate{{ID: "new-desk", Item: ComparisonItem{Title: "New writing desk"}}},
+	})
+	if err != nil || len(decisions) != 1 || !decisions[0].UseInComparison {
+		t.Fatalf("decisions: %+v, error: %v", decisions, err)
+	}
+}

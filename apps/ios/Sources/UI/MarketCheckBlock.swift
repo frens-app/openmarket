@@ -16,10 +16,11 @@ struct MarketCheckBlock: View {
     @EnvironmentObject private var checks: MarketCheckModel
     @EnvironmentObject private var account: AccountSession
     @State private var showSignIn = false
+    @State private var showEvidence = false
     @State private var resumeAfterSignIn = false
 
     var body: some View {
-        Group {
+        VStack(spacing: 10) {
             switch checks.phase(for: listing) {
             case nil:
                 if canAsk { askButton }
@@ -30,6 +31,7 @@ struct MarketCheckBlock: View {
             case .failed(let message):
                 InlineNotice(text: message, actionTitle: "Try again") { startCheck() }
             }
+            AmazonCheckBlock(listing: listing, canAsk: canAsk)
         }
         .animation(.easeOut(duration: 0.2), value: checks.phase(for: listing))
         .sheet(isPresented: $showSignIn, onDismiss: {
@@ -61,7 +63,13 @@ struct MarketCheckBlock: View {
     }
 
     private var askButton: some View {
-        Button { startCheck() } label: {
+        Button {
+            Analytics.capture(.marketCheckClicked, [
+                "listing_id": listing.id,
+                "is_signed_in": account.isSignedIn
+            ])
+            startCheck()
+        } label: {
             Label("AI Price Comparison", systemImage: "chart.bar.xaxis")
                 .font(.subheadline.weight(.medium))
                 .frame(maxWidth: .infinity)
@@ -120,7 +128,14 @@ struct MarketCheckBlock: View {
             .fixedSize(horizontal: false, vertical: true)
 
             if !check.comps.isEmpty || !check.sold.comps.isEmpty {
-                NavigationLink {
+                Button {
+                    capture(check)
+                    showEvidence = true
+                } label: {
+                    Text("See what this is based on")
+                        .font(.subheadline)
+                }
+                .navigationDestination(isPresented: $showEvidence) {
                     PriceEvidenceView(comps: check.comps,
                                       sold: check.sold,
                                       guide: check.guide,
@@ -128,10 +143,6 @@ struct MarketCheckBlock: View {
                                       marketName: check.marketName,
                                       searchTerm: check.term,
                                       surface: .marketCheck)
-                        .onAppear { capture(check) }
-                } label: {
-                    Text("See what this is based on")
-                        .font(.subheadline)
                 }
             }
         }

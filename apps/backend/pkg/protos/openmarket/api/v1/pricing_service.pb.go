@@ -1056,11 +1056,12 @@ func (x *ComparisonCandidate) GetItem() *ComparisonItem {
 }
 
 type EvaluateComparablesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Target        *ComparisonItem        `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	Candidates    []*ComparisonCandidate `protobuf:"bytes,2,rep,name=candidates,proto3" json:"candidates,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	RetailAlternative bool                   `protobuf:"varint,3,opt,name=retail_alternative,json=retailAlternative,proto3" json:"retail_alternative,omitempty"`
+	Target            *ComparisonItem        `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Candidates        []*ComparisonCandidate `protobuf:"bytes,2,rep,name=candidates,proto3" json:"candidates,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *EvaluateComparablesRequest) Reset() {
@@ -1091,6 +1092,13 @@ func (x *EvaluateComparablesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use EvaluateComparablesRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateComparablesRequest) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_pricing_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *EvaluateComparablesRequest) GetRetailAlternative() bool {
+	if x != nil {
+		return x.RetailAlternative
+	}
+	return false
 }
 
 func (x *EvaluateComparablesRequest) GetTarget() *ComparisonItem {
@@ -1291,8 +1299,9 @@ const file_openmarket_api_v1_pricing_service_proto_rawDesc = "" +
 	"\x13ComparisonCandidate\x12\x1a\n" +
 	"\x02id\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\x02id\x12=\n" +
-	"\x04item\x18\x02 \x01(\v2!.openmarket.api.v1.ComparisonItemB\x06\xbaH\x03\xc8\x01\x01R\x04item\"\xb3\x01\n" +
-	"\x1aEvaluateComparablesRequest\x12A\n" +
+	"\x04item\x18\x02 \x01(\v2!.openmarket.api.v1.ComparisonItemB\x06\xbaH\x03\xc8\x01\x01R\x04item\"\xe2\x01\n" +
+	"\x1aEvaluateComparablesRequest\x12-\n" +
+	"\x12retail_alternative\x18\x03 \x01(\bR\x11retailAlternative\x12A\n" +
 	"\x06target\x18\x01 \x01(\v2!.openmarket.api.v1.ComparisonItemB\x06\xbaH\x03\xc8\x01\x01R\x06target\x12R\n" +
 	"\n" +
 	"candidates\x18\x02 \x03(\v2&.openmarket.api.v1.ComparisonCandidateB\n" +

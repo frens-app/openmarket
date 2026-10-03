@@ -171,6 +171,9 @@ enum Analytics {
         /// Asking what somebody else's listing is worth. Its own prefix rather
         /// than a `source` on the price-check funnel: that one ends in a price
         /// being copied into a listing, and this one has no such step.
+        case marketCheckClicked = "market_check_clicked"
+        case amazonComparisonClicked = "amazon_comparison_clicked"
+        case amazonProductClicked = "amazon_product_clicked"
         case marketCheckStarted = "market_check_started"
         case marketCheckCompleted = "market_check_completed"
         case marketCheckFailed = "market_check_failed"

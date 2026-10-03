@@ -46,3 +46,13 @@ func TestRelevanceRequiresAuthAndConfiguredProvider(t *testing.T) {
 		t.Fatalf("unconfigured provider must not accept candidates, got %v", err)
 	}
 }
+
+func TestRetailAlternativeModeIsForwarded(t *testing.T) {
+	item := &v1.ComparisonItem{Title: "Desk"}
+	in, err := comparisonInput(&v1.EvaluateComparablesRequest{Target: item, RetailAlternative: true,
+		Candidates: []*v1.ComparisonCandidate{{Id: "desk", Item: item}},
+	})
+	if err != nil || !in.RetailAlternative {
+		t.Fatalf("retail mode lost: %+v, %v", in, err)
+	}
+}

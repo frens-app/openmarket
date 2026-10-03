@@ -50,6 +50,7 @@ struct OpenMarketApp: App {
     /// user can back out to a feed they have scrolled a long way down and come
     /// back to a finished answer.
     @StateObject private var marketChecks = MarketCheckModel()
+    @StateObject private var amazonChecks = AmazonCheckModel()
     /// App-level because a location switch outlives the sheet that starts it:
     /// the sheet dismisses on the tap and the results screen behind it shows
     /// the change landing (`PlaceChooser`).
@@ -73,6 +74,7 @@ struct OpenMarketApp: App {
                 .environmentObject(seller)
                 .environmentObject(discover)
                 .environmentObject(marketChecks)
+                .environmentObject(amazonChecks)
                 .environmentObject(chooser)
                 .onAppear { store.detail.browseWebView = discover.webViews.first }
         }
@@ -243,6 +245,7 @@ struct AppView: View {
     @EnvironmentObject private var seller: SellerToolsModel
     @EnvironmentObject private var discover: DiscoverFeed
     @EnvironmentObject private var marketChecks: MarketCheckModel
+    @EnvironmentObject private var amazonChecks: AmazonCheckModel
     @EnvironmentObject private var account: AccountSession
 
     var body: some View {
@@ -283,6 +286,8 @@ struct AppView: View {
                 HiddenWebViewHost(webView: webView)
                     .offset(x: 3000)
             }
+            HiddenWebViewHost(webView: amazonChecks.webView)
+                .offset(x: 3000)
             // The pool behind "is this a good price?" — several checks can be
             // in flight at once, all of them queued behind the same pacer.
             ForEach(marketChecks.webViews, id: \.self) { webView in

@@ -59,13 +59,14 @@ final class PricingService {
         )
     }
 
-    func evaluate(target: ComparisonItem, comps: [MarketComp]) async throws -> [MarketComp] {
+    func evaluate(target: ComparisonItem, comps: [MarketComp], retailAlternative: Bool = false) async throws -> [MarketComp] {
         let candidates = ComparisonRelevance.candidates(from: comps)
         guard !candidates.isEmpty else {
             return try ComparisonRelevance.apply([], to: comps, candidates: candidates)
         }
         var request = EvaluateComparablesRequest()
         request.target = target
+        request.retailAlternative = retailAlternative
         request.candidates = candidates
         let response = await client.evaluateComparables(request: request, headers: try await session.authorizedHeaders())
         let message = try unwrap(response)

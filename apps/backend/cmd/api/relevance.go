@@ -37,7 +37,7 @@ func (s *pricingServer) EvaluateComparables(ctx context.Context, req *connect.Re
 }
 
 func comparisonInput(req *v1.EvaluateComparablesRequest) (llm.EvaluationInput, error) {
-	in := llm.EvaluationInput{}
+	in := llm.EvaluationInput{RetailAlternative: req.GetRetailAlternative()}
 	if req.GetTarget() == nil || strings.TrimSpace(req.Target.Title) == "" || len(req.Candidates) == 0 || len(req.Candidates) > 30 {
 		return in, errors.New("target and between 1 and 30 candidates are required")
 	}

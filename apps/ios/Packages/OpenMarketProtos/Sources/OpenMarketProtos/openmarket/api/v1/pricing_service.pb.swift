@@ -500,6 +500,8 @@ public nonisolated struct Openmarket_Api_V1_EvaluateComparablesRequest: Sendable
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var retailAlternative: Bool = false
+
   public var target: Openmarket_Api_V1_ComparisonItem {
     get {_target ?? Openmarket_Api_V1_ComparisonItem()}
     set {_target = newValue}
@@ -1134,7 +1136,7 @@ nonisolated extension Openmarket_Api_V1_ComparisonCandidate: SwiftProtobuf.Messa
 
 nonisolated extension Openmarket_Api_V1_EvaluateComparablesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".EvaluateComparablesRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}target\0\u{1}candidates\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}target\0\u{1}candidates\0\u{3}retail_alternative\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1144,6 +1146,7 @@ nonisolated extension Openmarket_Api_V1_EvaluateComparablesRequest: SwiftProtobu
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._target) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.candidates) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.retailAlternative) }()
       default: break
       }
     }
@@ -1160,10 +1163,14 @@ nonisolated extension Openmarket_Api_V1_EvaluateComparablesRequest: SwiftProtobu
     if !self.candidates.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.candidates, fieldNumber: 2)
     }
+    if self.retailAlternative != false {
+      try visitor.visitSingularBoolField(value: self.retailAlternative, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Openmarket_Api_V1_EvaluateComparablesRequest, rhs: Openmarket_Api_V1_EvaluateComparablesRequest) -> Bool {
+    if lhs.retailAlternative != rhs.retailAlternative {return false}
     if lhs._target != rhs._target {return false}
     if lhs.candidates != rhs.candidates {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}

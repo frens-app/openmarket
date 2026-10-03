@@ -42,7 +42,7 @@ final class AnalyticsTests: XCTestCase {
     /// into one funnel — they answer different questions and end differently.
     func testMarketCheckEventsShareTheirPrefix() {
         let marketCheck: [Analytics.Event] = [
-            .marketCheckStarted, .marketCheckCompleted, .marketCheckFailed,
+            .marketCheckClicked, .marketCheckStarted, .marketCheckCompleted, .marketCheckFailed,
             .marketCheckEvidenceOpened
         ]
         for event in marketCheck {
