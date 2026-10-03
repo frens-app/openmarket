@@ -47,6 +47,7 @@ struct ListingDetail: Codable, Equatable, Hashable {
     /// clustering names or listing coordinates.
     var sellerProfileID: String?
     var sellerName: String?
+    var sellerPhotoURL: URL?
     var sellerJoined: String?      // "Joined Facebook in 2011"
     var sellerRating: Double?      // 4.8
     var sellerRatingCount: Int?    // 12

@@ -92,7 +92,7 @@ enum GraphQLFeedDecoder {
         return GraphQLFeedPage(listings: listings, endCursor: cursor, hasNextPage: hasNext)
     }
 
-    private static func payload(_ object: Object) throws -> PayloadListing {
+    static func payload(_ object: [String: Any]) throws -> PayloadListing {
         guard let id = identifier(object["id"]), let title = object["marketplace_listing_title"] as? String,
               !title.isEmpty else { throw GraphQLFeedError.invalidResponse }
         let photo = object["primary_listing_photo"] as? Object ?? [:]

@@ -561,6 +561,16 @@ enum DesktopScripts {
             }
             var uniqueProfileIDs = Object.keys(profileIDs);
             if (uniqueProfileIDs.length === 1) sellerProfileID = uniqueProfileIDs[0];
+            var sellerPhotoURL = null;
+            if (sellerProfileID) {
+              for (var sl = 0; sl < profileLinks.length; sl++) {
+                var linkID = (profileLinks[sl].getAttribute('href') || '').match(/[/]marketplace[/]profile[/]([0-9]{8,})/);
+                if (!linkID || linkID[1] !== sellerProfileID) continue;
+                var avatar = profileLinks[sl].querySelector('img, svg image');
+                var avatarURL = avatar && (avatar.currentSrc || avatar.getAttribute('src') || avatar.getAttribute('href') || avatar.getAttribute('xlink:href'));
+                if (avatarURL && avatarURL.indexOf('https://') === 0) { sellerPhotoURL = avatarURL; break; }
+              }
+            }
             var section = null;
             var candidates = document.querySelectorAll('div, span');
             for (var s = 0; s < candidates.length; s++) {
@@ -748,6 +758,7 @@ enum DesktopScripts {
               expected: '\(expectedID)',
               sellerProfileID: sellerProfileID,
               sellerName: sellerName,
+              sellerPhotoURL: sellerPhotoURL,
               sellerJoined: joined,
               sellerRatingText: ratingScore,
               sellerRatingCount: ratingCount,

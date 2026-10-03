@@ -10,6 +10,7 @@ final class DetailDecoderTests: XCTestCase {
         XCTAssertEqual(detail.latitude, 37)
         XCTAssertEqual(detail.longitude, -122)
         XCTAssertEqual(detail.sellerProfileID, "987654321")
+        XCTAssertEqual(detail.sellerPhotoURL?.absoluteString, "https://example.com/seller.jpg")
         XCTAssertEqual(detail.sellerJoined, "Joined Facebook in 2000")
         XCTAssertEqual(detail.sellerRating, 4.8)
         XCTAssertEqual(detail.sellerRatingCount, 12)
@@ -278,6 +279,7 @@ private func detailFixture(id: String = "123456789", privacy: Any = false, overr
         "delivery_types": ["IN_PERSON", "DOOR_DROPOFF"],
         "commerce_badges_info": ["source_summary": "Highly rated on Marketplace"],
         "marketplace_listing_seller": ["id": "987654321", "name": "Example Seller", "join_time": 946684800,
+            "profile_picture": ["uri": "https://example.com/seller.jpg"],
             "marketplace_ratings_stats_by_role_v2": ["seller_ratings_are_private": privacy,
                 "seller_stats": ["five_star_ratings_average": 4.8, "five_star_total_rating_count_by_role": 12],
                 "seller_buyer_combined": ["five_star_ratings_average": 4.9, "five_star_total_rating_count_by_role": 99]]]

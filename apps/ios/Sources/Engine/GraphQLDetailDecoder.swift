@@ -39,6 +39,7 @@ enum GraphQLDetailDecoder {
             locationText: (target["location_text"] as? Object)?["text"] as? String,
             sellerProfileID: seller?["id"] as? String,
             sellerName: seller?["name"] as? String,
+            sellerPhotoURL: SellerProfile.validatedPhotoURL((seller?["profile_picture"] as? Object)?["uri"] as? String),
             sellerJoined: joined,
             sellerRating: (count ?? 0) > 0 && (score ?? 0) > 0 && (score ?? 6) <= 5 ? score : nil,
             sellerRatingCount: count.flatMap { $0 >= 0 && $0 < Double(Int.max) && $0.rounded() == $0 ? Int($0) : nil },

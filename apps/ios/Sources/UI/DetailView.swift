@@ -18,6 +18,8 @@ struct DetailView: View {
     @State private var didFail = false
     @State private var isEnriching = true
     @State private var showSignIn = false
+    @StateObject private var sellerAccess = SellerAccess()
+    @EnvironmentObject private var following: FollowedSellers
 
     init(listing: Listing, namespace: Namespace.ID) {
         self.listing = listing
@@ -38,7 +40,16 @@ struct DetailView: View {
     /// `nil` from the item page means *nothing told us*, not *available*, so it
     /// falls back to the badge rather than overriding it.
     private enum Availability {
-        case available, pending, sold
+        case available, pending, sold, outOfStock
+
+        var label: String {
+            switch self {
+            case .available: return "Available"
+            case .pending: return "Sale pending"
+            case .sold: return "Sold"
+            case .outOfStock: return "Out of stock"
+            }
+        }
 
         var isGone: Bool { self != .available }
     }
@@ -47,12 +58,14 @@ struct DetailView: View {
         if let sold = detail?.isSold {
             if sold { return .sold }
             if detail?.isPending == true { return .pending }
+            if current.badgeText?.lowercased() == "out of stock" { return .outOfStock }
             return .available
         }
         // Nothing from the item page yet — fall back to the card.
         switch current.badgeText?.lowercased() {
         case "sold": return .sold
         case "pending": return .pending
+        case "out of stock": return .outOfStock
         default: return .available
         }
     }
@@ -112,6 +125,10 @@ struct DetailView: View {
                 didFail = enriched.detail == nil
                 isEnriching = false
             }
+        }
+        .modifier(SellerNavigation(access: sellerAccess))
+        .onChange(of: detail) { _, updated in
+            if let profile = updated.flatMap(SellerProfile.init(detail:)) { following.refresh(profile) }
         }
         .sheet(isPresented: $showSignIn) {
             SignInView(surface: .listingDetail) {
@@ -223,7 +240,7 @@ struct DetailView: View {
     /// Across the photo, because that is where the eye lands first and the
     /// whole point is that this is unmissable before anything else is read.
     private var soldStamp: some View {
-        Text(availability == .sold ? "SOLD" : "SALE PENDING")
+        Text(availability.label.uppercased())
             .font(.title2.weight(.heavy))
             .kerning(2)
             .foregroundStyle(.white)
@@ -233,7 +250,7 @@ struct DetailView: View {
                 Capsule().fill(.ultraThinMaterial)
                     .overlay(Capsule().stroke(.white.opacity(0.7), lineWidth: 2))
             )
-            .accessibilityLabel(availability == .sold ? "Sold" : "Sale pending")
+            .accessibilityLabel(availability.label)
     }
 
     private var priceBlock: some View {
@@ -250,7 +267,7 @@ struct DetailView: View {
                     Text(original).font(.subheadline).foregroundStyle(.secondary).strikethrough()
                 }
                 if availability.isGone {
-                    Text(availability == .sold ? "Sold" : "Pending")
+                    Text(availability.label)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
@@ -428,30 +445,52 @@ struct DetailView: View {
     private var sellerBlock: some View {
         if let name = detail?.sellerName {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    // Initials, because no seller photo is extracted from this
-                    // surface. A generic silhouette would take the same space
-                    // and say less.
-                    Text(Self.initials(from: name))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(Color(.tertiarySystemFill)))
-                        .accessibilityHidden(true)
+                Button {
+                    guard let profile = detail.flatMap(SellerProfile.init(detail:)) else { return }
+                    following.refresh(profile)
+                    Task { await sellerAccess.open(profile) }
+                } label: {
+                    HStack(spacing: 10) {
+                        SellerAvatar(name: name, photoURL: detail?.sellerPhotoURL
+                            ?? following.profiles.first(where: { $0.id == detail?.sellerProfileID })?.photoURL,
+                            size: 38)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        // One line, always. A name is a name; if extraction
-                        // ever hands this a paragraph again it should look
-                        // wrong and stay small rather than becoming a
-                        // three-line heading (which is exactly what a
-                        // flattened seller block did here).
-                        Text(name)
-                            .font(.body.weight(.semibold))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        ratingLine
+                        VStack(alignment: .leading, spacing: 3) {
+                            // One line, always. A name is a name; if extraction
+                            // ever hands this a paragraph again it should look
+                            // wrong and stay small rather than becoming a
+                            // three-line heading (which is exactly what a
+                            // flattened seller block did here).
+                            Text(name)
+                                .font(.body.weight(.semibold))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            ratingLine
+                        }
+                        Spacer(minLength: 0)
+                        if detail.flatMap(SellerProfile.init(detail:)) != nil {
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                    Spacer(minLength: 0)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(detail.flatMap(SellerProfile.init(detail:)) == nil)
+
+                if let profile = detail.flatMap(SellerProfile.init(detail:)) {
+                    HStack {
+                        Button {
+                            following.refresh(profile)
+                            Task { await sellerAccess.open(profile) }
+                        } label: {
+                            Label("View seller", systemImage: "person.crop.rectangle")
+                        }
+                        Spacer()
+                        Button(following.contains(profile.id) ? "Following" : "Follow") {
+                            following.toggle(profile)
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
                 }
 
                 if detail?.sellerIsHighlyRated == true {
@@ -517,15 +556,6 @@ struct DetailView: View {
         if rating >= Double(index) - 0.25 { return "star.fill" }
         if rating >= Double(index) - 0.75 { return "star.leadinghalf.filled" }
         return "star"
-    }
-
-    /// "Kelsey Jones" → "KJ". Falls back to one letter, then to nothing at all
-    /// rather than rendering a stray character for an unusual name.
-    static func initials(from name: String) -> String {
-        let letters = name.split(separator: " ")
-            .prefix(2)
-            .compactMap { $0.first(where: \.isLetter) }
-        return String(letters).uppercased()
     }
 
     @ViewBuilder
@@ -616,6 +646,7 @@ struct DetailView: View {
         switch availability {
         case .sold: return "Sold — view on Facebook"
         case .pending: return "Sale pending — view on Facebook"
+        case .outOfStock: return "Out of stock — view on Facebook"
         case .available: return "View on Facebook"
         }
     }

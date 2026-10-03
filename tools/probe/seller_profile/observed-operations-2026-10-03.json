@@ -1,0 +1,43 @@
+{
+  "observed_on": "2026-10-03",
+  "operations": [
+    {
+      "name": "MarketplaceSellerProfileInventoryQuery",
+      "document_id": "36929885949989832",
+      "variables": {"scale": 2, "sellerID": "<numeric seller ID>"},
+      "connection": "data.profile.marketplace_listing_sets",
+      "initial_availabilities": ["IN_STOCK"],
+      "count": 12,
+      "deferred_page_info": true,
+      "anonymous_direct_result": {"http_status": 200, "graphql_error_code": 1675002}
+    },
+    {
+      "name": "MarketplaceSellerProfileInventoryListPaginationQuery",
+      "document_id": "27189364780746738",
+      "variables": {
+        "id": "<resolved profile ID from initial response>",
+        "count": 12,
+        "cursor": null,
+        "availabilities": ["IN_STOCK"],
+        "order": "CREATION_TIMESTAMP_DESC",
+        "scale": 2,
+        "search": null
+      },
+      "connection": "data.node.marketplace_listing_sets",
+      "listing_path": "edges[].node.canonical_listing",
+      "anonymous_direct_result": {"http_status": 200, "graphql_error_code": 1675002}
+    }
+  ],
+  "facebook_filter_mapping": {
+    "Available & in stock": ["IN_STOCK"],
+    "Sold & out of stock": ["OUT_OF_STOCK"],
+    "All listings": ["IN_STOCK", "PENDING", "OUT_OF_STOCK"]
+  },
+  "native_unavailable_filter": ["PENDING", "OUT_OF_STOCK"],
+  "limitations": [
+    "The public HTML exposed one available listing and deferred has_next_page=false for the supplied profile.",
+    "Changing the signed-out browser to Sold & out of stock produced an unavailable-page error.",
+    "Authenticated pagination and the native combined pending/out-of-stock filter still require live signed-in verification.",
+    "Mobile-user-agent behavior was not measured in this experiment."
+  ]
+}

@@ -43,6 +43,7 @@ struct OpenMarketApp: App {
     @StateObject private var location = LocationProvider()
     @StateObject private var distances = DistanceResolver.shared
     @StateObject private var saved = SavedListings.shared
+    @StateObject private var following = FollowedSellers.shared
     @StateObject private var viewed = ViewedListings.shared
     @StateObject private var seller = SellerToolsModel()
     @StateObject private var discover = DiscoverFeed()
@@ -70,6 +71,7 @@ struct OpenMarketApp: App {
                 .environmentObject(location)
                 .environmentObject(distances)
                 .environmentObject(saved)
+                .environmentObject(following)
                 .environmentObject(viewed)
                 .environmentObject(seller)
                 .environmentObject(discover)

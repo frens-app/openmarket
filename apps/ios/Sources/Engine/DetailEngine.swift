@@ -374,6 +374,7 @@ final class DetailEngine: NSObject, ObservableObject, WKNavigationDelegate {
                revealed.sellerName != nil || revealed.sellerProfileID != nil {
                 best.sellerProfileID = revealed.sellerProfileID
                 best.sellerName = revealed.sellerName
+                best.sellerPhotoURL = revealed.sellerPhotoURL
                 best.sellerJoined = revealed.sellerJoined
                 best.sellerRatingText = revealed.sellerRatingText
                 best.sellerRatingCount = revealed.sellerRatingCount

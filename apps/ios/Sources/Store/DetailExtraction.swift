@@ -14,6 +14,7 @@ struct RawDetail: Decodable {
     /// Nothing else about this struct is mutable, and nothing else should be.
     var sellerProfileID: String?
     var sellerName: String?
+    var sellerPhotoURL: String?
     var sellerJoined: String?
     var sellerRatingText: String?
     var sellerRatingCount: String?
@@ -65,6 +66,7 @@ struct RawDetail: Decodable {
             locationText: locationText,
             sellerProfileID: sellerProfileID,
             sellerName: sellerName,
+            sellerPhotoURL: SellerProfile.validatedPhotoURL(sellerPhotoURL),
             sellerJoined: sellerJoined,
             sellerRating: sellerRatingText.flatMap(Double.init),
             sellerRatingCount: sellerRatingCount.flatMap(Int.init),
