@@ -1,0 +1,133 @@
+syntax = "proto3";
+package openmarket.api.v1;
+
+message ShoppingSearch {
+  string query = 1;
+  optional int32 min_price = 2;
+  optional int32 max_price = 3;
+  string sort = 4;
+  string delivery = 5;
+  repeated string conditions = 6;
+  int32 listed_within_days = 7;
+  string availability = 8;
+  string cursor = 9;
+}
+message ShoppingInspect { string listing_id = 1; }
+message ShoppingRecommendation {
+  string listing_id = 1;
+  string reason = 2;
+  string caveat = 3;
+}
+message ShoppingDisplay {
+  string title = 1;
+  repeated ShoppingRecommendation products = 2;
+}
+message ShoppingToolCall {
+  string id = 1;
+  oneof action {
+    ShoppingSearch search = 2;
+    ShoppingInspect inspect = 3;
+    ShoppingDisplay display = 4;
+  }
+}
+message ShoppingDetail {
+  optional string description = 1;
+  repeated string photo_urls = 2;
+  optional string posted_text = 3;
+  optional string condition_text = 4;
+  optional string location_text = 5;
+  optional string seller_profile_id = 6;
+  optional string seller_name = 7;
+  optional string seller_joined = 8;
+  optional double seller_rating = 9;
+  optional int32 seller_rating_count = 10;
+  optional bool seller_is_highly_rated = 11;
+  optional double latitude = 12;
+  optional double longitude = 13;
+  optional bool is_sold = 14;
+  optional bool is_pending = 15;
+  optional ShoppingFulfillment fulfillment = 16;
+}
+message ShoppingFulfillment {
+  bool ships = 1;
+  bool in_person = 2;
+  bool door_pickup = 3;
+  bool door_dropoff = 4;
+  bool public_meetup = 5;
+}
+message ShoppingListing {
+  string id = 1;
+  optional string title = 2;
+  optional string price_text = 3;
+  optional string original_price_text = 4;
+  optional string location_text = 5;
+  optional string condition_text = 6;
+  optional string thumbnail_url = 7;
+  optional string badge_text = 8;
+  optional ShoppingFulfillment fulfillment = 9;
+  optional ShoppingDetail detail = 10;
+  int64 observed_at_unix = 11;
+  string capture_source = 12;
+}
+message ShoppingToolResult {
+  string call_id = 1;
+  repeated ShoppingListing listings = 2;
+  string error = 3;
+  bool has_more = 4;
+  string next_cursor = 5;
+  string pagination_status = 6;
+  string applied_settings = 7;
+  repeated string displayed_ids = 8;
+}
+message ShoppingMessage {
+  string id = 1;
+  string role = 2;
+  string text = 3;
+  optional ShoppingDisplay display = 4;
+}
+message ShoppingSession {
+  string id = 1;
+  string run_id = 2;
+  string status = 3;
+  string progress = 4;
+  repeated ShoppingMessage messages = 5;
+  repeated ShoppingToolCall pending_calls = 6;
+  repeated ShoppingListing listings = 7;
+  string error = 8;
+  bool paused = 9;
+}
+message StartShoppingRequest {
+  string request_id = 1;
+  bool facebook_connected = 2;
+}
+message StartShoppingResponse { ShoppingSession session = 1; }
+message SendShoppingMessageRequest {
+  string session_id = 1;
+  string request_id = 2;
+  string text = 3;
+  string search_area = 4;
+  bool facebook_connected = 5;
+}
+message SendShoppingMessageResponse { ShoppingSession session = 1; }
+message GetShoppingSessionRequest { string session_id = 1; }
+message GetShoppingSessionResponse { ShoppingSession session = 1; }
+message SubmitShoppingToolResultRequest {
+  string session_id = 1;
+  string run_id = 2;
+  ShoppingToolResult result = 3;
+}
+message SubmitShoppingToolResultResponse { ShoppingSession session = 1; }
+message ControlShoppingSessionRequest {
+  string session_id = 1;
+  string run_id = 2;
+  // stop, clear, pause, resume
+  string action = 3;
+}
+message ControlShoppingSessionResponse { ShoppingSession session = 1; }
+service ShoppingService {
+  rpc StartShopping(StartShoppingRequest) returns (StartShoppingResponse);
+  rpc SendShoppingMessage(SendShoppingMessageRequest) returns (SendShoppingMessageResponse);
+  rpc GetShoppingSession(GetShoppingSessionRequest) returns (GetShoppingSessionResponse);
+  rpc SubmitShoppingToolResult(SubmitShoppingToolResultRequest) returns (SubmitShoppingToolResultResponse);
+  rpc ControlShoppingSession(ControlShoppingSessionRequest) returns (ControlShoppingSessionResponse);
+}

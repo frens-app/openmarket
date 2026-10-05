@@ -635,12 +635,13 @@ struct CompCard: View {
     /// whole reason the card is there. Nil on the active strip.
     var footnote: String?
 
-    private static let side: CGFloat = 124
+    var side: CGFloat = 124
+    var imageCornerRadius: CGFloat = 10
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Color(.tertiarySystemFill)
-                .frame(width: Self.side, height: Self.side)
+                .frame(width: side, height: side)
                 .overlay {
                     RemoteImage(url: comp.listing.thumbnailURL) { phase in
                         if let image = phase.image {
@@ -652,7 +653,7 @@ struct CompCard: View {
                 }
                 .saturation(comp.isComparable ? 1 : 0)
                 .opacity(comp.isComparable ? 1 : 0.45)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: imageCornerRadius, style: .continuous))
                 .overlay(alignment: .topLeading) {
                     if comp.isSold { soldTag }
                 }
@@ -679,7 +680,7 @@ struct CompCard: View {
                     .foregroundStyle(.tint)
             }
         }
-        .frame(width: Self.side, alignment: .leading)
+        .frame(width: side, alignment: .leading)
         .contentShape(Rectangle())
     }
 

@@ -25,6 +25,7 @@ type Stage string
 
 const (
 	StageIdentify  Stage = "IDENTIFY"
+	StageShopping  Stage = "SHOPPING"
 	StageRelevance Stage = "RELEVANCE"
 	// Nothing writes this. Defined so the rows already carrying it stay
 	// legible; dropping it from the Postgres enum would fail against them.

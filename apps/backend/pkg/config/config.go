@@ -74,6 +74,7 @@ func init() {
 	pflag.String("llm_provider", "stub", "model provider: stub, google, vercel")
 	pflag.String("llm_api_key", "", "API key for the model provider (not required by stub)")
 	pflag.String("ai_gateway_api_key", "", "Vercel AI Gateway key for Jev; defaults to llm_api_key when llm_provider=vercel")
+	pflag.String("shopping_model", "google/gemini-3.5-flash-lite", "provider-prefixed AI Gateway model for AI Search")
 	pflag.String("llm_model", "", "model identifier to request (not required by stub)")
 	// Per user, per window, counted in calls rather than money because there is
 	// no rate table yet. The failure this guards against early is a client stuck
@@ -90,10 +91,11 @@ var parseFlagsOnce sync.Once
 
 // ServiceConfig is the fully resolved configuration.
 type ServiceConfig struct {
-	Env         string `mapstructure:"env"`
-	Port        int    `mapstructure:"port"`
-	DatabaseURL string `mapstructure:"database_url"`
-	LogLevel    string `mapstructure:"log_level"`
+	ShoppingModel string `mapstructure:"shopping_model"`
+	Env           string `mapstructure:"env"`
+	Port          int    `mapstructure:"port"`
+	DatabaseURL   string `mapstructure:"database_url"`
+	LogLevel      string `mapstructure:"log_level"`
 
 	JWTSecret           string        `mapstructure:"jwt_secret"`
 	RefreshTokenHMACKey string        `mapstructure:"refresh_token_hmac_key"`
