@@ -6,10 +6,9 @@ import os
 /// Turning "here" or "that city" into a place Facebook recognises, for the two
 /// screens that need it: the location sheet and the location step of onboarding.
 ///
-/// Signed-in sessions use Facebook's own picker, because its precise coordinate
-/// becomes durable session state. Signed-out sessions call the picker's
-/// URL-resolution request directly, falling back to the picker if that internal
-/// endpoint changes. Holding the in-flight state here keeps the two screens from
+/// Both sessions resolve the URL directly and retain Apple's coordinate for
+/// every GraphQL search. The picker is a fallback if the URL operation changes.
+/// Holding the in-flight state here keeps the two screens from
 /// drifting apart; each keeps its own `AppleMapsCitySearch`, which is view state.
 ///
 /// ## Optimistic, and precisely how far
@@ -242,7 +241,7 @@ final class PlaceChooser: ObservableObject {
             switching?.coordinate = point
 
             let name = switching?.name ?? "that place"
-            switch await resolveForCurrentSession(point, name: name, origin: origin) {
+            switch await Self.resolveLocation(point, name: name, origin: origin) {
             case .success(var place):
                 guard mine == generation else { return }
                 // The one write, and only ever from here: a confirmed place.
@@ -258,31 +257,37 @@ final class PlaceChooser: ObservableObject {
         }
     }
 
-    /// Anonymous sessions only need Facebook's URL identifier. The exact
-    /// coordinate the picker also writes into its cookie-backed session is
-    /// skipped: it disappears with that short-lived session and costs most of
-    /// the location-change latency. Account sessions keep the full picker route
-    /// so their more precise ranking state is preserved.
-    private func resolveForCurrentSession(_ coordinate: CLLocationCoordinate2D,
-                                          name: String,
-                                          origin: ResolvedPlace.Origin) async
+    typealias Resolver = @MainActor (CLLocationCoordinate2D, String, ResolvedPlace.Origin) async
+        -> Result<ResolvedPlace, MarketplacePlaceResolver.Failure>
+
+    // Signed-in Search A/B/A returned 0/24 overlap between Toronto centers and
+    // 24/24 on repeat without the picker (docs/location.md, 2026-10-04 addendum).
+    static func resolveLocation(_ coordinate: CLLocationCoordinate2D,
+                                name: String,
+                                origin: ResolvedPlace.Origin,
+                                direct: Resolver = { coordinate, name, origin in
+                                    await UnauthenticatedMarketplacePlaceResolver()
+                                        .resolve(coordinate, name: name, origin: origin)
+                                },
+                                picker: Resolver = { coordinate, _, origin in
+                                    await MarketplacePlaceResolver().resolve(coordinate, origin: origin)
+                                }) async
         -> Result<ResolvedPlace, MarketplacePlaceResolver.Failure> {
         guard !Task.isCancelled else { return .failure(.superseded) }
-
-        if await SessionState.isSignedIn(settleFor: .milliseconds(300)) {
-            guard !Task.isCancelled else { return .failure(.superseded) }
-            return await MarketplacePlaceResolver().resolve(coordinate, origin: origin)
-        }
-
-        let direct = await UnauthenticatedMarketplacePlaceResolver()
-            .resolve(coordinate, name: name, origin: origin)
-        switch direct {
+        let result = await direct(coordinate, name, origin)
+        guard !Task.isCancelled else { return .failure(.superseded) }
+        switch result {
         case .success, .failure(.paced), .failure(.superseded):
-            return direct
+            return result
         case .failure:
+            Logger.place.info("direct location resolver unavailable; falling back to location picker")
+            let fallback = await picker(coordinate, name, origin)
             guard !Task.isCancelled else { return .failure(.superseded) }
-            Logger.place.info("anonymous direct resolver unavailable; falling back to location picker")
-            return await MarketplacePlaceResolver().resolve(coordinate, origin: origin)
+            return fallback.map { resolved in
+                var place = resolved
+                place.name = name
+                return place
+            }
         }
     }
 

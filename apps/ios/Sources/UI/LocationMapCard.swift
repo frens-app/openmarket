@@ -32,6 +32,8 @@ struct LocationMapCard: View {
         /// which is a far weaker claim: show the city-level map without an
         /// uncertainty circle.
         case city
+        /// The user's chosen search origin, not a listing's reported location.
+        case searchCenter
         /// Nothing has been chosen yet, so there is no area to draw.
         ///
         /// The map still renders — orientation is useful before a decision,
@@ -49,6 +51,7 @@ struct LocationMapCard: View {
             // invites the reader to imagine a street, and it's a district.
             case .listing: "Approximate area · within about 0.4 mi"
             case .city: "City only"
+            case .searchCenter: "Search center"
             case .unset: "No location chosen yet"
             }
         }
@@ -72,6 +75,7 @@ struct LocationMapCard: View {
         switch precision {
         case .listing: FacebookCoordinateGrid.worstCaseError(at: coordinate.latitude)
         case .city: precision.cityRadius
+        case .searchCenter: 2_000
         // Nothing is drawn at this size; it only sets the framing below, wide
         // enough to read as a metro area rather than a street.
         case .unset: 8_000
@@ -92,6 +96,10 @@ struct LocationMapCard: View {
                     MapCircle(center: coordinate, radius: areaRadius)
                         .foregroundStyle(.tint.opacity(0.18))
                         .stroke(.tint.opacity(0.55), lineWidth: 1)
+                }
+
+                if precision == .searchCenter {
+                    Marker("Search center", coordinate: coordinate)
                 }
 
                 if let userLocation {

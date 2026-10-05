@@ -302,7 +302,7 @@ private struct LocationPage: View {
         VStack(alignment: .leading, spacing: 0) {
             LocationMapCard(place: mapPlace ?? "no location",
                             coordinate: centre,
-                            precision: mapPlace == nil ? .unset : .city,
+                            precision: mapPlace == nil ? .unset : .searchCenter,
                             userLocation: location.coordinate)
                 .padding(.top, 8)
 
@@ -383,7 +383,7 @@ private struct LocationPage: View {
 
             Spacer(minLength: 16)
 
-            Text("Facebook names the place from your coordinate, and every search runs against that place — same as Marketplace itself.")
+            Text("Your selected location is sent to Facebook to find nearby listings. It stays fixed until you choose another location.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 12)

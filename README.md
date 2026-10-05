@@ -18,6 +18,14 @@ Signing in happens on Facebook's own page inside the app; there is no login form
 of this project's own, and there won't be. Browsing without an account still
 supports search, distance, filters, saved listings, and paginated Discover.
 
+Location selection uses a cookie-free Facebook URL lookup for both session
+types. Search and Discover retain the selected coordinate on every GraphQL
+page, allowing neighborhood targeting without driving Facebook's location
+dialog. The [location guide](docs/location.md#2026-10-04-direct-coordinates-for-signed-in-searches)
+records the Toronto regression, live coordinate controls, and remaining limits:
+the picker fallback is unreliable, browser fallback is city-level, and local
+distance filtering can only be as accurate as the available listing location.
+
 Two tabs. **Browse** searches and reads listings. **Seller** goes the other way:
 describe something you own and it finds what similar things are listed for near
 you, what has actually sold, and what to ask.
@@ -356,9 +364,10 @@ first screen anyone saw was a hardcoded fallback city searched for a shuffle of
 hardcoded categories. Whether that was any good depended on whether the user
 happened to live in San Francisco and happened to want furniture.
 
-- **A place**, by device fix or by searching a city — either way it goes through
-  Facebook's own picker, so the slug is one Facebook recognises
-  (`PlaceChooser`). Distance is the app's organising idea and it is applied on
+- **A place**, by device fix or by searching a city or neighborhood. Facebook's
+  direct URL lookup supplies a recognized segment; `PlaceChooser` retains the
+  selected coordinate for GraphQL targeting and uses the picker only as a
+  fallback. Distance is the app's organising idea and it is applied on
   this device, so without a place there is nothing to measure from.
 - **Three interests**, stored long-term as an array of ids and offered by the
   search field as a starting point until there's search history. Three because
@@ -580,6 +589,11 @@ item — several of these are harder or easier than they look. Items marked
 **(Matt)** came from the feedback above rather than from us.
 
 **Location and radius**
+
+Current implementation and verification are in [the location guide](docs/location.md).
+The older checklist below records the browser/picker investigation. Its proposed
+city cache and session-state changes are not prerequisites for the current
+coordinate-bearing GraphQL feeds.
 
 - [ ] **Cache city → place id, for a fast path.** Confirmed 2026-08-07: a
       coordinate resolves to a **city**, not a neighbourhood. Inner Sunset,
