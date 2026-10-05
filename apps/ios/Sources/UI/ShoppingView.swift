@@ -41,7 +41,7 @@ struct ShoppingView: View {
                                                         NavigationLink {
                                                             DetailView(listing: listing, namespace: namespace)
                                                         } label: {
-                                                            ShoppingProductCard(listing: listing, recommendation: product)
+                                                            ShoppingProductCard(listing: listing)
                                                         }.buttonStyle(.plain)
                                                     }
                                                 }
@@ -131,7 +131,6 @@ struct ShoppingView: View {
 
 private struct ShoppingProductCard: View {
     let listing: Listing
-    let recommendation: ShoppingRecommendation
 
     private var product: MarketComp {
         var value = MarketComp(listing: listing)
@@ -140,17 +139,6 @@ private struct ShoppingProductCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            CompCard(comp: product, footnote: listing.locationText, side: 160)
-            if !recommendation.reason.isEmpty {
-                Text(recommendation.reason).font(.caption)
-            }
-            if !recommendation.caveat.isEmpty {
-                Text(recommendation.caveat).font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: 160, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .contentShape(Rectangle())
+        CompCard(comp: product, side: 160)
     }
 }
