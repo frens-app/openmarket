@@ -9,9 +9,8 @@ import CoreLocation
 /// guessed wrong for five of the twelve it originally shipped.
 ///
 /// Both routes end in the same place: Apple supplies a coordinate and display
-/// name, and Facebook supplies the URL segment. Account sessions go through its
-/// picker; anonymous sessions ask the picker's URL resolver directly. The slug
-/// is valid in either case because Facebook produced it.
+/// name, and Facebook supplies the URL segment. Searches retain the selected
+/// coordinate even when several neighborhoods share that segment.
 struct LocationPickerSheet: View {
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var location: LocationProvider
@@ -51,7 +50,7 @@ struct LocationPickerSheet: View {
             }
             .searchable(text: $query, isPresented: $isSearchActive,
                         placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Search for a city")
+                        prompt: "Search for a city or neighborhood")
             .onChange(of: query) { cities.search(query) }
             .navigationTitle("Location")
             .navigationBarTitleDisplayMode(.inline)
@@ -101,7 +100,7 @@ struct LocationPickerSheet: View {
             // nothing set it makes no claim — no circle — and simply orients.
             LocationMapCard(place: mapPlace ?? "no location",
                             coordinate: mapCentre,
-                            precision: mapPlace == nil ? .unset : .city,
+                            precision: mapPlace == nil ? .unset : .searchCenter,
                             userLocation: location.coordinate)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
 
@@ -147,8 +146,8 @@ struct LocationPickerSheet: View {
         } header: {
             Text(prefs.resolvedPlace == nil ? "Location" : "Browsing")
         } footer: {
-            Text("Your coordinate is sent to Facebook once, to name the place. "
-                 + "Searches after that use the place name, not your position.")
+            Text("Your selected location is sent to Facebook to find nearby listings. "
+                 + "It stays fixed until you choose another location.")
         }
     }
 
@@ -175,7 +174,7 @@ struct LocationPickerSheet: View {
         } footer: {
             // Worth repeating here: this one is ours, and it is the reason a
             // result set can look emptier than the place suggests.
-            Text("Applied on this device — Facebook ignores distance in a search.")
+            Text("Results favor this area. Distance filtering also uses available listing locations, which may be approximate or city-level.")
         }
     }
 
@@ -222,7 +221,7 @@ struct LocationPickerSheet: View {
 
     @ViewBuilder
     private var suggestionSection: some View {
-        Section("Cities") {
+        Section("Places") {
             // Now that this is the only thing on screen while typing, it has to
             // account for having nothing to show — an empty section would read
             // as the field being broken.

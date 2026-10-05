@@ -18,41 +18,85 @@ the original 15 on the repeat. See
 This verifies coordinate-sensitive selection for the tested Search operation,
 not strict radius enforcement or per-listing location precision.
 
+## 2026-10-04: direct coordinates for signed-in searches
+
+The iPhone 17 Pro simulator reproduced the Toronto switch failure: the
+resolver clicked the correctly labelled San Francisco location control, but
+never found the geolocation arrow. One attempt mounted a visible dialog whose
+text was only `Change location`; the hidden Notifications dialog was unrelated.
+The failure was in the picker flow, before any new place was saved.
+
+The picker is unnecessary for normal GraphQL targeting. A bounded probe using
+the existing signed-in session, the production `AuthenticatedFeedClient`, and
+no picker interaction measured the following. Search was `desk`, nearest-first,
+local pickup, radius 5 km, null cursor. Every request used the same `toronto`
+URL context; only the coordinate changed.
+
+| Center | Listings | Reported cities | Overlap with first request |
+|---|---|---|---|
+| Distillery District (43.6503, -79.3596) | 24 | Toronto ×24 | — |
+| North York (43.7615, -79.4111) | 24 | Toronto ×24 | 0/24 |
+| Distillery District, repeated | 24 | Toronto ×24 | 24/24 |
+| San Francisco control | 24 | San Francisco ×24 | 0/24 |
+
+Discover also followed its explicit `buyLocation`: 20 Toronto listings for
+the Toronto point, 20 San Francisco listings for the control. The cookie-free
+URL resolver returned `toronto` for Distillery District and preserved the
+original coordinate. The complete probe passed in 15.3 seconds.
+
+After the change, the original simulator UI flow switched from San Francisco
+to Toronto with a 103 ms URL lookup. The existing `Variegated anthurium`
+search then showed Toronto listings and CAD prices. The full iOS suite ran
+176 tests with two session-dependent skips and zero failures.
+
+`PlaceChooser` therefore uses the direct URL resolver for both auth states.
+Apple's selected name and coordinate remain the search origin; Facebook's
+segment serves browser bootstrap and fallback. Search and Discover send the
+coordinate with every GraphQL page. The picker remains a best-effort fallback
+when the internal URL query fails; cancellation and backoff do not trigger it.
+The reproduced picker failure itself remains a limitation of that fallback.
+
+This establishes neighborhood-sensitive retrieval, not exact neighborhood
+membership or strict radius enforcement. Listing coordinates are approximate;
+without item detail, the local distance filter still uses a city centroid and
+can wrongly include or exclude a neighborhood result. Browser fallback/category
+routes only guarantee the resolved city; they do not gain the explicit
+coordinate behavior measured above. Tight geographic exclusion should use
+listing-specific points and their uncertainty, rather than city centroids.
+
+The opt-in probe is
+`tools/probe/location_targeting/LocationTargetingProbeTests.swift`. Temporarily
+copy it into `apps/ios/Tests`, generate the project, and run only
+`OpenMarketTests/LocationTargetingProbeTests` on a signed-in simulator with
+parallel testing disabled. It makes one URL lookup and six feed requests,
+plus browser bootstrap/app startup traffic; output contains aggregate city
+counts and overlaps, not cookies, tokens, listing IDs, or response bodies.
+Remove the temporary test copy afterward. Do not include it in routine tests.
+
+The older picker measurements below describe browser behavior, not a
+requirement for coordinate-bearing GraphQL requests.
+
 ---
 
 ## 1. The one-paragraph version
 
-Facebook targets **places** in the URL and **coordinates** underneath it, and
-the two are not the same resolution. It will not accept a latitude and
-longitude as a URL parameter, and it never asks the browser where it is on its
-own — but its location picker has a "use my current location" button that
-*does* ask, and it accepts any answer. What comes back in the URL is a city:
-every Manhattan neighbourhood reduces to `/marketplace/nyc`. What is *not* in
-the URL is the exact point, which Facebook keeps in session state and uses to
-rank results — and **logged out, keeps only until the browser closes** (§5), so
-there the path is the only durable carrier of location. Radius is decorative
-everywhere; distance is ours to enforce.
-
-> ### The thing most likely to be got wrong
->
-> **A slug is not a substitute for the coordinate.** It is tempting to read
-> "every neighbourhood collapses to the city" as "so a city lookup is
-> equivalent, and cheaper". It isn't. The place is city-level, but results are
-> ranked by the exact point, invisibly — two ends of Manhattan share **36%** of
-> their results from a byte-identical URL, against a noise floor of **zero**
-> (§5). And logged out the result set is capped at ~15, so a re-rank is not a
-> reordering of what you can see, it is a change to what you can see at all.
->
-> Where a city lookup *is* enough: browsing somewhere you aren't. "Show me
-> Toronto" has no particular point behind it, so a place id and the centroid
-> lose nothing. Where it isn't: "where I actually am", which is the whole
-> reason the picker is worth ten seconds.
+The app stores both the **selected coordinate** and a **Facebook URL segment**.
+Apple supplies the coordinate and display name; a cookie-free Facebook lookup
+supplies the segment for browser bootstrap and fallback. Both signed-in and
+signed-out GraphQL feeds receive the original coordinate on every page, so
+neighborhood targeting does not depend on writing Facebook's picker session
+state. Several neighborhoods can share one city segment and still produce
+different results. The picker remains a best-effort resolver fallback. Search
+targeting is coordinate-sensitive, but strict radius enforcement is not
+established: listing points are approximate, and the local filter still uses
+city centroids when item-level coordinates are unavailable.
 
 ---
 
 ## 2. What each input does
 
-Measured on desktop; mobile agrees everywhere both were tested.
+The URL and picker rows describe browser behavior; GraphQL carries separate
+inputs and must be assessed independently.
 
 | input | accepted? | notes |
 |---|---|---|
@@ -62,7 +106,8 @@ Measured on desktop; mobile agrees everywhere both were tested.
 | ZIP as a path segment | **no** | `94110`, `94103`, `m5v` all rejected |
 | `navigator.geolocation`, unprompted | **never called** | 0 calls across load and search, both surfaces, recorder proved live |
 | coordinate via the picker's arrow | **yes, and it is kept** | §5 — the useful one. The URL reduces to a city, but the point itself is retained in session state and ranks results |
-| `radius` / `radius_in_km` | **decorative** | §7 |
+| coordinate in GraphQL Search / Discover | **yes** | supplied on every page; signed-in Toronto Search A/B/A and Discover controls above |
+| URL `radius` / `radius_in_km` | **decorative in the measured browser searches** | §7; this does not establish how GraphQL radius inputs behave |
 
 ### Place ids
 
@@ -413,10 +458,10 @@ slug and numeric-id forms were exercised end to end. The request uses a native
 UA: advertising it as full Safari makes Facebook expect browser-page CSRF
 fields and reject the otherwise identical token-free call.
 
-This is the signed-out fast path only. It deliberately gives up the precise
-session-local centring point described above and keeps the city in the URL.
-Signed-in users still run the picker so the point is attached to their durable
-account session. The GraphQL document id is private and can rotate, so ordinary
+This cookie-free lookup is used for both auth states. The selected coordinate
+is retained separately and supplied to GraphQL feed requests; it does not need
+to be written into Facebook's account session. The GraphQL document id is
+private and can rotate, so ordinary
 decode or HTTP failures fall back to the picker rather than rejecting the
 user's location; explicit rate-limit responses still respect the shared
 backoff instead of immediately retrying through a browser.
@@ -488,7 +533,7 @@ Units follow the *place*, not the viewer: a Canadian location renders `km`.
 ## 6. Verification: "applied" is not "worked"
 
 Because of §3, setting a location and believing it are different acts. On the
-signed-in picker path, `MarketplacePlaceResolver.confirm` runs after resolution:
+picker fallback, `MarketplacePlaceResolver.confirm` runs after resolution:
 
 1. **Load the resulting URL from scratch.** Not the page still on screen — that
    one was mutated client-side by React and reports what the *picker* believes.
@@ -611,9 +656,9 @@ favour of MapKit's reverse-geocoding request. The app still uses it in
 
 * One-shot `CLLocationManager` fix, when-in-use, `kCLLocationAccuracyHundredMeters`.
   Never continuous tracking.
-* It goes to Facebook **exactly once**. Signed in, it is fed to the picker;
-  signed out, it is sent to the picker's direct URL resolver. What comes back is
-  a place segment. Searches after that carry the place, not the position.
+* The selected coordinate goes to Facebook's direct URL resolver and with each
+  GraphQL feed request in either auth state. The stored search center remains
+  fixed until the user selects another location; this is not live tracking.
 * The reverse-geocode writes a **display name only**. It used to write
   `city.lowercased()` into the slug on every fix, which was §3's failure by
   another route *and* silently overwrote whichever city the user had chosen.
@@ -656,9 +701,9 @@ would fix it at the cost of two meanings for one number.
 | type | job |
 |---|---|
 | `GeoPickerScripts` | the document-start shim and the picker-driving JS |
-| `UnauthenticatedMarketplacePlaceResolver` | coordinate → Facebook URL segment in one cookie-free request; signed-out fast path |
-| `MarketplacePlaceResolver` | coordinate → cold-page-confirmed `ResolvedPlace`; signed-in path and anonymous fallback |
-| `PlaceChooser` | chooses the resolver from auth state, owns fallback, cancellation, and the one preferences write |
+| `UnauthenticatedMarketplacePlaceResolver` | coordinate → Facebook URL segment in one cookie-free request, for either auth state |
+| `MarketplacePlaceResolver` | coordinate → cold-page-confirmed `ResolvedPlace`; best-effort picker fallback |
+| `PlaceChooser` | direct lookup first, fallback, cancellation, and the one preferences write |
 | `ResolvedPlace` | the stored answer (§6) |
 | `AppleMapsCitySearch` | `MKLocalSearchCompleter` → coordinate, for "browse another city" |
 | `MarketplaceURLPlace` | what place, if any, is in a URL — and whether it was refused |

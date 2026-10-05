@@ -7,21 +7,10 @@ extension Logger {
     static let place = Logger(subsystem: "lol.frens.openmarket", category: "place")
 }
 
-/// The cheap location resolver available while there is no Facebook account
-/// session to preserve.
-///
-/// Facebook's logged-out location dialog ultimately makes this single GraphQL
-/// request to turn a coordinate into the path component Marketplace expects.
-/// Calling it directly avoids loading Marketplace, opening the React dialog,
-/// waiting for its map, applying, and loading the result again. The request is
-/// deliberately cookie-free: it resolves a URL, but does not try to preserve
-/// the dialog's more precise session-local coordinate. That precision is useful
-/// to a signed-in session; for an anonymous session it is short-lived and not
-/// worth the roughly fifteen-second UI round trip.
-///
-/// This is an internal Facebook operation and its document id can rotate. A
-/// failure therefore means "use the picker", not "the location is invalid" —
-/// `PlaceChooser` owns that fallback.
+/// Cookie-free coordinate-to-URL lookup, also used while the app is signed in.
+/// Feed requests carry the original coordinate separately; this operation only
+/// supplies Facebook's path component for browser bootstrap and fallback.
+/// The internal document id can rotate; `PlaceChooser` owns the picker fallback.
 struct UnauthenticatedMarketplacePlaceResolver {
     private static let endpoint = URL(string: "https://www.facebook.com/api/graphql/")!
     private static let friendlyName = "MarketplaceBuyLocationDialogLocationUrlQuery"
