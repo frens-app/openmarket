@@ -636,6 +636,7 @@ struct CompCard: View {
     var footnote: String?
 
     var side: CGFloat = 124
+    var imageCornerRadius: CGFloat = 10
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -652,7 +653,7 @@ struct CompCard: View {
                 }
                 .saturation(comp.isComparable ? 1 : 0)
                 .opacity(comp.isComparable ? 1 : 0.45)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: imageCornerRadius, style: .continuous))
                 .overlay(alignment: .topLeading) {
                     if comp.isSold { soldTag }
                 }

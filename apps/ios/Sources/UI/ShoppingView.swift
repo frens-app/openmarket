@@ -8,6 +8,7 @@ struct ShoppingView: View {
     @State private var draft = ""
     @State private var showGate = false
     @State private var showLocation = false
+    @State private var showInfo = false
     @State private var sendAfterGate = false
     @State private var resumeAfterGate = false
     @Namespace private var namespace
@@ -16,9 +17,16 @@ struct ShoppingView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 Button { showLocation = true } label: {
-                    Label(searchAreaLabel, systemImage: "location")
-                        .font(.subheadline).padding(.vertical, 10)
+                    HStack(spacing: 6) {
+                        Label(searchAreaLabel, systemImage: "location")
+                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                    }
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(Color(.secondarySystemBackground), in: Capsule())
                 }
+                .buttonStyle(.plain)
+                .padding(.vertical, 8)
                 ScrollViewReader { reader in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
@@ -28,8 +36,8 @@ struct ShoppingView: View {
                                     if !message.text.isEmpty {
                                         Text(message.text)
                                             .textSelection(.enabled)
-                                            .padding(12)
-                                            .background(message.role == "user" ? Color.accentColor.opacity(0.12) : Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+                                            .padding(.horizontal, 16).padding(.vertical, 12)
+                                            .background(message.role == "user" ? Color.accentColor.opacity(0.12) : Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                                             .frame(maxWidth: .infinity, alignment: message.role == "user" ? .trailing : .leading)
                                     }
                                     if message.hasDisplay {
@@ -58,7 +66,7 @@ struct ShoppingView: View {
                                 }.accessibilityElement(children: .combine)
                             }
                             if let error = shopping.error { Text(error).font(.footnote).foregroundStyle(.red) }
-                            if shopping.canResume { Button("Resume", action: resume).buttonStyle(.bordered) }
+                            if shopping.canResume { Button("Resume", action: resume).buttonStyle(.bordered).buttonBorderShape(.capsule) }
                             Color.clear.frame(height: 1).id("bottom")
                         }.padding()
                     }
@@ -69,8 +77,21 @@ struct ShoppingView: View {
                 composer
             }
             .navigationTitle("AI Search")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("New chat") { shopping.clear() } }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showInfo = true } label: { Image(systemName: "info.circle") }
+                        .accessibilityLabel("About AI Search")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { shopping.clear() } label: { Image(systemName: "square.and.pencil") }
+                        .accessibilityLabel("New chat")
+                }
+            }
+            .alert("About AI Search", isPresented: $showInfo) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Chats are temporary. Messages and product information are processed by AI services.")
             }
             .sheet(isPresented: $showGate, onDismiss: {
                 if sendAfterGate {
@@ -84,31 +105,47 @@ struct ShoppingView: View {
         }
     }
     private var searchAreaLabel: String {
-        guard let name = prefs.locationName else { return "Choose a search area" }
+        guard let name = prefs.locationName else { return "Search area" }
         return name + (prefs.radiusKM == 0 ? " · Any distance" : " · \(prefs.radiusKM) km")
     }
     private var introduction: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: "sparkle.magnifyingglass").font(.largeTitle).foregroundStyle(.tint)
-            Text("Describe what you're looking for").font(.title2.bold())
-            Text("I'll search Marketplace and check listing details to find options that fit.").foregroundStyle(.secondary)
-            Button("A solid wood desk under $150 with drawers") { draft = "Find a solid wood desk under $150 with drawers." }
-                .buttonStyle(.bordered)
-            Text("Chats are temporary. Messages and product information are processed by AI services.")
-                .font(.caption).foregroundStyle(.secondary)
-        }.padding(.vertical, 24)
+        Image(systemName: "sparkle.magnifyingglass")
+            .font(.system(size: 36, weight: .light))
+            .foregroundStyle(.tint)
+            .frame(width: 88, height: 88)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 48)
+            .accessibilityHidden(true)
     }
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            TextField("What are you looking for?", text: $draft, axis: .vertical)
-                .lineLimit(1...5).textFieldStyle(.roundedBorder)
+        HStack(alignment: .bottom, spacing: 10) {
+            TextField("Find something…", text: $draft, axis: .vertical)
+                .lineLimit(1...5).textFieldStyle(.plain)
+                .padding(.vertical, 11).padding(.leading, 8)
+                .accessibilityLabel("Message")
             if shopping.busy {
-                Button("Stop", action: shopping.stop).buttonStyle(.bordered)
-            }
-            Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title) }
+                Button(action: shopping.stop) {
+                    Image(systemName: "stop.fill").font(.system(size: 14, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(Color(.tertiarySystemFill), in: Circle())
+                }.accessibilityLabel("Stop")
+            } else {
+                Button(action: submit) {
+                    Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .foregroundStyle(.white)
+                        .background(Color.accentColor, in: Circle())
+                }
                 .accessibilityLabel("Send message")
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 6000)
-        }.padding().background(.bar)
+                .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 6000 ? 0.4 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(8)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .padding(.horizontal, 16).padding(.vertical, 10)
     }
     private func resume() {
         Task {
@@ -139,6 +176,8 @@ private struct ShoppingProductCard: View {
     }
 
     var body: some View {
-        CompCard(comp: product, side: 160)
+        CompCard(comp: product, side: 160, imageCornerRadius: 20)
+            .padding(10)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 }
