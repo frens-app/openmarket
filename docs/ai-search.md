@@ -192,8 +192,9 @@ Measure time to first useful card, product opens, relevant candidates retained b
 
 The first implementation uses `ShoppingService` in Connect, a bounded in-memory
 backend session, native Gateway tool calls, and the iOS AI Search tab. Configure
-`AI_GATEWAY_API_KEY` and optionally `SHOPPING_MODEL`; the Vercel Price Check key
-is also accepted. The only migration adds `SHOPPING` to existing model usage
+`AI_GATEWAY_API_KEY` and optionally `SHOPPING_MODEL` (default
+`google/gemini-3.5-flash-lite`, using its default minimal thinking level); the
+Vercel Price Check key is also accepted. The only migration adds `SHOPPING` to existing model usage
 accounting. Deployment should use one backend replica or session affinity.
 
 Search cursors stay on the phone. Each active query has its own browser host,

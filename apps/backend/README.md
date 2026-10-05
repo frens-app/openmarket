@@ -167,7 +167,8 @@ without Prelude having sent it, which is why it is the only override guarded.
 `ShoppingService` runs an authenticated, temporary shopping conversation. Both
 Openmarket and the device's reported Facebook connection are required. Configure
 `AI_GATEWAY_API_KEY` (or `LLM_API_KEY` with `LLM_PROVIDER=vercel`) and optionally
-`SHOPPING_MODEL`, which defaults to `google/gemini-3.6-flash`. AI Search uses the
+`SHOPPING_MODEL`, which defaults to `google/gemini-3.5-flash-lite` for faster
+tool selection, using the model's default minimal thinking level. AI Search uses the
 Gateway independently of Price Check's configured identification provider. Missing
 credentials disable AI Search explicitly; there are no fabricated shopping results.
 
