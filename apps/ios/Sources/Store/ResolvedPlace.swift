@@ -11,18 +11,15 @@ import CoreLocation
 /// (`docs/location-targeting.md` §2 — five of twelve shipped slugs were not
 /// real places, and `richmond` is in Virginia).
 ///
-/// The coordinate is kept alongside it for two reasons: it identifies what was
-/// asked for when the answer is surprising ("I asked for Berkeley and got
-/// Oakland"), and it lets a stale resolution be repeated without making the
-/// user search again.
+/// The original coordinate supplies GraphQL targeting and local distance
+/// filtering; the segment may cover many different neighborhoods.
 struct ResolvedPlace: Codable, Equatable, Identifiable {
-    /// What Facebook calls it — taken from the pill after resolution, e.g.
-    /// "London", "Toronto", "San Francisco".
+    /// The selected place's display name, including a neighborhood when chosen.
     var name: String
     /// The path segment Facebook put in the URL. A slug, or a numeric place id;
     /// both are things it handed us rather than things we guessed.
     var segment: String
-    /// The coordinate that was fed to the picker to get this.
+    /// The selected search center, preserved independently of Facebook's city.
     var latitude: Double
     var longitude: Double
     /// ISO 3166-1 alpha-2 for the coordinate Apple resolved. Optional so places
