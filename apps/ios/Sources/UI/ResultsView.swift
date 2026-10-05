@@ -23,6 +23,7 @@ struct ResultsView: View {
     /// while clearing the field reveals the exact Discover view underneath.
     @State private var surface: Surface = .discover
     @State private var selected: Listing?
+    @State private var selectedReferrer: Analytics.Surface = .discover
     @State private var showSettings = false
     @State private var showFilters = false
     @State private var showSaved = false
@@ -118,7 +119,8 @@ struct ResultsView: View {
         .navigationDestination(item: $selected) { listing in
             DetailView(
                 listing: listing,
-                namespace: surface == .discover ? discoverNamespace : searchNamespace
+                namespace: surface == .discover ? discoverNamespace : searchNamespace,
+                referrer: selectedReferrer
             )
         }
         .onChange(of: store.session) {
@@ -660,6 +662,7 @@ struct ResultsView: View {
     // MARK: - Actions
 
     private func open(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
+        selectedReferrer = surface
         selected = listing
         recordListingOpen(listing, from: surface, at: position)
     }

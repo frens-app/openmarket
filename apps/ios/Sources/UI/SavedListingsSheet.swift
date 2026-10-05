@@ -45,7 +45,7 @@ struct SavedListingsSheet: View {
                 }
             }
             .navigationDestination(item: $selected) { listing in
-                DetailView(listing: listing, namespace: namespace)
+                DetailView(listing: listing, namespace: namespace, referrer: .saved)
             }
         }
         .presentationDetents([.large])

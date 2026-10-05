@@ -182,15 +182,22 @@ enum Analytics {
 
     // MARK: - Shared property values
 
+    struct ListingReferral {
+        let listingID: String
+        let referrer: Surface
+    }
+
     /// Where something was tapped. An enum because "discover" and "Discover"
     /// would be two breakdown rows.
     enum Surface: String, CaseIterable {
         case discover
         case search
+        case aiSearch = "ai_search"
         case recentlyViewed = "recently_viewed"
         case saved
         case priceCheckEvidence = "price_check_evidence"
         case listingDetail = "listing_detail"
+        case sellerProfile = "seller_profile"
         case onboarding
         case settings
         case resultsFooter = "results_footer"

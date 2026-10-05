@@ -7,6 +7,7 @@ import CoreLocation
 struct DetailView: View {
     let listing: Listing
     let namespace: Namespace.ID
+    let referrer: Analytics.Surface
 
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
@@ -21,9 +22,10 @@ struct DetailView: View {
     @StateObject private var sellerAccess = SellerAccess()
     @EnvironmentObject private var following: FollowedSellers
 
-    init(listing: Listing, namespace: Namespace.ID) {
+    init(listing: Listing, namespace: Namespace.ID, referrer: Analytics.Surface) {
         self.listing = listing
         self.namespace = namespace
+        self.referrer = referrer
         _current = State(initialValue: listing)
     }
 
@@ -178,6 +180,7 @@ struct DetailView: View {
             // rate are different questions.
             var properties: [String: Any] = [
                 "surface": Analytics.Surface.listingDetail.rawValue,
+                "referrer": referrer.rawValue,
                 "listing_id": current.id,
                 // No price means no price alert can ever fire for it.
                 "has_price": current.priceText != nil,
@@ -654,10 +657,11 @@ struct DetailView: View {
     /// Every route out is a link. When the canonical URL never resolved,
     /// fall back to a Marketplace search for the title rather than a dead end.
     private func openInFacebook() {
+        let referral = Analytics.ListingReferral(listingID: listing.id, referrer: referrer)
         if let url = current.itemURL {
-            Handoff.open(url, kind: "view-listing")
+            Handoff.open(url, kind: "view-listing", referral: referral)
         } else {
-            Handoff.openSearch(for: current, citySlug: prefs.locationSlug)
+            Handoff.openSearch(for: current, citySlug: prefs.locationSlug, referral: referral)
         }
     }
 

@@ -193,9 +193,9 @@ keeps every visit to Settings out of the conversion numerator.
 | --- | --- | --- |
 | `search_submitted` | `ResultsView.search`, before `recordSearch` | `term`, `source`, `term_length`, `word_count`, `has_active_filters`, `sort`, `radius_km` |
 | `discover_loaded` | `DiscoverFeed.loadIfNeeded` | `count`, `duration_ms`, `is_anonymous`, `reached_end`, `is_refresh`, `radius_km` |
-| `listing_opened` | every route in — `ResultsView.open`, plus the comparables under a price check | `surface`, `position`, `listing_id`, `title`, `price`, `price_text`, `place`, `has_price`, `is_saved`, `is_seen`, `distance_km`; `is_sold` and `search_term` on a comparable |
-| `listing_saved` / `listing_unsaved` | the detail screen's bookmark | `surface`, `listing_id`, `title`, `price`, `place`, `has_price`, `is_enriched` |
-| `listing_opened_on_facebook` | `Handoff`, via `Metrics` | `kind` |
+| `listing_opened` | `ResultsView.open`, comparables under a price check, and `ShoppingView.open` for AI Search cards | `surface`, `position`, `listing_id`, `title`, `price`, `price_text`, `place`, `has_price`, `is_saved`, `is_seen`; `distance_km` on browse surfaces; `is_sold` and `search_term` on a comparable |
+| `listing_saved` / `listing_unsaved` | the detail screen's bookmark | `surface`, `referrer`, `listing_id`, `title`, `price`, `place`, `has_price`, `is_enriched` |
+| `listing_opened_on_facebook` | `Handoff`, via `Metrics` | `kind`; `referrer` and `listing_id` when opened from a listing detail page |
 | `login_wall_hit` | `Metrics.loginWallHit` | `surface`, `session_count` |
 
 `source` on a search is a guess and says so: `.searchCompletion` puts the term in
@@ -220,8 +220,30 @@ nobody asked for.
 The four browse surfaces on `listing_opened` — `discover`, `search`,
 `recently_viewed`, `saved` — are the question the home screen was built to
 answer. Two personal rails cost two rows above the fold on every launch, and
-nothing said whether they were worth it. `price_check_evidence` is the fifth,
-and the only one where a *sold* listing can be opened.
+nothing said whether they were worth it. `price_check_evidence` identifies
+comparables, and `ai_search` identifies the assistant's product cards.
+
+The detail page keeps its entry surface as `referrer` for that navigation and
+includes it on Facebook handoffs and save/unsave events. It is passed explicitly
+by each route, rather than stored globally or on the listing, so opening the same
+listing from another screen gets that screen's source.
+
+| Entry point | `referrer` |
+| --- | --- |
+| Discover | `discover` |
+| Search | `search` |
+| Saved listings | `saved` |
+| AI Search | `ai_search` |
+| Seller Price Check comparisons | `price_check_evidence` |
+| Buyer market-check comparisons | `market_check` |
+| Seller profile inventory | `seller_profile` |
+
+Break down `listing_opened_on_facebook` by `referrer` to see where Facebook
+clicks originate. `listing_id` matches the listing that was opened, and `kind`
+still distinguishes `view-listing`, `search-fallback`, and `marketplace-root`.
+All detail-page fallback paths preserve the referral. A general "Open Facebook"
+action outside a listing has neither `referrer` nor `listing_id`. These events
+measure the user's handoff action, not a confirmed Facebook page load or purchase.
 
 ### Filters
 
@@ -309,5 +331,12 @@ PostHog. The backend's existing `llm_runs` records model identity, token usage,
 attempts, status, and latency under `SHOPPING` or `RELEVANCE`; RPC logging records
 method and duration without message bodies. Chat transcripts and observations
 remain in temporary server memory. The existing account gate and manual product
-opening still emit their established events. Dedicated AI Search funnel events
-and retention analysis are deferred.
+opening emit their established events. Tapping an AI Search product card sends
+`listing_opened` with `surface: ai_search`, the listing's ID, title, price text,
+parsed price when available, place, `has_price`, `is_saved`, and `is_seen`.
+`position` is zero-based within the message's rendered product carousel.
+The event fires in the button action before navigation, so background inspection,
+rendering cards, and returning from details do not count as clicks. Filter
+`listing_opened` by `surface = ai_search` in PostHog to count these clicks or
+unique users who clicked. Dedicated AI Search funnel events and retention
+analysis are deferred.

@@ -12,7 +12,7 @@ protocol MetricsReporter: AnyObject {
     func parseHealth(_ health: ParseHealth)
     func loginWallHit(surface: String)
     func detailLatency(seconds: TimeInterval, succeeded: Bool)
-    func handoff(kind: String)
+    func handoff(kind: String, referral: Analytics.ListingReferral?)
     func pageLoaded(index: Int, listings: Int)
 }
 
@@ -68,9 +68,14 @@ final class LocalMetrics: MetricsReporter {
 
     /// Every route out of a listing is a link, so this is the last thing
     /// the app can observe about somebody who went on to buy something.
-    func handoff(kind: String) {
+    func handoff(kind: String, referral: Analytics.ListingReferral?) {
         log.info("handoff: \(kind, privacy: .public)")
-        Analytics.capture(.listingOpenedOnFacebook, ["kind": kind])
+        var properties: [String: Any] = ["kind": kind]
+        if let referral {
+            properties["listing_id"] = referral.listingID
+            properties["referrer"] = referral.referrer.rawValue
+        }
+        Analytics.capture(.listingOpenedOnFacebook, properties)
     }
 
     func pageLoaded(index: Int, listings: Int) {

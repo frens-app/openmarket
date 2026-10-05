@@ -43,7 +43,7 @@ struct PriceEvidenceView: View {
         .navigationTitle("What this is based on")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selected) { listing in
-            DetailView(listing: listing, namespace: heroNamespace)
+            DetailView(listing: listing, namespace: heroNamespace, referrer: surface)
         }
     }
 

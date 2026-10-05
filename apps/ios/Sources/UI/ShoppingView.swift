@@ -5,6 +5,9 @@ struct ShoppingView: View {
     @EnvironmentObject private var shopping: ShoppingModel
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var account: AccountSession
+    @EnvironmentObject private var saved: SavedListings
+    @EnvironmentObject private var viewed: ViewedListings
+    @State private var selected: Listing?
     @State private var draft = ""
     @State private var showGate = false
     @State private var showLocation = false
@@ -44,14 +47,14 @@ struct ShoppingView: View {
                                         if !message.display.title.isEmpty { Text(message.display.title).font(.headline) }
                                         ScrollView(.horizontal, showsIndicators: false) {
                                             HStack(alignment: .top, spacing: 12) {
-                                                ForEach(message.display.products, id: \.listingID) { product in
-                                                    if let listing = shopping.tools.listings[product.listingID] {
-                                                        NavigationLink {
-                                                            DetailView(listing: listing, namespace: namespace)
-                                                        } label: {
-                                                            ShoppingProductCard(listing: listing)
-                                                        }.buttonStyle(.plain)
-                                                    }
+                                                ForEach(Array(message.display.products.compactMap {
+                                                    shopping.tools.listings[$0.listingID]
+                                                }.enumerated()), id: \.element.id) { position, listing in
+                                                    Button {
+                                                        open(listing, at: position)
+                                                    } label: {
+                                                        ShoppingProductCard(listing: listing)
+                                                    }.buttonStyle(.plain)
                                                 }
                                             }
                                             .padding(.horizontal, 2)
@@ -78,6 +81,9 @@ struct ShoppingView: View {
             }
             .navigationTitle("AI Search")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $selected) { listing in
+                DetailView(listing: listing, namespace: namespace, referrer: .aiSearch)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showInfo = true } label: { Image(systemName: "info.circle") }
@@ -154,6 +160,22 @@ struct ShoppingView: View {
             }
             shopping.resume()
         }
+    }
+    private func open(_ listing: Listing, at position: Int) {
+        var properties: [String: Any] = [
+            "surface": Analytics.Surface.aiSearch.rawValue,
+            "position": position,
+            "listing_id": listing.id,
+            "has_price": listing.priceText != nil,
+            "is_saved": saved.contains(listing.id),
+            "is_seen": viewed.contains(listing.id)
+        ]
+        properties["title"] = Analytics.text(listing.title)
+        properties["price_text"] = Analytics.text(listing.priceText)
+        properties["place"] = Analytics.text(listing.locationText)
+        if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
+        Analytics.capture(.listingOpened, properties)
+        selected = listing
     }
     private func submit() {
         Task {

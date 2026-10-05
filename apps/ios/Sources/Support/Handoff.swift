@@ -4,14 +4,16 @@ import UIKit
 /// Facebook app when it's installed and to Safari when it isn't. The `fb://`
 /// custom scheme is undocumented and fails silently, so it's never used.
 enum Handoff {
-    static func open(_ url: URL, kind: String, metrics: MetricsReporter = LocalMetrics.shared) {
-        metrics.handoff(kind: kind)
+    static func open(_ url: URL, kind: String, referral: Analytics.ListingReferral? = nil,
+                     metrics: MetricsReporter = LocalMetrics.shared) {
+        metrics.handoff(kind: kind, referral: referral)
         UIApplication.shared.open(url)
     }
 
-    static func openMarketplace(metrics: MetricsReporter = LocalMetrics.shared) {
+    static func openMarketplace(referral: Analytics.ListingReferral? = nil,
+                                metrics: MetricsReporter = LocalMetrics.shared) {
         guard let url = URL(string: "https://www.facebook.com/marketplace/") else { return }
-        open(url, kind: "marketplace-root", metrics: metrics)
+        open(url, kind: "marketplace-root", referral: referral, metrics: metrics)
     }
 
     /// Used when a listing's canonical URL couldn't be resolved. Searching
@@ -19,9 +21,10 @@ enum Handoff {
     /// beats dropping them at the top of Marketplace with nothing to go on.
     static func openSearch(for listing: Listing,
                            citySlug: String?,
+                           referral: Analytics.ListingReferral? = nil,
                            metrics: MetricsReporter = LocalMetrics.shared) {
         guard let title = listing.title, !title.isEmpty else {
-            openMarketplace(metrics: metrics)
+            openMarketplace(referral: referral, metrics: metrics)
             return
         }
         var components = URLComponents()
@@ -30,9 +33,9 @@ enum Handoff {
         components.path = "/marketplace/\(citySlug ?? "search")/search/"
         components.queryItems = [URLQueryItem(name: "query", value: title)]
         guard let url = components.url else {
-            openMarketplace(metrics: metrics)
+            openMarketplace(referral: referral, metrics: metrics)
             return
         }
-        open(url, kind: "search-fallback", metrics: metrics)
+        open(url, kind: "search-fallback", referral: referral, metrics: metrics)
     }
 }

@@ -44,7 +44,7 @@ struct PriceCheckRunView: View {
         .navigationTitle(model.hasResult || model.phase == .done ? "Price check" : "Checking…")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selected) { listing in
-            DetailView(listing: listing, namespace: heroNamespace)
+            DetailView(listing: listing, namespace: heroNamespace, referrer: .priceCheckEvidence)
         }
         .navigationDestination(isPresented: $isShowingEvidence) { evidence }
         // Seeds the editable copy the moment the run produces it, and only

@@ -82,7 +82,7 @@ struct SellerView: View {
         .onDisappear { inventory.cancel() }
         .refreshable { await inventory.load(profile: profile, filter: filter) }
         .navigationDestination(item: $selected) { listing in
-            DetailView(listing: listing, namespace: namespace)
+            DetailView(listing: listing, namespace: namespace, referrer: .sellerProfile)
         }
     }
 
