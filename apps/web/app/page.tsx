@@ -31,6 +31,10 @@ const FEATURES = [
 
 const FAQ: { q: string; a: string }[] = [
   {
+    q: "Where can I download Openmarket?",
+    a: "Openmarket is now available on the App Store for iOS. Use any download button on this site to open the official App Store listing.",
+  },
+  {
     q: "What is Openmarket?",
     a: "Openmarket is an iOS app — a better way to browse the local listings on Marketplace. It adds filters that work, distance and travel time on every card, saves and recently-viewed, a filter that hides listings you've already opened, and a price comparison on any listing, read from what similar items list and sell for nearby.",
   },
@@ -76,6 +80,10 @@ export default function HomePage() {
           applicationCategory: "ShoppingApplication",
           description: SITE.description,
           url: SITE.url,
+          downloadUrl: SITE.downloadUrl,
+          installUrl: SITE.downloadUrl,
+          sameAs: SITE.downloadUrl,
+          image: `${SITE.url}/logo.png`,
           featureList: FEATURES,
         }}
       />
@@ -98,6 +106,12 @@ export default function HomePage() {
           className="pointer-events-none absolute inset-x-0 top-[-220px] h-[520px] bg-[radial-gradient(ellipse_at_top,rgba(47,208,138,0.16),transparent_62%)]"
         />
         <div className="mx-auto flex max-w-5xl flex-col items-center px-5 pb-4 pt-16 text-center sm:pt-24">
+          <Link
+            href="/launch"
+            className="mb-6 rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20"
+          >
+            Now live on the App Store · Read the launch post &rarr;
+          </Link>
           <h1 className="max-w-3xl font-display text-[2.75rem] font-bold leading-[0.96] tracking-tight text-white sm:text-7xl">
             Actually local listings.
           </h1>
@@ -107,9 +121,9 @@ export default function HomePage() {
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
             <DownloadButton />
-            <DownloadButton variant="ghost" href="#features">
-              See what it does
-            </DownloadButton>
+            <a href="#features" className="px-4 py-3 text-gray-300 hover:text-white">
+              Explore the features &darr;
+            </a>
           </div>
         </div>
 

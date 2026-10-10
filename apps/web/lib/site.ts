@@ -2,12 +2,11 @@ export const SITE = {
   name: "Openmarket",
   domain: "openmarket.io",
   url: "https://openmarket.io",
-  title: "Openmarket — actually local listings",
+  title: "Openmarket — local listings for iOS",
   description:
-    "A better way to marketplace: actually local listings with distance and travel time on every card, filters that work, and price comparisons backed by what actually sells nearby.",
-  // TestFlight until the App Store listing is live — swap for the real
-  // https://apps.apple.com/... URL then.
-  downloadUrl: "https://testflight.apple.com/join/qcB76WmM",
+    "Download Openmarket for iOS. Browse nearby Marketplace listings with distance filters, travel times, and price comparisons based on similar local listings.",
+  downloadUrl: "https://apps.apple.com/us/app/openmarket-local-listings/id6799314929",
+  appStoreId: "6799314929",
   twitter: undefined as string | undefined,
 } as const;
 

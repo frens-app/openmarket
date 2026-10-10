@@ -10,8 +10,8 @@ don't apply to a consumer iOS app (B2B/Copilot, X) and minus the deceptive ones
 
 - [ ] Attach `openmarket.io` to the Vercel project. Every canonical URL, the sitemap,
       and llms.txt point at this domain. Nothing can be indexed until it serves.
-- [ ] Replace the TestFlight URL in `lib/site.ts` with the real
-      `https://apps.apple.com/...` link once the App Store listing is approved.
+- [x] Point all download calls to action at the live App Store listing in `lib/site.ts`.
+- [x] Add the launch post, sitemap entry, app download structured data, and Safari Smart App Banner.
 
 ## At deploy
 

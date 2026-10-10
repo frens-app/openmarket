@@ -58,6 +58,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "./",
   },
+  itunes: { appId: SITE.appStoreId },
   appleWebApp: {
     title: SITE.name,
   },
@@ -128,6 +129,7 @@ function Footer() {
           <div>
             <p className="mb-3 font-semibold text-white">Product</p>
             <ul className="space-y-2 text-gray-400">
+              <li><Link className="hover:text-white" href="/launch">Now on the App Store</Link></li>
               <li><Link className="hover:text-white" href="/buyers">For buyers</Link></li>
               <li><Link className="hover:text-white" href="/sellers">For sellers</Link></li>
               <li><a className="hover:text-white" href={SITE.downloadUrl}>Download for iOS</a></li>

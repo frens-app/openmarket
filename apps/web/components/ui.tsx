@@ -110,7 +110,7 @@ export function Eyebrow({ children }: { children: React.ReactNode }) {
 }
 
 export function DownloadButton({
-  children = "Download for iOS",
+  children = "Download on the App Store",
   variant = "primary",
   href = SITE.downloadUrl,
 }: {
@@ -187,8 +187,8 @@ export function Point({
 }
 
 export function CtaBlock({
-  title = "Get Openmarket",
-  body = "Search, save, and price-check local listings in seconds.",
+  title = "Openmarket is live on iOS",
+  body = "Download Openmarket from the App Store and start exploring nearby listings.",
 }: {
   title?: string;
   body?: string;
