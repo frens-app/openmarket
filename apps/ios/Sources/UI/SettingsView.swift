@@ -14,21 +14,25 @@ struct SettingsView: View {
     @State private var confirmingDelete = false
     @State private var deleteError: String?
 
+    private func filterHeadline(_ count: Int, title: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(count, format: .number)
+                .font(.largeTitle.bold())
+                .monospacedDigit()
+            Text(title)
+                .font(.headline)
+        }
+        .padding(.vertical, 8)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(filterTotals.nonLocalListings, format: .number)
-                            .font(.largeTitle.bold())
-                            .monospacedDigit()
-                        Text("Non-local listings filtered out")
-                            .font(.headline)
-                        Text("All time on this device")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 8)
+                    filterHeadline(filterTotals.nonLocalListings, title: "Non-local listings filtered out")
+                    filterHeadline(filterTotals.ads, title: "Ads filtered out")
+                } footer: {
+                    Text("All time on this device · Search and Discover")
                 }
 
                 Section("Your account") {

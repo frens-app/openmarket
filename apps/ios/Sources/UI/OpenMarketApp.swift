@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct OpenMarketApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = ListingStore()
+    @StateObject private var store = ListingStore(filterTotals: .shared)
     @StateObject private var prefs = Preferences.shared
     @StateObject private var location = LocationProvider()
     @StateObject private var distances = DistanceResolver.shared
@@ -46,7 +46,7 @@ struct OpenMarketApp: App {
     @StateObject private var following = FollowedSellers.shared
     @StateObject private var viewed = ViewedListings.shared
     @StateObject private var seller = SellerToolsModel()
-    @StateObject private var discover = DiscoverFeed()
+    @StateObject private var discover = DiscoverFeed(filterTotals: .shared)
     /// App-level so a check outlives the listing screen that started it: the
     /// user can back out to a feed they have scrolled a long way down and come
     /// back to a finished answer.

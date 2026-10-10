@@ -36,6 +36,7 @@ final class ListingStore: ObservableObject {
     /// Retained for resolving mobile cards that lack a canonical URL.
     let feed: FeedEngine
     let detail: DetailEngine
+    private let filterTotals: FilterTotals?
     private let prefs: Preferences
     private let metrics: MetricsReporter
     private let cache: ListingCache
@@ -103,6 +104,7 @@ final class ListingStore: ObservableObject {
          feed: FeedEngine? = nil,
          detail: DetailEngine? = nil,
          prefs: Preferences = .shared,
+         filterTotals: FilterTotals? = nil,
          metrics: MetricsReporter = LocalMetrics.shared,
          cache: ListingCache = .shared,
          anonymous: (any GraphQLFeedLoading)? = nil,
@@ -114,6 +116,7 @@ final class ListingStore: ObservableObject {
         self.detail = detail ?? DetailEngine()
         self.detail.authenticatedWebView = self.desktop.webView
         self.prefs = prefs
+        self.filterTotals = filterTotals
         self.metrics = metrics
         self.cache = cache
         self.anonymous = anonymous ?? AnonymousFeedClient()
@@ -209,11 +212,11 @@ final class ListingStore: ObservableObject {
                 let page = try await requestFeedPage(query, cursor: pagination.cursor)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 let payload = try pagination.accept(page)
-                FilterTotals.shared.recordAds(page.filteredAdCount)
                 graphQLPagination = pagination
                 graphQLState = .ready
                 await ingest(payload: payload)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
+                filterTotals?.recordAds(page.filteredAdCount)
                 logPagePublication(started: pageStarted)
                 if (!isShowingCachedResults && !visibleListings(in: listings).isEmpty) || !pagination.hasNextPage { break }
             }
@@ -479,12 +482,12 @@ final class ListingStore: ObservableObject {
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 var next = pagination
                 let payload = try next.accept(page)
-                FilterTotals.shared.recordAds(page.filteredAdCount)
                 await ingest(payload: payload, stageForPagination: true)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 graphQLPagination = next
                 reachedEnd = !next.hasNextPage
                 publishReadyPaginationRows()
+                filterTotals?.recordAds(page.filteredAdCount)
                 logPagePublication(started: pageStarted)
                 if reachedEnd || visiblePaginationCount - before >= Self.paginationTarget { break }
             } catch {
@@ -770,7 +773,7 @@ final class ListingStore: ObservableObject {
     /// scripts stay undisturbed and the rules are unit-testable.
     private func shouldFilter(_ listing: Listing) -> Bool {
         guard listing.badgeText?.lowercased() == "sponsored" else { return false }
-        FilterTotals.shared.recordSponsoredListing(listing.id)
+        filterTotals?.recordSponsoredListing(listing.id)
         return true
     }
 

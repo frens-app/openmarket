@@ -70,6 +70,7 @@ final class DiscoverFeed: ObservableObject {
     @Published private(set) var generation = 0
     @Published private(set) var loadError: String?
     @Published private(set) var usesBrowserFallback = false
+    private let filterTotals: FilterTotals?
     private let prefs: Preferences
     private let distances: DistanceResolver
     private var hasLoaded = false
@@ -91,6 +92,7 @@ final class DiscoverFeed: ObservableObject {
 
     init(engine: DesktopFeedEngine? = nil,
          prefs: Preferences = .shared,
+         filterTotals: FilterTotals? = nil,
          distances: DistanceResolver = .shared,
          anonymous: (any GraphQLFeedLoading)? = nil,
          authenticated: (any GraphQLFeedLoading)? = nil,
@@ -100,6 +102,7 @@ final class DiscoverFeed: ObservableObject {
          }) {
         self.engine = engine ?? DesktopFeedEngine()
         self.prefs = prefs
+        self.filterTotals = filterTotals
         self.distances = distances
         self.anonymous = anonymous ?? AnonymousFeedClient()
         self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.engine.webView)
@@ -176,9 +179,9 @@ final class DiscoverFeed: ObservableObject {
             guard current == generation, !Task.isCancelled else { return }
             var pagination = GraphQLFeedPagination()
             let payload = try pagination.accept(page)
-            FilterTotals.shared.recordAds(page.filteredAdCount)
             let batch = await nearby(payload: payload)
             guard current == generation, !Task.isCancelled else { return }
+            filterTotals?.recordAds(page.filteredAdCount)
             graphQLPagination = pagination
             publish(batch.kept, replacing: true, started: pageStarted)
             reachedEnd = !pagination.hasNextPage
@@ -445,9 +448,9 @@ final class DiscoverFeed: ObservableObject {
                 guard current == generation, !Task.isCancelled else { return }
                 var next = pagination
                 let payload = try next.accept(page)
-                FilterTotals.shared.recordAds(page.filteredAdCount)
                 let batch = await nearby(payload: payload)
                 guard current == generation, !Task.isCancelled else { return }
+                filterTotals?.recordAds(page.filteredAdCount)
                 graphQLPagination = next
                 reachedEnd = !next.hasNextPage
                 publish(batch.kept, started: pageStarted)
@@ -527,7 +530,7 @@ final class DiscoverFeed: ObservableObject {
             if km > Double(radiusKM) { nonLocalIDs.append(listing.id) }
             return km <= Double(radiusKM)
         }
-        FilterTotals.shared.recordNonLocal(nonLocalIDs)
+        filterTotals?.recordNonLocal(nonLocalIDs)
         return (kept, parsed.count)
     }
 

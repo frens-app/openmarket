@@ -4,6 +4,25 @@ import XCTest
 
 @MainActor
 final class SearchPaginationTests: XCTestCase {
+
+    func testOnlyOptedInFeedUpdatesFilterTotals() async {
+        let suite = "SearchPaginationTests.totals.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let totals = FilterTotals(defaults: defaults)
+        var response = page([card("near")], cursor: nil)
+        response.filteredAdCount = 3
+        let sharedAds = FilterTotals.shared.ads
+        let sharedNonLocal = FilterTotals.shared.nonLocalListings
+        var feed = makeStore(SearchStub([.success(response)]))
+        await feed.run(query())
+        XCTAssertEqual(FilterTotals.shared.ads, sharedAds)
+        XCTAssertEqual(FilterTotals.shared.nonLocalListings, sharedNonLocal)
+        XCTAssertEqual(totals.ads, 0)
+        feed = makeStore(SearchStub([.success(response)]), filterTotals: totals)
+        await feed.run(query())
+        XCTAssertEqual(totals.ads, 3)
+    }
     func testTopUpCountsVisibleCardsAcrossEmptyDistantViewedAndDuplicatePages() async {
         let client = SearchStub([
             .success(page([card("base")], cursor: "A")),
@@ -223,7 +242,7 @@ final class SearchPaginationTests: XCTestCase {
         XCTFail("Pagination did not finish")
     }
 
-    private func makeStore(_ client: any GraphQLFeedLoading, timeBudget: Duration = .seconds(8)) -> ListingStore {
+    private func makeStore(_ client: any GraphQLFeedLoading, filterTotals: FilterTotals? = nil, timeBudget: Duration = .seconds(8)) -> ListingStore {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         defaults.set(["Near, CA": [37.7793, -122.419], "Far, CA": [34.05, -118.24]], forKey: "placeCoordinates")
         let prefs = Preferences(defaults: defaults)
@@ -231,7 +250,7 @@ final class SearchPaginationTests: XCTestCase {
         let distances = DistanceResolver(defaults: defaults)
         distances.setUserLocation(query().coordinate)
         let cache = ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), isSaved: { _ in false })
-        return ListingStore(prefs: prefs, cache: cache, anonymous: client,
+        return ListingStore(prefs: prefs, filterTotals: filterTotals, cache: cache, anonymous: client,
                             distances: distances, paginationTimeBudget: timeBudget)
     }
 

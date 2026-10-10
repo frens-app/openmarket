@@ -4,6 +4,26 @@ import XCTest
 
 @MainActor
 final class DiscoverPaginationTests: XCTestCase {
+
+    func testOnlyOptedInFeedUpdatesFilterTotals() async {
+        let suite = "DiscoverPaginationTests.totals.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let totals = FilterTotals(defaults: defaults)
+        var response = page([card("near"), card("far", city: "Far")], cursor: nil)
+        response.filteredAdCount = 3
+        let sharedAds = FilterTotals.shared.ads
+        let sharedNonLocal = FilterTotals.shared.nonLocalListings
+        var feed = makeDiscover(DiscoverStub([.success(response)]))
+        await feed.loadIfNeeded(citySlug: "sanfrancisco")
+        XCTAssertEqual(FilterTotals.shared.ads, sharedAds)
+        XCTAssertEqual(FilterTotals.shared.nonLocalListings, sharedNonLocal)
+        XCTAssertEqual(totals.ads, 0)
+        feed = makeDiscover(DiscoverStub([.success(response)]), filterTotals: totals)
+        await feed.loadIfNeeded(citySlug: "sanfrancisco")
+        XCTAssertEqual(totals.ads, 3)
+        XCTAssertEqual(totals.nonLocalListings, 1)
+    }
     func testDiscoverStaysLocalWithDisabledWideDefaultAndTighterSearchRadii() async {
         let cases: [(Int?, Int, [String])] = [
             (0, 32, ["near", "mid"]),
@@ -211,7 +231,7 @@ final class DiscoverPaginationTests: XCTestCase {
         XCTAssertFalse(discover.isLoadingMore)
     }
 
-    private func makeDiscover(_ client: any GraphQLFeedLoading,
+    private func makeDiscover(_ client: any GraphQLFeedLoading, filterTotals: FilterTotals? = nil,
                               timeBudget: Duration = .seconds(8),
                               radiusKM: Int? = 8) -> DiscoverFeed {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
@@ -224,7 +244,7 @@ final class DiscoverPaginationTests: XCTestCase {
         if let radiusKM { prefs.radiusKM = radiusKM }
         let distances = DistanceResolver(defaults: defaults)
         distances.setUserLocation(point)
-        return DiscoverFeed(prefs: prefs, distances: distances, anonymous: client,
+        return DiscoverFeed(prefs: prefs, filterTotals: filterTotals, distances: distances, anonymous: client,
                             paginationTimeBudget: timeBudget, currentSession: { .unauthed })
     }
 

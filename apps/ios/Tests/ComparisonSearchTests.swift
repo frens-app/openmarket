@@ -4,6 +4,19 @@ import XCTest
 
 @MainActor
 final class ComparisonSearchTests: XCTestCase {
+
+    func testComparisonAdsDoNotChangeFeedTotals() async throws {
+        let ads = FilterTotals.shared.ads
+        let nonLocal = FilterTotals.shared.nonLocalListings
+        var response = try page(ids: ["1"], sold: [false])
+        response.filteredAdCount = 7
+        let search = ComparableSearch(client: ComparisonFeedStub(pages: [response]))
+        let result = await search.comparables(to: "desk", citySlug: "sanfrancisco",
+                                             radiusKM: 40, coordinate: point)
+        XCTAssertEqual(try result.get().count, 1)
+        XCTAssertEqual(FilterTotals.shared.ads, ads)
+        XCTAssertEqual(FilterTotals.shared.nonLocalListings, nonLocal)
+    }
     private let point = CLLocationCoordinate2D(latitude: 37.7793, longitude: -122.419)
 
     func testSearchPairOverlapsAndNeverExceedsPoolCapacity() async throws {
