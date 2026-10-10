@@ -4,7 +4,9 @@
 
 Openmarket aggregates publicly available local listings, including those posted to Facebook Marketplace — thousands of nearby items. It does not run its own marketplace and does not host inventory of its own.
 
-Openmarket is an independent app, not affiliated with Meta Platforms, Inc. Users browse with their own account; messaging and offers happen in the Facebook app via deep links.
+Openmarket helps people find local listings that are relevant to their location, budget, and preferences. Browsing does not require a Facebook account or an Openmarket login: users can search, browse more results, filter by distance, price, condition, and delivery method, save listings, revisit recently viewed items, and hide listings they have already opened. Signing in gives access to additional features.
+
+Openmarket is an independent app, not affiliated with Meta Platforms, Inc. Messaging and offers happen in the Facebook app via deep links.
 
 Availability: live on the App Store for iOS. Download: https://apps.apple.com/us/app/openmarket-local-listings/id6799314929
 

@@ -36,11 +36,11 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What is Openmarket?",
-    a: "Openmarket is an iOS app — a better way to browse the local listings on Marketplace. It adds filters that work, distance and travel time on every card, saves and recently-viewed, a filter that hides listings you've already opened, and a price comparison on any listing, read from what similar items list and sell for nearby.",
+    a: "Openmarket is an iOS app that helps you find local listings that are more relevant to you. Search around your location, filter by what matters to you, save your favorites, and hide listings you've already opened. Distance, travel times, and local price comparisons help you decide which items are worth a closer look.",
   },
   {
     q: "Where do the listings come from?",
-    a: "Openmarket aggregates publicly available local listings, including those posted to Facebook Marketplace — thousands of nearby items. It doesn't run its own marketplace: you see the same listings the source carries, browsed with your own account, and messaging and offers happen in the Facebook app.",
+    a: "Openmarket aggregates publicly available local listings, including those posted to Facebook Marketplace — thousands of nearby items. It doesn't run its own marketplace: you browse listings from the original source, and messaging and offers happen in the Facebook app.",
   },
   {
     q: "How is it different from browsing Marketplace directly?",
@@ -48,11 +48,19 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Is Openmarket affiliated with Facebook or Meta?",
-    a: "No. Openmarket is an independent app. You browse Facebook Marketplace listings with your own account, and when you want to message a seller or make an offer, the app hands you to the Facebook app — deals stay where sellers already are.",
+    a: "No. Openmarket is an independent app. When you want to message a seller or make an offer, the app opens the original listing in the Facebook app — deals stay where sellers already are.",
   },
   {
-    q: "Do I need a Facebook account?",
-    a: "Browsing works without one — search, filters, distances, price comparisons, and saves all function. Signing in with your own account, on Facebook's own login page inside the app, unlocks endless scrolling past the first page plus seller names and ratings.",
+    q: "Can I use Openmarket without a Facebook account?",
+    a: "Yes. You can browse without a Facebook account or an Openmarket login. Choose a location and start finding listings that are relevant to you.",
+  },
+  {
+    q: "What can I do without logging in?",
+    a: "Search and browse nearby listings, scroll for more results, and narrow your search by distance, price, condition, and pickup or shipping. You can also save listings, revisit recently viewed items, and use Only new listings to hide anything you've already opened.",
+  },
+  {
+    q: "What does signing in add?",
+    a: "Signing in gives you access to additional features when you want them. You can start browsing without it.",
   },
   {
     q: "How does the price comparison work?",

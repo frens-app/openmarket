@@ -1,6 +1,6 @@
 # openmarket.io — positioning, messaging, and search strategy
 
-**Date:** 2026-08-12
+**Updated:** 2026-10-10
 **Code:** `apps/web/` (Next.js 15, App Router, Tailwind 4, fully static build)
 **Live preview:** `npm run dev` in `apps/web`, or `make` nothing — it's standalone.
 
@@ -40,7 +40,7 @@ that doc is canonical for wording, this one for where wording goes):
   listings that are in different cities. We filter them down to the ones you
   can actually reach.") — pattern and approved facts in `docs/messaging.md` §2.
 - The footer carries a standing disclaimer (independent app, trademarks belong
-  to Meta, browsing uses your own account) on every page.
+  to Meta, messaging and offers happen in Facebook) on every page.
 - Every feature claim on the site maps to something verified in the app. The
   copy's specific numbers (quarter-second launch, instant re-opens) come from
   measurements in `docs/status.md`.
@@ -80,17 +80,25 @@ knowledge panels index):
 **Seller superpowers:** Price Check — photo or sentence in, price out, backed
 by nearby listed + sold comps, with ready-to-paste title/description.
 
-**Trust story** (the "how it works" section): your own account, messaging
-happens in the Facebook app. This is the honest description and the legal
-positioning — it is deliberately *not* a privacy pitch: privacy and storage
-mechanics are not the value proposition and stay out of marketing copy
-(`docs/messaging.md` §1).
+**How it works:** Openmarket helps people find listings relevant to their
+location, budget, and preferences. Browsing does not require an account;
+the FAQ explains what guests can do and says that signing in gives access to
+additional features. Messaging and offers happen in the Facebook app. Privacy
+and storage mechanics are not the value proposition and stay out of marketing
+copy (`docs/messaging.md` §1).
 
 ## 3. Search strategy: Google, DuckDuckGo, and LLMs
 
-Three audiences, two indexes: Google has its own; DuckDuckGo and ChatGPT both
-lean on **Bing**. So Bing Webmaster Tools is not optional — it is how DDG and
-ChatGPT learn the site exists.
+Register the site with Google Search Console and Bing Webmaster Tools now;
+additional research articles can be published and discovered as they are ready.
+The current product pages and original guide are enough to begin monitoring
+crawl health and search visibility. Bing also supports discovery for Copilot
+and partner experiences. ChatGPT has its own search crawler, OAI-SearchBot;
+allow it in robots.txt and through the hosting firewall. Registration and
+crawl access do not guarantee indexing or AI citations. See the official
+[Google sitemap guidance](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap),
+[Bing guidelines](https://www.bing.com/webmasters/help/bing-webmaster-guidelines-30fba23a),
+and [OpenAI crawler documentation](https://developers.openai.com/api/docs/bots).
 
 ### The keyword ladder
 
@@ -131,14 +139,14 @@ ChatGPT learn the site exists.
 
 1. Deploy to Vercel, point `openmarket.io` (A/CNAME per Vercel dashboard).
 2. **Google Search Console**: verify domain, submit sitemap.
-3. **Bing Webmaster Tools**: verify (can import from GSC), submit sitemap —
-   this is the DDG + ChatGPT path. Consider IndexNow (Bing's instant-index
-   API; a static key file, five minutes of work).
-4. Swap `SITE.testflightUrl` in `apps/web/lib/site.ts` for the real TestFlight
-   public link.
-5. When the App Store release lands: replace TestFlight CTAs with the App
-   Store badge + link, and add the App Store URL to the SoftwareApplication
-   schema (`installUrl` / `downloadUrl`).
+3. **Bing Webmaster Tools**: verify (can import from GSC), submit sitemap,
+   and monitor crawl health and AI Performance. Consider IndexNow for URL
+   update notifications.
+4. **ChatGPT search**: keep OAI-SearchBot allowed in robots.txt and through
+   the hosting firewall; Bing registration alone does not cover this.
+5. Keep `SITE.downloadUrl` in `apps/web/lib/site.ts` pointed at the current
+   App Store listing; CTAs and SoftwareApplication `installUrl` / `downloadUrl`
+   use this value.
 6. Set up `support@frens.lol` (referenced from /privacy and /terms).
 
 ### Content roadmap (after launch, in priority order)

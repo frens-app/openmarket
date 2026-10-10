@@ -11,7 +11,7 @@ export const SITE = {
 } as const;
 
 export const DISCLAIMER =
-  "Openmarket is an independent app. It is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Marketplace are trademarks of Meta Platforms, Inc. Listings are viewed with your own account and messaging happens in the Facebook app.";
+  "Openmarket is an independent app. It is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Marketplace are trademarks of Meta Platforms, Inc. Messaging and offers happen in the Facebook app.";
 
 // One entry per byline. The /about page and every article's author schema read
 // from here and share an @id, so the name resolves to a single entity rather

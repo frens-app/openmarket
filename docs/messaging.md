@@ -1,6 +1,6 @@
 # Product messaging — the language we use everywhere
 
-**Date:** 2026-08-13
+**Updated:** 2026-10-10
 **Applies to:** the website (`apps/web/`), `llms.txt`, App Store copy, guides,
 and any future announcement. `docs/website-strategy.md` covers where messages
 go (SEO, page structure); this doc covers the words themselves.
@@ -27,6 +27,18 @@ what we introduced or made better — the new things — not the category basics
 
 Supporting brags, used after the pillars, never instead of them: no sponsored
 posts, saves and recently viewed, native-app speed.
+
+**Product focus and optional sign-in** (Brian's call, 2026-10-10): help people
+surface listings that are more relevant to their location, budget, and
+preferences. Explain account-free browsing in the website FAQ. People can
+search, browse more results, filter, save listings, revisit recently viewed
+items, and hide listings they have opened without an Openmarket or Facebook
+login. Keep the sign-in message simple: "Signing in gives you access to
+additional features." Do not describe login as a prerequisite for browsing or
+scrolling past the first page. Check the current app before adding a feature to
+the guest list; price comparisons and seller Price Check are separate from
+guest browsing. Detailed access requirements belong in the app where someone
+chooses a feature.
 
 **Not value propositions** (Brian's call, 2026-08-13): storage and privacy
 mechanics — "saves load instantly", "works offline", "stays on-device",
