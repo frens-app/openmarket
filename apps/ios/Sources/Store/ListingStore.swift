@@ -209,6 +209,7 @@ final class ListingStore: ObservableObject {
                 let page = try await requestFeedPage(query, cursor: pagination.cursor)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 let payload = try pagination.accept(page)
+                FilterTotals.shared.recordAds(page.filteredAdCount)
                 graphQLPagination = pagination
                 graphQLState = .ready
                 await ingest(payload: payload)
@@ -478,6 +479,7 @@ final class ListingStore: ObservableObject {
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 var next = pagination
                 let payload = try next.accept(page)
+                FilterTotals.shared.recordAds(page.filteredAdCount)
                 await ingest(payload: payload, stageForPagination: true)
                 guard generation == resultsGeneration, !Task.isCancelled else { return }
                 graphQLPagination = next
@@ -767,7 +769,9 @@ final class ListingStore: ObservableObject {
     /// Filtering happens in Swift, after extraction, so the page's own
     /// scripts stay undisturbed and the rules are unit-testable.
     private func shouldFilter(_ listing: Listing) -> Bool {
-        listing.badgeText?.lowercased() == "sponsored"
+        guard listing.badgeText?.lowercased() == "sponsored" else { return false }
+        FilterTotals.shared.recordSponsoredListing(listing.id)
+        return true
     }
 
     // MARK: - Detail

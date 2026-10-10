@@ -8,6 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject private var viewed: ViewedListings
     @EnvironmentObject private var account: AccountSession
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var filterTotals = FilterTotals.shared
     @State private var showSignIn = false
     @State private var showPhoneLogin = false
     @State private var confirmingDelete = false
@@ -16,6 +17,20 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(filterTotals.nonLocalListings, format: .number)
+                            .font(.largeTitle.bold())
+                            .monospacedDigit()
+                        Text("Non-local listings filtered out")
+                            .font(.headline)
+                        Text("All time on this device")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                }
+
                 Section("Your account") {
                     if account.isSignedIn {
                         LabeledContent("Phone", value: accountPhoneNumber)

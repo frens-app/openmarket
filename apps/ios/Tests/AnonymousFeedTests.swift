@@ -16,6 +16,7 @@ final class AnonymousFeedDecoderTests: XCTestCase {
         let page = try GraphQLFeedDecoder.decode(Data([initial, patch].joined(separator: "\n").utf8), kind: .search("plant"))
         XCTAssertEqual(page.listings.map(\.id), ["101"])
         XCTAssertTrue(page.hasNextPage)
+        XCTAssertEqual(page.filteredAdCount, 1)
         let wrongEdge = patch.replacingOccurrences(of: "\"edges\",1", with: "\"edges\",0")
         XCTAssertThrowsError(try GraphQLFeedDecoder.decode(Data([initial, wrongEdge].joined(separator: "\n").utf8), kind: .search("plant")))
     }
@@ -28,6 +29,7 @@ final class AnonymousFeedDecoderTests: XCTestCase {
         let page = try GraphQLFeedDecoder.decode(Data([initial, ad, info, patch].joined(separator: "\n").utf8), kind: .browse)
         XCTAssertEqual(page.listings.map(\.id), ["101"])
         XCTAssertEqual(page.endCursor, "A")
+        XCTAssertEqual(page.filteredAdCount, 1)
     }
 
     func testSearchKeepsCanonicalIDAndUnknownStatus() throws {

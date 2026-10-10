@@ -9,6 +9,7 @@ struct WinnowedListings {
     var items: [Listing] = []
     var hiddenAsViewed = 0
     var hiddenByDistance = 0
+    var nonLocalIDs: [String] = []
     var nearestHiddenKM: Double?
 
     var isEmptiedByDistance: Bool { items.isEmpty && hiddenByDistance > 0 }
@@ -41,6 +42,7 @@ enum ListingWinnower {
                 coordinate: coordinate
             ), km > Double(radiusKM) {
                 result.hiddenByDistance += 1
+                result.nonLocalIDs.append(listing.id)
                 result.nearestHiddenKM = min(
                     km,
                     result.nearestHiddenKM ?? .greatestFiniteMagnitude

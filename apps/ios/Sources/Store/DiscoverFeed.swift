@@ -176,6 +176,7 @@ final class DiscoverFeed: ObservableObject {
             guard current == generation, !Task.isCancelled else { return }
             var pagination = GraphQLFeedPagination()
             let payload = try pagination.accept(page)
+            FilterTotals.shared.recordAds(page.filteredAdCount)
             let batch = await nearby(payload: payload)
             guard current == generation, !Task.isCancelled else { return }
             graphQLPagination = pagination
@@ -444,6 +445,7 @@ final class DiscoverFeed: ObservableObject {
                 guard current == generation, !Task.isCancelled else { return }
                 var next = pagination
                 let payload = try next.accept(page)
+                FilterTotals.shared.recordAds(page.filteredAdCount)
                 let batch = await nearby(payload: payload)
                 guard current == generation, !Task.isCancelled else { return }
                 graphQLPagination = next
@@ -512,15 +514,20 @@ final class DiscoverFeed: ObservableObject {
     }
 
     private func withinRadius(_ parsed: [Listing]) async -> (kept: [Listing], newCards: Int) {
+        let current = generation
         let started = ContinuousClock.now
         await distances.resolveAll(parsed.map(\.locationText))
         let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
         Logger.discover.info("distance resolution: cards=\(parsed.count, privacy: .public) geocode_ms=\(elapsed, privacy: .public)")
+        guard current == generation, !Task.isCancelled else { return ([], 0) }
+        var nonLocalIDs: [String] = []
         let kept = parsed.filter { listing in
             guard let km = distances.distanceKM(for: listing.locationText,
                                                 coordinate: distances.enrichedCoordinate(for: listing)) else { return false }
+            if km > Double(radiusKM) { nonLocalIDs.append(listing.id) }
             return km <= Double(radiusKM)
         }
+        FilterTotals.shared.recordNonLocal(nonLocalIDs)
         return (kept, parsed.count)
     }
 

@@ -98,6 +98,9 @@ struct ResultsView: View {
             }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .onChange(of: filteredNonLocalIDs, initial: true) { _, ids in
+            FilterTotals.shared.recordNonLocal(ids)
+        }
         .sheet(isPresented: $showFilters) {
             FilterSheet { refreshVisibleSurfaceAfterFilters() }
         }
@@ -515,6 +518,15 @@ struct ResultsView: View {
             radiusKM: radiusKM ?? prefs.radiusKM,
             distances: distances
         )
+    }
+
+    private var filteredNonLocalIDs: [String] {
+        switch surface {
+        case .search: return winnowed(store.listings).nonLocalIDs
+        case .discover:
+            return winnowed(discover.listings, hidingViewed: false,
+                            radiusKM: discover.radiusKM).nonLocalIDs
+        }
     }
 
     private var searchGrid: some View {

@@ -79,8 +79,13 @@ enum GraphQLFeedDecoder {
         let cursor = info["end_cursor"] as? String
         guard !hasNext || cursor?.isEmpty == false else { throw GraphQLFeedError.invalidResponse }
         var listings: [PayloadListing] = []
+        var filteredAdCount = 0
         for index in edges.keys.sorted() {
             guard let node = edges[index]?["node"] as? Object else { throw GraphQLFeedError.invalidResponse }
+            if node["__typename"] as? String == "MarketplaceFeedAdStory" {
+                filteredAdCount += 1
+                continue
+            }
             if !isBrowse {
                 if let listing = node["listing"] as? Object { listings.append(try payload(listing)) }
             } else if let picks = node["marketplace_listings"] as? [Object] {
@@ -89,7 +94,7 @@ enum GraphQLFeedDecoder {
                 listings.append(try generalListing(node))
             }
         }
-        return GraphQLFeedPage(listings: listings, endCursor: cursor, hasNextPage: hasNext)
+        return GraphQLFeedPage(listings: listings, endCursor: cursor, hasNextPage: hasNext, filteredAdCount: filteredAdCount)
     }
 
     static func payload(_ object: [String: Any]) throws -> PayloadListing {

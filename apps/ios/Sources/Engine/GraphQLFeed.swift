@@ -8,6 +8,7 @@ struct GraphQLFeedPage {
     let listings: [PayloadListing]
     let endCursor: String?
     let hasNextPage: Bool
+    var filteredAdCount = 0
 }
 
 enum GraphQLFeedError: Error, LocalizedError, Equatable {
