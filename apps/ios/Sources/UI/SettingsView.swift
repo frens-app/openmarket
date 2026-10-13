@@ -14,7 +14,7 @@ struct SettingsView: View {
     @State private var confirmingDelete = false
     @State private var deleteError: String?
 
-    private func filterHeadline(_ count: Int, title: String) -> some View {
+    private func totalHeadline(_ count: Int, title: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(count, format: .number)
                 .font(.largeTitle.bold())
@@ -29,10 +29,17 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    filterHeadline(filterTotals.nonLocalListings, title: "Non-local listings filtered out")
-                    filterHeadline(filterTotals.ads, title: "Ads filtered out")
+                    totalHeadline(filterTotals.nonLocalListings, title: "Non-local listings filtered out")
+                    totalHeadline(filterTotals.ads, title: "Ads filtered out")
                 } footer: {
                     Text("All time on this device · Search and Discover")
+                }
+
+                Section {
+                    totalHeadline(filterTotals.discoverListings, title: "Listings shown in Discover")
+                    totalHeadline(filterTotals.searchListings, title: "Listings shown in Search")
+                } footer: {
+                    Text("All time on this device · Each listing counts once per feed when it comes into view.")
                 }
 
                 Section("Your account") {

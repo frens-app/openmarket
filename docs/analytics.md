@@ -23,6 +23,24 @@ is the failure that stops this being a product, and a handoff to Facebook is the
 last thing the app can observe about somebody who went on to buy something. The
 other three stay local.
 
+### Settings counters
+
+`FilterTotals` also stays on the device. Settings shows ads and non-local
+listings filtered out, plus separate totals for listings shown in Discover and
+Search. A shown listing counts when at least half its card enters the viewport
+on the active feed. Filtered cards, offscreen prefetches, hidden feeds, search
+suggestions, sheets, detail pages, other tabs, and background activity do not
+add shown listings.
+
+Shown totals deduplicate listing IDs separately for each surface and persist
+across launches. The same listing can count once in Discover and once in Search;
+refreshing or revisiting it on the same surface does not count again. Existing
+installs start these new totals at zero; earlier impressions cannot be recovered.
+
+These totals provide browsing context beside the ad count, not an exact ad
+percentage: ad slots are counted on accepted fetched pages, including prefetched
+pages, while shown listings require viewport visibility and lifetime deduplication.
+
 ## §2 Content, and what still stays behind
 
 **Search terms and listing content go up.** §8 of the original spec says they

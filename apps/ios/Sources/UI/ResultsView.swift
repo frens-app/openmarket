@@ -15,7 +15,9 @@ struct ResultsView: View {
     @EnvironmentObject private var saved: SavedListings
     @EnvironmentObject private var viewed: ViewedListings
     @EnvironmentObject private var discover: DiscoverFeed
+    @Environment(\.scenePhase) private var scenePhase
 
+    @State private var isVisible = false
     @State private var searchText = ""
     @FocusState private var isSearching: Bool
     /// Search is a temporary surface over the home feed, not the owner of it.
@@ -37,6 +39,11 @@ struct ResultsView: View {
     /// Whether either sheet that can change the radius is up. Discover rebuilds
     /// when this goes false — see the `radiusKM` handler.
     private var isCoveredBySheet: Bool { showSettings || showLocationPicker }
+
+    private var canRecordShownListings: Bool {
+        isVisible && scenePhase == .active && !isSearching && selected == nil
+            && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
+    }
 
     /// Which listings the "only new" filter is hiding right now.
     ///
@@ -67,6 +74,8 @@ struct ResultsView: View {
     /// what the type checker will accept in one expression.
     private var results: some View {
         browseSurfaces
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 searchBar
@@ -417,6 +426,8 @@ struct ResultsView: View {
                     items: w.items,
                     namespace: discoverNamespace,
                     loadingPlaceholderCount: 0,
+                    tracksVisibleListings: canRecordShownListings && surface == .discover,
+                    onItemVisible: { FilterTotals.shared.recordShownListing($0.id, on: .discover) },
                     onSelect: { open($0, from: .discover, at: $1) },
                     onItemAppear: { await discover.loadMoreIfNeeded(currentItem: $0) }
                 ) {
@@ -535,6 +546,8 @@ struct ResultsView: View {
             items: winnowed.items,
             namespace: searchNamespace,
             loadingPlaceholderCount: 0,
+            tracksVisibleListings: canRecordShownListings && surface == .search,
+            onItemVisible: { FilterTotals.shared.recordShownListing($0.id, on: .search) },
             onSelect: { open($0, from: .search, at: $1) },
             onItemAppear: {
                 await store.loadMoreIfNeeded(
@@ -862,6 +875,8 @@ private struct PaginatedListingGrid<Footer: View>: View {
     let items: [Listing]
     let namespace: Namespace.ID
     let loadingPlaceholderCount: Int
+    let tracksVisibleListings: Bool
+    let onItemVisible: (Listing) -> Void
     /// The tapped listing and its index — only this view knows the draw order.
     let onSelect: (Listing, Int) -> Void
     let onItemAppear: (Listing) async -> Void
@@ -870,12 +885,16 @@ private struct PaginatedListingGrid<Footer: View>: View {
     init(items: [Listing],
          namespace: Namespace.ID,
          loadingPlaceholderCount: Int,
+         tracksVisibleListings: Bool,
+         onItemVisible: @escaping (Listing) -> Void,
          onSelect: @escaping (Listing, Int) -> Void,
          onItemAppear: @escaping (Listing) async -> Void,
          @ViewBuilder footer: () -> Footer) {
         self.items = items
         self.namespace = namespace
         self.loadingPlaceholderCount = loadingPlaceholderCount
+        self.tracksVisibleListings = tracksVisibleListings
+        self.onItemVisible = onItemVisible
         self.onSelect = onSelect
         self.onItemAppear = onItemAppear
         self.footer = footer()
@@ -890,6 +909,9 @@ private struct PaginatedListingGrid<Footer: View>: View {
                 loadingPlaceholderCount: loadingPlaceholderCount
             ) { listing in
                 ListingCard(listing: listing, namespace: namespace)
+                    .modifier(ListingVisibilityTracker(isEnabled: tracksVisibleListings) {
+                        onItemVisible(listing)
+                    })
                     // Scanned on the tap rather than changing `ListingGrid`'s
                     // builder signature, which every other screen also uses.
                     .onTapGesture {
