@@ -9,6 +9,7 @@ struct ShoppingView: View {
     @EnvironmentObject private var viewed: ViewedListings
     @State private var selected: Listing?
     @State private var draft = ""
+    @FocusState private var isComposing: Bool
     @State private var showGate = false
     @State private var showLocation = false
     @State private var showInfo = false
@@ -73,6 +74,9 @@ struct ShoppingView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }.padding()
                     }
+                    .scrollDismissesKeyboard(.interactively)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(TapGesture().onEnded { isComposing = false })
                     .onChange(of: shopping.messages.count) { _, _ in
                         withAnimation { reader.scrollTo("bottom", anchor: .bottom) }
                     }
@@ -90,8 +94,12 @@ struct ShoppingView: View {
                         .accessibilityLabel("About AI Search")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { shopping.clear() } label: { Image(systemName: "square.and.pencil") }
+                    Button { isComposing = false; shopping.clear() } label: { Image(systemName: "square.and.pencil") }
                         .accessibilityLabel("New chat")
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isComposing = false }
                 }
             }
             .alert("About AI Search", isPresented: $showInfo) {
@@ -128,6 +136,7 @@ struct ShoppingView: View {
         HStack(alignment: .bottom, spacing: 10) {
             TextField("Find something…", text: $draft, axis: .vertical)
                 .lineLimit(1...5).textFieldStyle(.plain)
+                .focused($isComposing)
                 .padding(.vertical, 11).padding(.leading, 8)
                 .accessibilityLabel("Message")
             if shopping.busy {
@@ -178,6 +187,7 @@ struct ShoppingView: View {
         selected = listing
     }
     private func submit() {
+        isComposing = false
         Task {
             guard account.isSignedIn, await SessionState.isSignedIn() else { resumeAfterGate = false; showGate = true; return }
             guard let area = ShoppingTools.Area(prefs: prefs) else { showLocation = true; return }
