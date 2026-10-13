@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import MapKit
 
 /// The progressive preview. The transition never waits on the network:
 /// everything the grid already knows renders on the first frame, and detail
@@ -614,14 +615,37 @@ struct DetailView: View {
     private var mapBlock: some View {
         if let place = placeName, let (coordinate, precision) = mapPoint {
             VStack(alignment: .leading, spacing: 10) {
-                LocationMapCard(place: place, coordinate: coordinate, precision: precision,
-                                userLocation: location.coordinate)
+                Button {
+                    openDirections(to: coordinate, place: place, precision: precision)
+                } label: {
+                    LocationMapCard(place: place, coordinate: coordinate, precision: precision,
+                                    userLocation: location.coordinate)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(precision.caption) around \(place)")
+                .accessibilityHint("Opens directions in Apple Maps")
                 // Under the map, because it answers the question the map
                 // raises. Draws nothing without a device fix — see
                 // `TravelTimeRow`.
-                TravelTimeRow(destination: coordinate, precision: precision)
+                TravelTimeRow(destination: coordinate, precision: precision) { mode in
+                    openDirections(to: coordinate, place: place, precision: precision, mode: mode)
+                }
             }
         }
+    }
+
+    private func openDirections(to coordinate: CLLocationCoordinate2D, place: String,
+                                precision: LocationMapCard.Precision,
+                                mode: MapKitTravelTime.Mode? = nil) {
+        let destination = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
+        destination.name = precision == .listing ? "Approximate area · \(place)" : "City only · \(place)"
+        // A single destination plus a directions mode routes from the user's
+        // current location in Maps, without reusing the app's cached fix.
+        destination.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: mode?.launchDirectionsMode ?? MKLaunchOptionsDirectionsModeDefault
+        ])
     }
 
     /// A quiet inline row, never a dialog. The preview above it still

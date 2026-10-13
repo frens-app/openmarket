@@ -41,6 +41,7 @@ import UIKit
 struct TravelTimeRow: View {
     let destination: CLLocationCoordinate2D
     let precision: LocationMapCard.Precision
+    let openDirections: (MapKitTravelTime.Mode) -> Void
 
     @EnvironmentObject private var location: LocationProvider
     @EnvironmentObject private var prefs: Preferences
@@ -137,7 +138,13 @@ struct TravelTimeRow: View {
     private var modes: some View {
         HStack(spacing: 8) {
             ForEach(MapKitTravelTime.Mode.allCases) { mode in
-                ModeChip(mode: mode, estimate: travel.estimate(for: destination, mode: mode) ?? .pending)
+                Button {
+                    openDirections(mode)
+                } label: {
+                    ModeChip(mode: mode, estimate: travel.estimate(for: destination, mode: mode) ?? .pending)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens \(mode.label.lowercased()) directions to the approximate area in Apple Maps")
             }
         }
     }

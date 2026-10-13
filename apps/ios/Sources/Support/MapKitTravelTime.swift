@@ -18,8 +18,7 @@ import MapKit
 ///   so the answer is rounded to whole minutes and captioned as an estimate.
 /// - Transit is ETA-only. `MKDirectionsTransportType.transit` is documented in
 ///   the SDK header as "Only supported for ETA calculations" — a travel time
-///   comes back, a route never does. That suits this exactly, and is also why
-///   nothing here offers turn-by-turn.
+///   comes back, a route never does. Route planning is handed off to Maps.
 @MainActor
 final class MapKitTravelTime: ObservableObject {
     static let shared = MapKitTravelTime()
@@ -50,6 +49,14 @@ final class MapKitTravelTime: ObservableObject {
             case .walking: .walking
             case .driving: .automobile
             case .transit: .transit
+            }
+        }
+
+        var launchDirectionsMode: String {
+            switch self {
+            case .walking: MKLaunchOptionsDirectionsModeWalking
+            case .driving: MKLaunchOptionsDirectionsModeDriving
+            case .transit: MKLaunchOptionsDirectionsModeTransit
             }
         }
     }
