@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-13",
+  "method": "Live Codex in-app browser, signed out, desktop Marketplace search for desk. Dismissed login overlay, verified location control, read rendered listing text and link aria-labels.",
+  "scope": "First-page browser search data; does not establish signed-in pagination, native location picker behavior, or SMS delivery.",
+  "markets": [
+    {
+      "country": "AU",
+      "currency": "AUD",
+      "url": "https://www.facebook.com/marketplace/sydney/search/?query=desk",
+      "location_control": "Sydney, Australia, Within 65 km",
+      "listing_count": 15,
+      "observed_price_prefix": "A$",
+      "sample_label": "Student Desk - perfect condition!, A$50, reduced from A$70, Sydney, NSW, listing 2087468435242779",
+      "sample_rendered_text": "A$50A$70Student Desk - perfect condition!Sydney, NSW",
+      "result": "pass"
+    },
+    {
+      "country": "GB",
+      "currency": "GBP",
+      "url": "https://www.facebook.com/marketplace/london/search/?query=desk",
+      "location_control": "London, United Kingdom, Within 65 km",
+      "listing_count": 15,
+      "observed_price_prefix": "£",
+      "sample_label": "IKEA TORALD desk, white, £0, reduced from £5, London, United Kingdom, listing 1471832678135287",
+      "sample_rendered_text": "Just listedFree£5IKEA TORALD desk, whiteLondon, United Kingdom",
+      "result": "pass"
+    },
+    {
+      "country": "NZ",
+      "currency": "NZD",
+      "url": "https://www.facebook.com/marketplace/auckland/search/?query=desk",
+      "location_control": "Auckland, New Zealand, Within 65 km",
+      "listing_count": 15,
+      "observed_price_prefix": "NZ$",
+      "sample_label": "Metal frame study/ Work desk with built in shelves, NZ$90, reduced from NZ$140, Auckland, New Zealand, listing 2984518891885400",
+      "sample_rendered_text": "NZ$90NZ$140Metal frame study/ Work desk with built in shelvesAuckland, New Zealand",
+      "result": "pass"
+    }
+  ]
+}

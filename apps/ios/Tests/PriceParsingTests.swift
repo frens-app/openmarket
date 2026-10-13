@@ -2,6 +2,29 @@ import XCTest
 @testable import OpenMarket
 
 final class PriceParsingTests: XCTestCase {
+    // Actual signed-out browser labels captured on 2026-10-13 from searches
+    // in Sydney, London and Auckland. Keep the country and title commas intact.
+    func testLiveRegionalBrowserLabels() throws {
+        let samples = [
+            ("2087468435242779", "Student Desk - perfect condition!, A$50, reduced from A$70, Sydney, NSW, listing 2087468435242779",
+             "Student Desk - perfect condition!", "A$50", "A$70", "Sydney, NSW", 50),
+            ("1471832678135287", "IKEA TORALD desk, white, £0, reduced from £5, London, United Kingdom, listing 1471832678135287",
+             "IKEA TORALD desk, white", "£0", "£5", "London, United Kingdom", 0),
+            ("2984518891885400", "Metal frame study/ Work desk with built in shelves, NZ$90, reduced from NZ$140, Auckland, New Zealand, listing 2984518891885400",
+             "Metal frame study/ Work desk with built in shelves", "NZ$90", "NZ$140", "Auckland, New Zealand", 90),
+        ]
+        for (id, label, title, price, original, location, amount) in samples {
+            let raw = DesktopRawCard(id: id, label: label, imageURL: "", text: "")
+            let listing = try XCTUnwrap(DesktopCardParser.parseLabel(raw, cardIndex: 0))
+            XCTAssertEqual(listing.title, title)
+            XCTAssertEqual(listing.priceText, price)
+            XCTAssertEqual(listing.originalPriceText, original)
+            XCTAssertEqual(listing.locationText, location)
+            XCTAssertEqual(PriceGuide.parse(listing.priceText), amount)
+            XCTAssertEqual(listing.itemURL?.lastPathComponent, id)
+        }
+    }
+
     private struct MarketFixture {
         let countryCode: String
         let prefix: String
