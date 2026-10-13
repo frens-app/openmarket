@@ -178,13 +178,13 @@ struct PriceGuide: Equatable {
 
     /// Whatever sits in front of the number — `$`, `CA$`, `£`, `€`.
     ///
-    /// Requires a digit immediately after it, which is what keeps "Free" from
+    /// Requires a digit after optional whitespace, which keeps "Free" from
     /// being read as a four-character currency symbol.
     static func currencySymbol(in text: String?) -> String? {
         guard let text else { return nil }
         let symbol = text.prefix { !$0.isNumber && !$0.isWhitespace }
         guard !symbol.isEmpty, symbol.count <= 4,
-              text.dropFirst(symbol.count).first?.isNumber == true else { return nil }
+              text.dropFirst(symbol.count).drop(while: { $0.isWhitespace }).first?.isNumber == true else { return nil }
         return String(symbol)
     }
 

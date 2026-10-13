@@ -94,7 +94,7 @@ enum CardLabel {
     }
 
     private static var pricedPattern: String {
-        "^(.*) for sale\(dash)(\(conditionAlternation))\(dash)((?:\(pricePrefixAlternation))[\\d,]+(?:\\.\\d{2})?)\(tail)"
+        "^(.*) for sale\(dash)(\(conditionAlternation))\(dash)((?:\(pricePrefixAlternation))\\s*[\\d,]+(?:\\.\\d{2})?)\(tail)"
     }
 
     private static var freePattern: String {

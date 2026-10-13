@@ -37,6 +37,14 @@ final class PriceParsingTests: XCTestCase {
     }
 
     private let markets = [
+        MarketFixture(countryCode: "ES", prefix: "€",
+                      shortLocation: "Madrid, ES", fullLocation: "Madrid, Spain"),
+        MarketFixture(countryCode: "DK", prefix: "DKK",
+                      shortLocation: "Copenhagen, DK", fullLocation: "Copenhagen, Denmark"),
+        MarketFixture(countryCode: "NL", prefix: "€",
+                      shortLocation: "Amsterdam, NL", fullLocation: "Amsterdam, Netherlands"),
+        MarketFixture(countryCode: "TW", prefix: "NT$",
+                      shortLocation: "Taipei, TW", fullLocation: "Taipei, Taiwan"),
         MarketFixture(countryCode: "GB", prefix: "£",
                       shortLocation: "London, UK", fullLocation: "London, United Kingdom"),
         MarketFixture(countryCode: "IE", prefix: "€",
@@ -183,6 +191,22 @@ final class PriceParsingTests: XCTestCase {
             )
             XCTAssertEqual(prices.current, market.current)
             XCTAssertEqual(prices.original, market.original)
+        }
+    }
+
+    func testSpacedCurrencyPrefixesKeepPricesAndMarkdowns() throws {
+        for prefix in ["DKK", "kr.", "kr", "NT$", "TWD", "€"] {
+            let current = "\(prefix) 12.50"
+            let original = "\(prefix) 12.99"
+            XCTAssertTrue(PriceRun.isPrice(current))
+            XCTAssertEqual(PriceGuide.currencySymbol(in: current), prefix)
+            XCTAssertEqual(PriceGuide.parse(current), 12)
+            let pair = try XCTUnwrap(PriceRun.split(current + original))
+            XCTAssertEqual(pair.current, current)
+            XCTAssertEqual(pair.original, original)
+            XCTAssertEqual(CardLabel.parse(
+                "Desk for sale - Used - Good - \(current) in Copenhagen, Denmark"
+            )?.priceText, current)
         }
     }
 

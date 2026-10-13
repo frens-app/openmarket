@@ -75,6 +75,23 @@ struct MarketRegion: Equatable, Identifiable {
             phoneEnabledByDefault: true, marketplaceVerified: true
         ),
 
+        MarketRegion(
+            "ES", callingCode: "34", pricePrefixes: ["€"],
+            phoneEnabledByDefault: false, marketplaceVerified: true
+        ),
+        MarketRegion(
+            "DK", callingCode: "45", pricePrefixes: ["DKK", "kr.", "kr"],
+            phoneEnabledByDefault: false, marketplaceVerified: true
+        ),
+        MarketRegion(
+            "NL", callingCode: "31", pricePrefixes: ["€"],
+            phoneEnabledByDefault: false, marketplaceVerified: true
+        ),
+        MarketRegion(
+            "TW", callingCode: "886", pricePrefixes: ["NT$", "TWD"],
+            phoneEnabledByDefault: false, marketplaceVerified: true
+        ),
+
         // Retained for correct E.164 entry if the server enables +39. Italy's
         // leading zero is part of landline numbers, unlike the trunk prefix in
         // the markets above. It is not in the offline phone fallback.
@@ -102,10 +119,9 @@ struct MarketRegion: Equatable, Identifiable {
         }
     }
 
-    /// Every prefix whose country is in the shipped phone catalog. A market
-    /// still needs `marketplaceVerified` before somebody can browse it.
+    /// Price recognition follows browsing support independently of phone sign-in.
     static var supportedPricePrefixes: [String] {
-        Array(Set(all.filter(\.phoneEnabledByDefault).flatMap(\.pricePrefixes)))
+        Array(Set(all.filter { $0.phoneEnabledByDefault || $0.marketplaceVerified }.flatMap(\.pricePrefixes)))
             .sorted { lhs, rhs in
                 lhs.count == rhs.count ? lhs < rhs : lhs.count > rhs.count
             }

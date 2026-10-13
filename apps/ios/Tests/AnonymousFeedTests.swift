@@ -57,6 +57,19 @@ final class AnonymousFeedDecoderTests: XCTestCase {
         XCTAssertNil(page.endCursor)
     }
 
+    func testNewMarketCurrenciesDecodeMinorUnits() throws {
+        for currency in ["EUR", "DKK", "TWD"] {
+            let raw = #"{"data":{"marketplace_home_feed":{"edges":[{"node":{"__typename":"MarketplaceFeedGeneralListingObject","data":{"title":"Chair","price":{"currency":"\#(currency)","amount_with_offset":"12345"}},"listing":{"id":"202"}}}],"page_info":{"has_next_page":false}}}}"#
+            let page = try GraphQLFeedDecoder.decode(Data(raw.utf8), kind: .browse)
+            let listing = try XCTUnwrap(page.listings.first)
+            XCTAssertEqual(listing.priceAmount, "123.45", currency)
+            XCTAssertFalse(try XCTUnwrap(listing.priceFormatted).isEmpty, currency)
+            XCTAssertThrowsError(try GraphQLFeedDecoder.decode(
+                Data(raw.replacingOccurrences(of: currency, with: "JPY").utf8), kind: .browse
+            ))
+        }
+    }
+
     func testPartialErrorsAndTruncatedStreamsAreNotAnEmptySuccess() {
         let responses = [
             #"{"data":{"marketplace_search":{"feed_units":{"edges":[],"page_info":{"has_next_page":false}}}},"errors":[{"message":"query changed"}]}"#,

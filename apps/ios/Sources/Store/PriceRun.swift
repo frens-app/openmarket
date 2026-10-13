@@ -59,6 +59,9 @@ enum PriceRun {
             guard let symbol = currencySymbol(in: remainder) else { return nil }
 
             var end = text.index(index, offsetBy: symbol.count)
+            while end < text.endIndex, text[end].isWhitespace {
+                end = text.index(after: end)
+            }
             while end < text.endIndex, text[end].isNumber || text[end] == "," || text[end] == "." {
                 end = text.index(after: end)
             }
@@ -83,7 +86,7 @@ enum PriceRun {
 
     private static func amount(in text: String) -> Decimal? {
         guard let symbol = currencySymbol(in: text) else { return nil }
-        return Decimal(string: text.dropFirst(symbol.count).replacingOccurrences(of: ",", with: ""))
+        return Decimal(string: text.dropFirst(symbol.count).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ""))
     }
 
     /// Applies `split` to a price that may or may not need it.

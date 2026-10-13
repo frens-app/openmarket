@@ -17,8 +17,8 @@ final class MarketRegionTests: XCTestCase {
         XCTAssertEqual(offeredCountries, expectedCountries)
     }
 
-    func testEveryDefaultPhoneCountryDeclaresARecognizedPricePrefix() {
-        for region in MarketRegion.all where region.phoneEnabledByDefault {
+    func testEverySupportedCountryDeclaresARecognizedPricePrefix() {
+        for region in MarketRegion.all where region.phoneEnabledByDefault || region.marketplaceVerified {
             XCTAssertFalse(region.pricePrefixes.isEmpty, "Missing prices for \(region.countryCode)")
             for prefix in region.pricePrefixes {
                 XCTAssertTrue(PriceRun.isPrice("\(prefix)25"),
@@ -36,7 +36,7 @@ final class MarketRegionTests: XCTestCase {
     func testOnlyVerifiedCountriesCanBrowseMarketplace() {
         XCTAssertEqual(
             MarketRegion.verifiedMarketplaceCountryCodes,
-            ["US", "CA", "GB", "IE", "AU", "NZ"]
+            ["US", "CA", "GB", "IE", "AU", "NZ", "ES", "DK", "NL", "TW"]
         )
         XCTAssertTrue(MarketRegion.region(countryCode: "ca")?.marketplaceVerified == true)
         XCTAssertTrue(MarketRegion.region(countryCode: "GB")?.marketplaceVerified == true)
@@ -81,7 +81,7 @@ final class MarketRegionTests: XCTestCase {
     }
 
     func testPreferencesAcceptEveryNewlyVerifiedMarketplace() throws {
-        for countryCode in ["GB", "IE", "AU", "NZ"] {
+        for countryCode in ["GB", "IE", "AU", "NZ", "ES", "DK", "NL", "TW"] {
             let suite = "MarketRegionTests.verified.\(countryCode).\(UUID().uuidString)"
             let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }

@@ -128,12 +128,12 @@ enum GraphQLFeedDecoder {
               let content = node["data"] as? Object,
               let price = content["price"] as? Object,
               let currency = price["currency"] as? String,
-              ["USD", "CAD", "GBP", "EUR", "AUD", "NZD"].contains(currency),
+              ["USD", "CAD", "GBP", "EUR", "AUD", "NZD", "DKK", "TWD"].contains(currency),
               let raw = price["amount_with_offset"] as? String,
               let amount = Decimal(string: raw, locale: Locale(identifier: "en_US_POSIX")) else {
             throw GraphQLFeedError.invalidResponse
         }
-        // These are the app's verified markets; all six currencies use cents.
+        // Supported currencies all use two decimal places for minor units.
         // Unknown currencies fall back instead of assuming their minor units.
         let number = NSDecimalNumber(decimal: amount / 100)
         let formatter = NumberFormatter()
