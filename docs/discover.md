@@ -39,10 +39,22 @@ is not a hard wall-clock timeout. Cards append after each filtered page.
 An unmet target with more upstream pages sets `paginationPaused`, separately
 from `loadError` and `reachedEnd`. The next scroll near the end resumes the
 current cursor with a fresh budget; a drag during a running top-up is queued.
-The stationary footer does not continuously retry a paused attempt. Errors
-show **Try again**. While fetching, the footer says **Finding more nearby listings…**.
+The stationary footer does not continuously retry a paused attempt. Pauses
+show **Load more listings**, allowing a sparse feed to resume without a drag.
+Errors show **Try again**. While fetching, the footer says **Finding more nearby listings…**.
 Browser top-ups retain their scroll budgets and resume from the browser's
 current position when the user scrolls again.
+
+The anonymous browser limit shows a limited-listings message with **Connect
+Facebook** and **Refresh listings**. A confirmed GraphQL end shows an end-of-results
+message. Neither state leaves an unexplained blank footer.
+
+Observed 2026-10-13: the anonymous Browse query returned 20 listings in a final
+response with no `page_info` and a null edge cursor. The app correctly rejected
+that as a paginated response and used browser extraction. Simulator logs showed
+20 browser cards, one shipping-only card, and only two cards inside the selected
+10-mile radius. Missing pagination metadata does not establish that Facebook
+has no more listings. Fallback logs include the reason for switching transports.
 
 Timing logs separate request pacing (`wait_ms`), the GraphQL fetch and response
 transfer (`graphql_ms`), response processing (`decode_ms`), city geocoding
@@ -70,8 +82,9 @@ Browser top-ups retain their three-scroll limit and also check elapsed time.
 A sparse attempt pauses without producing an error. Scrolling near the end
 resumes from the current cursor, including when every loaded card is hidden;
 one scroll during a running attempt can trigger a continuation. The footer
-says **Finding more matching listings…** while loading and offers **Try again**
-for actual failures. Partial rows are retained when an attempt stops.
+says **Finding more matching listings…** while loading, **Load more listings**
+when paused, and **Try again** for actual failures. Partial rows are retained
+when an attempt stops.
 
 Search logs geocoding and page processing time alongside the shared request
 timings. `request_to_publish_ms` includes processing through the page's current

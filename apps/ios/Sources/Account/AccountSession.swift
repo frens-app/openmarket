@@ -1,11 +1,12 @@
+import AuthenticationServices
 import Connect
 import Foundation
+import GoogleSignIn
 import OpenMarketProtos
 import SwiftProtobuf
 import SwiftUI
 
-/// The signed-in account: tokens, the viewer, and the two calls that get you
-/// one.
+/// The signed-in account, its tokens, and its provider login.
 ///
 /// Everything the app does against our own API goes through `headers()` here,
 /// so token refresh has exactly one implementation and no call site has to
@@ -70,7 +71,11 @@ final class AccountSession: ObservableObject {
     /// the account.
     @Published private(set) var device: Device?
 
-    private let protocolClient = API.makeProtocolClient()
+    private let protocolClient: any ProtocolClientInterface
+
+    init(protocolClient: any ProtocolClientInterface = API.makeProtocolClient()) {
+        self.protocolClient = protocolClient
+    }
     private lazy var auth = AuthServiceClient(client: protocolClient)
     private lazy var users = UserServiceClient(client: protocolClient)
 
@@ -79,10 +84,8 @@ final class AccountSession: ObservableObject {
         static let refreshToken = "refresh_token"
         static let accessExpiry = "access_token_expiry"
         static let viewer = "viewer"
-        /// UserDefaults, unlike the four above: a list of country calling codes
-        /// is public API configuration, not a secret, and it has to survive a
-        /// sign-out — the signed-out screen is the one that needs it.
         static let signInCallingCodes = "sign_in_calling_codes"
+        static let appleUserID = "social_apple_user_id"
     }
 
     private let defaults = UserDefaults.standard
@@ -112,6 +115,12 @@ final class AccountSession: ObservableObject {
     func restore() async {
         guard Keychain.get(Key.refreshToken) != nil else {
             state = .signedOut
+            return
+        }
+        if let userID = Keychain.get(Key.appleUserID),
+           let credential = try? await ASAuthorizationAppleIDProvider().credentialState(forUserID: userID),
+           credential == .revoked || credential == .notFound {
+            await signOut()
             return
         }
         let cachedViewer = cachedViewer()
@@ -156,14 +165,60 @@ final class AccountSession: ObservableObject {
 
     // MARK: - Signing in
 
-    /// The country calling codes sign-in accepts, which is what the country
-    /// picker is built from.
-    ///
-    /// The last answer is remembered, because this runs as the sign-in screen
-    /// appears and a picker that is empty until a round trip lands is a screen
-    /// nobody can start typing on. A first launch with no network falls back to
-    /// the codes the API shipped with — wrong only if the served set has
-    /// changed since this build, which is the case the cache then repairs.
+    func beginSignIn(provider: SignInProvider) async throws -> String {
+        var request = BeginSignInRequest()
+        request.provider = provider
+        request.installID = InstallIdentity.current
+        let response = await auth.beginSignIn(request: request)
+        switch response.result {
+        case .success(let message): return message.nonce
+        case .failure(let error): throw error.asAPIError
+        }
+    }
+
+    @discardableResult
+    func signIn(provider: SignInProvider, identityToken: String, nonce: String, appleUserID: String? = nil, names: AccountNames = AccountNames()) async throws -> Bool {
+        var request = SignInRequest()
+        request.provider = provider
+        request.identityToken = identityToken
+        if let firstName = names.firstName { request.firstName = firstName }
+        if let lastName = names.lastName { request.lastName = lastName }
+        if let displayName = names.displayName { request.displayName = displayName }
+        request.nonce = nonce
+        request.devicePlatform = .ios
+        request.timeZone = TimeZone.current.identifier
+        request.installID = InstallIdentity.current
+
+        let response = await auth.signIn(request: request)
+        switch response.result {
+        case .success(let message):
+            store(
+                accessToken: message.accessToken,
+                refreshToken: message.refreshToken,
+                expiresIn: TimeInterval(message.accessTokenExpiresInSeconds)
+            )
+            if provider == .apple, let appleUserID {
+                Keychain.set(appleUserID, for: Key.appleUserID)
+                AppleSignInNames.clear(userID: appleUserID)
+            } else {
+                Keychain.delete(Key.appleUserID)
+            }
+            cache(viewer: message.viewer)
+            state = .signedIn(message.viewer)
+            if message.hasDevice { device = message.device }
+            // Before the event, so the signup lands on the person's profile
+            // rather than the anonymous one it replaces.
+            updateAnalyticsProfile(message.viewer)
+            Analytics.capture(message.isNewUser ? .accountCreated : .accountSignedIn)
+            return message.isNewUser
+        case .failure(let error):
+            if error.code == .unauthenticated {
+                throw APIError.message(error.message ?? "Couldn't verify your sign-in. Please try again.")
+            }
+            throw error.asAPIError
+        }
+    }
+
     func signInCallingCodes() async -> [String] {
         let response = await auth.getSignInOptions(request: GetSignInOptionsRequest())
         if let codes = response.message?.phoneCountryCallingCodes, !codes.isEmpty {
@@ -222,6 +277,7 @@ final class AccountSession: ObservableObject {
                 refreshToken: message.refreshToken,
                 expiresIn: TimeInterval(message.accessTokenExpiresInSeconds)
             )
+            Keychain.delete(Key.appleUserID)
             cache(viewer: message.viewer)
             state = .signedIn(message.viewer)
             if message.hasDevice { device = message.device }
@@ -264,7 +320,20 @@ final class AccountSession: ObservableObject {
 
     func deleteAccount() async throws {
         let headers = try await authorizedHeaders()
-        let response = await users.deleteAccount(request: DeleteAccountRequest(), headers: headers)
+        var request = DeleteAccountRequest()
+        if state.viewer?.signInProvider == "apple" {
+            guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })?.windows.first(where: \.isKeyWindow) else {
+                throw APIError.message("Couldn't open Apple sign-in. Please try again.")
+            }
+            let nonce = try await beginSignIn(provider: .apple)
+            let authorization = AppleAccountAuthorization()
+            let credential = try await authorization.signIn(nonce: nonce, window: window)
+            request.appleIdentityToken = credential.identityToken
+            request.appleAuthorizationCode = credential.authorizationCode
+            request.nonce = nonce
+        }
+        let response = await users.deleteAccount(request: request, headers: headers)
         if let error = response.error, error.code != .notFound {
             throw error.asAPIError
         }
@@ -370,9 +439,17 @@ final class AccountSession: ObservableObject {
     /// wipes. No phone number — the user id answers everything it could.
     /// `createdAt` is `setOnce` so a later sign-in can't move somebody's cohort.
     private func updateAnalyticsProfile(_ viewer: Viewer) {
+        var properties: [String: Any] = ["onboarding_completed": viewer.onboardingCompleted]
+        let fallbackName = [viewer.firstName, viewer.lastName]
+            .compactMap { Analytics.text($0, limit: 256) }
+            .joined(separator: " ")
+        if let name = Analytics.text(viewer.displayName, limit: 512)
+            ?? Analytics.text(fallbackName, limit: 512) {
+            properties["name"] = name
+        }
         Analytics.identify(
             userID: viewer.id,
-            properties: ["onboarding_completed": viewer.onboardingCompleted],
+            properties: properties,
             setOnce: viewer.createdAt.isEmpty ? [:] : ["account_created_at": viewer.createdAt]
         )
     }
@@ -458,9 +535,11 @@ final class AccountSession: ObservableObject {
     }
 
     private func clearTokens() {
+        GIDSignIn.sharedInstance.signOut()
         Keychain.delete(Key.accessToken)
         Keychain.delete(Key.refreshToken)
         Keychain.delete(Key.accessExpiry)
         Keychain.delete(Key.viewer)
+        Keychain.delete(Key.appleUserID)
     }
 }

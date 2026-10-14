@@ -10,14 +10,11 @@ import (
 
 // StubProvider answers without calling anything.
 //
-// This is the local-development story, and it is the same shape as
-// verify.BypassSender: a real code path that a specific configuration selects,
-// not a mock wired in by a test. It exists so the iOS side of Price Check can be
+// Selected by local configuration so the iOS side of Price Check can be
 // built and re-run a hundred times without a key, a network, or a bill — and so
 // the recording path is exercised on every one of those runs.
 //
-// config.LoadAPI panics if this is selected under ENV=production, for the same
-// reason DEV_BYPASS_PHONE_NUMBERS is refused there.
+// config.LoadAPI refuses this provider under ENV=production.
 //
 // **It reports no token counts.** The temptation is to invent plausible ones so
 // the columns are populated in dev, and that is exactly backwards: the table

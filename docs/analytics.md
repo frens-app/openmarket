@@ -60,7 +60,7 @@ So the events carry the words:
 | `price_check_started`, `_completed`, `_failed` | `description` as typed, plus `identified_name` and `search_term` — the chain from "grill, needs cleaning" to "Weber Genesis II" to whatever got searched, which is where a wrong price went wrong |
 | `price_check_price_copied`, `_listing_copied`, `_history_opened` | `identified_name`, so a conversion event reads without a join |
 
-Everything free-text goes through `Analytics.text(_:)`, which trims and caps at
+Event free text goes through `Analytics.text(_:)`, which trims and caps at
 200 characters. That is a size measure, not a privacy one — a price-check
 description is an unbounded `3...8` line field, and one pasted essay would
 otherwise mint a single event tens of kilobytes wide, queued on disk and retried
@@ -147,28 +147,28 @@ breaks because an event wasn't counted.
 
 ## §4 Identity
 
-`distinct_id` is the **server's user id**, set at `AccountSession.verify` and at
-every successful `restore`. Not the install id: `InstallIdentity` is wiped by a
-reinstall and does not travel to a second phone, which is the property that
-makes it right for a cookie jar and wrong for a person.
+`distinct_id` is the **server's user id**, set at `AccountSession.signIn` and at
+every successful `restore`. It stays the same across devices.
 
-Person properties are `onboarding_completed` and `account_created_at` (the
-second `setOnce`, so a later sign-in can't rewrite somebody's cohort). The phone
-number is not among them.
+Person properties are `name`, `onboarding_completed`, and `account_created_at`.
+The creation date uses `setOnce`, so later sign-ins keep the original cohort.
+`name` uses the backend's saved display name, falling back to the available first
+and last names joined with a space. It is trimmed with a 512-character text limit
+and omitted when no name is available. First and last names remain separate in
+the database; analytics sends only the combined `name` property. Configure the
+project's person display-name property as `name` to show it in PostHog's UI.
+
+`name` is a person property attached to the user ID. It is not a super property
+copied onto every event. Signup, returning sign-in, and onboarding
+completion send the available profile properties. Session restoration links only
+the ID, avoiding repeated property writes on every launch.
 
 `personProfiles` is `.identifiedOnly`, so guest browsing uses an anonymous ID.
-Phone verification is optional in onboarding and available later through seller
-Price Check or Settings.
-PostHog merges the anonymous history at `identify` when an account is verified.
+Apple/Google sign-in is optional in onboarding and available later through seller
+Price Check or Settings. PostHog merges the anonymous history at `identify`.
 
-`reset()` on sign-out and delete, so the next person on a shared phone starts a
-new anonymous id rather than inheriting the last one's profile.
-
-**Person properties are only sent when they change** — at signup and when
-onboarding completes. A session restored at launch links the id and passes no
-properties, because PostHog dedupes repeated property writes against an
-in-memory hash that a relaunch clears: passing them there billed a `$set` on
-every cold launch to restate a flag that had not moved since signup.
+`reset()` on sign-out and delete gives the next person on a shared phone a new
+anonymous ID. Upgrading an existing phone session keeps its user ID.
 
 ### Super properties
 
@@ -190,11 +190,11 @@ enforces the casing so a hurried addition can't quietly split a funnel in two.
 
 | Event | Fired at | Properties |
 | --- | --- | --- |
-| `account_created` | `verify`, `isNewUser` true | — |
-| `account_signed_in` | `verify`, `isNewUser` false | — |
+| `account_created` | `signIn`, `isNewUser` true | — |
+| `account_signed_in` | `signIn`, `isNewUser` false | — |
 | `account_signed_out` | before `reset`, so it lands on the profile that left | — |
 | `account_deleted` | same | — |
-| `onboarding_step_completed` | each step as it is passed: phone (1), location (2), Facebook (3), notifications (4, when offered) | `step`, `step_index` |
+| `onboarding_step_completed` | each step as it is passed: account (1), location (2), Facebook (3) | `step`, `step_index` |
 | `onboarding_completed` | `RootView.finish`, the one-way door | — |
 | `facebook_session_connected` | cookies appear while the sheet is open | `surface` |
 | `facebook_connect_declined` | "Browse without Facebook" on the onboarding step | `surface` |

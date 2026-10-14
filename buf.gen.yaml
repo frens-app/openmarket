@@ -16,7 +16,7 @@ plugins:
     out: apps/backend/pkg/protos
     opt: paths=source_relative
   # Go ConnectRPC
-  - remote: buf.build/connectrpc/go
+  - remote: buf.build/connectrpc/go:v1.20.0
     out: apps/backend/pkg/protos
     opt: paths=source_relative
   # Swift protobuf

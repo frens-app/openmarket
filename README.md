@@ -25,16 +25,16 @@ Jev filtering and backend model orchestration. It requires both sign-ins.
 describe something you own and it finds what similar things are listed for near
 you, what has actually sold, and what to ask.
 
-Onboarding offers skippable phone signup, asks for a city, and offers an optional
+Onboarding offers skippable Apple/Google signup, asks for a city, and offers an optional
 Facebook connection. Verified accounts can also enable notifications. Browsing
-needs no Openmarket account. Seller Price Check requires phone verification and
+needs no Openmarket account. Seller Price Check requires app sign-in and
 a Facebook connection; its history is saved to the Openmarket account. These
 are separate logins: one identifies the account, the other supplies listings.
 
 ```
 protos/         the API schema; one `make generate` writes both Go and Swift
 apps/ios/       the app (xcodegen: `xcodegen generate`, then build the OpenMarket scheme)
-apps/backend/   Go + Connect + Postgres. Accounts and phone login; `make dev` runs it
+apps/backend/   Go + Connect + Postgres. Accounts and Apple/Google login; `make dev` runs it
 apps/web/       openmarket.io marketing + SEO site (Next.js; strategy in docs/website-strategy.md,
                 writing rules in docs/content-standards.md, screenshot evidence in apps/web/captures/)
 tools/probe/    harness for measuring the live site; every finding below came from it
@@ -881,7 +881,7 @@ item — several of these are harder or easier than they look. Items marked
 |---|---|
 | **`docs/parsing-conventions.md`** | **Rules every extractor follows.** An unknown value is logged, never silently dropped; absent ≠ empty; a value found near the right place is not the right value |
 | `docs/probe-checklist.md` | How to measure this site without recording false negatives |
-| **`docs/backend.md`** | **The server, as built** — accounts and phone login only, why that slice, how sessions and revocation work, and the four limits guarding the one endpoint that costs money per call |
+| **`docs/backend.md`** | **The server, as built** — accounts, Apple/Google sign-in, sessions and revocation |
 | `docs/backend-platform.md` | The platform evaluation behind it: why Postgres, why Connect rather than gRPC, and the listing-schema questions still open |
 | `docs/data-model.md` | Proposed schema for storing listings across devices |
 | `docs/status.md` | What's built and verified, and the open gaps |

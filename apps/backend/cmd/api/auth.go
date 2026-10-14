@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"frens.lol/openmarket/backend/pkg/auth"
 	"frens.lol/openmarket/backend/pkg/db"
+	"frens.lol/openmarket/backend/pkg/identity"
 	"frens.lol/openmarket/backend/pkg/phone"
 	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
 	"frens.lol/openmarket/backend/pkg/verify"
@@ -18,117 +19,84 @@ import (
 	"go.uber.org/zap"
 )
 
+type identityVerifier interface {
+	Enabled(string) bool
+	Verify(context.Context, string, string, string) (identity.Identity, error)
+}
+
 type authServer struct {
-	queries   *db.Queries
-	pool      *pgxpool.Pool
-	logger    *zap.Logger
-	sender    verify.Sender
-	allowlist *phone.Allowlist
-	ceiling   *sendCeiling
+	queries        *db.Queries
+	pool           *pgxpool.Pool
+	logger         *zap.Logger
+	identities     identityVerifier
+	sender         verify.Sender
+	allowlist      *phone.Allowlist
+	ceiling        *sendCeiling
+	resendCooldown time.Duration
 
 	jwtSecret           string
 	refreshTokenHMACKey string
 	accessTTL           time.Duration
 	refreshTTL          time.Duration
-	resendCooldown      time.Duration
 }
 
-// GetSignInOptions hands the client the country allowlist it is about to be
-// screened against, so its picker cannot offer a country whose sends would be
-// refused.
-func (s *authServer) GetSignInOptions(
-	_ context.Context,
-	_ *connect.Request[v1.GetSignInOptionsRequest],
-) (*connect.Response[v1.GetSignInOptionsResponse], error) {
-	return connect.NewResponse(&v1.GetSignInOptionsResponse{
-		PhoneCountryCallingCodes: s.allowlist.Codes(),
-	}), nil
-}
-
-// StartPhoneVerification asks the provider to deliver a code.
-func (s *authServer) StartPhoneVerification(
-	ctx context.Context,
-	req *connect.Request[v1.StartPhoneVerificationRequest],
-) (*connect.Response[v1.StartPhoneVerificationResponse], error) {
-	num, err := s.allowlist.Parse(req.Msg.GetPhoneNumber())
-	if err != nil {
-		var notAllowed phone.ErrNotAllowed
-		if errors.As(err, &notAllowed) {
-			// Named distinctly from a malformed number so the client can say
-			// "we don't serve that country yet" instead of "check the number".
-			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("that country isn't supported yet"))
-		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+func authService(provider v1.SignInProvider) (db.AuthService, error) {
+	switch provider {
+	case v1.SignInProvider_SIGN_IN_PROVIDER_APPLE:
+		return db.AuthServiceAPPLE, nil
+	case v1.SignInProvider_SIGN_IN_PROVIDER_GOOGLE:
+		return db.AuthServiceGOOGLE, nil
+	default:
+		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("choose Apple or Google"))
 	}
+}
 
-	if err := s.ceiling.allow(ctx); err != nil {
-		var ceiling *errCeilingReached
-		if errors.As(err, &ceiling) {
-			// Worth alerting on: this is a global budget, so hitting it means
-			// either an attack or a badly wrong ceiling, and in both cases real
-			// users are being turned away.
-			s.logger.Error("verification send ceiling reached",
-				zap.String("phone_number", num.Mask()),
-				zap.Duration("window", ceiling.window),
-			)
-			return nil, connect.NewError(connect.CodeResourceExhausted,
-				errors.New("too many verification requests right now; try again shortly"))
-		}
+func (s *authServer) BeginSignIn(ctx context.Context, req *connect.Request[v1.BeginSignInRequest]) (*connect.Response[v1.BeginSignInResponse], error) {
+	provider, err := authService(req.Msg.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if !s.identities.Enabled(string(provider)) {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("this sign-in provider is not configured yet"))
+	}
+	nonce, hash, err := identity.NewNonce()
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
-	signals := verify.Signals{
-		DeviceID:       req.Msg.GetInstallId(),
-		DevicePlatform: devicePlatformSignal(req.Msg.GetDevicePlatform()),
+	if err := s.queries.CreateSignInChallenge(ctx, db.CreateSignInChallengeParams{
+		NonceHash: hash, AuthService: provider, InstallID: req.Msg.InstallId,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
-	if err := s.sender.Start(ctx, num.E164, signals); err != nil {
-		switch {
-		case errors.Is(err, verify.ErrUndeliverable):
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("that number can't receive text messages"))
-		case errors.Is(err, verify.ErrTooManyAttempts):
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("too many attempts; try again later"))
-		}
-		// The provider's own message can name internal resources, so it is
-		// logged and not returned.
-		s.logger.Error("start verification", zap.String("phone_number", num.Mask()), zap.Error(err))
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("couldn't send a code right now"))
-	}
-
-	return connect.NewResponse(&v1.StartPhoneVerificationResponse{
-		ResendAvailableInSeconds: int32(s.resendCooldown.Seconds()),
-		CodeLength:               int32(s.sender.CodeLength()),
-	}), nil
+	return connect.NewResponse(&v1.BeginSignInResponse{Nonce: nonce}), nil
 }
 
-// VerifyPhone exchanges a code for a session, creating the account if this is
-// the first time the number has been seen.
-func (s *authServer) VerifyPhone(
-	ctx context.Context,
-	req *connect.Request[v1.VerifyPhoneRequest],
-) (*connect.Response[v1.VerifyPhoneResponse], error) {
-	num, err := s.allowlist.Parse(req.Msg.GetPhoneNumber())
+func (s *authServer) SignIn(ctx context.Context, req *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error) {
+	provider, err := authService(req.Msg.Provider)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
-
-	result, err := s.sender.Check(ctx, num.E164, req.Msg.GetCode())
+	verified, err := s.identities.Verify(ctx, string(provider), req.Msg.IdentityToken, req.Msg.Nonce)
 	if err != nil {
-		if errors.Is(err, verify.ErrTooManyAttempts) {
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("too many attempts; request a new code"))
-		}
-		s.logger.Error("check verification", zap.String("phone_number", num.Mask()), zap.Error(err))
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("couldn't check that code right now"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("couldn't verify your sign-in; please try again"))
 	}
-	if result != verify.ResultApproved {
-		// One error for wrong, expired, and already-used. Distinguishing them
-		// tells an attacker whether a number has a live verification in flight.
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("that code isn't right"))
-	}
-
+	subject := verified.Subject
 	platform, err := devicePlatformToDB(req.Msg.GetDevicePlatform())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	firstName, err := profileName(req.Msg.FirstName, "first_name", 256)
+	if err != nil {
+		return nil, err
+	}
+	lastName, err := profileName(req.Msg.LastName, "last_name", 256)
+	if err != nil {
+		return nil, err
+	}
+	displayName, err := profileName(req.Msg.DisplayName, "display_name", 512)
+	if err != nil {
+		return nil, err
 	}
 
 	refreshToken, refreshHash, err := auth.GenerateRefreshToken(s.refreshTokenHMACKey)
@@ -143,41 +111,65 @@ func (s *authServer) VerifyPhone(
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
 
+	if _, err := qtx.ConsumeSignInChallenge(ctx, db.ConsumeSignInChallengeParams{
+		NonceHash: identity.HashNonce(req.Msg.Nonce), AuthService: provider, InstallID: req.Msg.InstallId,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign-in expired; please try again"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := qtx.LockAuthIdentity(ctx, string(provider)+":"+subject); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	var (
 		user      db.User
 		isNewUser bool
 	)
 	method, err := qtx.GetAuthMethod(ctx, db.GetAuthMethodParams{
-		AuthService: db.AuthServicePHONE,
-		Subject:     num.E164,
+		AuthService: provider,
+		Subject:     subject,
 	})
 	switch {
 	case err == nil:
 		user, err = qtx.GetUser(ctx, method.UserID)
 		if err != nil {
-			// The auth method outlived its user, which DeleteAccount is written
-			// to prevent. Treat it as an unclaimed number rather than a dead
-			// end, so the person can sign up again.
+			// A deleted account cannot prevent this identity from signing up again.
 			if !errors.Is(err, pgx.ErrNoRows) {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load user: %w", err))
 			}
-			user, isNewUser, err = s.createAccount(ctx, qtx, num, req.Msg.TimeZone, true)
+			user, isNewUser, err = s.createAccount(ctx, qtx, provider, subject, req.Msg.TimeZone, true)
 			if err != nil {
 				return nil, err
 			}
 		} else if err := qtx.TouchAuthMethod(ctx, db.TouchAuthMethodParams{
-			AuthService: db.AuthServicePHONE,
-			Subject:     num.E164,
+			AuthService: provider,
+			Subject:     subject,
 		}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("touch auth method: %w", err))
 		}
 	case errors.Is(err, pgx.ErrNoRows):
-		user, isNewUser, err = s.createAccount(ctx, qtx, num, req.Msg.TimeZone, false)
+		user, isNewUser, err = s.createAccount(ctx, qtx, provider, subject, req.Msg.TimeZone, false)
 		if err != nil {
 			return nil, err
 		}
 	default:
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("lookup auth method: %w", err))
+	}
+
+	if firstName != nil || lastName != nil || displayName != nil {
+		user, err = qtx.FillMissingUserNames(ctx, db.FillMissingUserNamesParams{
+			ID: user.ID, FirstName: firstName, LastName: lastName, DisplayName: displayName,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save profile names: %w", err))
+		}
+	}
+
+	if verified.VerifiedEmail != "" {
+		if err := qtx.SetUserEmail(ctx, db.SetUserEmailParams{ID: user.ID, Email: verified.VerifiedEmail}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save account email: %w", err))
+		}
 	}
 
 	// The install is looked up before the session is made, so signing in again
@@ -217,36 +209,35 @@ func (s *authServer) VerifyPhone(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
-	s.logger.Info("phone verified",
+	s.logger.Info("signed in",
 		zap.String("user_id", user.ID.String()),
 		zap.String("device_id", device.ID.String()),
 		zap.Bool("is_new_user", isNewUser),
 		zap.Bool("facebook_connected", device.FacebookConnected),
 	)
 
-	return connect.NewResponse(&v1.VerifyPhoneResponse{
+	return connect.NewResponse(&v1.SignInResponse{
 		AccessToken:                 accessToken,
 		RefreshToken:                refreshToken,
 		AccessTokenExpiresInSeconds: int32(s.accessTTL.Seconds()),
-		Viewer:                      viewerProto(user, num.E164),
+		Viewer:                      viewerProto(user, provider, subject),
 		IsNewUser:                   isNewUser,
 		Device:                      deviceProto(device),
 	}), nil
 }
 
-// createAccount makes the user and its phone auth method. reclaim is set when a
-// stale auth-method row for this number has to be replaced.
 func (s *authServer) createAccount(
 	ctx context.Context,
 	qtx *db.Queries,
-	num phone.Number,
+	provider db.AuthService,
+	subject string,
 	timeZone *string,
 	reclaim bool,
 ) (db.User, bool, error) {
 	if reclaim {
 		if err := qtx.DeleteAuthMethodBySubject(ctx, db.DeleteAuthMethodBySubjectParams{
-			AuthService: db.AuthServicePHONE,
-			Subject:     num.E164,
+			AuthService: provider,
+			Subject:     subject,
 		}); err != nil {
 			return db.User{}, false, connect.NewError(connect.CodeInternal, fmt.Errorf("release stale auth method: %w", err))
 		}
@@ -258,8 +249,8 @@ func (s *authServer) createAccount(
 	}
 	if _, err := qtx.CreateAuthMethod(ctx, db.CreateAuthMethodParams{
 		UserID:      user.ID,
-		AuthService: db.AuthServicePHONE,
-		Subject:     num.E164,
+		AuthService: provider,
+		Subject:     subject,
 	}); err != nil {
 		return db.User{}, false, connect.NewError(connect.CodeInternal, fmt.Errorf("create auth method: %w", err))
 	}
@@ -340,23 +331,6 @@ func devicePlatformToDB(p v1.DevicePlatform) (db.DevicePlatform, error) {
 		return db.DevicePlatformWEB, nil
 	default:
 		return "", fmt.Errorf("device_platform must be set")
-	}
-}
-
-// devicePlatformSignal renders the platform the way verification providers
-// spell it. Separate from devicePlatformToDB because that one is the storage
-// encoding and must reject an unset value; here an unset value is a signal we
-// simply do not have, and refusing to send a code over it would be absurd.
-func devicePlatformSignal(p v1.DevicePlatform) string {
-	switch p {
-	case v1.DevicePlatform_DEVICE_PLATFORM_IOS:
-		return "ios"
-	case v1.DevicePlatform_DEVICE_PLATFORM_ANDROID:
-		return "android"
-	case v1.DevicePlatform_DEVICE_PLATFORM_WEB:
-		return "web"
-	default:
-		return ""
 	}
 }
 

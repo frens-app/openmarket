@@ -1,4 +1,5 @@
 import SwiftUI
+import GoogleSignIn
 import WebKit
 
 /// Exists for one callback: APNs hands the device token to the app delegate and
@@ -80,6 +81,7 @@ struct OpenMarketApp: App {
                 .environmentObject(amazonChecks)
                 .environmentObject(shopping)
                 .environmentObject(chooser)
+                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
                 .onAppear { store.detail.browseWebView = discover.webViews.first }
         }
         // Cache writes are coalesced on a 2s debounce, which is right for a
@@ -121,19 +123,15 @@ struct OpenMarketApp: App {
 }
 
 /// Browsing requires a chosen place, not an account. Account-based tools ask
-/// for phone verification at the point of use (`AccountGateView`).
+/// for account sign-in at the point of use (`AccountGateView`).
 struct RootView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
 
     /// Whether the flow is on screen. `nil` until the session check comes back.
     ///
-    /// **A latch, not a derivation.** Recomputing
-    /// `!account.isSignedIn || prefs.needsOnboarding` on every change lets an
-    /// answer landing early dismiss the flow out from under the person still
-    /// using it: the location step resolves in the background, and the moment it
-    /// lands the notifications step would never be shown. `openIfNeeded` can
-    /// only *open* this; only `finish` closes it.
+    /// `openIfNeeded` can only open this; only `finish` closes it, so account
+    /// and location updates cannot dismiss the flow before its final step.
     @State private var isOnboarding: Bool?
 
     var body: some View {
@@ -152,6 +150,12 @@ struct RootView: View {
         }
         .task {
             if account.state == .unknown { await account.restore() }
+        }
+        .task(id: account.state.viewer?.id) {
+            guard let userID = account.state.viewer?.id else { return }
+            let connected = await SessionState.isSignedIn()
+            guard !Task.isCancelled, account.state.viewer?.id == userID else { return }
+            await account.reportFacebookConnection(connected)
         }
         .onAppear { openIfNeeded() }
         .onChange(of: prefs.needsOnboarding) { _, _ in openIfNeeded() }

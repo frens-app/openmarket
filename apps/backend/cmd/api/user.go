@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"frens.lol/openmarket/backend/pkg/auth"
 	"frens.lol/openmarket/backend/pkg/db"
+	"frens.lol/openmarket/backend/pkg/identity"
 	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,9 +18,11 @@ import (
 )
 
 type userServer struct {
-	queries *db.Queries
-	pool    *pgxpool.Pool
-	logger  *zap.Logger
+	identities   identityVerifier
+	appleRevoker *identity.AppleRevoker
+	queries      *db.Queries
+	pool         *pgxpool.Pool
+	logger       *zap.Logger
 }
 
 func (s *userServer) GetViewer(
@@ -35,12 +38,12 @@ func (s *userServer) GetViewer(
 	if err != nil {
 		return nil, notFoundOrInternal(err, "load user")
 	}
-	phoneNumber, err := s.queries.GetPhoneNumberForUser(ctx, userID)
+	method, err := s.queries.GetAuthMethodForUser(ctx, userID)
 	if err != nil {
-		return nil, notFoundOrInternal(err, "load phone number")
+		return nil, notFoundOrInternal(err, "load sign-in provider")
 	}
 
-	response := &v1.GetViewerResponse{Viewer: viewerProto(user, phoneNumber)}
+	response := &v1.GetViewerResponse{Viewer: viewerProto(user, method.AuthService, method.Subject)}
 
 	// device_id is nullable — a deleted device row sets it null rather than
 	// taking the session with it — so a viewer without a device is possible.
@@ -89,12 +92,30 @@ func (s *userServer) SetFacebookConnection(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load device: %w", err))
 	}
 
-	updated, err := s.queries.SetDeviceFacebookConnection(ctx, db.SetDeviceFacebookConnectionParams{
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("begin tx: %w", err))
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.queries.WithTx(tx)
+
+	updated, err := qtx.SetDeviceFacebookConnection(ctx, db.SetDeviceFacebookConnectionParams{
 		ID:        device.ID,
 		Connected: req.Msg.GetConnected(),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("set facebook connection: %w", err))
+	}
+
+	if updated.FacebookConnected {
+		if err := qtx.RecordUserFacebookConnection(ctx, db.RecordUserFacebookConnectionParams{
+			ID: updated.UserID, ConnectedAt: updated.FacebookConnectedAt,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("record user facebook connection: %w", err))
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
 	if updated.FacebookConnected != device.FacebookConnected {
@@ -118,24 +139,17 @@ func (s *userServer) UpdateViewer(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	// Three states, and they have to stay distinct: field absent means leave
-	// it, present-and-empty means clear it, present-and-set means write it.
-	// Collapsing the first two is why partial updates usually end up wiping
-	// data.
-	var (
-		displayName *string
-		clearName   bool
-	)
-	if req.Msg.DisplayName != nil {
-		trimmed := strings.TrimSpace(req.Msg.GetDisplayName())
-		if trimmed == "" {
-			clearName = true
-		} else {
-			if len([]rune(trimmed)) > 64 {
-				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("display_name is too long"))
-			}
-			displayName = &trimmed
-		}
+	firstName, err := profileName(req.Msg.FirstName, "first_name", 256)
+	if err != nil {
+		return nil, err
+	}
+	lastName, err := profileName(req.Msg.LastName, "last_name", 256)
+	if err != nil {
+		return nil, err
+	}
+	displayName, err := profileName(req.Msg.DisplayName, "display_name", 512)
+	if err != nil {
+		return nil, err
 	}
 
 	var markComplete *bool
@@ -151,28 +165,28 @@ func (s *userServer) UpdateViewer(
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
 
-	if clearName {
-		if _, err := qtx.ClearUserDisplayName(ctx, userID); err != nil {
-			return nil, notFoundOrInternal(err, "clear display name")
-		}
-	}
 	user, err := qtx.UpdateUser(ctx, db.UpdateUserParams{
 		ID:                     userID,
 		DisplayName:            displayName,
+		FirstName:              firstName,
+		LastName:               lastName,
+		SetDisplayName:         req.Msg.DisplayName != nil,
+		SetFirstName:           req.Msg.FirstName != nil,
+		SetLastName:            req.Msg.LastName != nil,
 		MarkOnboardingComplete: markComplete,
 	})
 	if err != nil {
 		return nil, notFoundOrInternal(err, "update user")
 	}
-	phoneNumber, err := qtx.GetPhoneNumberForUser(ctx, userID)
+	method, err := qtx.GetAuthMethodForUser(ctx, userID)
 	if err != nil {
-		return nil, notFoundOrInternal(err, "load phone number")
+		return nil, notFoundOrInternal(err, "load sign-in provider")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
-	return connect.NewResponse(&v1.UpdateViewerResponse{Viewer: viewerProto(user, phoneNumber)}), nil
+	return connect.NewResponse(&v1.UpdateViewerResponse{Viewer: viewerProto(user, method.AuthService, method.Subject)}), nil
 }
 
 func (s *userServer) RegisterDeviceToken(
@@ -235,12 +249,7 @@ func (s *userServer) RegisterDeviceToken(
 	return connect.NewResponse(&v1.RegisterDeviceTokenResponse{}), nil
 }
 
-// DeleteAccount soft-deletes the user, releases the phone number, revokes every
-// session, and deletes their price checks.
-//
-// Releasing the auth method is the part that is easy to skip and expensive to
-// get wrong: the row's primary key is the phone number, so leaving it behind
-// would mean the person can never sign up again with the number they own.
+// DeleteAccount releases the provider identity, revokes sessions and deletes price checks.
 //
 // **The price checks are deleted for real, and that is not a redundancy with
 // the soft delete above.** `price_checks.user_id` cascades, but a cascade only
@@ -252,7 +261,7 @@ func (s *userServer) RegisterDeviceToken(
 // detached — see the query for why that one is deliberate rather than missed.
 func (s *userServer) DeleteAccount(
 	ctx context.Context,
-	_ *connect.Request[v1.DeleteAccountRequest],
+	req *connect.Request[v1.DeleteAccountRequest],
 ) (*connect.Response[v1.DeleteAccountResponse], error) {
 	userID, err := auth.UserID(ctx)
 	if err != nil {
@@ -266,6 +275,41 @@ func (s *userServer) DeleteAccount(
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
 
+	method, err := qtx.GetAuthMethodForUser(ctx, userID)
+	if err != nil {
+		return nil, notFoundOrInternal(err, "load sign-in provider")
+	}
+	if method.AuthService == db.AuthServiceAPPLE {
+		verified, err := s.identities.Verify(ctx, "APPLE", req.Msg.AppleIdentityToken, req.Msg.Nonce)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign in with Apple again to delete this account"))
+		}
+		subject := verified.Subject
+		method, err := qtx.GetAuthMethod(ctx, db.GetAuthMethodParams{AuthService: db.AuthServiceAPPLE, Subject: subject})
+		if err != nil || method.UserID != userID {
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("use the Apple account you signed in with"))
+		}
+		sessionID, _ := auth.SessionID(ctx)
+		device, err := qtx.GetDeviceForSession(ctx, sessionID)
+		if err != nil {
+			return nil, notFoundOrInternal(err, "load device")
+		}
+		if _, err := qtx.ConsumeSignInChallenge(ctx, db.ConsumeSignInChallengeParams{
+			NonceHash: identity.HashNonce(req.Msg.Nonce), AuthService: db.AuthServiceAPPLE, InstallID: device.InstallID,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("sign-in expired; please try again"))
+		}
+		if err := s.appleRevoker.Revoke(ctx, req.Msg.AppleAuthorizationCode, func(rawToken string) error {
+			confirmed, err := s.identities.Verify(ctx, "APPLE", rawToken, req.Msg.Nonce)
+			if err != nil || confirmed.Subject != subject {
+				return errors.New("Apple token identity mismatch")
+			}
+			return nil
+		}); err != nil {
+			s.logger.Error("revoke Apple grant", zap.Error(err))
+			return nil, connect.NewError(connect.CodeUnavailable, errors.New("couldn't disconnect Apple; please try deleting your account again"))
+		}
+	}
 	if err := qtx.SoftDeleteUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("soft delete user: %w", err))
 	}
@@ -289,12 +333,21 @@ func (s *userServer) DeleteAccount(
 	return connect.NewResponse(&v1.DeleteAccountResponse{}), nil
 }
 
-func viewerProto(user db.User, phoneNumber string) *v1.Viewer {
+func viewerProto(user db.User, provider db.AuthService, subject string) *v1.Viewer {
 	viewer := &v1.Viewer{
 		Id:                  user.ID.String(),
-		PhoneNumber:         phoneNumber,
+		SignInProvider:      strings.ToLower(string(provider)),
 		DisplayName:         user.DisplayName,
+		FirstName:           user.FirstName,
+		LastName:            user.LastName,
 		OnboardingCompleted: user.OnboardingCompletedAt.Valid,
+	}
+	if provider == db.AuthServicePHONE {
+		viewer.PhoneNumber = subject
+	}
+	if user.FacebookLastConnectedAt.Valid {
+		at := user.FacebookLastConnectedAt.Time.UTC().Format(time.RFC3339)
+		viewer.FacebookLastConnectedAt = &at
 	}
 	if user.CreatedAt.Valid {
 		viewer.CreatedAt = user.CreatedAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00")

@@ -1,5 +1,4 @@
-// Package phone normalises and screens the one identifier this service
-// authenticates against.
+// Package phone normalises phone login numbers and enforces the country allowlist.
 package phone
 
 import (

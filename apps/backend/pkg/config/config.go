@@ -28,6 +28,12 @@ func init() {
 	pflag.Duration("access_token_ttl", 30*time.Minute, "access token TTL")
 	pflag.Duration("refresh_token_ttl", 365*24*time.Hour, "refresh token TTL")
 
+	pflag.String("apple_client_id", "", "Sign in with Apple bundle ID for this environment")
+	pflag.String("apple_team_id", "", "Apple developer team ID")
+	pflag.String("apple_sign_in_key_id", "", "Key ID shown in Apple Developer for the Sign in with Apple key")
+	pflag.String("apple_sign_in_private_key", "", "Sign in with Apple .p8 key contents in PKCS8 PEM format; escaped newlines accepted")
+	pflag.String("google_client_id", "", "Google web OAuth client ID used as the ID token audience")
+
 	// SMS verification, via Prelude.
 	//
 	// Deliberately no base-URL override. Every environment talks to the real
@@ -101,6 +107,12 @@ type ServiceConfig struct {
 	RefreshTokenHMACKey string        `mapstructure:"refresh_token_hmac_key"`
 	AccessTokenTTL      time.Duration `mapstructure:"access_token_ttl"`
 	RefreshTokenTTL     time.Duration `mapstructure:"refresh_token_ttl"`
+
+	AppleTeamID           string `mapstructure:"apple_team_id"`
+	AppleSignInKeyID      string `mapstructure:"apple_sign_in_key_id"`
+	AppleSignInPrivateKey string `mapstructure:"apple_sign_in_private_key"`
+	AppleClientID         string `mapstructure:"apple_client_id"`
+	GoogleClientID        string `mapstructure:"google_client_id"`
 
 	PreludeAPIKey          string `mapstructure:"prelude_api_key"`
 	VerificationCodeLength int    `mapstructure:"verification_code_length"`
@@ -210,6 +222,11 @@ func requireAPIValues(cfg ServiceConfig) {
 				"numbers on DEV_BYPASS_PHONE_NUMBERS are what skip it."
 		}
 		panic(fmt.Sprintf("missing required config: %v%s", missing, hint))
+	}
+
+	if cfg.IsProduction() && strings.TrimSpace(cfg.AppleClientID) != "" &&
+		(strings.TrimSpace(cfg.AppleTeamID) == "" || strings.TrimSpace(cfg.AppleSignInKeyID) == "" || strings.TrimSpace(cfg.AppleSignInPrivateKey) == "") {
+		panic("Apple revocation signing credentials are required when Apple sign-in is enabled in production")
 	}
 
 	// The bypass list is the only way a code is accepted without Prelude having

@@ -15,7 +15,9 @@ import (
 type AuthService string
 
 const (
-	AuthServicePHONE AuthService = "PHONE"
+	AuthServicePHONE  AuthService = "PHONE"
+	AuthServiceAPPLE  AuthService = "APPLE"
+	AuthServiceGOOGLE AuthService = "GOOGLE"
 )
 
 func (e *AuthService) Scan(src interface{}) error {
@@ -278,14 +280,25 @@ type PriceCheckPhoto struct {
 	Height       int32
 }
 
+type SignInChallenge struct {
+	NonceHash   string
+	AuthService AuthService
+	InstallID   string
+	ExpiresAt   pgtype.Timestamptz
+}
+
 type User struct {
-	ID                    uuid.UUID
-	DisplayName           *string
-	TimeZone              *string
-	OnboardingCompletedAt pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
+	ID                      uuid.UUID
+	DisplayName             *string
+	TimeZone                *string
+	OnboardingCompletedAt   pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	FirstName               *string
+	LastName                *string
+	FacebookLastConnectedAt pgtype.Timestamptz
+	Email                   *string
 }
 
 type UserAuthMethod struct {

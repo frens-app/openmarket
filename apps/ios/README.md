@@ -146,7 +146,7 @@ current one.
 ## Before a device build or an archive
 
 Both bundle identifiers need their own App ID in the developer portal, each with
-**Push Notifications enabled** — without it the entitlement is present, the build
+**Push Notifications and Sign in with Apple enabled** — without it the entitlement is present, the build
 succeeds, and APNs refuses a token at runtime.
 
 Build numbers live in the xcconfigs. Only `Release.xcconfig` tracks one that
@@ -166,3 +166,13 @@ make tunnel           # expose the API on the tailnet — `make dev` does this t
 make tunnel-status    # what's registered, and the xcconfig lines for it
 make tunnel-stop
 ```
+
+## Account sign-in
+
+Configure Apple and Google using [docs/social-login.md](../../docs/social-login.md).
+The Google IDs live in per-environment xcconfigs; Apple uses the bundle ID and
+the Sign in with Apple entitlement from `project.yml`.
+
+The sign-in UI offers Apple and Google. Phone login and signup remain supported
+by the backend for older app versions, and existing phone sessions keep working.
+SMS configuration is covered in [docs/phone-login.md](../../docs/phone-login.md).

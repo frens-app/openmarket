@@ -21,6 +21,12 @@ public protocol Openmarket_Api_V1_AuthServiceClientInterface: Sendable {
     func `verifyPhone`(request: Openmarket_Api_V1_VerifyPhoneRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_VerifyPhoneResponse>
 
     @available(iOS 13, *)
+    func `beginSignIn`(request: Openmarket_Api_V1_BeginSignInRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_BeginSignInResponse>
+
+    @available(iOS 13, *)
+    func `signIn`(request: Openmarket_Api_V1_SignInRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_SignInResponse>
+
+    @available(iOS 13, *)
     func `refreshToken`(request: Openmarket_Api_V1_RefreshTokenRequest, headers: Connect.Headers) async -> ResponseMessage<Openmarket_Api_V1_RefreshTokenResponse>
 
     @available(iOS 13, *)
@@ -51,6 +57,16 @@ public final class Openmarket_Api_V1_AuthServiceClient: Openmarket_Api_V1_AuthSe
     }
 
     @available(iOS 13, *)
+    public func `beginSignIn`(request: Openmarket_Api_V1_BeginSignInRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_BeginSignInResponse> {
+        return await self.client.unary(path: "/openmarket.api.v1.AuthService/BeginSignIn", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `signIn`(request: Openmarket_Api_V1_SignInRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_SignInResponse> {
+        return await self.client.unary(path: "/openmarket.api.v1.AuthService/SignIn", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `refreshToken`(request: Openmarket_Api_V1_RefreshTokenRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Openmarket_Api_V1_RefreshTokenResponse> {
         return await self.client.unary(path: "/openmarket.api.v1.AuthService/RefreshToken", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -65,6 +81,8 @@ public final class Openmarket_Api_V1_AuthServiceClient: Openmarket_Api_V1_AuthSe
             public static let getSignInOptions = Connect.MethodSpec(name: "GetSignInOptions", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let startPhoneVerification = Connect.MethodSpec(name: "StartPhoneVerification", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let verifyPhone = Connect.MethodSpec(name: "VerifyPhone", service: "openmarket.api.v1.AuthService", type: .unary)
+            public static let beginSignIn = Connect.MethodSpec(name: "BeginSignIn", service: "openmarket.api.v1.AuthService", type: .unary)
+            public static let signIn = Connect.MethodSpec(name: "SignIn", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let refreshToken = Connect.MethodSpec(name: "RefreshToken", service: "openmarket.api.v1.AuthService", type: .unary)
             public static let logout = Connect.MethodSpec(name: "Logout", service: "openmarket.api.v1.AuthService", type: .unary)
         }

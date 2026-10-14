@@ -7,72 +7,48 @@ struct OnboardingView: View {
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var chooser: PlaceChooser
     @EnvironmentObject private var account: AccountSession
-    @StateObject private var push = PushRegistrar.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isFinishing = false
     @State private var hasStarted = false
-    @State private var current: Step = .phone
+    @State private var current: Step = .account
 
     enum Step: Int, CaseIterable {
-        case phone, location, facebook, notifications
+        case account, location, facebook
 
         var analyticsName: String {
             switch self {
-            case .phone: return "phone"
+            case .account: return "account"
             case .location: return "location"
             case .facebook: return "facebook"
-            case .notifications: return "notifications"
             }
         }
 
-        func next(hasAccount: Bool, needsNotificationPermission: Bool) -> Step? {
+        func next() -> Step? {
             switch self {
-            case .phone: return .location
+            case .account: return .location
             case .location: return .facebook
-            case .facebook:
-                return hasAccount && needsNotificationPermission ? .notifications : nil
-            case .notifications: return nil
+            case .facebook: return nil
             }
-        }
-    }
-
-    private var visibleSteps: [Step] {
-        Step.allCases.filter {
-            $0 != .notifications || (account.isSignedIn && push.status == .notDetermined)
-                || current == .notifications
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            if current != .account { header }
             ZStack {
                 switch current {
-                case .phone:
-                    VStack(spacing: 0) {
-                        PhoneLoginView(prompt: "Create an account to save your price checks. You can also browse without one.") { _ in
-                            guard current == .phone else { return }
-                            Task { await account.reportFacebookConnection(await SessionState.isSignedIn()) }
-                            advance(from: .phone)
-                        }
-                        Button("Not now — browse without an account") { advance(from: .phone) }
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .padding(.horizontal, 24)
+                case .account:
+                    AccountLoginView(onSkip: { advance(from: .account) }) { _ in
+                        guard current == .account else { return }
+                        advance(from: .account)
                     }
                     .transition(.opacity)
                 case .location:
                     LocationPage { advance(from: .location) }
                         .transition(.opacity)
                 case .facebook:
-                    FacebookPage(isFinishing: isFinishing,
-                                 continueTitle: account.isSignedIn && push.status == .notDetermined
-                                     ? "Continue" : "Start browsing") { advance(from: .facebook) }
-                        .transition(.opacity)
-                case .notifications:
-                    NotificationsPage(isFinishing: isFinishing) { advance(from: .notifications) }
+                    FacebookPage(isFinishing: isFinishing) { advance(from: .facebook) }
                         .transition(.opacity)
                 }
             }
@@ -83,7 +59,6 @@ struct OnboardingView: View {
             guard !hasStarted else { return }
             hasStarted = true
             if account.isSignedIn { current = .location }
-            await push.refreshStatus()
         }
     }
 
@@ -95,13 +70,8 @@ struct OnboardingView: View {
         ])
         isFinishing = true
         Task {
-            if step == .facebook {
-                await push.refreshStatus()
-                if account.isSignedIn { push.registerIfAuthorized() }
-            }
             guard !Task.isCancelled else { return }
-            if let next = step.next(hasAccount: account.isSignedIn,
-                                    needsNotificationPermission: push.status == .notDetermined) {
+            if let next = step.next() {
                 current = next
                 isFinishing = false
             } else {
@@ -112,7 +82,7 @@ struct OnboardingView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            ForEach(visibleSteps, id: \.rawValue) { dot in
+            ForEach(Step.allCases, id: \.rawValue) { dot in
                 Capsule()
                     .fill(dot == current ? Color.primary : Color(.tertiaryLabel))
                     .frame(width: dot == current ? 18 : 6, height: 6)
@@ -120,11 +90,10 @@ struct OnboardingView: View {
         }
         .padding(.top, 14)
         .padding(.bottom, 4)
-        .accessibilityLabel("Step \((visibleSteps.firstIndex(of: current) ?? 0) + 1) of \(visibleSteps.count)")
+        .accessibilityLabel("Step \(current.rawValue + 1) of \(Step.allCases.count)")
     }
 
     private func finish() async {
-        // A place can still be resolving while the optional steps are visible.
         await chooser.settle()
         isFinishing = false
         guard prefs.hasBrowseablePlace else {
@@ -139,7 +108,6 @@ struct OnboardingView: View {
 
 private struct FacebookPage: View {
     let isFinishing: Bool
-    let continueTitle: String
     let done: () -> Void
 
     /// The session is the store's cache key, and signing in here happens while
@@ -213,7 +181,7 @@ private struct FacebookPage: View {
             .scrollBounceBehavior(.basedOnSize)
 
             if isSignedIn {
-                OnboardingButton(title: continueTitle, isEnabled: !isFinishing,
+                OnboardingButton(title: "Start browsing", isEnabled: !isFinishing,
                                  isBusy: isFinishing, action: done)
             } else {
                 OnboardingButton(title: "Connect Facebook", isEnabled: !isFinishing) {
@@ -258,16 +226,6 @@ private struct FacebookPage: View {
 
 // MARK: - 1. Location
 
-/// Required, and required for a reason worth stating on the screen: distance is
-/// the app's organising idea, and it is applied on this device
-/// (`docs/filter-parameters.md` §3). Without a place there is nothing to measure
-/// from, and the app would quietly measure from a hardcoded city.
-///
-/// Two routes, both ending in the same place — Apple answers "where is that",
-/// Facebook answers "what do you call it" (`PlaceChooser`). The device fix is
-/// the primary action because it is one tap and exact; searching a city is a
-/// full alternative rather than a fallback, since plenty of people want to
-/// browse somewhere they aren't.
 private struct LocationPage: View {
     let next: () -> Void
 
@@ -292,12 +250,6 @@ private struct LocationPage: View {
         chooser.switching?.name ?? prefs.resolvedPlace?.name
     }
 
-    /// Continue opens on the *choice*, not on the confirmation — the round trip
-    /// finishes while the user reads the next screen.
-    private var canContinue: Bool {
-        prefs.hasBrowseablePlace || chooser.switching != nil
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             LocationMapCard(place: mapPlace ?? "no location",
@@ -306,15 +258,9 @@ private struct LocationPage: View {
                             userLocation: location.coordinate)
                 .padding(.top, 8)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Where are you shopping?")
-                    .font(.largeTitle.weight(.bold))
-                Text("Listings are sorted and filtered by how far away they are, so the app needs somewhere to measure from. You can change it any time.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.top, 24)
+            Text("Where are you shopping?")
+                .font(.largeTitle.weight(.bold))
+                .padding(.top, 24)
 
             // Neither button is disabled while a switch runs. The point of not
             // blocking is that the screen stays usable, and the most likely
@@ -382,16 +328,13 @@ private struct LocationPage: View {
             }
 
             Spacer(minLength: 16)
-
-            Text("Facebook names the place from your coordinate, and every search runs against that place — same as Marketplace itself.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.bottom, 12)
-
-            OnboardingButton(title: "Continue", isEnabled: canContinue, action: next)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 20)
+        .onChange(of: prefs.resolvedPlace) { _, _ in
+            guard prefs.hasBrowseablePlace else { return }
+            next()
+        }
         .locationSettingsAlert(isPresented: $chooser.needsLocationSettings)
         .sheet(isPresented: $showCitySearch) {
             CitySearchSheet(chooser: chooser)
@@ -464,53 +407,6 @@ private struct CitySearchSheet: View {
         return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "Type a city, town or ZIP code."
             : "No places found."
-    }
-}
-
-private struct NotificationsPage: View {
-    let isFinishing: Bool
-    let done: () -> Void
-
-    @StateObject private var push = PushRegistrar.shared
-    @State private var isAsking = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Image(systemName: "bell.badge")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.tint)
-                        .padding(.bottom, 12)
-                    Text("Enable notifications")
-                        .font(.largeTitle.weight(.bold))
-                    Text("Allow notifications from Openmarket. You can change this anytime in Settings.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 32)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-
-            OnboardingButton(title: "Turn on notifications", isEnabled: !isAsking && !isFinishing,
-                             isBusy: isAsking || isFinishing) {
-                isAsking = true
-                Task {
-                    await push.requestAuthorization()
-                    isAsking = false
-                    done()
-                }
-            }
-            Button("Not now", action: done)
-                .font(.subheadline.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .disabled(isAsking || isFinishing)
-        }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 20)
     }
 }
 

@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/validate"
 	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
+	"frens.lol/openmarket/backend/pkg/identity"
 	"frens.lol/openmarket/backend/pkg/llm"
 	"frens.lol/openmarket/backend/pkg/phone"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
@@ -34,9 +35,9 @@ import (
 const migrationsDir = "deployments/migrations"
 
 const (
-	shutdownGrace       = 15 * time.Second
-	readHeaderTimeout   = 10 * time.Second
-	verificationPruneAt = time.Hour
+	shutdownGrace     = 15 * time.Second
+	readHeaderTimeout = 10 * time.Second
+	authPruneInterval = time.Minute
 )
 
 // maxRequestBytes is the ceiling on a single request body.
@@ -111,7 +112,13 @@ func main() {
 	// requests stop at the door.
 	handlerOptions := []connect.HandlerOption{interceptors, connect.WithReadMaxBytes(maxRequestBytes)}
 
+	identities := identity.NewVerifier(ctx, cfg.AppleClientID, cfg.GoogleClientID)
+	appleRevoker, err := identity.NewAppleRevoker(cfg.AppleClientID, cfg.AppleTeamID, cfg.AppleSignInKeyID, cfg.AppleSignInPrivateKey)
+	if err != nil {
+		logger.Fatal("configure Apple revocation", zap.Error(err))
+	}
 	authSvc := &authServer{
+		identities:          identities,
 		queries:             queries,
 		pool:                pool,
 		logger:              logger.Named("auth"),
@@ -125,9 +132,11 @@ func main() {
 		resendCooldown:      cfg.VerificationResendCooldown,
 	}
 	userSvc := &userServer{
-		queries: queries,
-		pool:    pool,
-		logger:  logger.Named("user"),
+		identities:   identities,
+		appleRevoker: appleRevoker,
+		queries:      queries,
+		pool:         pool,
+		logger:       logger.Named("user"),
 	}
 	modelProvider, err := buildModelProvider(cfg)
 	if err != nil {
@@ -318,13 +327,16 @@ func runMigrations(pool *pgxpool.Pool, logger *zap.Logger) error {
 }
 
 func prunePeriodically(ctx context.Context, ceiling *sendCeiling, logger *zap.Logger) {
-	ticker := time.NewTicker(verificationPruneAt)
+	ticker := time.NewTicker(authPruneInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if err := ceiling.queries.PruneSignInChallenges(ctx); err != nil {
+				logger.Warn("prune sign-in challenges", zap.Error(err))
+			}
 			if err := ceiling.prune(ctx); err != nil {
 				logger.Warn("prune verification sends", zap.Error(err))
 			}

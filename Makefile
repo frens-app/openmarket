@@ -52,9 +52,7 @@ sqlc-generate:
 # the section below.
 dev: dev-infra tunnel-ensure api
 
-# Just Postgres. Verification goes to the real Prelude API in every
-# environment; the dev skip button works in-process off DEV_BYPASS_PHONE_NUMBERS,
-# so there is nothing local to stand in for it.
+# Just Postgres. Identity providers are configured separately; see docs/social-login.md.
 dev-infra:
 	@printf '$(BLUE)[docker]$(RESET) postgres up\n'
 	@$(COMPOSE) up -d --wait --remove-orphans db

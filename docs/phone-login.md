@@ -4,12 +4,13 @@
 **Code:** `apps/ios/Sources/UI/PhoneLoginView.swift`,
 `apps/ios/Sources/Account/PhoneCountry.swift`,
 `apps/ios/Sources/Account/AccountSession.swift`,
-`apps/backend/cmd/api/auth.go`, `apps/backend/pkg/phone/phone.go`,
+`apps/backend/cmd/api/auth_phone.go`, `apps/backend/pkg/phone/phone.go`,
 `apps/backend/pkg/verify/prelude.go`
 **Related:** `onboarding.md`, `backend.md` §3
 
-Phone login is the first required step of onboarding. The app asks for a phone
-number in one of the served countries, Prelude sends a one-time code, and the
+Phone login and signup remain supported by the backend for older app versions.
+The current iOS sign-in UI offers Apple and Google. In the phone flow, the app
+asks for a number in one of the served countries, Prelude sends a one-time code, and the
 backend exchanges an approved code for the app's own session. Facebook sign-in
 is a separate session for Marketplace browsing and is not part of this flow.
 

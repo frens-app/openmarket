@@ -7,6 +7,7 @@
 package apiv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -74,10 +75,15 @@ func (NotificationPermissionStatus) EnumDescriptor() ([]byte, []int) {
 type Viewer struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// E.164, e.g. "+14155550123". Login identity; never shown to other users
-	// (see docs/backend.md §6).
-	PhoneNumber string  `protobuf:"bytes,2,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
-	DisplayName *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	// Retained for phone clients. Empty for Apple/Google accounts.
+	PhoneNumber string `protobuf:"bytes,2,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
+	// "apple", "google", or "phone". Apple/Google subjects stay on the server.
+	SignInProvider string  `protobuf:"bytes,6,opt,name=sign_in_provider,json=signInProvider,proto3" json:"sign_in_provider,omitempty"`
+	DisplayName    *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	FirstName      *string `protobuf:"bytes,7,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	LastName       *string `protobuf:"bytes,8,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
+	// RFC 3339. Latest reported connection on any install; not current device status.
+	FacebookLastConnectedAt *string `protobuf:"bytes,9,opt,name=facebook_last_connected_at,json=facebookLastConnectedAt,proto3,oneof" json:"facebook_last_connected_at,omitempty"`
 	// Set once the client has finished onboarding.
 	//
 	// Named without a `has_` prefix on purpose: protoc-gen-swift derives its own
@@ -134,9 +140,37 @@ func (x *Viewer) GetPhoneNumber() string {
 	return ""
 }
 
+func (x *Viewer) GetSignInProvider() string {
+	if x != nil {
+		return x.SignInProvider
+	}
+	return ""
+}
+
 func (x *Viewer) GetDisplayName() string {
 	if x != nil && x.DisplayName != nil {
 		return *x.DisplayName
+	}
+	return ""
+}
+
+func (x *Viewer) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *Viewer) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
+	}
+	return ""
+}
+
+func (x *Viewer) GetFacebookLastConnectedAt() string {
+	if x != nil && x.FacebookLastConnectedAt != nil {
+		return *x.FacebookLastConnectedAt
 	}
 	return ""
 }
@@ -409,6 +443,8 @@ type UpdateViewerRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Absent leaves the current value; present-and-empty clears it.
 	DisplayName *string `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	FirstName   *string `protobuf:"bytes,3,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	LastName    *string `protobuf:"bytes,4,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
 	// Idempotent latch — false never un-completes onboarding.
 	OnboardingCompleted *bool `protobuf:"varint,2,opt,name=onboarding_completed,json=onboardingCompleted,proto3,oneof" json:"onboarding_completed,omitempty"`
 	unknownFields       protoimpl.UnknownFields
@@ -448,6 +484,20 @@ func (*UpdateViewerRequest) Descriptor() ([]byte, []int) {
 func (x *UpdateViewerRequest) GetDisplayName() string {
 	if x != nil && x.DisplayName != nil {
 		return *x.DisplayName
+	}
+	return ""
+}
+
+func (x *UpdateViewerRequest) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *UpdateViewerRequest) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
 	}
 	return ""
 }
@@ -606,9 +656,13 @@ func (*RegisterDeviceTokenResponse) Descriptor() ([]byte, []int) {
 }
 
 type DeleteAccountRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Apple accounts reauthorize so their provider grant can be revoked.
+	AppleIdentityToken     string `protobuf:"bytes,1,opt,name=apple_identity_token,json=appleIdentityToken,proto3" json:"apple_identity_token,omitempty"`
+	AppleAuthorizationCode string `protobuf:"bytes,2,opt,name=apple_authorization_code,json=appleAuthorizationCode,proto3" json:"apple_authorization_code,omitempty"`
+	Nonce                  string `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DeleteAccountRequest) Reset() {
@@ -639,6 +693,27 @@ func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeleteAccountRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAccountRequest) Descriptor() ([]byte, []int) {
 	return file_openmarket_api_v1_user_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DeleteAccountRequest) GetAppleIdentityToken() string {
+	if x != nil {
+		return x.AppleIdentityToken
+	}
+	return ""
+}
+
+func (x *DeleteAccountRequest) GetAppleAuthorizationCode() string {
+	if x != nil {
+		return x.AppleAuthorizationCode
+	}
+	return ""
+}
+
+func (x *DeleteAccountRequest) GetNonce() string {
+	if x != nil {
+		return x.Nonce
+	}
+	return ""
 }
 
 type DeleteAccountResponse struct {
@@ -681,15 +756,24 @@ var File_openmarket_api_v1_user_service_proto protoreflect.FileDescriptor
 
 const file_openmarket_api_v1_user_service_proto_rawDesc = "" +
 	"\n" +
-	"$openmarket/api/v1/user_service.proto\x12\x11openmarket.api.v1\"\xc6\x01\n" +
+	"$openmarket/api/v1/user_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\"\xb4\x03\n" +
 	"\x06Viewer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
-	"\fphone_number\x18\x02 \x01(\tR\vphoneNumber\x12&\n" +
-	"\fdisplay_name\x18\x03 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x121\n" +
+	"\fphone_number\x18\x02 \x01(\tR\vphoneNumber\x12(\n" +
+	"\x10sign_in_provider\x18\x06 \x01(\tR\x0esignInProvider\x12&\n" +
+	"\fdisplay_name\x18\x03 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"first_name\x18\a \x01(\tH\x01R\tfirstName\x88\x01\x01\x12 \n" +
+	"\tlast_name\x18\b \x01(\tH\x02R\blastName\x88\x01\x01\x12@\n" +
+	"\x1afacebook_last_connected_at\x18\t \x01(\tH\x03R\x17facebookLastConnectedAt\x88\x01\x01\x121\n" +
 	"\x14onboarding_completed\x18\x04 \x01(\bR\x13onboardingCompleted\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\tR\tcreatedAtB\x0f\n" +
-	"\r_display_name\"\x9a\x01\n" +
+	"\r_display_nameB\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_nameB\x1d\n" +
+	"\x1b_facebook_last_connected_at\"\x9a\x01\n" +
 	"\x06Device\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
 	"\x12facebook_connected\x18\x02 \x01(\bR\x11facebookConnected\x127\n" +
@@ -702,11 +786,17 @@ const file_openmarket_api_v1_user_service_proto_rawDesc = "" +
 	"\x1cSetFacebookConnectionRequest\x12\x1c\n" +
 	"\tconnected\x18\x01 \x01(\bR\tconnected\"R\n" +
 	"\x1dSetFacebookConnectionResponse\x121\n" +
-	"\x06device\x18\x01 \x01(\v2\x19.openmarket.api.v1.DeviceR\x06device\"\x9f\x01\n" +
-	"\x13UpdateViewerRequest\x12&\n" +
-	"\fdisplay_name\x18\x01 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x126\n" +
-	"\x14onboarding_completed\x18\x02 \x01(\bH\x01R\x13onboardingCompleted\x88\x01\x01B\x0f\n" +
-	"\r_display_nameB\x17\n" +
+	"\x06device\x18\x01 \x01(\v2\x19.openmarket.api.v1.DeviceR\x06device\"\xa0\x02\n" +
+	"\x13UpdateViewerRequest\x120\n" +
+	"\fdisplay_name\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04H\x00R\vdisplayName\x88\x01\x01\x12,\n" +
+	"\n" +
+	"first_name\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02H\x01R\tfirstName\x88\x01\x01\x12*\n" +
+	"\tlast_name\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02H\x02R\blastName\x88\x01\x01\x126\n" +
+	"\x14onboarding_completed\x18\x02 \x01(\bH\x03R\x13onboardingCompleted\x88\x01\x01B\x0f\n" +
+	"\r_display_nameB\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_nameB\x17\n" +
 	"\x15_onboarding_completed\"I\n" +
 	"\x14UpdateViewerResponse\x121\n" +
 	"\x06viewer\x18\x01 \x01(\v2\x19.openmarket.api.v1.ViewerR\x06viewer\"\x99\x01\n" +
@@ -714,8 +804,11 @@ const file_openmarket_api_v1_user_service_proto_rawDesc = "" +
 	"\n" +
 	"push_token\x18\x01 \x01(\tR\tpushToken\x12\\\n" +
 	"\x11permission_status\x18\x02 \x01(\x0e2/.openmarket.api.v1.NotificationPermissionStatusR\x10permissionStatus\"\x1d\n" +
-	"\x1bRegisterDeviceTokenResponse\"\x16\n" +
-	"\x14DeleteAccountRequest\"\x17\n" +
+	"\x1bRegisterDeviceTokenResponse\"\xb6\x01\n" +
+	"\x14DeleteAccountRequest\x12;\n" +
+	"\x14apple_identity_token\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x01R\x12appleIdentityToken\x12B\n" +
+	"\x18apple_authorization_code\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\x16appleAuthorizationCode\x12\x1d\n" +
+	"\x05nonce\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x18+R\x05nonce\"\x17\n" +
 	"\x15DeleteAccountResponse*\xa7\x01\n" +
 	"\x1cNotificationPermissionStatus\x12.\n" +
 	"*NOTIFICATION_PERMISSION_STATUS_UNSPECIFIED\x10\x00\x12*\n" +

@@ -1,7 +1,5 @@
 syntax = "proto3";
-
 package openmarket.api.v1;
-
 import "buf/validate/validate.proto";
 import "openmarket/api/v1/user_service.proto";
 
@@ -12,6 +10,40 @@ enum DevicePlatform {
   DEVICE_PLATFORM_WEB = 3;
 }
 
+enum SignInProvider {
+  SIGN_IN_PROVIDER_UNSPECIFIED = 0;
+  SIGN_IN_PROVIDER_APPLE = 1;
+  SIGN_IN_PROVIDER_GOOGLE = 2;
+}
+
+message BeginSignInRequest {
+  SignInProvider provider = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string install_id = 2 [(buf.validate.field).string = {min_len: 8, max_len: 128}];
+}
+message BeginSignInResponse {
+  // Pass unchanged as the provider's nonce and back to SignIn.
+  string nonce = 1;
+}
+message SignInRequest {
+  SignInProvider provider = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string identity_token = 2 [(buf.validate.field).string = {min_len: 1, max_len: 16384}];
+  string nonce = 3 [(buf.validate.field).string = {len: 43}];
+  DevicePlatform device_platform = 4 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  optional string time_zone = 5 [(buf.validate.field).string.max_len = 128];
+  string install_id = 6 [(buf.validate.field).string = {min_len: 8, max_len: 128}];
+  // Optional profile metadata, not proof of identity. Only fills missing names.
+  optional string first_name = 7 [(buf.validate.field).string.max_len = 256];
+  optional string last_name = 8 [(buf.validate.field).string.max_len = 256];
+  optional string display_name = 9 [(buf.validate.field).string.max_len = 512];
+}
+message SignInResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  Viewer viewer = 3;
+  bool is_new_user = 4;
+  int32 access_token_expires_in_seconds = 5;
+  Device device = 6;
+}
 // GetSignInOptions reports what the sign-in screen needs to know before it can
 // ask for a number. Unauthenticated, and called before any account exists.
 message GetSignInOptionsRequest {}
@@ -72,9 +104,7 @@ message StartPhoneVerificationResponse {
   int32 code_length = 2;
 }
 
-// VerifyPhone exchanges a delivered code for a session. This is the only way an
-// account comes into existence: a first successful verification creates the
-// user, so there is no separate signup call.
+// VerifyPhone signs in an existing phone account or creates one after verification.
 message VerifyPhoneRequest {
   string phone_number = 1 [
     (buf.validate.field).required = true,
@@ -129,25 +159,21 @@ message VerifyPhoneResponse {
 }
 
 message RefreshTokenRequest {
-  string refresh_token = 1 [(buf.validate.field).required = true];
+  string refresh_token = 1 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
 }
-
 message RefreshTokenResponse {
   string access_token = 1;
-  // Refresh tokens rotate on every use; the old one is dead the moment this
-  // returns.
   string refresh_token = 2;
   int32 access_token_expires_in_seconds = 3;
 }
-
 message LogoutRequest {}
-
 message LogoutResponse {}
-
 service AuthService {
   rpc GetSignInOptions(GetSignInOptionsRequest) returns (GetSignInOptionsResponse);
   rpc StartPhoneVerification(StartPhoneVerificationRequest) returns (StartPhoneVerificationResponse);
   rpc VerifyPhone(VerifyPhoneRequest) returns (VerifyPhoneResponse);
+  rpc BeginSignIn(BeginSignInRequest) returns (BeginSignInResponse);
+  rpc SignIn(SignInRequest) returns (SignInResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 }

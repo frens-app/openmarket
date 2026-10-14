@@ -11,7 +11,7 @@ export default function PrivacyPage() {
   return (
     <article className="prose-guide mx-auto max-w-3xl px-5 py-16">
       <h1 className="text-3xl font-bold tracking-tight text-white">Privacy</h1>
-      <p className="mt-2 text-sm text-gray-500">Last updated August 14, 2026</p>
+      <p className="mt-2 text-sm text-gray-500">Last updated October 13, 2026</p>
       <h2>The short version</h2>
       <p>
         We collect what we need to run your account, answer a Price Check, and
@@ -22,8 +22,10 @@ export default function PrivacyPage() {
       <h2>What we collect</h2>
       <ul>
         <li>
-          <strong>Your account:</strong> the phone number you sign up with and a
-          verification record, used to sign you in.
+          <strong>Your account:</strong> your sign-in provider (Apple, Google, or
+          phone), its account identifier or your phone number, any first, last,
+          and display names supplied during sign-in, an email address marked
+          verified by Apple or Google, and session records used to sign you in.
         </li>
         <li>
           <strong>Your install:</strong> a device identifier, whether you have
@@ -65,18 +67,21 @@ export default function PrivacyPage() {
       </ul>
       <h2>Who we share it with</h2>
       <p>
-        Service providers who run parts of the app on our behalf: an SMS
-        provider for sign-in codes, Apple for push notifications, an analytics
-        provider for usage events, and an AI provider for Price Check. They may
-        only use it to provide that service. Your phone number is not sent to
-        the analytics provider, and neither are your Facebook cookies or your
-        precise coordinates. We do not sell your data.
+        Apple or Google authenticates your account when you choose those options.
+        Phone sign-in sends your number to our SMS verification provider, Prelude.
+        We also use service providers for push notifications, analytics events, and AI processing
+        for Price Check. Our analytics provider, PostHog, receives your Openmarket
+        user ID and, when available, your display name or combined first and last
+        name to associate app activity with your account. We do not send your
+        email address, phone number, Apple or Google account identifier, Facebook cookies,
+        or precise coordinates to PostHog.
+        We do not sell your data.
       </p>
       <h2>Your choices</h2>
       <p>
         You can turn notifications off in iOS Settings at any time, and you can
-        delete your account from the app — that closes the account, releases
-        your phone number, and ends your sessions. To ask what we still hold
+        delete your account from the app — that closes the account, removes
+        its sign-in identity, and ends your sessions. To ask what we still hold
         about you, or to have it erased, email us.
       </p>
       <h2>Questions</h2>

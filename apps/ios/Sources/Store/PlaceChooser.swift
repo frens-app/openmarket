@@ -24,9 +24,6 @@ import os
 /// area's characteristic silent failure. So `Preferences.resolvedPlace` changes
 /// exactly once, on confirmation, which also makes rollback free: a failed
 /// switch has written nothing.
-///
-/// Onboarding works the same way, with resolution overlapping the interests
-/// step. Its last step is the one thing that waits — see `settle`.
 @MainActor
 final class PlaceChooser: ObservableObject {
     /// One per app: the sheet dismisses on the tap, so a switch outlives it and
@@ -173,9 +170,7 @@ final class PlaceChooser: ObservableObject {
                 unplaceable: "Couldn't place \(suggestion.title) on the map.")
     }
 
-    /// Waits for whatever is in flight. For the one caller that cannot proceed
-    /// on an optimistic answer: the end of onboarding, which must not let
-    /// anyone into the app without a place it can search.
+    /// Waits for the current resolution before onboarding's final place check.
     func settle() async {
         await inFlight?.value
     }

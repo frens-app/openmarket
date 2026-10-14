@@ -10,12 +10,15 @@ WHERE id = $1
   AND deleted_at IS NULL;
 
 -- name: UpdateUser :one
--- Partial update: a NULL argument leaves the column alone. Callers that want to
--- clear display_name pass the empty string, which the service maps to NULL
--- before it gets here.
+-- Presence flags distinguish an omitted name from explicitly clearing it.
 UPDATE users
 SET
-    display_name = COALESCE(sqlc.narg('display_name'), display_name),
+    display_name = CASE WHEN sqlc.arg('set_display_name')::boolean
+        THEN sqlc.narg('display_name') ELSE display_name END,
+    first_name = CASE WHEN sqlc.arg('set_first_name')::boolean
+        THEN sqlc.narg('first_name') ELSE first_name END,
+    last_name = CASE WHEN sqlc.arg('set_last_name')::boolean
+        THEN sqlc.narg('last_name') ELSE last_name END,
     time_zone = COALESCE(sqlc.narg('time_zone'), time_zone),
     -- Latch: once completed, it stays completed at its original timestamp.
     onboarding_completed_at = CASE
@@ -28,22 +31,37 @@ WHERE id = $1
   AND deleted_at IS NULL
 RETURNING *;
 
--- name: ClearUserDisplayName :one
+-- name: FillMissingUserNames :one
 UPDATE users
-SET display_name = NULL,
+SET first_name = COALESCE(first_name, sqlc.narg('first_name')),
+    last_name = COALESCE(last_name, sqlc.narg('last_name')),
+    display_name = COALESCE(display_name, sqlc.narg('display_name')),
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $1
-  AND deleted_at IS NULL
+WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
+
+-- name: RecordUserFacebookConnection :exec
+UPDATE users
+SET facebook_last_connected_at = GREATEST(facebook_last_connected_at, sqlc.arg('connected_at')::timestamptz),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+    AND (facebook_last_connected_at IS NULL OR facebook_last_connected_at < sqlc.arg('connected_at')::timestamptz);
+
+-- name: SetUserEmail :exec
+UPDATE users
+SET email = sqlc.arg('email')::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+    AND email IS DISTINCT FROM sqlc.arg('email')::text;
 
 -- name: SoftDeleteUser :exec
 UPDATE users
 SET deleted_at = CURRENT_TIMESTAMP,
-    -- The phone number is the account. Nulling the profile here without
-    -- releasing the auth method would leave the number permanently unusable for
-    -- a new signup, so DeleteAccount removes the auth-method row in the same
-    -- transaction.
     display_name = NULL,
+    first_name = NULL,
+    last_name = NULL,
+    email = NULL,
+    facebook_last_connected_at = NULL,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
   AND deleted_at IS NULL;
@@ -70,14 +88,9 @@ DELETE FROM user_auth_methods
 WHERE user_id = $1;
 
 -- name: DeleteAuthMethodBySubject :exec
--- Releases a number whose user row is gone, so signing up again works instead
--- of hitting the primary key.
 DELETE FROM user_auth_methods
 WHERE auth_service = $1
   AND subject = $2;
 
--- name: GetPhoneNumberForUser :one
-SELECT subject
-FROM user_auth_methods
-WHERE user_id = $1
-  AND auth_service = 'PHONE';
+-- name: GetAuthMethodForUser :one
+SELECT * FROM user_auth_methods WHERE user_id = $1 ORDER BY created_at, auth_service LIMIT 1;

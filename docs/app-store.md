@@ -127,16 +127,16 @@ Facebook session.
 
 The current onboarding flow (`onboarding.md`):
 
-- Optionally verify a phone number, or tap "Not now — browse without an account".
+- Optionally continue with Apple or Google, or tap "Not now, browse without an account".
 - Choose a supported city, using device location or manual city/ZIP search.
 - Optionally connect Facebook. The primary button is "Connect Facebook" and
   the visible secondary action is "Browse without Facebook". Closing Facebook
   login returns to that choice.
-- Verified accounts may enable notifications or tap "Not now". Guests skip
-  notification setup. Enter Browse; being signed out does not reopen onboarding.
-- Seller Price Check asks for phone verification and a Facebook connection at
+- Enter Browse after the Facebook step without a notification prompt;
+  being signed out does not reopen onboarding.
+- Seller Price Check asks for app sign-in and a Facebook connection at
   submission. It stores checks against the Openmarket account. The gate is
-  dismissible and retains the draft. Phone verification comes first, followed by
+  dismissible and retains the draft. Account sign-in comes first, followed by
   Facebook login; existing sessions skip their step. No notification prompt
   appears in this flow.
 
@@ -151,10 +151,9 @@ before assuming this flow was present in the rejected submission.
 **For the Review Notes field, after the release validation passes:**
 
 > Openmarket can be used without registration. Tap "Not now — browse without
-> an account" on the phone screen, choose a city, then tap "Browse without
+> an account" on the account screen, choose a city, then tap "Browse without
 > Facebook" on the optional connection screen.
-> You can browse, search, filter, open listings, and save them without phone
-> verification or a Facebook login. Seller Price Check (Tools tab) requests an
+> You can browse, search, filter, open listings, and save them without an Openmarket account or a Facebook login. Seller Price Check (Tools tab) requests an
 > Openmarket account at the point of use and stores checks in that account's
 > history; it also uses a connected Facebook session for comparable searches.
 > Its sign-in screen can be dismissed to return to browsing.
