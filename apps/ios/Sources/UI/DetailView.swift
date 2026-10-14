@@ -491,7 +491,7 @@ struct DetailView: View {
                         }
                         Spacer()
                         Button(following.contains(profile.id) ? "Following" : "Follow") {
-                            following.toggle(profile)
+                            following.toggle(profile, surface: .listingDetail)
                         }
                     }
                     .font(.subheadline.weight(.semibold))

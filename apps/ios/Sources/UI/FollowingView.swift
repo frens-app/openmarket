@@ -29,7 +29,7 @@ struct FollowingView: View {
                     }
                     .buttonStyle(.plain)
                     .swipeActions {
-                        Button("Unfollow", role: .destructive) { following.toggle(seller) }
+                        Button("Unfollow", role: .destructive) { following.toggle(seller, surface: .following) }
                     }
                 }
             }

@@ -110,7 +110,7 @@ struct SellerView: View {
                     .font(.subheadline).foregroundStyle(.orange)
             }
             Button {
-                following.toggle(displayedProfile)
+                following.toggle(displayedProfile, surface: .sellerProfile)
             } label: {
                 Label(following.contains(profile.id) ? "Following" : "Follow seller",
                       systemImage: following.contains(profile.id) ? "checkmark" : "person.badge.plus")

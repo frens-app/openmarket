@@ -93,12 +93,15 @@ final class FollowedSellers: ObservableObject {
 
     func contains(_ id: String) -> Bool { profiles.contains { $0.id == id } }
 
-    func toggle(_ profile: SellerProfile) {
+    func toggle(_ profile: SellerProfile, surface: Analytics.Surface? = nil) {
         let following = !contains(profile.id)
         if following { profiles.insert(profile, at: 0) }
         else { profiles.removeAll { $0.id == profile.id } }
         if userID != nil { pending[profile.id] = FollowChange(profile: profile, following: following) }
         persist()
+        var properties: [String: Any] = ["seller_id": profile.id]
+        properties["surface"] = surface?.rawValue
+        Analytics.capture(following ? .sellerFollowed : .sellerUnfollowed, properties)
         synchronize()
     }
 

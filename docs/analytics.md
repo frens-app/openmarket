@@ -215,6 +215,11 @@ keeps every visit to Settings out of the conversion numerator.
 | `listing_saved` / `listing_unsaved` | the detail screen's bookmark | `surface`, `referrer`, `listing_id`, `title`, `price`, `place`, `has_price`, `is_enriched` |
 | `listing_opened_on_facebook` | `Handoff`, via `Metrics` | `kind`; `referrer` and `listing_id` when opened from a listing detail page |
 | `login_wall_hit` | `Metrics.loginWallHit` | `surface`, `session_count` |
+| `seller_followed` / `seller_unfollowed` | `FollowedSellers.toggle`, after saving the local change | `seller_id`, `surface` (`listing_detail`, `seller_profile`, or `following`) |
+
+Seller follow events include guest and signed-in actions. They record local changes;
+account restoration, guest migration, server synchronization, and retries do not
+emit them.
 
 `source` on a search is a guess and says so: `.searchCompletion` puts the term in
 the field and submits it, so by `onSubmit` a tapped suggestion and a typed word

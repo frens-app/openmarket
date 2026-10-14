@@ -148,6 +148,8 @@ enum Analytics {
         case listingOpened = "listing_opened"
         case listingSaved = "listing_saved"
         case listingUnsaved = "listing_unsaved"
+        case sellerFollowed = "seller_followed"
+        case sellerUnfollowed = "seller_unfollowed"
         /// Every route out of a listing is a link, so this is the closest
         /// thing to a conversion the app can see.
         case listingOpenedOnFacebook = "listing_opened_on_facebook"
@@ -198,6 +200,7 @@ enum Analytics {
         case priceCheckEvidence = "price_check_evidence"
         case listingDetail = "listing_detail"
         case sellerProfile = "seller_profile"
+        case following
         case onboarding
         case settings
         case resultsFooter = "results_footer"
