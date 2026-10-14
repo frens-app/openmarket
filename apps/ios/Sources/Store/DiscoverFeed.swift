@@ -90,10 +90,6 @@ final class DiscoverFeed: ObservableObject {
 
     var radiusKM: Int { SearchQuery.discoverRadiusKM(prefs.radiusKM) }
 
-    var requiresFacebookForMore: Bool {
-        isAnonymous && usesBrowserFallback && reachedEnd
-    }
-
     init(engine: DesktopFeedEngine? = nil,
          prefs: Preferences = .shared,
          filterTotals: FilterTotals? = nil,
@@ -203,7 +199,6 @@ final class DiscoverFeed: ObservableObject {
                 return
             }
             usesBrowserFallback = true
-            Logger.discover.info("initial feed using browser fallback: \(String(describing: error), privacy: .public)")
         }
         let cards = await engine.loadCards(query.url)
         guard current == generation, !Task.isCancelled else { return }
@@ -468,14 +463,12 @@ final class DiscoverFeed: ObservableObject {
                 if (error as? GraphQLFeedError)?.permitsBrowserFallback == true {
                     graphQLPagination = nil
                     usesBrowserFallback = true
-                    Logger.discover.info("pagination using browser fallback: \(String(describing: error), privacy: .public)")
                     let cards = await engine.loadCards(query.url)
                     guard current == generation, !Task.isCancelled else { return }
                     if case .failed(let message) = engine.state {
                         loadError = message
                         return
                     }
-                    isAnonymous = engine.state == .loginWall || filledUnder == .unauthed
                     let batch = await nearby(cards)
                     guard current == generation, !Task.isCancelled else { return }
                     listings.append(contentsOf: batch.kept)

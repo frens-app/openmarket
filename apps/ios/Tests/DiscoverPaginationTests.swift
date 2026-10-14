@@ -138,29 +138,6 @@ final class DiscoverPaginationTests: XCTestCase {
         XCTAssertEqual(cursors, [nil, "A"])
     }
 
-    func testSparseInitialFillCanResumeExplicitlyWithoutScrolling() async {
-        let client = DiscoverStub([
-            .success(page([card("first"), card("second")], cursor: "A")),
-            .success(page([card("far", city: "Far")], cursor: "B")),
-            .success(page([card("third")], cursor: nil))
-        ])
-        let discover = makeDiscover(client, timeBudget: .zero)
-        await discover.loadIfNeeded(citySlug: "sanfrancisco")
-
-        XCTAssertEqual(discover.listings.count, 2)
-        XCTAssertTrue(discover.paginationPaused)
-        XCTAssertFalse(discover.requiresFacebookForMore)
-        XCTAssertFalse(discover.isLoading)
-        await discover.retryLoadingMore()
-
-        XCTAssertEqual(discover.listings.map(\.title), ["first", "second", "third"])
-        XCTAssertFalse(discover.paginationPaused)
-        XCTAssertTrue(discover.reachedEnd)
-        XCTAssertFalse(discover.requiresFacebookForMore)
-        let cursors = await client.cursors
-        XCTAssertEqual(cursors, [nil, "A", "B"])
-    }
-
     func testEmptyBudgetIsRetryableRatherThanAnErrorOrEnd() async {
         let client = DiscoverStub((0...DiscoverFeed.graphQLPageBudget).map {
             .success(page([], cursor: "P\($0)"))

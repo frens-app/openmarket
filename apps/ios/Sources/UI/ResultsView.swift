@@ -461,18 +461,6 @@ struct ResultsView: View {
                         .foregroundStyle(.secondary)
                     Button("Try again") { Task { await discover.retryLoadingMore() } }
                         .buttonStyle(.bordered)
-                } else if discover.requiresFacebookForMore {
-                    endOfResultsSignIn
-                    Button("Refresh listings") { Task { await loadDiscover(force: true) } }
-                        .buttonStyle(.bordered)
-                } else if discover.reachedEnd {
-                    endOfResults
-                } else if discover.paginationPaused {
-                    Text("More nearby listings may be available.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Load more listings") { Task { await discover.retryLoadingMore() } }
-                        .buttonStyle(.bordered)
                 }
             }
         }
@@ -496,20 +484,12 @@ struct ResultsView: View {
                     await store.loadMore()
                 }
             }
-            if !store.isRefreshingSearch && !store.isLoadingMore {
-                if let error = store.paginationError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Try again") { Task { await store.retryLoadingMore() } }
-                        .buttonStyle(.bordered)
-                } else if store.paginationPaused && store.canLoadMore {
-                    Text("More matching listings may be available.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Load more listings") { Task { await store.retryLoadingMore() } }
-                        .buttonStyle(.bordered)
-                }
+            if !store.isRefreshingSearch && !store.isLoadingMore, let error = store.paginationError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Try again") { Task { await store.retryLoadingMore() } }
+                    .buttonStyle(.bordered)
             }
         }
         .multilineTextAlignment(.center)
@@ -589,7 +569,7 @@ struct ResultsView: View {
             } else if store.requiresFacebookForMore {
                 if !winnowed.items.isEmpty { endOfResultsSignIn }
             } else if store.reachedEnd, !winnowed.items.isEmpty {
-                endOfResults
+                endOfSearchResults
             }
             searchPaginationFooter(items: winnowed.items)
         }
@@ -672,12 +652,12 @@ struct ResultsView: View {
     /// The anonymous browser fallback cannot continue past its first page.
     private var endOfResultsSignIn: some View {
         VStack(spacing: 12) {
-            Text("Facebook is showing a limited set of listings. Connect to see seller details and try more results.")
+            Text("Log in to see seller details and try more results.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button { presentSignIn(from: .resultsFooter) } label: {
-                Text("Connect Facebook")
+                Text("Log in to Facebook")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
@@ -690,7 +670,10 @@ struct ResultsView: View {
         .padding(.bottom, 20)
     }
 
-    private var endOfResults: some View {
+    /// Shown only after the hidden Marketplace feed has stayed at a valid,
+    /// unchanged bottom through its confirmation window. Dry pagination batches
+    /// and WebKit failures remain retryable and never reach this footer.
+    private var endOfSearchResults: some View {
         Text("You've reached the end of these results.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
