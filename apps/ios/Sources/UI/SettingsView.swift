@@ -10,7 +10,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var filterTotals = FilterTotals.shared
     @State private var showSignIn = false
-    @State private var showPhoneLogin = false
+    @State private var showAccountLogin = false
     @State private var confirmingDelete = false
     @State private var deleteError: String?
 
@@ -44,15 +44,15 @@ struct SettingsView: View {
 
                 Section("Your account") {
                     if account.isSignedIn {
-                        LabeledContent("Phone", value: accountPhoneNumber)
+                        LabeledContent("Sign-in", value: accountProvider)
                         Button("Sign out") { Task { await account.signOut() } }
                         Button("Delete account", role: .destructive) { confirmingDelete = true }
-                        Text("Deleting removes your account and releases your phone number, so you can sign up again with it later. It can't be undone.")
+                        Text("Deleting removes your account and saved price checks. It can't be undone.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        LabeledContent("Phone", value: "Not signed in")
-                        Button("Create an account") { showPhoneLogin = true }
+                        LabeledContent("Sign-in", value: "Not signed in")
+                        Button("Create an account") { showAccountLogin = true }
                         Text("Browsing needs no account. One is what Price Check runs under, and what keeps your past checks when you change phone.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -163,15 +163,13 @@ struct SettingsView: View {
             } message: {
                 Text(deleteError ?? "")
             }
-            .sheet(isPresented: $showPhoneLogin) {
+            .sheet(isPresented: $showAccountLogin) {
                 NavigationStack {
-                    PhoneLoginView(
-                        prompt: "We'll text you a code. An account is what Price Check runs under, and it's how your checks follow you to a new phone."
-                    ) { _ in showPhoneLogin = false }
+                    AccountLoginView { _ in showAccountLogin = false }
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button("Cancel") { showPhoneLogin = false }
+                            Button("Cancel") { showAccountLogin = false }
                         }
                     }
                 }
@@ -194,12 +192,14 @@ struct SettingsView: View {
         }
     }
 
-    /// The signed-in number, formatted for reading. A session from an older app
-    /// version may not have a cached viewer yet, so an offline launch has no
-    /// number to show even though the account remains signed in.
-    private var accountPhoneNumber: String {
+    private var accountProvider: String {
         guard let viewer = account.state.viewer else { return "Unavailable offline" }
-        return viewer.phoneNumber
+        switch viewer.signInProvider {
+        case "apple": return "Apple"
+        case "google": return "Google"
+        case "phone": return "Phone number"
+        default: return viewer.phoneNumber.isEmpty ? "Unavailable" : "Phone number"
+        }
     }
 
     /// The first couple by name, then a count. Naming all eighteen would wrap

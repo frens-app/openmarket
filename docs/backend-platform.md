@@ -1,5 +1,9 @@
 # Backend platform — database and API server
 
+> Historical platform evaluation. Account authentication now uses Apple and
+> Google alongside temporary phone login/signup; see [social-login.md](social-login.md).
+
+
 **Date:** 2026-08-10
 **Supersedes:** the "What isn't decided" section of `apps/backend/README.md`
 **Related:** `data-model.md`, `onboarding.md` §5, `logged-in-findings.md`

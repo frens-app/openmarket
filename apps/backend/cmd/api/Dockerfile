@@ -19,8 +19,7 @@ RUN CGO_ENABLED=0 \
 # which is the point. Debugging goes through logs.
 FROM scratch
 
-# Needed to verify Prelude's TLS certificate; without it every verification send
-# fails with an opaque x509 error.
+# Provider JWKS, Apple token revocation and model requests require TLS roots.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /out/app /usr/local/bin/app
 # The server runs goose at boot, so the migrations ship in the image and the

@@ -11,7 +11,7 @@ what actually shipped and why the scope is what it is.
 
 ## 1. Scope: accounts, and nothing else yet
 
-The server owns **users, sessions, phone login, and push tokens**. It does not
+The server owns **users, sessions, Apple/Google login, and push tokens**. It does not
 index listings, does not accept sightings, and does not run search. All of that
 still happens on the device, exactly as `feasibility-2026-07-31.md` describes.
 
@@ -47,8 +47,7 @@ buf.gen.yaml                  Go → apps/backend/pkg/protos
 apps/backend/
   cmd/api/                    main, handlers, interceptors, Dockerfile
   pkg/auth/                   JWT signing, refresh-token hashing, context
-  pkg/phone/                  E.164 normalisation + country allowlist
-  pkg/verify/                 Prelude Verify client, and the dev bypass
+  pkg/identity/               Apple/Google token verification and Apple revocation
   pkg/config/                 flags → env → .env files
   pkg/db/                     sqlc output (generated)
   railway.toml                deploy config (see §8 — its path is load-bearing)
@@ -58,7 +57,7 @@ apps/backend/
     compose.yml               local Postgres
 apps/ios/Sources/Account/     Keychain, install identity, Connect client,
                               AccountSession
-apps/ios/Sources/UI/PhoneLoginView.swift
+apps/ios/Sources/UI/AccountLoginView.swift
 ```
 
 Two things about this shape are load-bearing.
@@ -78,107 +77,9 @@ output never enter it. Railway's root directory is set to `apps/backend`.
 
 ## 3. The auth flow
 
-Two RPCs, and the account comes into existence as a side effect of the second —
-there is no separate signup call.
-
-```
-StartPhoneVerification(+14155550123)   → provider sends a code
-VerifyPhone(+14155550123, "123456")    → session, and the user row if new
-```
-
-`VerifyPhoneResponse` carries `is_new_user`, which is what decides whether
-onboarding runs. Asked of the server rather than inferred from an empty profile,
-so a reinstall on an existing account doesn't walk the user through it again.
-
-**A verification provider, not our own OTP table.** The service never generates,
-stores or compares a code. Code generation, delivery, expiry, per-code attempt
-limits and fraud scoring are all behind one HTTP call, and what we keep is the
-`users` table and our own sessions.
-
-### The provider is Prelude
-
-Chosen over Twilio Verify on cost and on fit: roughly 30% cheaper per US
-verification at list price, and its API is addressed by phone number rather than
-by a service resource, so there is nothing per-environment to create. It also
-scores each request on **signals** — `StartPhoneVerification` forwards
-`install_id` and the platform, which is how a real app install asking about one
-number is told apart from a script walking a range. Twilio Verify has no
-equivalent parameters. See [`backend-platform.md`](backend-platform.md) §3 for
-the evaluation.
-
-`verify.Sender` is three methods, so the provider is swappable in the sense that
-matters — a replacement is one file in `pkg/verify` and its tests — but there
-is exactly **one** implementation of it and no runtime switch. A second one kept
-"just in case" is a second one nobody exercises.
-
-The one thing to know before touching `PreludeSender`: **a refused send comes
-back as HTTP 200 with `status: "blocked"`**, not as an error status. `Start`
-therefore inspects the body on success as well as on failure, and a rewrite that
-only checks the status code would silently count every blocked number as a code
-delivered.
-
-### Development runs the same path, not a different one
-
-`pkg/verify.Sender` is the seam, and the arrangement around it matters more than
-it looks.
-
-The first version had **two implementations** — the real provider, and a dev
-sender that returned a fixed answer — chosen by a flag. That meant a developer
-picked between a login they could use and a login that ran the production code,
-so request encoding, the auth header, response parsing and provider-error mapping
-were only ever exercised in production. The parts most likely to be wrong were
-the parts dev never ran.
-
-The second version replaced that with a local HTTP service imitating the
-provider. It fixed the fidelity problem and introduced a worse one: a base-URL
-override, wired to configuration, whose only purpose was to point the service at
-something that isn't Prelude. That override has to exist in production in order
-to be unset there, and a production deploy still pointed at a stand-in would
-accept any code from anybody while looking perfectly healthy. The guard against
-it was a boot panic — a guard that only exists because the hazard was invented.
-
-**Now there is one client and no override.** `PreludeSender` always talks to
-`https://api.prelude.dev`; `PreludeOptions.BaseURL` survives for tests only and
-is not reachable from any configuration value. Every environment has the same
-provider on the other end.
-
-What makes that liveable is that the skip is **in-process**:
-
-- **`verify.BypassSender`** *wraps* the real sender so a listed number never
-  reaches it. Everything not on `DEV_BYPASS_PHONE_NUMBERS` goes to Prelude
-  normally, so both modes work at once. An empty list returns the wrapped sender
-  unchanged, so production carries no bypass code at all — not a disabled one.
-
-**The list takes `*`, and that is what development ships with.** Every number is
-then intercepted, so a developer types their own number — or a made-up one — and
-no text is sent, nothing is billed, and Prelude's per-number limit never enters
-into it. That limit is the reason: it is the provider's defence against exactly
-the pattern of signing in over and over with one number, so a developer testing
-the login screen looks like abuse and gets `repeated_attempts` after a handful of
-tries. Set the list back to explicit E.164 numbers when you want the ones you
-type to reach Prelude for real, which is the only way to confirm the provider
-path still works.
-
-`*` rides on the list rather than being its own setting so that it inherits the
-list's production guard: `requireAPIValues` already refuses to boot on a
-non-empty list under `ENV=production`, and a separate boolean would be a second
-thing to remember there.
-
-**The dev code is still checked.** `BypassSender.Check` compares against
-`DEV_VERIFICATION_CODE` rather than accepting anything, so the code screen — its
-error state, its resend, its autofill sizing — is testable rather than skipped
-past.
-
-The cost of dropping the stand-in is that provider *failure* paths — blocked,
-repeated attempts, landline — are no longer reachable by typing a magic number
-into the app. They are covered instead by `pkg/verify/prelude_test.go`, which
-points `BaseURL` at an `httptest` server and asserts each mapping, including the
-one most likely to be got wrong: **a refused send is HTTP 200 with
-`status: "blocked"`**, not an error status.
-
-`config.requireAPIValues` panics at boot if `DEV_BYPASS_PHONE_NUMBERS` is
-non-empty with `ENV=production`. That list is now the only way a code is accepted
-without Prelude having sent it, which is what makes one guard sufficient.
+Apple and Google native sign-in are exchanged for app sessions. See
+[social-login.md](social-login.md) for provider setup, nonce validation,
+account deletion and the compatible rollout alongside phone login/signup.
 
 ### Sessions
 
@@ -213,7 +114,7 @@ makes the third one obvious.
 
 | | Lives as long as | Example |
 |---|---|---|
-| User | The account | Phone number, display name, onboarding |
+| User | The account | Provider identity, display name, onboarding |
 | **Device** | **The app install** | **Facebook connection, APNs token** |
 | Session | One sign-in | Refresh token, revocation |
 
@@ -226,10 +127,13 @@ reproduces it.
 So `facebook_connected` on `users` would assert something false the moment
 someone picks up a second phone: the server would believe they were connected
 while the app in their hand had no cookies and no way to get them without asking
-again. It belongs on `user_devices`, and that is where it is.
+again. It belongs on `user_devices`, and that is where it is. The separate
+`users.facebook_last_connected_at` records historical connection across installs;
+NULL means none recorded. It advances on connection transitions and remains on
+disconnect. It must not be used to decide whether this device needs Facebook login.
 
 An install identifies itself with a client-generated `install_id`, sent **only on
-`VerifyPhone`**. The session records which device it belongs to, so every later
+`SignIn`**. The session records which device it belongs to, so every later
 call derives the device from the session — a client cannot report about an
 install it did not sign in from, because it never names one.
 
@@ -244,9 +148,11 @@ only thing that can observe the state. That is fine for what the flag is for —
 deciding whether to prompt on this device — and it is emphatically not an
 authorisation input. Nothing treats it as one.
 
-The client reports from the three places that already detect the session, deduped
+The client reports when it detects the session, deduped
 against what the server last returned so the common foreground costs nothing:
 
+- **After app-account sign-in or restoration**, including Settings sign-in, to
+  associate an existing browser session with the current app account.
 - **Every foreground** (`scenePhase == .active`) — the only place that notices a
   session lapsing on its own, through an expiry or a password change elsewhere.
 - **After the Facebook sign-in webview completes.**
@@ -286,142 +192,21 @@ creating push columns on `user_sessions` only for `00003` to remove them.
 
 ---
 
-## 5. Abuse controls on `StartPhoneVerification`
+## 5. Sign-in controls
 
-This is the one endpoint that is unauthenticated **and** costs money on every
-call. Almost everything that guards it belongs to the provider, and the useful
-question turned out to be which part doesn't.
+The backend verifies provider signatures, issuer, audience, expiry and a
+single-use nonce bound to provider and install. Challenges expire in five minutes
+and are pruned every minute. Configure edge rate limits for public sign-in routes.
+The phone endpoints retain Prelude SMS delivery, its country allowlist,
+and the global verification-send ceiling. Older clients can still sign in or
+create an account. SMS charges continue for those requests; see [phone-login.md](phone-login.md).
 
-The table below was reasoned against Twilio Verify, which is what this service
-used first. **Prelude covers the same four** — per-number request limits and
-per-window check limits are configurable in its dashboard (`repeated_attempts`,
-`too_many_checks`), and its ML scoring plus allow/block lists occupy the ground
-Fraud Guard does. The conclusion — that the only thing worth building here is a
-global spend ceiling — is unchanged, because it follows from *every* provider
-limit being per entity, which is true of both.
+## 6. Account identity
 
-### What the provider already does, so we don't
-
-| Threat | Twilio Verify's answer, and Prelude's equivalent |
-|---|---|
-| One number hammered | **Built in: 5 sends per number per 10 minutes** ([60203](https://www.twilio.com/docs/api/errors/60203)), no configuration |
-| Codes brute-forced | Built in: max check attempts ([60202](https://www.twilio.com/docs/api/errors/60202)) |
-| One script, one address | [Service Rate Limits](https://www.twilio.com/docs/verify/api/programmable-rate-limits) — you define the keys to meter, IP being the documented example |
-| **SMS pumping** | [Fraud Guard](https://www.twilio.com/docs/verify/preventing-toll-fraud/sms-fraud-guard) — **on by default**, blocks by destination prefix, and blocked attempts are included in Verify's price rather than billed |
-
-The first version of this service reimplemented the first three in Postgres, on
-the reasoning — inherited from `backend-platform.md` — that "the bill arrives
-before the alert does." That was written about Programmable Messaging and carried
-into a Verify design where it largely doesn't hold. Fraud Guard in particular has
-cross-customer traffic signal that a single service cannot reproduce, so a local
-pumping heuristic is strictly worse than the one already running.
-
-### The one thing that survives, and why
-
-**Every limit above is per entity. None of them caps total spend.**
-
-The provider's built-in limit is per *number*, so somebody cycling a thousand
-ordinary US mobiles trips it zero times. And that traffic looks nothing like
-pumping — no premium prefix, nobody taking a revenue share — so the anti-fraud
-model has no reason to flag it. It's griefing rather than fraud, which is exactly
-why no third party is watching for it: there's no attacker profit to detect. A
-provider's own spend controls are account-level and after the fact.
-
-So `verification_sends` is a **circuit breaker on the invoice**, not a fairness
-mechanism: one row per send, counted over a window, refused past a ceiling
-(`VERIFICATION_MAX_SENDS`, default 500/hour, global).
-
-Three things about it:
-
-- **It stores nothing but a timestamp.** No number, no IP, no country. Counting
-  is the whole job, and the provider's dashboard is already the per-number audit
-  trail — duplicating it would mean holding data we don't need.
-- **The counter is in Postgres, not in process.** An in-memory one resets on
-  every deploy and stops existing at all once there are two instances.
-- **Hitting it logs at error level**, because a global ceiling being reached
-  means either an attack or a badly set number, and in both cases real users are
-  being turned away.
-
-### What else is still ours
-
-**The country allowlist** (`pkg/phone`), because it fails closed at boot in a way
-a console setting doesn't: `phone.NewAllowlist("")` returns an error and the
-server refuses to start. A missing env var must not silently unlock every premium
-range on earth. It also validates E.164 before an API call is spent. The same
-list is served to the app by `GetSignInOptions`, so the picker offers exactly
-what will be accepted — see `phone-login.md`.
-
-**The resend countdown** is now a hint the server reports, not a limit it
-enforces — Verify's per-number limit is what actually stops a runaway client, and
-keeping the number server-side means pacing can be tuned without an app release.
-
-### On A2P 10DLC: the open question before launch
-
-This section has been wrong twice. The first version called US A2P 10DLC Brand
-and Campaign registration a hard blocker. The second called it simply "not
-required". Both were too broad: **the answer depends on whose sender the messages
-go out on**, and that is the one thing not settled.
-
-10DLC governs **bring-your-own-number A2P messaging** — you own a 10-digit long
-code and carriers want it registered. Since February 2025 carriers block
-unregistered A2P 10DLC traffic outright, OTP included. It is binary, not a volume
-threshold: ten users fail exactly the way ten thousand would, and delivery does
-not degrade gracefully, it stops.
-
-**Twilio Verify is carved out**, which is what this doc previously described.
-Twilio's [A2P 10DLC overview](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc)
-says it directly — "if you're only using 10DLC numbers to send user verification
-text messages, you can use Twilio Verify rather than registering for A2P 10DLC" —
-because you are renting their pre-registered sender pool.
-
-**Prelude publishes no equivalent carve-out.** Its
-[10DLC guide](https://prelude.so/blog/10dlc-guide) says registration is mandatory
-for US SMS including login codes, lists OTP as a campaign type that must be
-declared, and says Prelude manages the process on your behalf.
-
-> **Open question — settle this with Prelude before launch.** Ask whether Verify
-> traffic goes out on *their* pre-registered sender or requires a brand and
-> campaign in our name. If theirs, nothing needs registering. If ours, a
-> **sole-proprietor 10DLC brand** is the small-launch path: no EIN required,
-> approval in days rather than the 4–6 weeks a standard brand takes, throttled to
-> roughly 1,000 messages/day on T-Mobile and ~15/min on AT&T, limited to one
-> campaign and one number. That is far above early-user volume and buys time for
-> a standard brand to clear.
-
-What applies either way: Prelude's messaging policy and consent rules, which are
-not a multi-week blocker.
-
-10DLC is a US regime, and the other served countries have their own — the UK and
-Ireland run on alphanumeric or shared short-code senders, Australia and New
-Zealand register senders separately. Ask Prelude the same question per country
-before a market is announced: whose sender the codes leave on, and what it costs
-per message there. Adding a code to `ALLOWED_COUNTRY_CODES` starts the sends; it
-does not answer either.
-
----
-
-## 6. What the phone number is, and isn't
-
-It is the login identity, and that is all. It is returned to its own owner in
-`Viewer` and is never exposed to another user.
-
-This closes open question 3 in `backend-platform.md`. Recording the reasoning
-because the alternative is tempting: showing a seller's number would make
-contact trivial and would also make the app a phone-number directory for
-anyone willing to scrape it. Contact stays where it already is — Facebook
-Messenger — until there is a messaging story of our own.
-
-`DeleteAccount` soft-deletes the user and **deletes the auth-method row in the
-same transaction**. That second part is the one that is easy to skip: the row's
-primary key *is* the phone number, so leaving it behind would mean the person
-could never sign up again with a number they own. `VerifyPhone` also handles the
-inverse — an auth method whose user row is gone is released and treated as an
-unclaimed number rather than a dead end.
-
-Soft delete rather than hard: an in-flight request must not be able to resurrect
-the row by racing the delete. A purge job is a separate, later problem.
-
----
+Accounts are keyed by provider and stable subject, never by email. Apple and
+Google and phone identities stay separate; provider linking is not implemented. DeleteAccount releases the identity, revokes
+app sessions and removes saved price checks. Apple deletion also revokes the
+provider grant after reauthorization; see `social-login.md`.
 
 ## 7. Local development
 
@@ -434,43 +219,10 @@ Starts Postgres in Docker — the only thing there is to start — then runs the
 API. The server applies migrations itself at boot, so there is no separate
 migration step and the schema can never be older than the code that expects it.
 
-**Put a real Prelude key in `.env.local`.** It is required in development as well
-as production, and nothing is defaulted in quietly, because a config that fills
-itself in is a config where dev and prod quietly diverge. There is no offline
-mode: dev talks to the same Prelude the deployed service does. What keeps that
-from costing anything is `DEV_BYPASS_PHONE_NUMBERS=*`, which development ships
-with — every number is handled in-process and nothing leaves it. Narrow the list
-to real numbers when you want to exercise the provider. The boot panic names the
-`cp` if you forget the key either way.
-
-```bash
-make generate            # protobuf (Go + Swift) and sqlc
-make migration-create name=add_listings
-make dev-infra-reset     # drop the volume; next boot re-migrates
-make ci                  # buf lint, go vet, go test, gofmt
-```
-
-Two files, and the split is deliberate.
-
-`.env.development` is committed and holds only what is genuinely shared and
-genuinely not secret: the database URL, the test number on the bypass list, the
-resend cooldown off, and signing keys that are obviously not secrets. It carries
-**no provider credentials at all** — credentials in a committed file read as real
-settings somebody has to understand, and they are neither shared nor true.
-
-`.env.local` is gitignored, merged on top, and is where the Prelude key lives.
-The example is copied, not merged, so the key you paste in is yours and never a
-committed default that somebody could mistake for a working one.
-
-Postgres **18** specifically: `uuidv7()` is a builtin from 18 onward and it is
-the default on every primary key.
-
-The Simulator reaches a laptop server at `http://localhost:8080` — verified, ATS
-permits loopback — and `OPENMARKET_API_URL` overrides it for a device on the same
-network. Debug builds only; release builds have the host compiled in so a shipped
-app cannot be pointed anywhere.
-
----
+Configure providers in `.env.local` following [social-login.md](social-login.md).
+`make dev` starts Postgres and the API. The API applies migrations on startup.
+Development can boot without Google or Apple signing keys, but those provider
+operations stay unavailable until configured. No sign-in bypass is provided.
 
 ## 8. Deploying to Railway
 
@@ -508,8 +260,6 @@ Environment variables on the service — the full list is in
 | `DATABASE_URL` | Injected by the Postgres plugin. Use the private-network host |
 | `JWT_SECRET` | `openssl rand -hex 32`. Set both keys by hand rather than scripting them into place: they are the keys to every session, and rotating one signs everybody out, so that should be a thing you did rather than a thing that happened |
 | `REFRESH_TOKEN_HMAC_KEY` | `openssl rand -hex 32`, **different from the above** — the server refuses to boot if they match, because rotating one should not invalidate every stored refresh token |
-| `PRELUDE_API_KEY` | From the Prelude dashboard → API Keys |
-| `ALLOWED_COUNTRY_CODES` | `1,44,353,61,64` — US/CA, UK, IE, AU, NZ. `GetSignInOptions` serves this list to the app's country picker, so opening a market is this variable and a restart |
 | `VERIFICATION_MAX_SENDS` | `500` per hour, global. The spend ceiling (§5). Raise it before a launch push, not during one |
 | `APNS_BUNDLE_ID` | `lol.frens.openmarket`. The `apns-topic` header for outgoing pushes. Nothing reads it yet — there is no sender (§4) |
 

@@ -35,7 +35,7 @@ fileGroups:
 packages:
   OpenMarketProtos:
     path: Packages/OpenMarketProtos
-  # The only remote dependency declared here, and pinned exactly — same rule
+  # Remote dependencies are pinned exactly — same rule
   # `Packages/OpenMarketProtos/Package.swift` states for its three, and for the
   # same reason: with a range, two checkouts of this commit can resolve
   # different versions and the one that breaks is whichever machine resolved
@@ -44,6 +44,10 @@ packages:
   PostHog:
     url: https://github.com/PostHog/posthog-ios
     exactVersion: 3.69.5
+
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: 9.2.0
 
 targets:
   OpenMarket:
@@ -61,6 +65,8 @@ targets:
     dependencies:
       - package: OpenMarketProtos
       - package: PostHog
+      - package: GoogleSignIn
+        product: GoogleSignIn
     # Push, declared here for the same reason signing is: this file is the
     # source of truth and `xcodegen generate` rewrites the .xcodeproj wholesale,
     # so a capability added through Xcode's Signing & Capabilities pane survives
@@ -75,6 +81,8 @@ targets:
       path: OpenMarket.entitlements
       properties:
         aps-environment: $(APNS_ENVIRONMENT)
+        com.apple.developer.applesignin:
+          - Default
 
     # A real Info.plist, because the endpoint has to be readable at *runtime*.
     #
@@ -90,6 +98,11 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Read by `API.baseURL`. Two keys rather than one URL because xcconfig
         # treats `//` as a comment — see Configurations/Debug.xcconfig.
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        GIDServerClientID: $(GOOGLE_SERVER_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
         API_SCHEME: $(API_SCHEME)
         API_HOSTNAME: $(API_HOSTNAME)
         # Read by `Analytics`. Debug and Release carry different PostHog

@@ -38,4 +38,10 @@ POSTHOG_HOSTNAME = us.i.posthog.com
 // The build that actually reports. Debug ships NO.
 POSTHOG_CAPTURE_EVENTS = YES
 
+// Production Google OAuth: iOS client ID, Web client ID, and iOS URL scheme.
+// See docs/social-login.md for Google Cloud setup.
+GOOGLE_IOS_CLIENT_ID = 999753049767-36ihspc6rffdf0rktlgvo4buvbvkl8mg.apps.googleusercontent.com
+GOOGLE_SERVER_CLIENT_ID = 999753049767-85gprrl5em55ip2ev1u9j293v6kse6fd.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.999753049767-36ihspc6rffdf0rktlgvo4buvbvkl8mg
+
 #include? "Release.local.xcconfig"

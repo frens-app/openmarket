@@ -3,32 +3,31 @@
 **Code:** `apps/ios/Sources/UI/OnboardingView.swift`,
 `apps/ios/Sources/UI/OpenMarketApp.swift`,
 `apps/ios/Sources/UI/AccountGateView.swift`
-**Related:** `phone-login.md`, `location-targeting.md`,
+**Related:** `social-login.md`, `location-targeting.md`,
 `logged-in-findings.md`, `app-store.md`, `analytics.md`
 
 ## 1. The first run
 
-**Optional phone verification → Location → optional Facebook → optional
-notifications for verified accounts → Browse.** Browsing, local saves, viewing
+**Optional Apple/Google sign-in → Location → optional Facebook → Browse.**
+Browsing, local saves, viewing
 history and buyer-side price comparisons do not require an Openmarket account.
 
 ## 2. The order
 
 | Step | Required | Actions |
 |---|---|---|
-| Phone | No | Verify a number, or Not now — browse without an account |
+| Account | No | Continue with Apple or Google, or Not now, browse without an account |
 | Location | Yes, a supported browsing place | Use current location, or search for a city or ZIP without location permission |
 | Facebook | No | Connect Facebook, or Browse without Facebook |
-| Notifications | No; only for verified accounts with undetermined permission | Turn on notifications, or Not now |
 
-`OnboardingView.current` starts at `.phone`; an existing Openmarket session skips
-to `.location`. The phone skip action stays outside the scrolling form, including
-on the code-entry screen. Late verification callbacks cannot advance another
-step after the user skips. Skipping phone does not create an account.
+`OnboardingView.current` starts at `.account`; an existing Openmarket session skips
+to `.location`. The account skip action stays outside the scrolling form. Late sign-in callbacks cannot advance another
+step after the user skips. Skipping sign-in does not create an account.
 
-Only explicit actions advance the flow. Progress includes notification setup
-only for an account that can still be asked. Quitting before completion restarts
-the flow, skipping phone if already verified. Facebook benefits scroll separately
+Choosing a location advances the flow automatically once the place is saved;
+the other steps advance through explicit actions. Progress shows three steps.
+Quitting before completion restarts
+the flow, skipping sign-in if already authenticated. Facebook benefits scroll separately
 from its buttons so the skip action stays accessible.
 
 ## 3. When onboarding appears
@@ -43,6 +42,10 @@ from its buttons so the skip action stays accessible.
 Being signed out is not a reason to open onboarding. Declining Facebook does not
 make onboarding incomplete. Signing out or an expired Openmarket session leaves
 a completed browsing setup intact.
+
+The Apple/Google rollout preserves existing phone credentials and onboarding
+state. Phone sessions restore using the same Keychain keys. Facebook's browser
+session and chosen place remain available without repeating onboarding.
 
 Visibility is latched: `openIfNeeded` can open onboarding, but only `finish`
 closes it. A pending place resolution settles before completion; failure returns
@@ -59,7 +62,9 @@ Debug Settings → Restart onboarding resets the setup without signing out.
 `PlaceChooser` resolves a device coordinate or an Apple city-search result
 through Facebook's place picker. Device location permission is optional; manual
 city or ZIP search is a full alternative. The map shows a pending choice while
-it resolves, and resolution can continue during the Facebook step.
+it resolves. Once a supported place is saved, onboarding advances automatically
+to Facebook without a Continue button. Permission denial or failed resolution
+keeps the location step open for retry or manual search.
 
 The existing limitation remains: there is no invented place-slug fallback if
 Facebook's place picker is unavailable. Test this path with a clean, signed-out
@@ -83,23 +88,17 @@ removing the app's signup requirement cannot guarantee Facebook availability.
 
 ## 6. Notifications
 
-After Facebook, verified accounts are offered notification setup if iOS has no
-permission decision yet. Both “Not now” and denying the system prompt continue
-to Browse. Guests are never prompted. Already authorized accounts register
-with APNs without another prompt. Seller Price Check and Settings sign-in do
-not request notification permission.
-
-The push token is registered against a verified Openmarket account. This is
-separate from local saves, which work without an account. Token registration
-does not by itself establish that alert delivery works; verify the delivery
-service separately before promising alerts.
+Onboarding does not offer notification setup or request notification permission.
+The Facebook step finishes onboarding for both guests and signed-in accounts.
+Notification delivery must be available before adding an opt-in step.
 
 ## 7. Verification
 
-- Clean install: skip phone, manually choose a supported city, skip Facebook, reach real
-  listings without a phone number, and open/search/filter/save listings.
-- Verify phone: complete SMS verification, then finish setup with notifications
-  accepted, denied, and skipped. Guests must never see notification setup.
+- Clean install: skip sign-in, manually choose a supported city, skip Facebook, reach real
+  listings without an account, and open/search/filter/save listings.
+- Sign in: complete Apple and Google authentication, then finish setup after
+  Facebook. Neither guests nor signed-in accounts should see notification setup
+  or a notification permission prompt.
 - Facebook step: connect successfully, cancel login, dismiss the sheet, and
   skip. Check both a small screen and large accessibility text.
 - Deny device location permission and use manual city search.
@@ -113,13 +112,13 @@ service separately before promising alerts.
 
 ## 8. The account gate
 
-Phone verification creates or restores an Openmarket account. It is required for
+Apple/Google sign-in creates or restores an Openmarket account. It is required for
 seller Price Check: item identification, saving completed checks, reading the
 account's previous checks, and recording feedback/copy actions on those checks.
 `PricingService` calls authenticated APIs for these operations.
 
 Seller Price Check also requires a Facebook connection for comparable searches.
-`AccountGateView` opens phone verification first, then an onboarding-style
+`AccountGateView` opens Apple/Google sign-in first, then an onboarding-style
 Facebook introduction. The user taps “Connect Facebook” to open the login page;
 returning from that page resumes the check only if the session is connected. It skips
 any step whose session already exists and resumes automatically when both are
@@ -129,14 +128,13 @@ runs on-device. Local saves and recently viewed listings do not sync to the
 Openmarket account.
 
 The gate appears on submission, not when opening Tools or filling out the form.
-“Cancel” is available throughout and preserves the draft. Completing phone
-verification creates or restores the account even if the user later cancels
+“Cancel” is available throughout and preserves the draft. Completing sign-in creates or restores the account even if the user later cancels
 Facebook login; the next attempt resumes with Facebook. On success, the original
 submission resumes after the sheet dismisses. There is no notification prompt.
 
 Authentication remains enforced by the backend. No pricing or account endpoint
 becomes public as part of this onboarding change. The account-backed history is
-the product rationale for the phone account; App Review may still assess the
+the product rationale for the Openmarket account; App Review may still assess the
 seller tool separately from the browsing issue.
 
 ### Verification performed, 2026-09-30

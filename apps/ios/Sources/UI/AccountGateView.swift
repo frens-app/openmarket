@@ -18,10 +18,10 @@ struct AccountGateView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Step: Hashable {
-        case phone, facebook, complete
+        case account, facebook, complete
 
         static func next(hasAccount: Bool, facebookConnected: Bool) -> Step {
-            if !hasAccount { return .phone }
+            if !hasAccount { return .account }
             if !facebookConnected { return .facebook }
             return .complete
         }
@@ -30,9 +30,9 @@ struct AccountGateView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if step == .phone || step == .facebook {
+                if step == .account || step == .facebook {
                     HStack(spacing: 6) {
-                        ForEach([Step.phone, .facebook], id: \.self) { item in
+                        ForEach([Step.account, .facebook], id: \.self) { item in
                             Capsule()
                                 .fill(item == step ? Color.primary : Color(.tertiaryLabel))
                                 .frame(width: item == step ? 18 : 6, height: 6)
@@ -40,13 +40,13 @@ struct AccountGateView: View {
                     }
                     .padding(.top, 14)
                     .padding(.bottom, 4)
-                    .accessibilityLabel(step == .phone ? "Step 1 of 2" : "Step 2 of 2")
+                    .accessibilityLabel(step == .account ? "Step 1 of 2" : "Step 2 of 2")
                 }
 
                 ZStack {
                     switch step {
-                    case .phone:
-                        PhoneLoginView(prompt: feature == .shopping ? "Verify your number to use AI Search." : "Verify your number to save your price checks.") { _ in
+                    case .account:
+                        AccountLoginView { _ in
                             Task { await advance() }
                         }
                         .transition(.opacity)

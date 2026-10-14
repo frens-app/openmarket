@@ -50,6 +50,12 @@ POSTHOG_HOSTNAME = us.i.posthog.com
 // Debug.local.xcconfig to watch events fire while working on them.
 POSTHOG_CAPTURE_EVENTS = NO
 
+// Development Google OAuth: iOS client ID, Web client ID, and iOS URL scheme.
+// See docs/social-login.md for Google Cloud setup.
+GOOGLE_IOS_CLIENT_ID = 103819528089-hgohhmaq8tok6ljcnen6onaqt9hr91nu.apps.googleusercontent.com
+GOOGLE_SERVER_CLIENT_ID = 103819528089-reet26ul5ta83auu7n1edk8fhj9tc1b6.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.103819528089-hgohhmaq8tok6ljcnen6onaqt9hr91nu
+
 // Optional per-machine overrides, gitignored. Missing is fine — the values
 // above stand. Copy Debug.example.xcconfig to get started.
 #include? "Debug.local.xcconfig"

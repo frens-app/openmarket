@@ -9,31 +9,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
-
-const clearUserDisplayName = `-- name: ClearUserDisplayName :one
-UPDATE users
-SET display_name = NULL,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = $1
-  AND deleted_at IS NULL
-RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at
-`
-
-func (q *Queries) ClearUserDisplayName(ctx context.Context, id uuid.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, clearUserDisplayName, id)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.DisplayName,
-		&i.TimeZone,
-		&i.OnboardingCompletedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
 
 const createAuthMethod = `-- name: CreateAuthMethod :one
 INSERT INTO user_auth_methods (user_id, auth_service, subject)
@@ -63,7 +40,7 @@ func (q *Queries) CreateAuthMethod(ctx context.Context, arg CreateAuthMethodPara
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (time_zone)
 VALUES ($1)
-RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at
+RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
 `
 
 func (q *Queries) CreateUser(ctx context.Context, timeZone *string) (User, error) {
@@ -77,6 +54,10 @@ func (q *Queries) CreateUser(ctx context.Context, timeZone *string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.FirstName,
+		&i.LastName,
+		&i.FacebookLastConnectedAt,
+		&i.Email,
 	)
 	return i, err
 }
@@ -92,8 +73,6 @@ type DeleteAuthMethodBySubjectParams struct {
 	Subject     string
 }
 
-// Releases a number whose user row is gone, so signing up again works instead
-// of hitting the primary key.
 func (q *Queries) DeleteAuthMethodBySubject(ctx context.Context, arg DeleteAuthMethodBySubjectParams) error {
 	_, err := q.db.Exec(ctx, deleteAuthMethodBySubject, arg.AuthService, arg.Subject)
 	return err
@@ -107,6 +86,47 @@ WHERE user_id = $1
 func (q *Queries) DeleteAuthMethodsForUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteAuthMethodsForUser, userID)
 	return err
+}
+
+const fillMissingUserNames = `-- name: FillMissingUserNames :one
+UPDATE users
+SET first_name = COALESCE(first_name, $2),
+    last_name = COALESCE(last_name, $3),
+    display_name = COALESCE(display_name, $4),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
+`
+
+type FillMissingUserNamesParams struct {
+	ID          uuid.UUID
+	FirstName   *string
+	LastName    *string
+	DisplayName *string
+}
+
+func (q *Queries) FillMissingUserNames(ctx context.Context, arg FillMissingUserNamesParams) (User, error) {
+	row := q.db.QueryRow(ctx, fillMissingUserNames,
+		arg.ID,
+		arg.FirstName,
+		arg.LastName,
+		arg.DisplayName,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.TimeZone,
+		&i.OnboardingCompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.FirstName,
+		&i.LastName,
+		&i.FacebookLastConnectedAt,
+		&i.Email,
+	)
+	return i, err
 }
 
 const getAuthMethod = `-- name: GetAuthMethod :one
@@ -134,22 +154,25 @@ func (q *Queries) GetAuthMethod(ctx context.Context, arg GetAuthMethodParams) (U
 	return i, err
 }
 
-const getPhoneNumberForUser = `-- name: GetPhoneNumberForUser :one
-SELECT subject
-FROM user_auth_methods
-WHERE user_id = $1
-  AND auth_service = 'PHONE'
+const getAuthMethodForUser = `-- name: GetAuthMethodForUser :one
+SELECT user_id, auth_service, subject, created_at, last_used_at FROM user_auth_methods WHERE user_id = $1 ORDER BY created_at, auth_service LIMIT 1
 `
 
-func (q *Queries) GetPhoneNumberForUser(ctx context.Context, userID uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getPhoneNumberForUser, userID)
-	var subject string
-	err := row.Scan(&subject)
-	return subject, err
+func (q *Queries) GetAuthMethodForUser(ctx context.Context, userID uuid.UUID) (UserAuthMethod, error) {
+	row := q.db.QueryRow(ctx, getAuthMethodForUser, userID)
+	var i UserAuthMethod
+	err := row.Scan(
+		&i.UserID,
+		&i.AuthService,
+		&i.Subject,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at
+SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
 FROM users
 WHERE id = $1
   AND deleted_at IS NULL
@@ -166,18 +189,58 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.FirstName,
+		&i.LastName,
+		&i.FacebookLastConnectedAt,
+		&i.Email,
 	)
 	return i, err
+}
+
+const recordUserFacebookConnection = `-- name: RecordUserFacebookConnection :exec
+UPDATE users
+SET facebook_last_connected_at = GREATEST(facebook_last_connected_at, $2::timestamptz),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+    AND (facebook_last_connected_at IS NULL OR facebook_last_connected_at < $2::timestamptz)
+`
+
+type RecordUserFacebookConnectionParams struct {
+	ID          uuid.UUID
+	ConnectedAt pgtype.Timestamptz
+}
+
+func (q *Queries) RecordUserFacebookConnection(ctx context.Context, arg RecordUserFacebookConnectionParams) error {
+	_, err := q.db.Exec(ctx, recordUserFacebookConnection, arg.ID, arg.ConnectedAt)
+	return err
+}
+
+const setUserEmail = `-- name: SetUserEmail :exec
+UPDATE users
+SET email = $2::text,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+    AND email IS DISTINCT FROM $2::text
+`
+
+type SetUserEmailParams struct {
+	ID    uuid.UUID
+	Email string
+}
+
+func (q *Queries) SetUserEmail(ctx context.Context, arg SetUserEmailParams) error {
+	_, err := q.db.Exec(ctx, setUserEmail, arg.ID, arg.Email)
+	return err
 }
 
 const softDeleteUser = `-- name: SoftDeleteUser :exec
 UPDATE users
 SET deleted_at = CURRENT_TIMESTAMP,
-    -- The phone number is the account. Nulling the profile here without
-    -- releasing the auth method would leave the number permanently unusable for
-    -- a new signup, so DeleteAccount removes the auth-method row in the same
-    -- transaction.
     display_name = NULL,
+    first_name = NULL,
+    last_name = NULL,
+    email = NULL,
+    facebook_last_connected_at = NULL,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
   AND deleted_at IS NULL
@@ -208,34 +271,47 @@ func (q *Queries) TouchAuthMethod(ctx context.Context, arg TouchAuthMethodParams
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET
-    display_name = COALESCE($2, display_name),
-    time_zone = COALESCE($3, time_zone),
+    display_name = CASE WHEN $2::boolean
+        THEN $3 ELSE display_name END,
+    first_name = CASE WHEN $4::boolean
+        THEN $5 ELSE first_name END,
+    last_name = CASE WHEN $6::boolean
+        THEN $7 ELSE last_name END,
+    time_zone = COALESCE($8, time_zone),
     -- Latch: once completed, it stays completed at its original timestamp.
     onboarding_completed_at = CASE
-        WHEN $4::boolean IS TRUE
+        WHEN $9::boolean IS TRUE
             THEN COALESCE(onboarding_completed_at, CURRENT_TIMESTAMP)
         ELSE onboarding_completed_at
     END,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
   AND deleted_at IS NULL
-RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at
+RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
 `
 
 type UpdateUserParams struct {
 	ID                     uuid.UUID
+	SetDisplayName         bool
 	DisplayName            *string
+	SetFirstName           bool
+	FirstName              *string
+	SetLastName            bool
+	LastName               *string
 	TimeZone               *string
 	MarkOnboardingComplete *bool
 }
 
-// Partial update: a NULL argument leaves the column alone. Callers that want to
-// clear display_name pass the empty string, which the service maps to NULL
-// before it gets here.
+// Presence flags distinguish an omitted name from explicitly clearing it.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.ID,
+		arg.SetDisplayName,
 		arg.DisplayName,
+		arg.SetFirstName,
+		arg.FirstName,
+		arg.SetLastName,
+		arg.LastName,
 		arg.TimeZone,
 		arg.MarkOnboardingComplete,
 	)
@@ -248,6 +324,10 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.FirstName,
+		&i.LastName,
+		&i.FacebookLastConnectedAt,
+		&i.Email,
 	)
 	return i, err
 }

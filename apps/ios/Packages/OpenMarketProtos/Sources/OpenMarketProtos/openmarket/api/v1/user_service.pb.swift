@@ -66,9 +66,11 @@ public nonisolated struct Openmarket_Api_V1_Viewer: Sendable {
 
   public var id: String = String()
 
-  /// E.164, e.g. "+14155550123". Login identity; never shown to other users
-  /// (see docs/backend.md §6).
+  /// Retained for phone clients. Empty for Apple/Google accounts.
   public var phoneNumber: String = String()
+
+  /// "apple", "google", or "phone". Apple/Google subjects stay on the server.
+  public var signInProvider: String = String()
 
   public var displayName: String {
     get {_displayName ?? String()}
@@ -78,6 +80,34 @@ public nonisolated struct Openmarket_Api_V1_Viewer: Sendable {
   public var hasDisplayName: Bool {self._displayName != nil}
   /// Clears the value of `displayName`. Subsequent reads from it will return its default value.
   public mutating func clearDisplayName() {self._displayName = nil}
+
+  public var firstName: String {
+    get {_firstName ?? String()}
+    set {_firstName = newValue}
+  }
+  /// Returns true if `firstName` has been explicitly set.
+  public var hasFirstName: Bool {self._firstName != nil}
+  /// Clears the value of `firstName`. Subsequent reads from it will return its default value.
+  public mutating func clearFirstName() {self._firstName = nil}
+
+  public var lastName: String {
+    get {_lastName ?? String()}
+    set {_lastName = newValue}
+  }
+  /// Returns true if `lastName` has been explicitly set.
+  public var hasLastName: Bool {self._lastName != nil}
+  /// Clears the value of `lastName`. Subsequent reads from it will return its default value.
+  public mutating func clearLastName() {self._lastName = nil}
+
+  /// RFC 3339. Latest reported connection on any install; not current device status.
+  public var facebookLastConnectedAt: String {
+    get {_facebookLastConnectedAt ?? String()}
+    set {_facebookLastConnectedAt = newValue}
+  }
+  /// Returns true if `facebookLastConnectedAt` has been explicitly set.
+  public var hasFacebookLastConnectedAt: Bool {self._facebookLastConnectedAt != nil}
+  /// Clears the value of `facebookLastConnectedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearFacebookLastConnectedAt() {self._facebookLastConnectedAt = nil}
 
   /// Set once the client has finished onboarding.
   ///
@@ -94,6 +124,9 @@ public nonisolated struct Openmarket_Api_V1_Viewer: Sendable {
   public init() {}
 
   fileprivate var _displayName: String? = nil
+  fileprivate var _firstName: String? = nil
+  fileprivate var _lastName: String? = nil
+  fileprivate var _facebookLastConnectedAt: String? = nil
 }
 
 /// Device is this install, as the server sees it.
@@ -224,6 +257,24 @@ public nonisolated struct Openmarket_Api_V1_UpdateViewerRequest: Sendable {
   /// Clears the value of `displayName`. Subsequent reads from it will return its default value.
   public mutating func clearDisplayName() {self._displayName = nil}
 
+  public var firstName: String {
+    get {_firstName ?? String()}
+    set {_firstName = newValue}
+  }
+  /// Returns true if `firstName` has been explicitly set.
+  public var hasFirstName: Bool {self._firstName != nil}
+  /// Clears the value of `firstName`. Subsequent reads from it will return its default value.
+  public mutating func clearFirstName() {self._firstName = nil}
+
+  public var lastName: String {
+    get {_lastName ?? String()}
+    set {_lastName = newValue}
+  }
+  /// Returns true if `lastName` has been explicitly set.
+  public var hasLastName: Bool {self._lastName != nil}
+  /// Clears the value of `lastName`. Subsequent reads from it will return its default value.
+  public mutating func clearLastName() {self._lastName = nil}
+
   /// Idempotent latch — false never un-completes onboarding.
   public var onboardingCompleted: Bool {
     get {_onboardingCompleted ?? false}
@@ -239,6 +290,8 @@ public nonisolated struct Openmarket_Api_V1_UpdateViewerRequest: Sendable {
   public init() {}
 
   fileprivate var _displayName: String? = nil
+  fileprivate var _firstName: String? = nil
+  fileprivate var _lastName: String? = nil
   fileprivate var _onboardingCompleted: Bool? = nil
 }
 
@@ -306,6 +359,13 @@ public nonisolated struct Openmarket_Api_V1_DeleteAccountRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  /// Apple accounts reauthorize so their provider grant can be revoked.
+  public var appleIdentityToken: String = String()
+
+  public var appleAuthorizationCode: String = String()
+
+  public var nonce: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -331,7 +391,7 @@ nonisolated extension Openmarket_Api_V1_NotificationPermissionStatus: SwiftProto
 
 nonisolated extension Openmarket_Api_V1_Viewer: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Viewer"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}phone_number\0\u{3}display_name\0\u{3}onboarding_completed\0\u{3}created_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}phone_number\0\u{3}display_name\0\u{3}onboarding_completed\0\u{3}created_at\0\u{3}sign_in_provider\0\u{3}first_name\0\u{3}last_name\0\u{3}facebook_last_connected_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -344,6 +404,10 @@ nonisolated extension Openmarket_Api_V1_Viewer: SwiftProtobuf.Message, SwiftProt
       case 3: try { try decoder.decodeSingularStringField(value: &self._displayName) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.onboardingCompleted) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.createdAt) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.signInProvider) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self._firstName) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self._lastName) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self._facebookLastConnectedAt) }()
       default: break
       }
     }
@@ -369,13 +433,29 @@ nonisolated extension Openmarket_Api_V1_Viewer: SwiftProtobuf.Message, SwiftProt
     if !self.createdAt.isEmpty {
       try visitor.visitSingularStringField(value: self.createdAt, fieldNumber: 5)
     }
+    if !self.signInProvider.isEmpty {
+      try visitor.visitSingularStringField(value: self.signInProvider, fieldNumber: 6)
+    }
+    try { if let v = self._firstName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+    } }()
+    try { if let v = self._lastName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+    } }()
+    try { if let v = self._facebookLastConnectedAt {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 9)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Openmarket_Api_V1_Viewer, rhs: Openmarket_Api_V1_Viewer) -> Bool {
     if lhs.id != rhs.id {return false}
     if lhs.phoneNumber != rhs.phoneNumber {return false}
+    if lhs.signInProvider != rhs.signInProvider {return false}
     if lhs._displayName != rhs._displayName {return false}
+    if lhs._firstName != rhs._firstName {return false}
+    if lhs._lastName != rhs._lastName {return false}
+    if lhs._facebookLastConnectedAt != rhs._facebookLastConnectedAt {return false}
     if lhs.onboardingCompleted != rhs.onboardingCompleted {return false}
     if lhs.createdAt != rhs.createdAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -551,7 +631,7 @@ nonisolated extension Openmarket_Api_V1_SetFacebookConnectionResponse: SwiftProt
 
 nonisolated extension Openmarket_Api_V1_UpdateViewerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateViewerRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}display_name\0\u{3}onboarding_completed\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}display_name\0\u{3}onboarding_completed\0\u{3}first_name\0\u{3}last_name\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -561,6 +641,8 @@ nonisolated extension Openmarket_Api_V1_UpdateViewerRequest: SwiftProtobuf.Messa
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self._displayName) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self._onboardingCompleted) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._firstName) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self._lastName) }()
       default: break
       }
     }
@@ -577,11 +659,19 @@ nonisolated extension Openmarket_Api_V1_UpdateViewerRequest: SwiftProtobuf.Messa
     try { if let v = self._onboardingCompleted {
       try visitor.visitSingularBoolField(value: v, fieldNumber: 2)
     } }()
+    try { if let v = self._firstName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._lastName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Openmarket_Api_V1_UpdateViewerRequest, rhs: Openmarket_Api_V1_UpdateViewerRequest) -> Bool {
     if lhs._displayName != rhs._displayName {return false}
+    if lhs._firstName != rhs._firstName {return false}
+    if lhs._lastName != rhs._lastName {return false}
     if lhs._onboardingCompleted != rhs._onboardingCompleted {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -678,18 +768,39 @@ nonisolated extension Openmarket_Api_V1_RegisterDeviceTokenResponse: SwiftProtob
 
 nonisolated extension Openmarket_Api_V1_DeleteAccountRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteAccountRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}apple_identity_token\0\u{3}apple_authorization_code\0\u{1}nonce\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.appleIdentityToken) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.appleAuthorizationCode) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.nonce) }()
+      default: break
+      }
+    }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.appleIdentityToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.appleIdentityToken, fieldNumber: 1)
+    }
+    if !self.appleAuthorizationCode.isEmpty {
+      try visitor.visitSingularStringField(value: self.appleAuthorizationCode, fieldNumber: 2)
+    }
+    if !self.nonce.isEmpty {
+      try visitor.visitSingularStringField(value: self.nonce, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Openmarket_Api_V1_DeleteAccountRequest, rhs: Openmarket_Api_V1_DeleteAccountRequest) -> Bool {
+    if lhs.appleIdentityToken != rhs.appleIdentityToken {return false}
+    if lhs.appleAuthorizationCode != rhs.appleAuthorizationCode {return false}
+    if lhs.nonce != rhs.nonce {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

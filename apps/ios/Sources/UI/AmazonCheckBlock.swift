@@ -49,7 +49,7 @@ struct AmazonCheckBlock: View {
             }
         }) {
             NavigationStack {
-                PhoneLoginView(prompt: "Sign in to compare this item with Amazon products.") { _ in
+                AccountLoginView { _ in
                     resumeAfterSignIn = true
                     showSignIn = false
                 }

@@ -3,12 +3,12 @@ import XCTest
 
 @MainActor
 final class AccountGateTests: XCTestCase {
-    func testGuestStartsWithPhone() {
-        XCTAssertEqual(AccountGateView.Step.next(hasAccount: false, facebookConnected: false), .phone)
+    func testGuestStartsWithAccount() {
+        XCTAssertEqual(AccountGateView.Step.next(hasAccount: false, facebookConnected: false), .account)
     }
 
-    func testFacebookAloneStillRequiresPhone() {
-        XCTAssertEqual(AccountGateView.Step.next(hasAccount: false, facebookConnected: true), .phone)
+    func testFacebookAloneStillRequiresAccount() {
+        XCTAssertEqual(AccountGateView.Step.next(hasAccount: false, facebookConnected: true), .account)
     }
 
     func testVerifiedAccountWithoutFacebookContinuesToFacebook() {

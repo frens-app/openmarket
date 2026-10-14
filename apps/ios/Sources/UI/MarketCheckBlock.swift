@@ -41,7 +41,7 @@ struct MarketCheckBlock: View {
             }
         }) {
             NavigationStack {
-                PhoneLoginView(prompt: "Sign in to compare this item with similar listings.") { _ in
+                AccountLoginView { _ in
                     resumeAfterSignIn = true
                     showSignIn = false
                 }
