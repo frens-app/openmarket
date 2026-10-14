@@ -40,14 +40,14 @@ final class AnalyticsTests: XCTestCase {
 
     /// And the buyer-side check keeps its own prefix, so the two never merge
     /// into one funnel — they answer different questions and end differently.
-    func testMarketCheckEventsShareTheirPrefix() {
-        let marketCheck: [Analytics.Event] = [
-            .marketCheckClicked, .marketCheckStarted, .marketCheckCompleted, .marketCheckFailed,
-            .marketCheckEvidenceOpened
+    func testListingPriceCheckEventsShareTheirPrefix() {
+        let listingPriceCheck: [Analytics.Event] = [
+            .listingPriceCheckClicked, .listingPriceCheckStarted, .listingPriceCheckCompleted, .listingPriceCheckFailed,
+            .listingPriceCheckEvidenceOpened
         ]
-        for event in marketCheck {
-            XCTAssertTrue(event.rawValue.hasPrefix("market_check_"),
-                          "\(event.rawValue) is a market check event and should say so first")
+        for event in listingPriceCheck {
+            XCTAssertTrue(event.rawValue.hasPrefix("listing_price_check_"),
+                          "\(event.rawValue) is a listing price check event and should say so first")
         }
     }
 

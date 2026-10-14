@@ -64,7 +64,7 @@ struct MarketCheckBlock: View {
 
     private var askButton: some View {
         Button {
-            Analytics.capture(.marketCheckClicked, [
+            Analytics.capture(.listingPriceCheckClicked, [
                 "listing_id": listing.id,
                 "is_signed_in": account.isSignedIn
             ])
@@ -142,7 +142,7 @@ struct MarketCheckBlock: View {
                                       price: check.price,
                                       marketName: check.marketName,
                                       searchTerm: check.term,
-                                      surface: .marketCheck)
+                                      surface: .listingPriceCheck)
                 }
             }
         }
@@ -152,7 +152,7 @@ struct MarketCheckBlock: View {
     }
 
     private func capture(_ check: MarketCheck) {
-        Analytics.capture(.marketCheckEvidenceOpened, [
+        Analytics.capture(.listingPriceCheckEvidenceOpened, [
             "listing_id": listing.id,
             "comps_found": check.comps.count,
             "sold_count": check.sold.count

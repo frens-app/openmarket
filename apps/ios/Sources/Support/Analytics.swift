@@ -171,13 +171,13 @@ enum Analytics {
         /// Asking what somebody else's listing is worth. Its own prefix rather
         /// than a `source` on the price-check funnel: that one ends in a price
         /// being copied into a listing, and this one has no such step.
-        case marketCheckClicked = "market_check_clicked"
+        case listingPriceCheckClicked = "listing_price_check_clicked"
         case amazonComparisonClicked = "amazon_comparison_clicked"
         case amazonProductClicked = "amazon_product_clicked"
-        case marketCheckStarted = "market_check_started"
-        case marketCheckCompleted = "market_check_completed"
-        case marketCheckFailed = "market_check_failed"
-        case marketCheckEvidenceOpened = "market_check_evidence_opened"
+        case listingPriceCheckStarted = "listing_price_check_started"
+        case listingPriceCheckCompleted = "listing_price_check_completed"
+        case listingPriceCheckFailed = "listing_price_check_failed"
+        case listingPriceCheckEvidenceOpened = "listing_price_check_evidence_opened"
     }
 
     // MARK: - Shared property values
@@ -205,7 +205,7 @@ enum Analytics {
         case resultsNotice = "results_notice"
         case priceCheckRun = "price_check_run"
         case priceCheckHistory = "price_check_history"
-        case marketCheck = "market_check"
+        case listingPriceCheck = "listing_price_check"
         case accountGate = "account_gate"
     }
 

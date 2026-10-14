@@ -78,7 +78,7 @@ benchmark for comparison instead of selecting the slowest baseline.
 
 ## Ongoing measurements
 
-`market_check_completed` and failures after searches now include:
+`listing_price_check_completed` and failures after searches now include:
 
 | Field | Meaning |
 | --- | --- |

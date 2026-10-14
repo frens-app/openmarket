@@ -68,7 +68,7 @@ final class MarketCheckModel: ObservableObject {
         var started: [String: Any] = ["listing_id": listing.id, "price": price]
         started["search_term"] = Analytics.text(term.lowercased())
         started["title"] = Analytics.text(listing.title)
-        Analytics.capture(.marketCheckStarted, started)
+        Analytics.capture(.listingPriceCheckStarted, started)
 
         set(listing.id, .running(pool.hasFreeSearch
                                  ? "Checking active and recently sold listings"
@@ -97,7 +97,7 @@ final class MarketCheckModel: ObservableObject {
                 "duration_ms": Int(startedAt.duration(to: .now) / .milliseconds(1))
             ]
             failed.merge(timings) { _, new in new }
-            Analytics.capture(.marketCheckFailed, failed)
+            Analytics.capture(.listingPriceCheckFailed, failed)
         case .success(let found):
             // Sold-search failure remains nonfatal. Record it separately so
             // failed searches aren't counted as healthy empty markets in timing data.
@@ -120,7 +120,7 @@ final class MarketCheckModel: ObservableObject {
                 failed["listing_id"] = listing.id
                 failed["reason"] = "relevance_failed"
                 failed["duration_ms"] = Int(startedAt.duration(to: .now) / .milliseconds(1))
-                Analytics.capture(.marketCheckFailed, failed)
+                Analytics.capture(.listingPriceCheckFailed, failed)
                 return
             }
             timings["relevance_ms"] = Int(relevanceStarted.duration(to: .now) / .milliseconds(1))
@@ -147,7 +147,7 @@ final class MarketCheckModel: ObservableObject {
             if let standing = check.standing { completed["standing"] = Self.name(of: standing) }
             completed["search_term"] = Analytics.text(term.lowercased())
             completed.merge(timings) { _, new in new }
-            Analytics.capture(.marketCheckCompleted, completed)
+            Analytics.capture(.listingPriceCheckCompleted, completed)
         }
     }
 

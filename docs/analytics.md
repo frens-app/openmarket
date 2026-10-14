@@ -253,7 +253,7 @@ listing from another screen gets that screen's source.
 | Saved listings | `saved` |
 | AI Search | `ai_search` |
 | Seller Price Check comparisons | `price_check_evidence` |
-| Buyer market-check comparisons | `market_check` |
+| Buyer listing price check comparisons | `listing_price_check` |
 | Seller profile inventory | `seller_profile` |
 
 Break down `listing_opened_on_facebook` by `referrer` to see where Facebook
@@ -358,3 +358,15 @@ rendering cards, and returning from details do not count as clicks. Filter
 `listing_opened` by `surface = ai_search` in PostHog to count these clicks or
 unique users who clicked. Dedicated AI Search funnel events and retention
 analysis are deferred.
+
+## Listing price check naming
+
+Buyer comparisons on an existing listing use `listing_price_check_clicked`,
+`listing_price_check_started`, `listing_price_check_completed`,
+`listing_price_check_failed`, and `listing_price_check_evidence_opened`. Their
+comparison evidence surface is `listing_price_check`. Seller Price Check keeps
+its `price_check_*` events.
+
+These buyer events and the evidence surface were previously named
+`market_check_*` and `market_check`. Historical PostHog data retains the old
+names; reports spanning the rename should include both names.
