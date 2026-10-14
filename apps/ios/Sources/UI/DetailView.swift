@@ -613,8 +613,9 @@ struct DetailView: View {
 
     @ViewBuilder
     private var mapBlock: some View {
-        if let place = placeName, let (coordinate, precision) = mapPoint {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            if let (coordinate, precision) = mapPoint {
+                let place = placeName ?? "Listing"
                 Button {
                     openDirections(to: coordinate, place: place, precision: precision)
                 } label: {
@@ -626,11 +627,11 @@ struct DetailView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(precision.caption) around \(place)")
                 .accessibilityHint("Opens directions in Apple Maps")
-                // Under the map, because it answers the question the map
-                // raises. Draws nothing without a device fix — see
-                // `TravelTimeRow`.
-                TravelTimeRow(destination: coordinate, precision: precision) { mode in
-                    openDirections(to: coordinate, place: place, precision: precision, mode: mode)
+            }
+            TravelTimeRow(destination: mapPoint.flatMap { $0.1 == .listing ? $0.0 : nil },
+                          isLoadingDestination: isEnriching) { mode in
+                if let (coordinate, precision) = mapPoint {
+                    openDirections(to: coordinate, place: placeName ?? "Listing", precision: precision, mode: mode)
                 }
             }
         }

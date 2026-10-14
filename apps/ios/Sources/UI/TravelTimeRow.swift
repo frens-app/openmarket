@@ -8,58 +8,64 @@ import UIKit
 /// listing is already the deliberate act — nobody taps into a detail screen by
 /// accident — so making the user ask a second time bought nothing.
 ///
-/// **Both ends have to be real, or there is no row.**
+/// Both ends need coordinates before estimates can be calculated.
 ///
 /// The destination must be the listing's own published point, off the item
 /// page. A city centroid is not a weaker version of that answer, it is a
 /// different one: routing to the middle of San Francisco from the Inner Sunset
 /// gives a confident "8 min walk" for something that is an hour away. A
 /// distance shown against a centroid is at least captioned as approximate and
-/// reads as a rough sort order; a travel time reads as a plan. So the row
-/// stays away entirely until enrichment lands.
+/// reads as a rough sort order; a travel time reads as a plan. Until enrichment
+/// lands, explain why estimates aren't available.
 ///
 /// The origin must be the device's own fix. Everything else on this screen
 /// degrades gracefully without one; a travel time cannot, because there would
 /// be nowhere to travel *from*. The chosen search city is not a substitute: it
 /// says which listings Facebook returns, not where the user is.
 ///
-/// **And the search itself has to be one the user is inside.** Browsing Toronto
-/// from San Francisco, "how long to get there" has no useful answer — the
-/// honest one is a flight, and nobody asked. So the row appears only while the
-/// saved location came from the device (`ResolvedPlace.isUserLocation`) rather
-/// than from a city someone searched for.
-///
-/// That is *in addition to* the distance cutoff, not instead of it — the two
-/// catch different things. The type gate handles browsing a city you are not
-/// in; the cutoff handles the individual listing that is 90 miles out of a
-/// search you ran from home, which "Newest first" produces regularly.
+/// The listing must be within 160 km of the device's current location.
+/// How the user selected their search city does not affect travel estimates.
 ///
 /// The fix it routes from is taken **fresh**, unlike everything else here.
 /// Distances measure from the saved search point precisely so they hold still
 /// as the user walks; travel time has the opposite requirement, because it is a
 /// question about where they are standing now.
 struct TravelTimeRow: View {
+    let destination: CLLocationCoordinate2D?
+    let isLoadingDestination: Bool
+    let openDirections: (MapKitTravelTime.Mode) -> Void
+
+    var body: some View {
+        if let destination {
+            LocatedTravelTimeRow(destination: destination, openDirections: openDirections)
+                .id("\(destination.latitude),\(destination.longitude)")
+        } else if isLoadingDestination {
+            TravelEstimateNote("Loading the listing’s location for travel estimates…", isLoading: true)
+        } else {
+            TravelEstimateNote("Travel estimates aren’t available because this listing’s approximate location is missing.")
+        }
+    }
+}
+
+private struct LocatedTravelTimeRow: View {
     let destination: CLLocationCoordinate2D
-    let precision: LocationMapCard.Precision
     let openDirections: (MapKitTravelTime.Mode) -> Void
 
     @EnvironmentObject private var location: LocationProvider
-    @EnvironmentObject private var prefs: Preferences
     @StateObject private var travel = MapKitTravelTime.shared
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Where the user is *now*, re-fixed when this listing was opened. Nil
     /// until it lands, so the row waits rather than routing from a stale point.
     @State private var freshOrigin: CLLocationCoordinate2D?
+    @State private var isResolvingLocation = false
+    @State private var locationFailed = false
 
     @ViewBuilder
     var body: some View {
-        if precision == .listing, prefs.resolvedPlace?.isUserLocation == true {
-            if let origin = freshOrigin {
-                if isWorthRouting(from: origin) {
-                    estimates(from: origin)
-                }
-            } else if location.isUndecided {
+        Group {
+            if location.isUndecided {
                 // The one place in the app where location has an obvious,
                 // concrete payoff to point at — same argument as the seller
                 // sign-in prompt this is modelled on. Tapping summons the
@@ -67,7 +73,7 @@ struct TravelTimeRow: View {
                 LocationPrompt(
                     title: "Enable location for travel estimates",
                     subtitle: "Walking, driving and transit times from where you are.",
-                    action: { Task { freshOrigin = await location.resolveFresh(prompt: .ifNeeded) } }
+                    action: { Task { await resolveLocation(prompt: .ifNeeded) } }
                 )
             } else if location.isDenied {
                 LocationPrompt(
@@ -77,23 +83,49 @@ struct TravelTimeRow: View {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                     }
                 )
+            } else if let origin = freshOrigin {
+                if isWorthRouting(from: origin) {
+                    estimates(from: origin)
+                } else {
+                    TravelEstimateNote("Travel estimates are only shown for listings within about 100 miles of your current location. You can still tap the map for directions.")
+                }
+            } else if locationFailed, !isResolvingLocation {
+                LocationPrompt(
+                    title: "Try your location again",
+                    subtitle: "We couldn’t get your current location to estimate travel times.",
+                    action: { Task { await resolveLocation() } }
+                )
             } else {
-                // Authorised, fix not landed yet. Nothing to show and nothing
-                // to ask for — just take the fix. Keyed on the destination so
-                // opening a different listing re-fixes rather than reusing the
-                // position from the last one.
-                Color.clear
-                    .frame(height: 0)
-                    .task(id: trigger) { freshOrigin = await location.resolveFresh() }
+                TravelEstimateNote("Finding your location for travel estimates…", isLoading: true)
             }
         }
+        .task { if location.isAuthorized { await resolveLocation() } }
+        .onChange(of: location.isAuthorized) { _, authorized in
+            if !authorized { freshOrigin = nil }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Returning from Settings should replace the enable-location card
+            // with estimates without requiring the listing to be reopened.
+            if phase == .active, location.isAuthorized, freshOrigin == nil {
+                Task { await resolveLocation() }
+            }
+        }
+    }
+
+    private func resolveLocation(prompt: LocationProvider.Prompt = .never) async {
+        guard !isResolvingLocation else { return }
+        isResolvingLocation = true
+        locationFailed = false
+        defer { isResolvingLocation = false }
+        freshOrigin = await location.resolveFresh(prompt: prompt)
+        locationFailed = freshOrigin == nil
     }
 
     private func estimates(from origin: CLLocationCoordinate2D) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             modes
             HStack(spacing: 8) {
-                Text(caption)
+                Text(anyFailed ? "Some travel estimates couldn’t be loaded." : caption)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 // Throttling and dropped connections are both transient and
@@ -113,10 +145,7 @@ struct TravelTimeRow: View {
         .task(id: trigger) { await run(from: origin) }
     }
 
-    /// A hundred miles is past any "go and collect it" trip and well short of a
-    /// normal metro-area search — which routinely reaches 60-90 miles under
-    /// "Newest first". Past that the drive is a two-day answer to a question
-    /// nobody asked, and the transit leg is a flight MapKit won't route anyway.
+    /// Only request estimates for local pickup trips, measured from the device.
     private func isWorthRouting(from origin: CLLocationCoordinate2D) -> Bool {
         CLLocation(latitude: destination.latitude, longitude: destination.longitude)
             .distance(from: CLLocation(latitude: origin.latitude, longitude: origin.longitude)) < 160_000
@@ -153,6 +182,31 @@ struct TravelTimeRow: View {
     /// the destination is Facebook's *approximate* point, so these are minutes
     /// to a neighbourhood and not to a door.
     private let caption = "Estimated to the approximate area, from your location"
+}
+
+private struct TravelEstimateNote: View {
+    let message: String
+    var isLoading = false
+
+    init(_ message: String, isLoading: Bool = false) {
+        self.message = message
+        self.isLoading = isLoading
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            if isLoading {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "info.circle")
+                    .accessibilityHidden(true)
+            }
+            Text(message)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
 }
 
 /// Deliberately the same card as `sellerSignInPrompt`: an absent capability

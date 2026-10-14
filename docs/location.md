@@ -640,10 +640,15 @@ search" share a location. The rules:
 | card/detail distance, radius filter | the **saved** `ResolvedPlace.coordinate`, whichever kind it is | browsing elsewhere, a live fix makes every Toronto listing read "~2273 mi" and empties the radius filter; browsing *here*, it makes distances drift as the user walks, so cards slide in and out of the radius with no search having happened. Distances belong to the search that produced them. |
 | travel time | a **fresh** device fix, taken when the listing is opened | it answers "how long would it take *me* to go and get this", which is a question about where they are standing now — the one place a stale position gives a confidently wrong answer |
 
-Travel time is also gated twice: it draws only while the saved location came
-from the device (`ResolvedPlace.isUserLocation`), and only for listings within
-100 miles. Those catch different things — browsing a city you are not in, and
-the individual listing 90 miles out of a search you ran from home.
+Travel estimates require the listing's own approximate coordinate and a fresh
+device location less than 160 km (about 100 miles) away. A manually selected
+search city is eligible too: the distance from the device decides whether the
+trip is local. Missing location permission shows an enable-location or Settings
+prompt beneath the map. While loading, the row says whether it is waiting for
+the listing's location or the device's location. A failed location fix offers
+a retry; missing listing coordinates and trips beyond the cutoff show a reason
+instead of leaving the estimates area blank. Returning from Settings after
+enabling location starts a fresh fix automatically.
 
 Known wart: the Saved shelf shows listings saved elsewhere at their distance
 from the *browsed* city, which reads oddly. Splitting the rule per surface

@@ -91,10 +91,7 @@ struct ResolvedPlace: Codable, Equatable, Identifiable {
         segment.count >= 8 && segment.allSatisfy(\.isNumber) ? .placeID : .slug
     }
 
-    /// Is the app currently browsing where the user actually is?
-    ///
-    /// The one flag that decides whether "how long to get there" is a question
-    /// worth answering — see `TravelTimeRow`.
+    /// Whether the search location was selected using a device fix.
     var isUserLocation: Bool { origin == .deviceFix }
 
     var coordinate: CLLocationCoordinate2D {
