@@ -35,6 +35,13 @@ struct FollowingView: View {
             }
         }
         .modifier(SellerNavigation(access: sellerAccess))
+        .safeAreaInset(edge: .bottom) {
+            Text(following.statusText)
+                .font(.caption).foregroundStyle(.secondary)
+                .padding().frame(maxWidth: .infinity).background(.bar)
+        }
+        .onAppear { following.synchronize() }
+        .refreshable { following.synchronize() }
         .navigationTitle("Following")
         .navigationBarTitleDisplayMode(.inline)
     }

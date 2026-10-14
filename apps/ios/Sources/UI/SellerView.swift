@@ -37,8 +37,8 @@ struct SellerView: View {
         .onChange(of: inventory.needsSignIn) { _, needed in
             if needed { revokeAccess() }
         }
-        .onChange(of: inventory.sellerPhotoURL) { _, photoURL in
-            if photoURL != nil { following.refresh(displayedProfile) }
+        .onChange(of: inventory.sellerPhotoURL, initial: true) { _, _ in
+            following.refresh(displayedProfile)
         }
     }
 
@@ -117,7 +117,7 @@ struct SellerView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            Text("Following is saved on this device.")
+            Text(following.statusText)
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

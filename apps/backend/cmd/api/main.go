@@ -202,6 +202,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))
+	mux.Handle(apiv1connect.NewSellerServiceHandler(&sellerServer{queries: queries, pool: pool}, handlerOptions...))
 	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewShoppingServiceHandler(shoppingSvc, interceptors, connect.WithReadMaxBytes(300000)))
 	mux.HandleFunc("/health", healthHandler(pool))
@@ -213,6 +214,7 @@ func main() {
 		reflector := grpcreflect.NewStaticReflector(
 			apiv1connect.AuthServiceName,
 			apiv1connect.UserServiceName,
+			apiv1connect.SellerServiceName,
 			apiv1connect.PricingServiceName,
 			apiv1connect.ShoppingServiceName,
 		)

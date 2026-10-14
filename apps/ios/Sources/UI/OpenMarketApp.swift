@@ -95,6 +95,7 @@ struct OpenMarketApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { shopping.pause() }
             if phase == .active {
+                following.synchronize()
                 Task {
                     // A failed launch-time check keeps the local account signed
                     // in. Foregrounding is the natural retry point once the

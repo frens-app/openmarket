@@ -227,6 +227,18 @@ func (ns NullNotificationPermissionStatus) Value() (driver.Value, error) {
 	return string(ns.NotificationPermissionStatus), nil
 }
 
+type FacebookSeller struct {
+	ID            string
+	Name          string
+	PhotoUrl      *string
+	JoinedText    *string
+	Rating        *float64
+	RatingCount   *int32
+	IsHighlyRated *bool
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type LlmRun struct {
 	ID                uuid.UUID
 	PriceCheckID      *uuid.UUID
@@ -278,6 +290,12 @@ type PriceCheckPhoto struct {
 	Bytes        int32
 	Width        int32
 	Height       int32
+}
+
+type SellerFollow struct {
+	UserID    uuid.UUID
+	SellerID  string
+	CreatedAt pgtype.Timestamptz
 }
 
 type SignInChallenge struct {

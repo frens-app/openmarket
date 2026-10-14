@@ -322,6 +322,9 @@ func (s *userServer) DeleteAccount(
 	// In the same transaction as the rest, so there is no window in which the
 	// account is gone and the content is not — and no way to end up with a user
 	// who cannot sign in and a history nobody can reach to delete.
+	if err := qtx.DeleteSellerFollowsForUser(ctx, userID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete seller follows: %w", err))
+	}
 	if err := qtx.DeletePriceChecksForUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete price checks: %w", err))
 	}

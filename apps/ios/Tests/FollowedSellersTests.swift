@@ -18,7 +18,7 @@ final class FollowedSellersTests: XCTestCase {
         XCTAssertTrue(FollowedSellers(defaults: defaults).profiles.isEmpty)
     }
 
-    func testRefreshDoesNotFollowOrDuplicateAndClearsStaleRating() throws {
+    func testPartialRefreshDoesNotFollowOrEraseKnownRating() throws {
         let suite = "FollowedSellersTests.\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -33,6 +33,8 @@ final class FollowedSellersTests: XCTestCase {
         XCTAssertTrue(store.profiles.isEmpty)
         store.toggle(original)
         store.refresh(updated)
+        updated.rating = original.rating
+        updated.ratingCount = original.ratingCount
         XCTAssertEqual(FollowedSellers(defaults: defaults).profiles, [updated])
     }
 

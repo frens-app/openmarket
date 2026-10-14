@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+
+// Public fields observed by a device, including guest Facebook browsing.
+// Missing fields preserve existing data. No locations or Facebook credentials.
+message FacebookSeller {
+  string id = 1 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
+  string name = 2 [(buf.validate.field).string = {min_len: 1, max_len: 512}];
+  optional string photo_url = 3 [(buf.validate.field).string.max_len = 8192];
+  // Preserve Facebook's displayed join text without inventing an exact date.
+  optional string joined_text = 4 [(buf.validate.field).string.max_len = 512];
+  optional double rating = 5 [(buf.validate.field).double = {gte: 0, lte: 5, finite: true}];
+  optional int32 rating_count = 6 [(buf.validate.field).int32.gte = 0];
+  optional bool is_highly_rated = 7;
+}
+
+message UpsertSellerRequest {
+  FacebookSeller seller = 1 [(buf.validate.field).required = true];
+}
+message UpsertSellerResponse {
+  FacebookSeller seller = 1;
+}
+
+message SetSellerFollowRequest {
+  string seller_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
+  bool following = 2;
+  // Required when following. Upserted atomically with the follow, so newly
+  // observed sellers do not need a separate upload before being followed.
+  FacebookSeller seller = 3;
+}
+message SetSellerFollowResponse {}
+
+message ListFollowedSellersRequest {
+  string after_id = 1 [(buf.validate.field).string = {max_len: 64, pattern: "^[0-9]*$"}];
+}
+message ListFollowedSellersResponse {
+  repeated FacebookSeller sellers = 1;
+  // Empty on the last page. Pass as after_id for the next page.
+  string next_after_id = 2;
+}
+
+// Requires an OpenMarket account, independently of Facebook session state.
+service SellerService {
+  rpc UpsertSeller(UpsertSellerRequest) returns (UpsertSellerResponse);
+  rpc SetSellerFollow(SetSellerFollowRequest) returns (SetSellerFollowResponse);
+  rpc ListFollowedSellers(ListFollowedSellersRequest) returns (ListFollowedSellersResponse);
+}

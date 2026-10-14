@@ -130,7 +130,7 @@ struct DetailView: View {
             }
         }
         .modifier(SellerNavigation(access: sellerAccess))
-        .onChange(of: detail) { _, updated in
+        .onChange(of: detail, initial: true) { _, updated in
             if let profile = updated.flatMap(SellerProfile.init(detail:)) { following.refresh(profile) }
         }
         .sheet(isPresented: $showSignIn) {

@@ -1,6 +1,6 @@
 # Backend
 
-Go + Connect RPC + Postgres. Accounts, Apple/Google/phone login, Price Check, and AI Search.
+Go + Connect RPC + Postgres. Accounts, Apple/Google/phone login, seller follows, Price Check, and AI Search.
 
 **Full write-up: [`docs/backend.md`](../../docs/backend.md).** The platform
 evaluation that led here is [`docs/backend-platform.md`](../../docs/backend-platform.md).
@@ -169,3 +169,49 @@ identical pages and repeated inspections within a run are rejected.
 Run `go test -race ./cmd/api ./pkg/llm` for the scripted frontend/tool loop, account
 isolation, pagination binding, cancellation, filtering failure, and Gateway tests.
 These tests use synthetic provider responses and do not spend model credits.
+
+## Seller profiles and follows
+
+Migration `00019` adds `facebook_sellers`, keyed by the Facebook profile ID,
+and `seller_follows`, keyed by `(user_id, seller_id)`. The profile stores the
+name, current profile image URL, Facebook join text, rating, rating count, and
+highly-rated badge. Optional fields remain nullable; partial uploads preserve
+previously known values. Explicit zero counts and false badges are retained.
+No seller locations, Facebook credentials, image binaries, or individual review
+texts are stored. Join text is kept as displayed rather than converted into an
+invented exact account-creation date. These are device-reported observations,
+not verified Facebook records; supplied fields use the latest received value.
+
+All `SellerService` RPCs require an OpenMarket session. They do **not** require a
+Facebook login, device row, or reported Facebook connection:
+
+- `POST /openmarket.api.v1.SellerService/UpsertSeller` accepts `seller` with its
+  numeric-string `id`, `name`, and optional profile fields.
+- `POST /openmarket.api.v1.SellerService/SetSellerFollow` accepts `sellerId` and
+  `following`. Following also requires a matching `seller`; the profile and
+  follow are written in one transaction. Unfollowing needs only the ID.
+  Repeating either desired state is safe. The user comes from the session.
+- `POST /openmarket.api.v1.SellerService/ListFollowedSellers` returns up to 100
+  profiles and `nextAfterId`; send it as `afterId` until it is empty.
+
+The iOS app uploads seller fields encountered in listing details and seller
+profiles. Follow/unfollow updates the local list immediately, then sends the
+desired state to the API. Each account has its own persisted cache and pending
+changes. Failed synchronization retries after 30 seconds and on foreground or
+opening Following; a status message indicates unsynced changes. Legacy/device-only
+follows are imported into the first OpenMarket account once. Account deletion
+removes its follows without removing shared seller profiles.
+
+Seller inventory browsing still uses the existing Facebook sign-in flow;
+storing profiles and managing follows are independent of that browsing access.
+
+To exercise the migration, authorization, partial updates, pagination, and account
+deletion against a disposable Postgres database (name must end in `_seller_test`):
+
+```bash
+cd apps/backend
+SELLER_TEST_DATABASE_URL=postgres://…/example_seller_test go test ./cmd/api -run '^TestSellerIntegration$' -count=1 -v
+```
+
+The iOS `FollowedSellersTests` and `SellerSyncTests` cover local persistence,
+migration, offline retries, rapid toggles, reads racing changes, and account isolation.
