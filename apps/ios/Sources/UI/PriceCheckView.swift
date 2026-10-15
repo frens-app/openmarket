@@ -143,7 +143,7 @@ struct PriceCheckView: View {
                     // rather than under a field because it answers the question
                     // somebody has before they touch anything: which of these
                     // two boxes do I have to fill in.
-                    Text("A photo or a sentence is enough. Both is better.")
+                    Text("Add a photo or description.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

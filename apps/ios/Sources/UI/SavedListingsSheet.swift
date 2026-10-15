@@ -37,8 +37,10 @@ struct SavedListingsSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Text(saved.statusText).font(.caption).foregroundStyle(.secondary)
-                    .padding().frame(maxWidth: .infinity).background(.bar)
+                if let status = saved.statusText {
+                    Text(status).font(.caption).foregroundStyle(.secondary)
+                        .padding().frame(maxWidth: .infinity).background(.bar)
+                }
             }
             .onAppear { saved.synchronize() }
             .refreshable { saved.synchronize() }

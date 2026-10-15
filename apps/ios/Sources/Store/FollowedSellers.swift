@@ -38,11 +38,11 @@ final class FollowedSellers: ObservableObject {
         var observations: [String: SellerProfile]
     }
 
-    var statusText: String {
+    var statusText: String? {
         if userID == nil { return "Sign in to OpenMarket to sync followed sellers." }
         if syncFailed { return "Saved on this device. Sync will retry." }
         if isSyncing { return "Syncing followed sellers…" }
-        return "Following is synced to your OpenMarket account."
+        return nil
     }
 
     init(defaults: UserDefaults = .standard, service: (any SellerSyncService)? = nil) {

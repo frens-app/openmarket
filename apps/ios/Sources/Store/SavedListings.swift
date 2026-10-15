@@ -50,14 +50,14 @@ final class SavedListings: ObservableObject {
         }
     }
     var isEmpty: Bool { entries.isEmpty }
-    var statusText: String {
+    var statusText: String? {
         if userID == nil { return "Sign in to OpenMarket to sync saved listings." }
         if !rejected.isEmpty { return "Some listings could not sync. Open them to refresh their details." }
         if entries.contains(where: { $0.listing.facebookListingID == nil }) { return "Some older saves are available only on this device." }
         if entries.contains(where: { !$0.listing.hasSaveMetadata }) { return "Open older saves to recover their details and sync them." }
         if syncFailed { return "Saved on this device. Sync will retry." }
         if isSyncing { return "Syncing saved listings…" }
-        return "Saved listings are synced to your OpenMarket account."
+        return nil
     }
 
     init(defaults: UserDefaults = .standard, service: (any SavedListingSyncService)? = nil,

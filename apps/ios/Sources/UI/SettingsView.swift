@@ -47,13 +47,10 @@ struct SettingsView: View {
                         LabeledContent("Sign-in", value: accountProvider)
                         Button("Sign out") { Task { await account.signOut() } }
                         Button("Delete account", role: .destructive) { confirmingDelete = true }
-                        Text("Deleting removes your account and saved price checks. It can't be undone.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     } else {
                         LabeledContent("Sign-in", value: "Not signed in")
                         Button("Create an account") { showAccountLogin = true }
-                        Text("Browsing needs no account. One is what Price Check runs under, and what keeps your past checks when you change phone.")
+                        Text("An account is required for Price Check and saves your past checks across devices.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -82,17 +79,11 @@ struct SettingsView: View {
                         .disabled(prefs.recentSearches.isEmpty)
                     Button("Clear viewing history") { viewed.clear() }
                         .disabled(viewed.isEmpty)
-                    Text("Search history fills the suggestions under the search field. Turn it off to search without adding to it — what's already saved stays until you clear it. Searches the Tools tab runs never go into your history.")
+                    Text("Turning this off keeps existing history until you clear it. Searches from Tools are never saved.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Viewing history is what \"Only new listings\" filters against, and what fills Recently viewed. It stays on this device — Facebook is never told which listings you opened.")
+                    Text("Viewing history powers \"Only new listings\" and Recently viewed. It stays on this device.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    Text("Signing in happens on Facebook's own page — this app has no login form of its own. Browsing without signing in also works. Messaging a seller opens the Facebook app.")
-                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 

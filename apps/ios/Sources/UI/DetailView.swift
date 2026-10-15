@@ -399,21 +399,12 @@ struct DetailView: View {
         Button {
             showSignIn = true
         } label: {
-            // Icon aligned to the first line of text rather than to the centre
-            // of the whole block: centring floats it into the gap between the
-            // title and the subtitle whenever the title wraps.
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Image(systemName: "person.crop.circle.badge.questionmark")
                     .font(.body)
                     .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Log in to see seller details")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Name, rating, and how long they've been on Facebook.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text("Log in to see seller details")
+                    .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))

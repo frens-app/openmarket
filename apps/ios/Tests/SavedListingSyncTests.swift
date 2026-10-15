@@ -143,7 +143,7 @@ final class SavedListingSyncTests: XCTestCase {
         store.toggle(listing("999")); store.toggle(listing())
         store.setAccount("A"); try await settled(store)
         XCTAssertTrue(store.contains("fb:999"))
-        XCTAssertTrue(store.statusText.contains("could not sync"))
+        XCTAssertTrue(store.statusText?.contains("could not sync") == true)
         XCTAssertEqual(service.remote["A"]?.count, 1)
         service.remote["A"] = [:]
         var updated = listing(); updated.title = "New title"

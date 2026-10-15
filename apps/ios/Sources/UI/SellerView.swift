@@ -117,8 +117,10 @@ struct SellerView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            Text(following.statusText)
-                .font(.caption).foregroundStyle(.secondary)
+            if let status = following.statusText {
+                Text(status)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
