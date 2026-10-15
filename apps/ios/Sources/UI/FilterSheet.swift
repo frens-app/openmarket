@@ -291,7 +291,7 @@ struct FilterSheet: View {
 
     private func priceField(_ label: String, text: Binding<String>) -> some View {
         HStack(spacing: 4) {
-            Text("$").foregroundStyle(.secondary)
+            Text(prefs.currencySymbol).foregroundStyle(.secondary)
             TextField(label, text: text)
                 .keyboardType(.numberPad)
         }

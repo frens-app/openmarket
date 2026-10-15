@@ -4,6 +4,21 @@ import OpenMarketProtos
 @testable import OpenMarket
 
 final class RegionalCurrencyTests: XCTestCase {
+    func testSouthAfricanAmountsPreserveCurrencyAndCents() throws {
+        let currency = try XCTUnwrap(MarketRegion.region(countryCode: "ZA")?.currency)
+        XCTAssertEqual(currency.code, "ZAR")
+        XCTAssertEqual(currency.localSymbol, "R")
+        XCTAssertEqual(currency.amount(fromFacebookOffset: "123456"), Decimal(string: "1234.56"))
+        for source in ["ZAR1,234.56", "R1 234,56", "R1\u{00a0}234,56", "1 234,56 ZAR"] {
+            let parsed = try XCTUnwrap(MarketplacePrice.parse(source), source)
+            XCTAssertEqual(parsed.amount, Decimal(string: "1234.56"), source)
+            let listing = Listing(id: source, priceText: source, cardIndex: 0, capturedAt: Date())
+            XCTAssertEqual(listing.currencyCode, "ZAR", source)
+        }
+        XCTAssertEqual(MarketplacePrice.display("ZAR1,234.56"), "R1,234.56")
+        XCTAssertEqual(MarketCurrency.unambiguousCurrency(symbol: "R$")?.code, "BRL")
+    }
+
     @MainActor
     func testCurrencyCardsRender() throws {
         let suite = "RegionalCurrencyTests.preview.\(UUID().uuidString)"

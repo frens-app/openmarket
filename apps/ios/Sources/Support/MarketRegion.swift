@@ -3,27 +3,20 @@ import Foundation
 /// Supported Marketplace regions and the price prefixes their listings use.
 struct MarketRegion: Equatable, Identifiable {
     let countryCode: String
-    let pricePrefixes: [String]
+    let currencyCode: String
     let marketplaceVerified: Bool
 
     var id: String { countryCode }
-
-    init(
-        _ countryCode: String,
-        pricePrefixes: [String],
-        marketplaceVerified: Bool
-    ) {
-        self.countryCode = countryCode
-        self.pricePrefixes = pricePrefixes
-        self.marketplaceVerified = marketplaceVerified
-    }
+    var currency: MarketCurrency { MarketCurrency.currency(code: currencyCode)! }
+    var pricePrefixes: [String] { currency.symbols }
 
     static let unitedStates = MarketRegion("US", currencyCode: "USD")
     static let canada = MarketRegion("CA", currencyCode: "CAD")
 
     private init(_ countryCode: String, currencyCode: String) {
-        self.init(countryCode, pricePrefixes: MarketCurrency.currency(code: currencyCode)!.symbols,
-                  marketplaceVerified: true)
+        self.countryCode = countryCode
+        self.currencyCode = currencyCode
+        self.marketplaceVerified = true
     }
 
     static let all: [MarketRegion] = [

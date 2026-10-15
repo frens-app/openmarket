@@ -4,6 +4,51 @@ import XCTest
 
 @MainActor
 final class MarketRegionTests: XCTestCase {
+    func testSouthAfricanLocationsRetainCurrencyAfterSelectionAndReload() throws {
+        for origin in [ResolvedPlace.Origin.searchedCity, .deviceFix] {
+            let suite = "MarketRegionTests.southAfrica.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let preferences = Preferences(defaults: defaults)
+            preferences.hasCompletedOnboarding = true
+            preferences.minPrice = 100
+            preferences.maxPrice = 500
+            XCTAssertEqual(preferences.currencySymbol, "$")
+
+            preferences.setResolvedPlace(ResolvedPlace(
+                name: "Johannesburg", segment: "johannesburg",
+                coordinate: CLLocationCoordinate2D(latitude: -26.2041, longitude: 28.0473),
+                origin: origin, verifiedAt: Date(), countryCode: "za"
+            ))
+
+            for stored in [preferences, Preferences(defaults: defaults)] {
+                XCTAssertTrue(stored.hasBrowseablePlace)
+                XCTAssertFalse(stored.needsOnboarding)
+                XCTAssertEqual(stored.resolvedPlace?.countryCode, "ZA")
+                XCTAssertEqual(stored.resolvedPlace?.origin, origin)
+                XCTAssertEqual(stored.locationName, "Johannesburg")
+                XCTAssertEqual(stored.currencySymbol, "R")
+                XCTAssertEqual(stored.priceFilterLabel, "R100–R500")
+                stored.minPrice = nil
+                XCTAssertEqual(stored.priceFilterLabel, "Under R500")
+                stored.minPrice = 100
+                stored.maxPrice = nil
+                XCTAssertEqual(stored.priceFilterLabel, "Over R100")
+                stored.minPrice = nil
+                XCTAssertEqual(stored.priceFilterLabel, "Any price")
+            }
+
+            preferences.setResolvedPlace(ResolvedPlace(
+                name: "London", segment: "london",
+                coordinate: CLLocationCoordinate2D(latitude: 51.5074, longitude: -0.1278),
+                origin: .searchedCity, countryCode: "GB"
+            ))
+            XCTAssertEqual(preferences.currencySymbol, "£")
+            preferences.resetOnboarding()
+            XCTAssertEqual(preferences.currencySymbol, "$")
+        }
+    }
+
     func testEverySupportedCountryDeclaresARecognizedPricePrefix() {
         for region in MarketRegion.all where region.marketplaceVerified {
             XCTAssertFalse(region.pricePrefixes.isEmpty, "Missing prices for \(region.countryCode)")

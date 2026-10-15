@@ -48,6 +48,10 @@ shorten symbols without changing numbers or separators. Examples: CA$/CAD → $,
 GBP → £, PHP → ₱, IDR → Rp. Price-check history also retains its source marker
 while rendering the shorter symbol.
 
+Price-filter fields and active filter labels use the confirmed location's
+currency. Selecting South Africa (`ZA`) shows `R`, including after restarting
+the app. Locations saved without a country code retain the legacy `$` fallback.
+
 Price guides group known aliases by currency and exclude other currencies from
 their numeric sample. A check of a specific listing uses that listing's source
 currency. No exchange-rate conversion occurs. Price recommendations retain the
@@ -123,3 +127,25 @@ These probes do not establish signed-in behavior, every city, location-picker
 resolution, item-detail access, seller handoff, or App Store availability in
 the new countries. The test suite covers parsers and region eligibility locally;
 live requests stopped at the rate-limit response rather than retrying.
+
+### South Africa location-picker follow-up — 2026-10-15
+
+The shared `AppleMapsCitySearch` → `PlaceChooser` flow used by onboarding and
+the location sheet passed a live simulator check for Johannesburg, Cape Town,
+and Durban. Each city appeared in autocomplete, resolved through Apple Maps
+and Facebook, and saved with country `ZA` and currency symbol `R`. Facebook
+returned `johannesburg`, `capetown`, and `durban`, respectively. This check
+exercises city selection and persistence; it does not exercise device GPS or
+the Facebook dialog fallback.
+
+The simulator build and 37 focused currency, region, price-parsing, onboarding,
+and location tests passed, followed by the complete shared-picker probe.
+Regression coverage includes South African decimal prices, both saved location
+origins, persistence across reloads, and currency changes when switching countries.
+
+To rerun the live probe, temporarily copy
+[`SouthAfricaLocationProbeTests.swift`](../tools/probe/regional/SouthAfricaLocationProbeTests.swift)
+into `apps/ios/Tests`, run `xcodebuild test` for
+`OpenMarketTests/SouthAfricaLocationProbeTests`, then remove the temporary copy.
+It stays outside the regular suite because it requires live Apple and Facebook
+services.

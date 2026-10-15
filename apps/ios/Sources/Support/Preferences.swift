@@ -101,6 +101,19 @@ final class Preferences: ObservableObject {
     @Published var minPrice: Int? { didSet { defaults.set(minPrice ?? -1, forKey: Key.minPrice) } }
     @Published var maxPrice: Int? { didSet { defaults.set(maxPrice ?? -1, forKey: Key.maxPrice) } }
 
+    var currencySymbol: String {
+        MarketRegion.region(countryCode: resolvedPlace?.countryCode)?.currency.localSymbol ?? "$"
+    }
+
+    var priceFilterLabel: String {
+        switch (minPrice, maxPrice) {
+        case let (min?, max?): "\(currencySymbol)\(min)–\(currencySymbol)\(max)"
+        case let (nil, max?): "Under \(currencySymbol)\(max)"
+        case let (min?, nil): "Over \(currencySymbol)\(min)"
+        default: "Any price"
+        }
+    }
+
     /// Comma-joined raw values, which is also the shape Facebook's own
     /// `itemCondition` parameter takes.
     @Published var conditions: [SearchQuery.Condition] {

@@ -271,11 +271,6 @@ struct ActiveFilterBar: View {
     }
 
     private var priceLabel: String {
-        switch (prefs.minPrice, prefs.maxPrice) {
-        case let (min?, max?): "$\(min)–$\(max)"
-        case let (nil, max?): "Under $\(max)"
-        case let (min?, nil): "Over $\(min)"
-        default: "Any price"
-        }
+        prefs.priceFilterLabel
     }
 }
