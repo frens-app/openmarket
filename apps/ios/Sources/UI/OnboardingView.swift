@@ -254,7 +254,7 @@ private struct LocationPage: View {
         VStack(alignment: .leading, spacing: 0) {
             LocationMapCard(place: mapPlace ?? "no location",
                             coordinate: centre,
-                            precision: mapPlace == nil ? .unset : .city,
+                            precision: mapPlace == nil ? .unset : .searchCenter,
                             userLocation: location.coordinate)
                 .padding(.top, 8)
 
