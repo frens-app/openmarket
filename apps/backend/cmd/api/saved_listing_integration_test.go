@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -54,6 +55,7 @@ func TestSavedListingIntegration(t *testing.T) {
 	q := db.New(pool)
 	mux := http.NewServeMux()
 	mux.Handle(apiv1connect.NewSavedListingServiceHandler(&savedListingServer{queries: q, pool: pool}, connect.WithInterceptors(validate.NewInterceptor(), newAuthInterceptor("test-secret", q))))
+	mux.Handle(apiv1connect.NewListingViewServiceHandler(&listingViewServer{queries: q, pool: pool}, connect.WithInterceptors(validate.NewInterceptor(), newAuthInterceptor("test-secret", q))))
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	client := apiv1connect.NewSavedListingServiceClient(server.Client(), server.URL)
@@ -75,7 +77,7 @@ func TestSavedListingIntegration(t *testing.T) {
 		return user, token
 	}
 	userA, tokenA := newAccount()
-	_, tokenB := newAccount()
+	userB, tokenB := newAccount()
 	makeSave := func(id string) *v1.SavedListingChange {
 		now := timestamppb.Now()
 		return &v1.SavedListingChange{MutationId: uuid.NewString(), FacebookListingId: id, Saved: proto.Bool(true), SavedAt: now, Snapshot: &v1.SavedListingSnapshot{FacebookListingId: id, Title: proto.String("Desk"), PriceText: proto.String("$20"), CardObservedAt: now, PriceObservedAt: now}}
@@ -166,12 +168,77 @@ func TestSavedListingIntegration(t *testing.T) {
 	if len(page.Listings) != 100 || len(last.Listings) != 1 || last.NextAfterId != "" {
 		t.Fatal("pagination")
 	}
+
+	viewClient := apiv1connect.NewListingViewServiceClient(server.Client(), server.URL)
+	viewAt := time.Now().Add(-time.Minute).Truncate(time.Microsecond)
+	submitView := func(token string, at time.Time, snapshot *v1.SavedListingSnapshot) {
+		t.Helper()
+		r := &v1.SubmitListingViewRequest{FacebookListingId: first.FacebookListingId, ViewedAt: timestamppb.New(at), Snapshot: snapshot}
+		if snapshot != nil {
+			r.Source = v1.ListingViewSource_LISTING_VIEW_SOURCE_ANONYMOUS_GRAPHQL
+		}
+		request := connect.NewRequest(r)
+		if token != "" {
+			request.Header().Set("Authorization", "Bearer "+token)
+		}
+		if _, err := viewClient.SubmitListingView(ctx, request); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	guestRequest := connect.NewRequest(&v1.SubmitListingViewRequest{FacebookListingId: "777777777", ViewedAt: timestamppb.New(viewAt)})
+	if _, err := viewClient.SubmitListingView(ctx, guestRequest); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatal("anonymous view accepted", err)
+	}
+	var guestRows int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM listings WHERE facebook_listing_id = '777777777'").Scan(&guestRows); err != nil || guestRows != 0 {
+		t.Fatal("anonymous request created a listing", err)
+	}
+	submitView(tokenB, viewAt.Add(time.Second), nil)
+	detailAt := time.Now().Truncate(time.Microsecond)
+	submitView(tokenB, viewAt.Add(time.Second), &v1.SavedListingSnapshot{FacebookListingId: first.FacebookListingId, Description: proto.String("Fresh detail"), DetailObservedAt: timestamppb.New(detailAt)})
+	previous, err := q.LockListing(ctx, first.FacebookListingId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The next account's clock is behind: receipt order still decides attribution.
+	submitView(tokenA, viewAt, &v1.SavedListingSnapshot{FacebookListingId: first.FacebookListingId, Description: proto.String("Cached detail"), DetailObservedAt: timestamppb.New(detailAt.Add(-time.Hour))})
+	row, err := q.LockListing(ctx, first.FacebookListingId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.LastViewedBy == nil || *row.LastViewedBy != userA.ID || !row.LastViewedAt.Time.Equal(viewAt) || !row.LastViewReceivedAt.Time.After(previous.LastViewReceivedAt.Time) {
+		t.Fatal("view attribution did not follow server receipt time", row)
+	}
+	if row.LastDetailUpdatedBy == nil || *row.LastDetailUpdatedBy != userA.ID || !row.LastDetailReceivedAt.Time.After(previous.LastDetailReceivedAt.Time) || !row.LastDetailObservedAt.Time.Equal(detailAt.Add(-time.Hour)) {
+		t.Fatal("data attribution did not follow server receipt time", row)
+	}
+	if row.LastDetailSource == nil || *row.LastDetailSource != "LISTING_VIEW_SOURCE_ANONYMOUS_GRAPHQL" {
+		t.Fatal("lost provenance")
+	}
+	restored := &v1.SavedListingSnapshot{}
+	if err := protojson.Unmarshal(row.Snapshot, restored); err != nil || restored.GetDescription() != "Fresh detail" {
+		t.Fatal("cached snapshot replaced fresh detail", err)
+	}
+	// A click without a payload changes only the viewer, not the data submitter.
+	submitView(tokenB, viewAt.Add(-time.Hour), nil)
+	clicked, err := q.LockListing(ctx, first.FacebookListingId)
+	if err != nil || clicked.LastViewedBy == nil || *clicked.LastViewedBy != userB.ID || clicked.LastDetailUpdatedBy == nil || *clicked.LastDetailUpdatedBy != userA.ID || !clicked.LastDetailReceivedAt.Time.Equal(row.LastDetailReceivedAt.Time) {
+		t.Fatal("click changed data attribution", err)
+	}
+	if len(list(tokenB, "").Listings) != 1 {
+		t.Fatal("view changed bookmarks")
+	}
 	if _, err := q.CreateAuthMethod(ctx, db.CreateAuthMethodParams{UserID: userA.ID, AuthService: db.AuthServiceGOOGLE, Subject: userA.ID.String()}); err != nil {
 		t.Fatal(err)
 	}
 	users := &userServer{queries: q, pool: pool, logger: zap.NewNop()}
 	if _, err := users.DeleteAccount(auth.WithUserID(ctx, userA.ID), connect.NewRequest(&v1.DeleteAccountRequest{})); err != nil {
 		t.Fatal(err)
+	}
+	row, err = q.LockListing(ctx, first.FacebookListingId)
+	if err != nil || row.LastDetailUpdatedBy != nil || row.LastViewedBy == nil || *row.LastViewedBy != userB.ID {
+		t.Fatal("deletion failed to clear observer or cleared another viewer", err)
 	}
 	for _, table := range []string{"saved_listings", "saved_listing_mutations"} {
 		var count int

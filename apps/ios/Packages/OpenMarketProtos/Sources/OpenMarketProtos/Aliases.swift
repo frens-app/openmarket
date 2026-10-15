@@ -89,3 +89,7 @@ public typealias SavedListingSnapshot = Openmarket_Api_V1_SavedListingSnapshot
 public typealias SavedListingChange = Openmarket_Api_V1_SavedListingChange
 public typealias ApplySavedListingChangesRequest = Openmarket_Api_V1_ApplySavedListingChangesRequest
 public typealias ListSavedListingsRequest = Openmarket_Api_V1_ListSavedListingsRequest
+
+public typealias ListingViewServiceClient = Openmarket_Api_V1_ListingViewServiceClient
+public typealias ListingViewSource = Openmarket_Api_V1_ListingViewSource
+public typealias SubmitListingViewRequest = Openmarket_Api_V1_SubmitListingViewRequest

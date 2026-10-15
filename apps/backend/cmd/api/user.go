@@ -322,6 +322,9 @@ func (s *userServer) DeleteAccount(
 	// In the same transaction as the rest, so there is no window in which the
 	// account is gone and the content is not — and no way to end up with a user
 	// who cannot sign in and a history nobody can reach to delete.
+	if err := qtx.ClearListingViewerForUser(ctx, &userID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	if err := qtx.DeleteSavedListingsForUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete saved listings: %w", err))
 	}

@@ -116,7 +116,7 @@ struct DetailView: View {
             // Words land seconds before the gallery, so they're shown the
             // moment they exist rather than waiting on the photos. The strip
             // keeps its own placeholders until the second stage arrives.
-            let enriched = await store.enrich(listing) { staged in
+            let enriched = await store.enrich(listing, reportView: true) { staged in
                 withAnimation(.easeOut(duration: 0.2)) {
                     current = staged
                     isEnriching = false

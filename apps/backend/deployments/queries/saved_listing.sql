@@ -35,3 +35,19 @@ DELETE FROM saved_listings WHERE user_id = $1;
 
 -- name: DeleteSavedListingMutationsForUser :exec
 DELETE FROM saved_listing_mutations WHERE user_id = $1;
+
+-- name: RecordListingView :exec
+UPDATE listings SET last_viewed_at = sqlc.arg(viewed_at),
+    last_viewed_by = sqlc.narg(viewer)::uuid, last_view_received_at = sqlc.arg(received_at)
+WHERE id = sqlc.arg(id) AND (last_view_received_at IS NULL OR last_view_received_at < sqlc.arg(received_at));
+
+-- name: RecordListingDetailSource :exec
+UPDATE listings SET last_detail_observed_at = sqlc.arg(observed_at), last_detail_source = sqlc.arg(source),
+    last_detail_updated_by = sqlc.narg(observer)::uuid, last_detail_received_at = sqlc.arg(received_at)
+WHERE id = sqlc.arg(id) AND (last_detail_received_at IS NULL OR last_detail_received_at < sqlc.arg(received_at));
+
+-- name: ClearListingViewerForUser :exec
+UPDATE listings SET
+    last_viewed_by = CASE WHEN last_viewed_by = $1 THEN NULL ELSE last_viewed_by END,
+    last_detail_updated_by = CASE WHEN last_detail_updated_by = $1 THEN NULL ELSE last_detail_updated_by END
+WHERE last_viewed_by = $1 OR last_detail_updated_by = $1;

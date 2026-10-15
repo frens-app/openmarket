@@ -1,0 +1,30 @@
+syntax = "proto3";
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "openmarket/api/v1/saved_listing_service.proto";
+
+// Describes the fresh detail read, not older card fields retained in snapshot.
+enum ListingViewSource {
+  LISTING_VIEW_SOURCE_UNSPECIFIED = 0;
+  LISTING_VIEW_SOURCE_ANONYMOUS_GRAPHQL = 1;
+  LISTING_VIEW_SOURCE_AUTHENTICATED_GRAPHQL = 2;
+  LISTING_VIEW_SOURCE_ANONYMOUS_DESKTOP_PAGE = 3;
+  LISTING_VIEW_SOURCE_AUTHENTICATED_DESKTOP_PAGE = 4;
+  LISTING_VIEW_SOURCE_ANONYMOUS_MOBILE_PAGE = 5;
+  LISTING_VIEW_SOURCE_AUTHENTICATED_MOBILE_PAGE = 6;
+}
+
+service ListingViewService {
+  rpc SubmitListingView(SubmitListingViewRequest) returns (SubmitListingViewResponse);
+}
+
+message SubmitListingViewRequest {
+  string facebook_listing_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
+  google.protobuf.Timestamp viewed_at = 2 [(buf.validate.field).required = true];
+  // Absent for the initial click or a failed detail fetch.
+  SavedListingSnapshot snapshot = 3;
+  ListingViewSource source = 4 [(buf.validate.field).enum.defined_only = true];
+}
+message SubmitListingViewResponse {}

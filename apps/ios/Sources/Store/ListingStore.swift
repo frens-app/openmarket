@@ -1,4 +1,5 @@
 import Foundation
+import OpenMarketProtos
 import Combine
 import SwiftUI
 import os
@@ -803,8 +804,11 @@ final class ListingStore: ObservableObject {
     /// `onStage` can publish cache, text, gallery, then complete details. Each is built from
     /// the original card rather than accumulated, so a late partial can't
     /// interleave with an earlier one into a state neither described.
-    func enrich(_ listing: Listing, onStage: @escaping @MainActor (Listing) -> Void = { _ in }) async -> Listing {
+    func enrich(_ listing: Listing, reportView: Bool = false, onStage: @escaping @MainActor (Listing) -> Void = { _ in }) async -> Listing {
         let started = Date()
+        let view = reportView ? ListingViewSubmission() : nil
+        view?.submit(listing)
+        let viewSession = session
         var best = listing
 
         // Step 2 — the local profile store.
@@ -819,8 +823,10 @@ final class ListingStore: ObservableObject {
         }
 
         // Step 3 — revalidate live, always.
-        if let fresh = await fetchLive(best, startedAt: started, onStage: onStage) {
+        var source = ListingViewSource.unspecified
+        if let fresh = await fetchLive(best, startedAt: started, onStage: onStage, onSource: { source = $0 }) {
             best = fresh
+            if session == viewSession { view?.submit(fresh, source: source) }
         }
         return best
     }
@@ -833,7 +839,8 @@ final class ListingStore: ObservableObject {
     /// belong to the demoted WebLite path, where cards carry no id at all.
     private func fetchLive(_ listing: Listing,
                            startedAt started: Date,
-                           onStage: @escaping @MainActor (Listing) -> Void) async -> Listing? {
+                           onStage: @escaping @MainActor (Listing) -> Void,
+                           onSource: (ListingViewSource) -> Void) async -> Listing? {
         if let url = listing.itemURL {
             // Text first, gallery after. The description is readable well
             // before the photos have rendered, and holding the screen empty
@@ -856,6 +863,7 @@ final class ListingStore: ObservableObject {
             updated.title = updated.title ?? detailValue.title
             updated.detailObservedAt = Date()
             if updated.locationText == nil { updated.locationText = detailValue.locationText }
+            onSource(detailViewSource)
             record(updated)
             onStage(updated)
             Logger.store.info("tap -> revalidated in \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
@@ -873,6 +881,7 @@ final class ListingStore: ObservableObject {
             let updated = Self.merging(listing, harvest)
             metrics.detailLatency(seconds: Date().timeIntervalSince(started), succeeded: true)
             Logger.store.info("tap -> complete in \(String(format: "%.2f", Date().timeIntervalSince(started)))s (harvested in place)")
+            onSource(session == .authed ? .authenticatedMobilePage : .anonymousMobilePage)
             record(updated)
             onStage(updated)
             return updated
@@ -889,9 +898,18 @@ final class ListingStore: ObservableObject {
         updated.title = updated.title ?? detailValue.title
         updated.detailObservedAt = Date()
         if updated.locationText == nil { updated.locationText = detailValue.locationText }
+        onSource(detailViewSource)
         record(updated)
         onStage(updated)
         return updated
+    }
+
+    private var detailViewSource: ListingViewSource {
+        switch detail.lastTransport {
+        case "anonymous_graphql": return .anonymousGraphql
+        case "authenticated_graphql": return .authenticatedGraphql
+        default: return session == .authed ? .authenticatedDesktopPage : .anonymousDesktopPage
+        }
     }
 
     /// Writes a fully-read listing to both the grid and the profile store,

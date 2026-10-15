@@ -240,12 +240,19 @@ type FacebookSeller struct {
 }
 
 type Listing struct {
-	ID                uuid.UUID
-	FacebookListingID string
-	Snapshot          []byte
-	FieldObservedAt   []byte
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
+	ID                   uuid.UUID
+	FacebookListingID    string
+	Snapshot             []byte
+	FieldObservedAt      []byte
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	LastViewedAt         pgtype.Timestamptz
+	LastViewedBy         *uuid.UUID
+	LastViewReceivedAt   pgtype.Timestamptz
+	LastDetailObservedAt pgtype.Timestamptz
+	LastDetailSource     *string
+	LastDetailUpdatedBy  *uuid.UUID
+	LastDetailReceivedAt pgtype.Timestamptz
 }
 
 type LlmRun struct {

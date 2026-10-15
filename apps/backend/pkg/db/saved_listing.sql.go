@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearListingViewerForUser = `-- name: ClearListingViewerForUser :exec
+UPDATE listings SET
+    last_viewed_by = CASE WHEN last_viewed_by = $1 THEN NULL ELSE last_viewed_by END,
+    last_detail_updated_by = CASE WHEN last_detail_updated_by = $1 THEN NULL ELSE last_detail_updated_by END
+WHERE last_viewed_by = $1 OR last_detail_updated_by = $1
+`
+
+func (q *Queries) ClearListingViewerForUser(ctx context.Context, lastViewedBy *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearListingViewerForUser, lastViewedBy)
+	return err
+}
+
 const deleteSavedListingMutationsForUser = `-- name: DeleteSavedListingMutationsForUser :exec
 DELETE FROM saved_listing_mutations WHERE user_id = $1
 `
@@ -95,7 +107,7 @@ func (q *Queries) ListSavedListings(ctx context.Context, arg ListSavedListingsPa
 }
 
 const lockListing = `-- name: LockListing :one
-SELECT id, facebook_listing_id, snapshot, field_observed_at, created_at, updated_at FROM listings WHERE facebook_listing_id = $1 FOR UPDATE
+SELECT id, facebook_listing_id, snapshot, field_observed_at, created_at, updated_at, last_viewed_at, last_viewed_by, last_view_received_at, last_detail_observed_at, last_detail_source, last_detail_updated_by, last_detail_received_at FROM listings WHERE facebook_listing_id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockListing(ctx context.Context, facebookListingID string) (Listing, error) {
@@ -108,6 +120,13 @@ func (q *Queries) LockListing(ctx context.Context, facebookListingID string) (Li
 		&i.FieldObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastViewedAt,
+		&i.LastViewedBy,
+		&i.LastViewReceivedAt,
+		&i.LastDetailObservedAt,
+		&i.LastDetailSource,
+		&i.LastDetailUpdatedBy,
+		&i.LastDetailReceivedAt,
 	)
 	return i, err
 }
@@ -121,6 +140,54 @@ func (q *Queries) LockSavedListingUser(ctx context.Context, id uuid.UUID) (uuid.
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const recordListingDetailSource = `-- name: RecordListingDetailSource :exec
+UPDATE listings SET last_detail_observed_at = $1, last_detail_source = $2,
+    last_detail_updated_by = $3::uuid, last_detail_received_at = $4
+WHERE id = $5 AND (last_detail_received_at IS NULL OR last_detail_received_at < $4)
+`
+
+type RecordListingDetailSourceParams struct {
+	ObservedAt pgtype.Timestamptz
+	Source     *string
+	Observer   *uuid.UUID
+	ReceivedAt pgtype.Timestamptz
+	ID         uuid.UUID
+}
+
+func (q *Queries) RecordListingDetailSource(ctx context.Context, arg RecordListingDetailSourceParams) error {
+	_, err := q.db.Exec(ctx, recordListingDetailSource,
+		arg.ObservedAt,
+		arg.Source,
+		arg.Observer,
+		arg.ReceivedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const recordListingView = `-- name: RecordListingView :exec
+UPDATE listings SET last_viewed_at = $1,
+    last_viewed_by = $2::uuid, last_view_received_at = $3
+WHERE id = $4 AND (last_view_received_at IS NULL OR last_view_received_at < $3)
+`
+
+type RecordListingViewParams struct {
+	ViewedAt   pgtype.Timestamptz
+	Viewer     *uuid.UUID
+	ReceivedAt pgtype.Timestamptz
+	ID         uuid.UUID
+}
+
+func (q *Queries) RecordListingView(ctx context.Context, arg RecordListingViewParams) error {
+	_, err := q.db.Exec(ctx, recordListingView,
+		arg.ViewedAt,
+		arg.Viewer,
+		arg.ReceivedAt,
+		arg.ID,
+	)
+	return err
 }
 
 const recordSavedListingMutation = `-- name: RecordSavedListingMutation :exec

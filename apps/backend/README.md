@@ -276,3 +276,33 @@ The database must be disposable and its name must end in `_saved_listing_test`.
 `SavedListingSyncTests` covers migration, account isolation, offline removals,
 lost acknowledgements, in-flight edits, metadata-only refresh, and fresh-device
 restoration. Snapshot URLs can expire; sync retains metadata, not image binaries.
+
+### Listing views
+
+`POST /openmarket.api.v1.ListingViewService/SubmitListingView` records an item
+open, independently of saving it. Send `facebook_listing_id` and `viewed_at`;
+a successful live read also sends `snapshot` and `source`. The iOS detail screen
+submits the click immediately, then the refreshed snapshot after extraction.
+Uploads run independently of screen dismissal; failures are logged and are not
+currently queued for offline retry. Unresolved mobile cards submit once their
+Facebook listing ID is known.
+
+An authenticated OpenMarket account is required. Guest browsing never submits
+views. The server derives `listings.last_viewed_by` from the verified session;
+`last_view_received_at` determines the latest view, while `last_viewed_at` retains
+the client clock time for that submission. Client clock skew cannot stop a later
+received view from becoming the latest. Facebook authentication is separate from
+OpenMarket account authentication: a signed-in app user may fetch Facebook data
+without a Facebook session.
+
+`last_detail_updated_by` identifies the account that last submitted an accepted
+snapshot, independently of the latest viewer. `last_detail_received_at` determines
+which submission is latest; `last_detail_observed_at` retains its client clock
+time. `last_detail_source` distinguishes anonymous/authenticated Facebook GraphQL,
+desktop page, and mobile page extraction. These describe the overall submission,
+not individual fields. Existing per-field observation timestamps still protect
+newer values from older cached fields, and missing values preserve prior facts.
+Account deletion clears both viewer and data-submitter attribution.
+
+The endpoint neither saves a bookmark nor appends view history. Contents, source,
+and client observation times are client-reported, not independently verified.
