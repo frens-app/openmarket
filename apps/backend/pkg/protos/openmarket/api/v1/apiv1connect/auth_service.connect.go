@@ -45,6 +45,11 @@ const (
 	AuthServiceBeginSignInProcedure = "/openmarket.api.v1.AuthService/BeginSignIn"
 	// AuthServiceSignInProcedure is the fully-qualified name of the AuthService's SignIn RPC.
 	AuthServiceSignInProcedure = "/openmarket.api.v1.AuthService/SignIn"
+	// AuthServiceBeginLinkSignInProcedure is the fully-qualified name of the AuthService's
+	// BeginLinkSignIn RPC.
+	AuthServiceBeginLinkSignInProcedure = "/openmarket.api.v1.AuthService/BeginLinkSignIn"
+	// AuthServiceLinkSignInProcedure is the fully-qualified name of the AuthService's LinkSignIn RPC.
+	AuthServiceLinkSignInProcedure = "/openmarket.api.v1.AuthService/LinkSignIn"
 	// AuthServiceRefreshTokenProcedure is the fully-qualified name of the AuthService's RefreshToken
 	// RPC.
 	AuthServiceRefreshTokenProcedure = "/openmarket.api.v1.AuthService/RefreshToken"
@@ -59,6 +64,8 @@ type AuthServiceClient interface {
 	VerifyPhone(context.Context, *connect.Request[v1.VerifyPhoneRequest]) (*connect.Response[v1.VerifyPhoneResponse], error)
 	BeginSignIn(context.Context, *connect.Request[v1.BeginSignInRequest]) (*connect.Response[v1.BeginSignInResponse], error)
 	SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error)
+	BeginLinkSignIn(context.Context, *connect.Request[v1.BeginLinkSignInRequest]) (*connect.Response[v1.BeginLinkSignInResponse], error)
+	LinkSignIn(context.Context, *connect.Request[v1.LinkSignInRequest]) (*connect.Response[v1.LinkSignInResponse], error)
 	RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.RefreshTokenResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 }
@@ -104,6 +111,18 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("SignIn")),
 			connect.WithClientOptions(opts...),
 		),
+		beginLinkSignIn: connect.NewClient[v1.BeginLinkSignInRequest, v1.BeginLinkSignInResponse](
+			httpClient,
+			baseURL+AuthServiceBeginLinkSignInProcedure,
+			connect.WithSchema(authServiceMethods.ByName("BeginLinkSignIn")),
+			connect.WithClientOptions(opts...),
+		),
+		linkSignIn: connect.NewClient[v1.LinkSignInRequest, v1.LinkSignInResponse](
+			httpClient,
+			baseURL+AuthServiceLinkSignInProcedure,
+			connect.WithSchema(authServiceMethods.ByName("LinkSignIn")),
+			connect.WithClientOptions(opts...),
+		),
 		refreshToken: connect.NewClient[v1.RefreshTokenRequest, v1.RefreshTokenResponse](
 			httpClient,
 			baseURL+AuthServiceRefreshTokenProcedure,
@@ -126,6 +145,8 @@ type authServiceClient struct {
 	verifyPhone            *connect.Client[v1.VerifyPhoneRequest, v1.VerifyPhoneResponse]
 	beginSignIn            *connect.Client[v1.BeginSignInRequest, v1.BeginSignInResponse]
 	signIn                 *connect.Client[v1.SignInRequest, v1.SignInResponse]
+	beginLinkSignIn        *connect.Client[v1.BeginLinkSignInRequest, v1.BeginLinkSignInResponse]
+	linkSignIn             *connect.Client[v1.LinkSignInRequest, v1.LinkSignInResponse]
 	refreshToken           *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
 	logout                 *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 }
@@ -155,6 +176,16 @@ func (c *authServiceClient) SignIn(ctx context.Context, req *connect.Request[v1.
 	return c.signIn.CallUnary(ctx, req)
 }
 
+// BeginLinkSignIn calls openmarket.api.v1.AuthService.BeginLinkSignIn.
+func (c *authServiceClient) BeginLinkSignIn(ctx context.Context, req *connect.Request[v1.BeginLinkSignInRequest]) (*connect.Response[v1.BeginLinkSignInResponse], error) {
+	return c.beginLinkSignIn.CallUnary(ctx, req)
+}
+
+// LinkSignIn calls openmarket.api.v1.AuthService.LinkSignIn.
+func (c *authServiceClient) LinkSignIn(ctx context.Context, req *connect.Request[v1.LinkSignInRequest]) (*connect.Response[v1.LinkSignInResponse], error) {
+	return c.linkSignIn.CallUnary(ctx, req)
+}
+
 // RefreshToken calls openmarket.api.v1.AuthService.RefreshToken.
 func (c *authServiceClient) RefreshToken(ctx context.Context, req *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.RefreshTokenResponse], error) {
 	return c.refreshToken.CallUnary(ctx, req)
@@ -172,6 +203,8 @@ type AuthServiceHandler interface {
 	VerifyPhone(context.Context, *connect.Request[v1.VerifyPhoneRequest]) (*connect.Response[v1.VerifyPhoneResponse], error)
 	BeginSignIn(context.Context, *connect.Request[v1.BeginSignInRequest]) (*connect.Response[v1.BeginSignInResponse], error)
 	SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error)
+	BeginLinkSignIn(context.Context, *connect.Request[v1.BeginLinkSignInRequest]) (*connect.Response[v1.BeginLinkSignInResponse], error)
+	LinkSignIn(context.Context, *connect.Request[v1.LinkSignInRequest]) (*connect.Response[v1.LinkSignInResponse], error)
 	RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.RefreshTokenResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 }
@@ -213,6 +246,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("SignIn")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceBeginLinkSignInHandler := connect.NewUnaryHandler(
+		AuthServiceBeginLinkSignInProcedure,
+		svc.BeginLinkSignIn,
+		connect.WithSchema(authServiceMethods.ByName("BeginLinkSignIn")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceLinkSignInHandler := connect.NewUnaryHandler(
+		AuthServiceLinkSignInProcedure,
+		svc.LinkSignIn,
+		connect.WithSchema(authServiceMethods.ByName("LinkSignIn")),
+		connect.WithHandlerOptions(opts...),
+	)
 	authServiceRefreshTokenHandler := connect.NewUnaryHandler(
 		AuthServiceRefreshTokenProcedure,
 		svc.RefreshToken,
@@ -237,6 +282,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceBeginSignInHandler.ServeHTTP(w, r)
 		case AuthServiceSignInProcedure:
 			authServiceSignInHandler.ServeHTTP(w, r)
+		case AuthServiceBeginLinkSignInProcedure:
+			authServiceBeginLinkSignInHandler.ServeHTTP(w, r)
+		case AuthServiceLinkSignInProcedure:
+			authServiceLinkSignInHandler.ServeHTTP(w, r)
 		case AuthServiceRefreshTokenProcedure:
 			authServiceRefreshTokenHandler.ServeHTTP(w, r)
 		case AuthServiceLogoutProcedure:
@@ -268,6 +317,14 @@ func (UnimplementedAuthServiceHandler) BeginSignIn(context.Context, *connect.Req
 
 func (UnimplementedAuthServiceHandler) SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.AuthService.SignIn is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) BeginLinkSignIn(context.Context, *connect.Request[v1.BeginLinkSignInRequest]) (*connect.Response[v1.BeginLinkSignInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.AuthService.BeginLinkSignIn is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) LinkSignIn(context.Context, *connect.Request[v1.LinkSignInRequest]) (*connect.Response[v1.LinkSignInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openmarket.api.v1.AuthService.LinkSignIn is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.RefreshTokenResponse], error) {

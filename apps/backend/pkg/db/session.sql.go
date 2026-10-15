@@ -106,6 +106,35 @@ func (q *Queries) GetSessionByRefreshTokenHash(ctx context.Context, refreshToken
 	return i, err
 }
 
+const lockActiveSession = `-- name: LockActiveSession :one
+SELECT id, user_id, refresh_token_hash, refresh_token_expires_at, device_platform, created_at, updated_at, last_used_at, revoked_at, device_id FROM user_sessions
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+FOR UPDATE
+`
+
+type LockActiveSessionParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) LockActiveSession(ctx context.Context, arg LockActiveSessionParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, lockActiveSession, arg.ID, arg.UserID)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RefreshTokenHash,
+		&i.RefreshTokenExpiresAt,
+		&i.DevicePlatform,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+		&i.DeviceID,
+	)
+	return i, err
+}
+
 const revokeAllSessionsForUser = `-- name: RevokeAllSessionsForUser :exec
 UPDATE user_sessions
 SET revoked_at = CURRENT_TIMESTAMP,

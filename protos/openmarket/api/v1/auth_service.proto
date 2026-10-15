@@ -44,8 +44,27 @@ message SignInResponse {
   int32 access_token_expires_in_seconds = 5;
   Device device = 6;
 }
-// GetSignInOptions reports what the sign-in screen needs to know before it can
-// ask for a number. Unauthenticated, and called before any account exists.
+// One-time replacement of a phone login on the authenticated account.
+// Linking challenges are bound to the current session, separate from sign-in.
+message BeginLinkSignInRequest {
+  SignInProvider provider = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+}
+message BeginLinkSignInResponse {
+  string nonce = 1;
+}
+message LinkSignInRequest {
+  SignInProvider provider = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string identity_token = 2 [(buf.validate.field).string = {min_len: 1, max_len: 16384}];
+  string nonce = 3 [(buf.validate.field).string = {len: 43}];
+  optional string first_name = 4 [(buf.validate.field).string.max_len = 256];
+  optional string last_name = 5 [(buf.validate.field).string.max_len = 256];
+  optional string display_name = 6 [(buf.validate.field).string.max_len = 512];
+}
+message LinkSignInResponse {
+  // Same user ID as the authenticated account; session tokens do not change.
+  Viewer viewer = 1;
+}
+// Retired phone API retained for old clients. Returns no phone countries.
 message GetSignInOptionsRequest {}
 
 message GetSignInOptionsResponse {
@@ -58,10 +77,7 @@ message GetSignInOptionsResponse {
   repeated string phone_country_calling_codes = 1;
 }
 
-// StartPhoneVerification asks the SMS provider to deliver a code. It is
-// unauthenticated and it costs money on every call — see docs/backend.md §5 for
-// what guards it, and for why almost all of that is the provider's job rather
-// than ours.
+// Retired: returns FAILED_PRECONDITION without sending SMS.
 message StartPhoneVerificationRequest {
   // E.164, including the leading "+". The client is expected to have composed
   // this from a country picker rather than free text.
@@ -104,7 +120,7 @@ message StartPhoneVerificationResponse {
   int32 code_length = 2;
 }
 
-// VerifyPhone signs in an existing phone account or creates one after verification.
+// Retired: returns FAILED_PRECONDITION without verifying a code or issuing a session.
 message VerifyPhoneRequest {
   string phone_number = 1 [
     (buf.validate.field).required = true,
@@ -174,6 +190,8 @@ service AuthService {
   rpc VerifyPhone(VerifyPhoneRequest) returns (VerifyPhoneResponse);
   rpc BeginSignIn(BeginSignInRequest) returns (BeginSignInResponse);
   rpc SignIn(SignInRequest) returns (SignInResponse);
+  rpc BeginLinkSignIn(BeginLinkSignInRequest) returns (BeginLinkSignInResponse);
+  rpc LinkSignIn(LinkSignInRequest) returns (LinkSignInResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 }

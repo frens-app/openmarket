@@ -94,3 +94,6 @@ WHERE auth_service = $1
 
 -- name: GetAuthMethodForUser :one
 SELECT * FROM user_auth_methods WHERE user_id = $1 ORDER BY created_at, auth_service LIMIT 1;
+
+-- name: LockUser :one
+SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;

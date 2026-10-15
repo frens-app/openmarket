@@ -7,12 +7,35 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
+
+const consumeLinkSignInChallenge = `-- name: ConsumeLinkSignInChallenge :one
+DELETE FROM sign_in_challenges
+WHERE nonce_hash = $1 AND auth_service = $2 AND linking_session_id = $3
+  AND expires_at > CURRENT_TIMESTAMP
+RETURNING nonce_hash
+`
+
+type ConsumeLinkSignInChallengeParams struct {
+	NonceHash        string
+	AuthService      AuthService
+	LinkingSessionID *uuid.UUID
+}
+
+func (q *Queries) ConsumeLinkSignInChallenge(ctx context.Context, arg ConsumeLinkSignInChallengeParams) (string, error) {
+	row := q.db.QueryRow(ctx, consumeLinkSignInChallenge, arg.NonceHash, arg.AuthService, arg.LinkingSessionID)
+	var nonce_hash string
+	err := row.Scan(&nonce_hash)
+	return nonce_hash, err
+}
 
 const consumeSignInChallenge = `-- name: ConsumeSignInChallenge :one
 DELETE FROM sign_in_challenges
 WHERE nonce_hash = $1 AND auth_service = $2 AND install_id = $3
   AND expires_at > CURRENT_TIMESTAMP
+  AND linking_session_id IS NULL
 RETURNING nonce_hash
 `
 
@@ -27,6 +50,28 @@ func (q *Queries) ConsumeSignInChallenge(ctx context.Context, arg ConsumeSignInC
 	var nonce_hash string
 	err := row.Scan(&nonce_hash)
 	return nonce_hash, err
+}
+
+const createLinkSignInChallenge = `-- name: CreateLinkSignInChallenge :exec
+INSERT INTO sign_in_challenges (nonce_hash, auth_service, install_id, linking_session_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateLinkSignInChallengeParams struct {
+	NonceHash        string
+	AuthService      AuthService
+	InstallID        string
+	LinkingSessionID *uuid.UUID
+}
+
+func (q *Queries) CreateLinkSignInChallenge(ctx context.Context, arg CreateLinkSignInChallengeParams) error {
+	_, err := q.db.Exec(ctx, createLinkSignInChallenge,
+		arg.NonceHash,
+		arg.AuthService,
+		arg.InstallID,
+		arg.LinkingSessionID,
+	)
+	return err
 }
 
 const createSignInChallenge = `-- name: CreateSignInChallenge :exec

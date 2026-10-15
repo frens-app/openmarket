@@ -16,10 +16,8 @@ import (
 	"frens.lol/openmarket/backend/pkg/auth"
 	"frens.lol/openmarket/backend/pkg/db"
 	"frens.lol/openmarket/backend/pkg/identity"
-	"frens.lol/openmarket/backend/pkg/phone"
 	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
-	"frens.lol/openmarket/backend/pkg/verify"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -36,17 +34,6 @@ func (testIdentityVerifier) Verify(_ context.Context, _, token, _ string) (ident
 	}
 	subject, email, _ := strings.Cut(token, "|")
 	return identity.Identity{Subject: subject, VerifiedEmail: email}, nil
-}
-
-type testPhoneSender struct{}
-
-func (testPhoneSender) Start(context.Context, string, verify.Signals) error { return nil }
-func (testPhoneSender) CodeLength() int                                     { return 6 }
-func (testPhoneSender) Check(_ context.Context, _, code string) (verify.Result, error) {
-	if code == "123456" {
-		return verify.ResultApproved, nil
-	}
-	return verify.ResultDenied, nil
 }
 
 // Run only against a new disposable database, never a development/production DB.
@@ -147,14 +134,6 @@ func TestSocialAuthIntegration(t *testing.T) {
 		t.Fatalf("Facebook migration did not preserve latest connection history: %+v", migratedUser)
 	}
 	server := &authServer{pool: pool, queries: queries, logger: zap.NewNop(), identities: testIdentityVerifier{}, jwtSecret: "access-secret", refreshTokenHMACKey: "refresh-secret", accessTTL: time.Hour, refreshTTL: time.Hour}
-	allowlist, err := phone.NewAllowlist("1,44")
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.sender = testPhoneSender{}
-	server.allowlist = allowlist
-	server.ceiling = &sendCeiling{queries: queries, max: 100, window: time.Hour}
-	server.resendCooldown = time.Minute
 	users := &userServer{pool: pool, queries: queries, logger: zap.NewNop()}
 	t.Run("phone accounts data and sessions survive migration", func(t *testing.T) {
 		header := http.Header{"Authorization": []string{"Bearer " + oldAccess}}
@@ -196,68 +175,30 @@ func TestSocialAuthIntegration(t *testing.T) {
 			t.Fatalf("verification ledger lost: %d %v", count, err)
 		}
 	})
-	t.Run("legacy phone endpoints support returning users and signup", func(t *testing.T) {
+	t.Run("phone login is retired", func(t *testing.T) {
 		mux := http.NewServeMux()
 		options := connect.WithInterceptors(validate.NewInterceptor(), newAuthInterceptor(server.jwtSecret, queries))
 		mux.Handle(apiv1connect.NewAuthServiceHandler(server, options))
-		mux.Handle(apiv1connect.NewUserServiceHandler(users, options))
 		httpServer := httptest.NewServer(mux)
 		defer httpServer.Close()
 		client := apiv1connect.NewAuthServiceClient(httpServer.Client(), httpServer.URL, connect.WithProtoJSON())
-		userClient := apiv1connect.NewUserServiceClient(httpServer.Client(), httpServer.URL, connect.WithProtoJSON())
-		optionsResponse, err := client.GetSignInOptions(ctx, connect.NewRequest(&v1.GetSignInOptionsRequest{}))
-		if err != nil || len(optionsResponse.Msg.PhoneCountryCallingCodes) != 2 {
+		res, err := client.GetSignInOptions(ctx, connect.NewRequest(&v1.GetSignInOptionsRequest{}))
+		if err != nil || len(res.Msg.PhoneCountryCallingCodes) != 0 {
 			t.Fatalf("phone options: %v", err)
 		}
 		for _, number := range []string{"+15005550100", "+15005550101"} {
-			sent, err := client.StartPhoneVerification(ctx, connect.NewRequest(&v1.StartPhoneVerificationRequest{PhoneNumber: number, InstallId: "phone-install", DevicePlatform: v1.DevicePlatform_DEVICE_PLATFORM_IOS}))
-			if err != nil || sent.Msg.CodeLength != 6 || sent.Msg.ResendAvailableInSeconds != 60 {
+			_, err := client.StartPhoneVerification(ctx, connect.NewRequest(&v1.StartPhoneVerificationRequest{PhoneNumber: number}))
+			if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("send: %v", err)
 			}
-			login := &v1.VerifyPhoneRequest{PhoneNumber: number, Code: "000000", InstallId: "phone-install", DevicePlatform: v1.DevicePlatform_DEVICE_PLATFORM_IOS}
-			if _, err := client.VerifyPhone(ctx, connect.NewRequest(login)); connect.CodeOf(err) != connect.CodeUnauthenticated {
-				t.Fatalf("wrong code accepted: %v", err)
-			}
-			login.Code = "123456"
-			verified, err := client.VerifyPhone(ctx, connect.NewRequest(login))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if verified.Msg.Viewer.PhoneNumber != number || verified.Msg.Viewer.SignInProvider != "phone" {
-				t.Fatalf("missing phone identity: %v", verified.Msg.Viewer)
-			}
-			if number == "+15005550100" {
-				if verified.Msg.IsNewUser || verified.Msg.Viewer.Id != oldUserID.String() || verified.Msg.Device.Id != oldDevice.ID.String() || !verified.Msg.Device.FacebookConnected {
-					t.Fatal("returning phone login lost account or device")
-				}
-			} else if !verified.Msg.IsNewUser || verified.Msg.Viewer.Id == oldUserID.String() {
-				t.Fatal("phone signup failed")
-			}
-			get := connect.NewRequest(&v1.GetViewerRequest{})
-			get.Header().Set("Authorization", "Bearer "+verified.Msg.AccessToken)
-			viewer, err := userClient.GetViewer(ctx, get)
-			if err != nil || viewer.Msg.Viewer.PhoneNumber != number {
-				t.Fatalf("legacy get viewer: %v", err)
-			}
-			profile := connect.NewRequest(&v1.UpdateViewerRequest{DisplayName: stringPointer("Phone profile")})
-			profile.Header().Set("Authorization", "Bearer "+verified.Msg.AccessToken)
-			updated, err := userClient.UpdateViewer(ctx, profile)
-			if err != nil || updated.Msg.Viewer.PhoneNumber != number {
-				t.Fatalf("legacy update viewer: %v", err)
+			_, err = client.VerifyPhone(ctx, connect.NewRequest(&v1.VerifyPhoneRequest{PhoneNumber: number, Code: "123456", InstallId: "phone-install"}))
+			if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				t.Fatalf("verify: %v", err)
 			}
 		}
-		if _, err := client.StartPhoneVerification(ctx, connect.NewRequest(&v1.StartPhoneVerificationRequest{PhoneNumber: "+390612345678"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-			t.Fatalf("unsupported country accepted: %v", err)
-		}
-		count, err := queries.CountVerificationSends(ctx, interval(time.Hour))
-		if err != nil {
-			t.Fatal(err)
-		}
-		server.ceiling.max = int(count)
-		defer func() { server.ceiling.max = 100 }()
-		if _, err := client.StartPhoneVerification(ctx, connect.NewRequest(&v1.StartPhoneVerificationRequest{PhoneNumber: "+15005550100"})); connect.CodeOf(err) != connect.CodeResourceExhausted {
-			t.Fatalf("send ceiling bypassed: %v", err)
-		}
+	})
+	t.Run("phone account linking", func(t *testing.T) {
+		testPhoneAccountLinking(t, server, users, oldUserID, oldAccess)
 	})
 	begin := func(t *testing.T, p v1.SignInProvider, install string) string {
 		t.Helper()

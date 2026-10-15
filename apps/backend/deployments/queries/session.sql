@@ -51,6 +51,11 @@ WHERE id = $1
   AND user_id = $2
   AND revoked_at IS NULL;
 
+-- name: LockActiveSession :one
+SELECT * FROM user_sessions
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+FOR UPDATE;
+
 -- name: RevokeAllSessionsForUser :exec
 UPDATE user_sessions
 SET revoked_at = CURRENT_TIMESTAMP,

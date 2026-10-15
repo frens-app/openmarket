@@ -413,8 +413,226 @@ func (x *SignInResponse) GetDevice() *Device {
 	return nil
 }
 
-// GetSignInOptions reports what the sign-in screen needs to know before it can
-// ask for a number. Unauthenticated, and called before any account exists.
+// One-time replacement of a phone login on the authenticated account.
+// Linking challenges are bound to the current session, separate from sign-in.
+type BeginLinkSignInRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      SignInProvider         `protobuf:"varint,1,opt,name=provider,proto3,enum=openmarket.api.v1.SignInProvider" json:"provider,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginLinkSignInRequest) Reset() {
+	*x = BeginLinkSignInRequest{}
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginLinkSignInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginLinkSignInRequest) ProtoMessage() {}
+
+func (x *BeginLinkSignInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginLinkSignInRequest.ProtoReflect.Descriptor instead.
+func (*BeginLinkSignInRequest) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BeginLinkSignInRequest) GetProvider() SignInProvider {
+	if x != nil {
+		return x.Provider
+	}
+	return SignInProvider_SIGN_IN_PROVIDER_UNSPECIFIED
+}
+
+type BeginLinkSignInResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Nonce         string                 `protobuf:"bytes,1,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginLinkSignInResponse) Reset() {
+	*x = BeginLinkSignInResponse{}
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginLinkSignInResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginLinkSignInResponse) ProtoMessage() {}
+
+func (x *BeginLinkSignInResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginLinkSignInResponse.ProtoReflect.Descriptor instead.
+func (*BeginLinkSignInResponse) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *BeginLinkSignInResponse) GetNonce() string {
+	if x != nil {
+		return x.Nonce
+	}
+	return ""
+}
+
+type LinkSignInRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      SignInProvider         `protobuf:"varint,1,opt,name=provider,proto3,enum=openmarket.api.v1.SignInProvider" json:"provider,omitempty"`
+	IdentityToken string                 `protobuf:"bytes,2,opt,name=identity_token,json=identityToken,proto3" json:"identity_token,omitempty"`
+	Nonce         string                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	FirstName     *string                `protobuf:"bytes,4,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	LastName      *string                `protobuf:"bytes,5,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
+	DisplayName   *string                `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkSignInRequest) Reset() {
+	*x = LinkSignInRequest{}
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkSignInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkSignInRequest) ProtoMessage() {}
+
+func (x *LinkSignInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkSignInRequest.ProtoReflect.Descriptor instead.
+func (*LinkSignInRequest) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *LinkSignInRequest) GetProvider() SignInProvider {
+	if x != nil {
+		return x.Provider
+	}
+	return SignInProvider_SIGN_IN_PROVIDER_UNSPECIFIED
+}
+
+func (x *LinkSignInRequest) GetIdentityToken() string {
+	if x != nil {
+		return x.IdentityToken
+	}
+	return ""
+}
+
+func (x *LinkSignInRequest) GetNonce() string {
+	if x != nil {
+		return x.Nonce
+	}
+	return ""
+}
+
+func (x *LinkSignInRequest) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *LinkSignInRequest) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
+	}
+	return ""
+}
+
+func (x *LinkSignInRequest) GetDisplayName() string {
+	if x != nil && x.DisplayName != nil {
+		return *x.DisplayName
+	}
+	return ""
+}
+
+type LinkSignInResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Same user ID as the authenticated account; session tokens do not change.
+	Viewer        *Viewer `protobuf:"bytes,1,opt,name=viewer,proto3" json:"viewer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkSignInResponse) Reset() {
+	*x = LinkSignInResponse{}
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkSignInResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkSignInResponse) ProtoMessage() {}
+
+func (x *LinkSignInResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkSignInResponse.ProtoReflect.Descriptor instead.
+func (*LinkSignInResponse) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *LinkSignInResponse) GetViewer() *Viewer {
+	if x != nil {
+		return x.Viewer
+	}
+	return nil
+}
+
+// Retired phone API retained for old clients. Returns no phone countries.
 type GetSignInOptionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -423,7 +641,7 @@ type GetSignInOptionsRequest struct {
 
 func (x *GetSignInOptionsRequest) Reset() {
 	*x = GetSignInOptionsRequest{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[4]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +653,7 @@ func (x *GetSignInOptionsRequest) String() string {
 func (*GetSignInOptionsRequest) ProtoMessage() {}
 
 func (x *GetSignInOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[4]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +666,7 @@ func (x *GetSignInOptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSignInOptionsRequest.ProtoReflect.Descriptor instead.
 func (*GetSignInOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{4}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{8}
 }
 
 type GetSignInOptionsResponse struct {
@@ -466,7 +684,7 @@ type GetSignInOptionsResponse struct {
 
 func (x *GetSignInOptionsResponse) Reset() {
 	*x = GetSignInOptionsResponse{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[5]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -478,7 +696,7 @@ func (x *GetSignInOptionsResponse) String() string {
 func (*GetSignInOptionsResponse) ProtoMessage() {}
 
 func (x *GetSignInOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[5]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -491,7 +709,7 @@ func (x *GetSignInOptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSignInOptionsResponse.ProtoReflect.Descriptor instead.
 func (*GetSignInOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{5}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetSignInOptionsResponse) GetPhoneCountryCallingCodes() []string {
@@ -501,10 +719,7 @@ func (x *GetSignInOptionsResponse) GetPhoneCountryCallingCodes() []string {
 	return nil
 }
 
-// StartPhoneVerification asks the SMS provider to deliver a code. It is
-// unauthenticated and it costs money on every call — see docs/backend.md §5 for
-// what guards it, and for why almost all of that is the provider's job rather
-// than ours.
+// Retired: returns FAILED_PRECONDITION without sending SMS.
 type StartPhoneVerificationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// E.164, including the leading "+". The client is expected to have composed
@@ -527,7 +742,7 @@ type StartPhoneVerificationRequest struct {
 
 func (x *StartPhoneVerificationRequest) Reset() {
 	*x = StartPhoneVerificationRequest{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[6]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +754,7 @@ func (x *StartPhoneVerificationRequest) String() string {
 func (*StartPhoneVerificationRequest) ProtoMessage() {}
 
 func (x *StartPhoneVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[6]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +767,7 @@ func (x *StartPhoneVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartPhoneVerificationRequest.ProtoReflect.Descriptor instead.
 func (*StartPhoneVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{6}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StartPhoneVerificationRequest) GetPhoneNumber() string {
@@ -593,7 +808,7 @@ type StartPhoneVerificationResponse struct {
 
 func (x *StartPhoneVerificationResponse) Reset() {
 	*x = StartPhoneVerificationResponse{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[7]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -605,7 +820,7 @@ func (x *StartPhoneVerificationResponse) String() string {
 func (*StartPhoneVerificationResponse) ProtoMessage() {}
 
 func (x *StartPhoneVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[7]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -618,7 +833,7 @@ func (x *StartPhoneVerificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartPhoneVerificationResponse.ProtoReflect.Descriptor instead.
 func (*StartPhoneVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{7}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StartPhoneVerificationResponse) GetResendAvailableInSeconds() int32 {
@@ -635,7 +850,7 @@ func (x *StartPhoneVerificationResponse) GetCodeLength() int32 {
 	return 0
 }
 
-// VerifyPhone signs in an existing phone account or creates one after verification.
+// Retired: returns FAILED_PRECONDITION without verifying a code or issuing a session.
 type VerifyPhoneRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	PhoneNumber    string                 `protobuf:"bytes,1,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
@@ -656,7 +871,7 @@ type VerifyPhoneRequest struct {
 
 func (x *VerifyPhoneRequest) Reset() {
 	*x = VerifyPhoneRequest{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[8]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -668,7 +883,7 @@ func (x *VerifyPhoneRequest) String() string {
 func (*VerifyPhoneRequest) ProtoMessage() {}
 
 func (x *VerifyPhoneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[8]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,7 +896,7 @@ func (x *VerifyPhoneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyPhoneRequest.ProtoReflect.Descriptor instead.
 func (*VerifyPhoneRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{8}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *VerifyPhoneRequest) GetPhoneNumber() string {
@@ -742,7 +957,7 @@ type VerifyPhoneResponse struct {
 
 func (x *VerifyPhoneResponse) Reset() {
 	*x = VerifyPhoneResponse{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[9]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -754,7 +969,7 @@ func (x *VerifyPhoneResponse) String() string {
 func (*VerifyPhoneResponse) ProtoMessage() {}
 
 func (x *VerifyPhoneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[9]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -767,7 +982,7 @@ func (x *VerifyPhoneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyPhoneResponse.ProtoReflect.Descriptor instead.
 func (*VerifyPhoneResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{9}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *VerifyPhoneResponse) GetAccessToken() string {
@@ -821,7 +1036,7 @@ type RefreshTokenRequest struct {
 
 func (x *RefreshTokenRequest) Reset() {
 	*x = RefreshTokenRequest{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[10]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +1048,7 @@ func (x *RefreshTokenRequest) String() string {
 func (*RefreshTokenRequest) ProtoMessage() {}
 
 func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[10]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +1061,7 @@ func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshTokenRequest.ProtoReflect.Descriptor instead.
 func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{10}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RefreshTokenRequest) GetRefreshToken() string {
@@ -867,7 +1082,7 @@ type RefreshTokenResponse struct {
 
 func (x *RefreshTokenResponse) Reset() {
 	*x = RefreshTokenResponse{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[11]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -879,7 +1094,7 @@ func (x *RefreshTokenResponse) String() string {
 func (*RefreshTokenResponse) ProtoMessage() {}
 
 func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[11]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -892,7 +1107,7 @@ func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshTokenResponse.ProtoReflect.Descriptor instead.
 func (*RefreshTokenResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{11}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RefreshTokenResponse) GetAccessToken() string {
@@ -924,7 +1139,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[12]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -936,7 +1151,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[12]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -949,7 +1164,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{12}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{16}
 }
 
 type LogoutResponse struct {
@@ -960,7 +1175,7 @@ type LogoutResponse struct {
 
 func (x *LogoutResponse) Reset() {
 	*x = LogoutResponse{}
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[13]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +1187,7 @@ func (x *LogoutResponse) String() string {
 func (*LogoutResponse) ProtoMessage() {}
 
 func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[13]
+	mi := &file_openmarket_api_v1_auth_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -985,7 +1200,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{13}
+	return file_openmarket_api_v1_auth_service_proto_rawDescGZIP(), []int{17}
 }
 
 var File_openmarket_api_v1_auth_service_proto protoreflect.FileDescriptor
@@ -1028,7 +1243,27 @@ const file_openmarket_api_v1_auth_service_proto_rawDesc = "" +
 	"\x06viewer\x18\x03 \x01(\v2\x19.openmarket.api.v1.ViewerR\x06viewer\x12\x1e\n" +
 	"\vis_new_user\x18\x04 \x01(\bR\tisNewUser\x12D\n" +
 	"\x1faccess_token_expires_in_seconds\x18\x05 \x01(\x05R\x1baccessTokenExpiresInSeconds\x121\n" +
-	"\x06device\x18\x06 \x01(\v2\x19.openmarket.api.v1.DeviceR\x06device\"\x19\n" +
+	"\x06device\x18\x06 \x01(\v2\x19.openmarket.api.v1.DeviceR\x06device\"c\n" +
+	"\x16BeginLinkSignInRequest\x12I\n" +
+	"\bprovider\x18\x01 \x01(\x0e2!.openmarket.api.v1.SignInProviderB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\bprovider\"/\n" +
+	"\x17BeginLinkSignInResponse\x12\x14\n" +
+	"\x05nonce\x18\x01 \x01(\tR\x05nonce\"\xec\x02\n" +
+	"\x11LinkSignInRequest\x12I\n" +
+	"\bprovider\x18\x01 \x01(\x0e2!.openmarket.api.v1.SignInProviderB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\bprovider\x122\n" +
+	"\x0eidentity_token\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x01\x18\x80\x80\x01R\ridentityToken\x12\x1e\n" +
+	"\x05nonce\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x98\x01+R\x05nonce\x12,\n" +
+	"\n" +
+	"first_name\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02H\x00R\tfirstName\x88\x01\x01\x12*\n" +
+	"\tlast_name\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02H\x01R\blastName\x88\x01\x01\x120\n" +
+	"\fdisplay_name\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04H\x02R\vdisplayName\x88\x01\x01B\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_nameB\x0f\n" +
+	"\r_display_name\"G\n" +
+	"\x12LinkSignInResponse\x121\n" +
+	"\x06viewer\x18\x01 \x01(\v2\x19.openmarket.api.v1.ViewerR\x06viewer\"\x19\n" +
 	"\x17GetSignInOptionsRequest\"Y\n" +
 	"\x18GetSignInOptionsResponse\x12=\n" +
 	"\x1bphone_country_calling_codes\x18\x01 \x03(\tR\x18phoneCountryCallingCodes\"\xcd\x02\n" +
@@ -1079,13 +1314,16 @@ const file_openmarket_api_v1_auth_service_proto_rawDesc = "" +
 	"\x0eSignInProvider\x12 \n" +
 	"\x1cSIGN_IN_PROVIDER_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SIGN_IN_PROVIDER_APPLE\x10\x01\x12\x1b\n" +
-	"\x17SIGN_IN_PROVIDER_GOOGLE\x10\x022\xb4\x05\n" +
+	"\x17SIGN_IN_PROVIDER_GOOGLE\x10\x022\xf9\x06\n" +
 	"\vAuthService\x12k\n" +
 	"\x10GetSignInOptions\x12*.openmarket.api.v1.GetSignInOptionsRequest\x1a+.openmarket.api.v1.GetSignInOptionsResponse\x12}\n" +
 	"\x16StartPhoneVerification\x120.openmarket.api.v1.StartPhoneVerificationRequest\x1a1.openmarket.api.v1.StartPhoneVerificationResponse\x12\\\n" +
 	"\vVerifyPhone\x12%.openmarket.api.v1.VerifyPhoneRequest\x1a&.openmarket.api.v1.VerifyPhoneResponse\x12\\\n" +
 	"\vBeginSignIn\x12%.openmarket.api.v1.BeginSignInRequest\x1a&.openmarket.api.v1.BeginSignInResponse\x12M\n" +
-	"\x06SignIn\x12 .openmarket.api.v1.SignInRequest\x1a!.openmarket.api.v1.SignInResponse\x12_\n" +
+	"\x06SignIn\x12 .openmarket.api.v1.SignInRequest\x1a!.openmarket.api.v1.SignInResponse\x12h\n" +
+	"\x0fBeginLinkSignIn\x12).openmarket.api.v1.BeginLinkSignInRequest\x1a*.openmarket.api.v1.BeginLinkSignInResponse\x12Y\n" +
+	"\n" +
+	"LinkSignIn\x12$.openmarket.api.v1.LinkSignInRequest\x1a%.openmarket.api.v1.LinkSignInResponse\x12_\n" +
 	"\fRefreshToken\x12&.openmarket.api.v1.RefreshTokenRequest\x1a'.openmarket.api.v1.RefreshTokenResponse\x12M\n" +
 	"\x06Logout\x12 .openmarket.api.v1.LogoutRequest\x1a!.openmarket.api.v1.LogoutResponseB\xd0\x01\n" +
 	"\x15com.openmarket.api.v1B\x10AuthServiceProtoP\x01Z?frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1;apiv1\xa2\x02\x03OAX\xaa\x02\x11Openmarket.Api.V1\xca\x02\x11Openmarket\\Api\\V1\xe2\x02\x1dOpenmarket\\Api\\V1\\GPBMetadata\xea\x02\x13Openmarket::Api::V1b\x06proto3"
@@ -1103,7 +1341,7 @@ func file_openmarket_api_v1_auth_service_proto_rawDescGZIP() []byte {
 }
 
 var file_openmarket_api_v1_auth_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_openmarket_api_v1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_openmarket_api_v1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_openmarket_api_v1_auth_service_proto_goTypes = []any{
 	(DevicePlatform)(0),                    // 0: openmarket.api.v1.DevicePlatform
 	(SignInProvider)(0),                    // 1: openmarket.api.v1.SignInProvider
@@ -1111,48 +1349,59 @@ var file_openmarket_api_v1_auth_service_proto_goTypes = []any{
 	(*BeginSignInResponse)(nil),            // 3: openmarket.api.v1.BeginSignInResponse
 	(*SignInRequest)(nil),                  // 4: openmarket.api.v1.SignInRequest
 	(*SignInResponse)(nil),                 // 5: openmarket.api.v1.SignInResponse
-	(*GetSignInOptionsRequest)(nil),        // 6: openmarket.api.v1.GetSignInOptionsRequest
-	(*GetSignInOptionsResponse)(nil),       // 7: openmarket.api.v1.GetSignInOptionsResponse
-	(*StartPhoneVerificationRequest)(nil),  // 8: openmarket.api.v1.StartPhoneVerificationRequest
-	(*StartPhoneVerificationResponse)(nil), // 9: openmarket.api.v1.StartPhoneVerificationResponse
-	(*VerifyPhoneRequest)(nil),             // 10: openmarket.api.v1.VerifyPhoneRequest
-	(*VerifyPhoneResponse)(nil),            // 11: openmarket.api.v1.VerifyPhoneResponse
-	(*RefreshTokenRequest)(nil),            // 12: openmarket.api.v1.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),           // 13: openmarket.api.v1.RefreshTokenResponse
-	(*LogoutRequest)(nil),                  // 14: openmarket.api.v1.LogoutRequest
-	(*LogoutResponse)(nil),                 // 15: openmarket.api.v1.LogoutResponse
-	(*Viewer)(nil),                         // 16: openmarket.api.v1.Viewer
-	(*Device)(nil),                         // 17: openmarket.api.v1.Device
+	(*BeginLinkSignInRequest)(nil),         // 6: openmarket.api.v1.BeginLinkSignInRequest
+	(*BeginLinkSignInResponse)(nil),        // 7: openmarket.api.v1.BeginLinkSignInResponse
+	(*LinkSignInRequest)(nil),              // 8: openmarket.api.v1.LinkSignInRequest
+	(*LinkSignInResponse)(nil),             // 9: openmarket.api.v1.LinkSignInResponse
+	(*GetSignInOptionsRequest)(nil),        // 10: openmarket.api.v1.GetSignInOptionsRequest
+	(*GetSignInOptionsResponse)(nil),       // 11: openmarket.api.v1.GetSignInOptionsResponse
+	(*StartPhoneVerificationRequest)(nil),  // 12: openmarket.api.v1.StartPhoneVerificationRequest
+	(*StartPhoneVerificationResponse)(nil), // 13: openmarket.api.v1.StartPhoneVerificationResponse
+	(*VerifyPhoneRequest)(nil),             // 14: openmarket.api.v1.VerifyPhoneRequest
+	(*VerifyPhoneResponse)(nil),            // 15: openmarket.api.v1.VerifyPhoneResponse
+	(*RefreshTokenRequest)(nil),            // 16: openmarket.api.v1.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),           // 17: openmarket.api.v1.RefreshTokenResponse
+	(*LogoutRequest)(nil),                  // 18: openmarket.api.v1.LogoutRequest
+	(*LogoutResponse)(nil),                 // 19: openmarket.api.v1.LogoutResponse
+	(*Viewer)(nil),                         // 20: openmarket.api.v1.Viewer
+	(*Device)(nil),                         // 21: openmarket.api.v1.Device
 }
 var file_openmarket_api_v1_auth_service_proto_depIdxs = []int32{
 	1,  // 0: openmarket.api.v1.BeginSignInRequest.provider:type_name -> openmarket.api.v1.SignInProvider
 	1,  // 1: openmarket.api.v1.SignInRequest.provider:type_name -> openmarket.api.v1.SignInProvider
 	0,  // 2: openmarket.api.v1.SignInRequest.device_platform:type_name -> openmarket.api.v1.DevicePlatform
-	16, // 3: openmarket.api.v1.SignInResponse.viewer:type_name -> openmarket.api.v1.Viewer
-	17, // 4: openmarket.api.v1.SignInResponse.device:type_name -> openmarket.api.v1.Device
-	0,  // 5: openmarket.api.v1.StartPhoneVerificationRequest.device_platform:type_name -> openmarket.api.v1.DevicePlatform
-	0,  // 6: openmarket.api.v1.VerifyPhoneRequest.device_platform:type_name -> openmarket.api.v1.DevicePlatform
-	16, // 7: openmarket.api.v1.VerifyPhoneResponse.viewer:type_name -> openmarket.api.v1.Viewer
-	17, // 8: openmarket.api.v1.VerifyPhoneResponse.device:type_name -> openmarket.api.v1.Device
-	6,  // 9: openmarket.api.v1.AuthService.GetSignInOptions:input_type -> openmarket.api.v1.GetSignInOptionsRequest
-	8,  // 10: openmarket.api.v1.AuthService.StartPhoneVerification:input_type -> openmarket.api.v1.StartPhoneVerificationRequest
-	10, // 11: openmarket.api.v1.AuthService.VerifyPhone:input_type -> openmarket.api.v1.VerifyPhoneRequest
-	2,  // 12: openmarket.api.v1.AuthService.BeginSignIn:input_type -> openmarket.api.v1.BeginSignInRequest
-	4,  // 13: openmarket.api.v1.AuthService.SignIn:input_type -> openmarket.api.v1.SignInRequest
-	12, // 14: openmarket.api.v1.AuthService.RefreshToken:input_type -> openmarket.api.v1.RefreshTokenRequest
-	14, // 15: openmarket.api.v1.AuthService.Logout:input_type -> openmarket.api.v1.LogoutRequest
-	7,  // 16: openmarket.api.v1.AuthService.GetSignInOptions:output_type -> openmarket.api.v1.GetSignInOptionsResponse
-	9,  // 17: openmarket.api.v1.AuthService.StartPhoneVerification:output_type -> openmarket.api.v1.StartPhoneVerificationResponse
-	11, // 18: openmarket.api.v1.AuthService.VerifyPhone:output_type -> openmarket.api.v1.VerifyPhoneResponse
-	3,  // 19: openmarket.api.v1.AuthService.BeginSignIn:output_type -> openmarket.api.v1.BeginSignInResponse
-	5,  // 20: openmarket.api.v1.AuthService.SignIn:output_type -> openmarket.api.v1.SignInResponse
-	13, // 21: openmarket.api.v1.AuthService.RefreshToken:output_type -> openmarket.api.v1.RefreshTokenResponse
-	15, // 22: openmarket.api.v1.AuthService.Logout:output_type -> openmarket.api.v1.LogoutResponse
-	16, // [16:23] is the sub-list for method output_type
-	9,  // [9:16] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	20, // 3: openmarket.api.v1.SignInResponse.viewer:type_name -> openmarket.api.v1.Viewer
+	21, // 4: openmarket.api.v1.SignInResponse.device:type_name -> openmarket.api.v1.Device
+	1,  // 5: openmarket.api.v1.BeginLinkSignInRequest.provider:type_name -> openmarket.api.v1.SignInProvider
+	1,  // 6: openmarket.api.v1.LinkSignInRequest.provider:type_name -> openmarket.api.v1.SignInProvider
+	20, // 7: openmarket.api.v1.LinkSignInResponse.viewer:type_name -> openmarket.api.v1.Viewer
+	0,  // 8: openmarket.api.v1.StartPhoneVerificationRequest.device_platform:type_name -> openmarket.api.v1.DevicePlatform
+	0,  // 9: openmarket.api.v1.VerifyPhoneRequest.device_platform:type_name -> openmarket.api.v1.DevicePlatform
+	20, // 10: openmarket.api.v1.VerifyPhoneResponse.viewer:type_name -> openmarket.api.v1.Viewer
+	21, // 11: openmarket.api.v1.VerifyPhoneResponse.device:type_name -> openmarket.api.v1.Device
+	10, // 12: openmarket.api.v1.AuthService.GetSignInOptions:input_type -> openmarket.api.v1.GetSignInOptionsRequest
+	12, // 13: openmarket.api.v1.AuthService.StartPhoneVerification:input_type -> openmarket.api.v1.StartPhoneVerificationRequest
+	14, // 14: openmarket.api.v1.AuthService.VerifyPhone:input_type -> openmarket.api.v1.VerifyPhoneRequest
+	2,  // 15: openmarket.api.v1.AuthService.BeginSignIn:input_type -> openmarket.api.v1.BeginSignInRequest
+	4,  // 16: openmarket.api.v1.AuthService.SignIn:input_type -> openmarket.api.v1.SignInRequest
+	6,  // 17: openmarket.api.v1.AuthService.BeginLinkSignIn:input_type -> openmarket.api.v1.BeginLinkSignInRequest
+	8,  // 18: openmarket.api.v1.AuthService.LinkSignIn:input_type -> openmarket.api.v1.LinkSignInRequest
+	16, // 19: openmarket.api.v1.AuthService.RefreshToken:input_type -> openmarket.api.v1.RefreshTokenRequest
+	18, // 20: openmarket.api.v1.AuthService.Logout:input_type -> openmarket.api.v1.LogoutRequest
+	11, // 21: openmarket.api.v1.AuthService.GetSignInOptions:output_type -> openmarket.api.v1.GetSignInOptionsResponse
+	13, // 22: openmarket.api.v1.AuthService.StartPhoneVerification:output_type -> openmarket.api.v1.StartPhoneVerificationResponse
+	15, // 23: openmarket.api.v1.AuthService.VerifyPhone:output_type -> openmarket.api.v1.VerifyPhoneResponse
+	3,  // 24: openmarket.api.v1.AuthService.BeginSignIn:output_type -> openmarket.api.v1.BeginSignInResponse
+	5,  // 25: openmarket.api.v1.AuthService.SignIn:output_type -> openmarket.api.v1.SignInResponse
+	7,  // 26: openmarket.api.v1.AuthService.BeginLinkSignIn:output_type -> openmarket.api.v1.BeginLinkSignInResponse
+	9,  // 27: openmarket.api.v1.AuthService.LinkSignIn:output_type -> openmarket.api.v1.LinkSignInResponse
+	17, // 28: openmarket.api.v1.AuthService.RefreshToken:output_type -> openmarket.api.v1.RefreshTokenResponse
+	19, // 29: openmarket.api.v1.AuthService.Logout:output_type -> openmarket.api.v1.LogoutResponse
+	21, // [21:30] is the sub-list for method output_type
+	12, // [12:21] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_openmarket_api_v1_auth_service_proto_init() }
@@ -1162,14 +1411,15 @@ func file_openmarket_api_v1_auth_service_proto_init() {
 	}
 	file_openmarket_api_v1_user_service_proto_init()
 	file_openmarket_api_v1_auth_service_proto_msgTypes[2].OneofWrappers = []any{}
-	file_openmarket_api_v1_auth_service_proto_msgTypes[8].OneofWrappers = []any{}
+	file_openmarket_api_v1_auth_service_proto_msgTypes[6].OneofWrappers = []any{}
+	file_openmarket_api_v1_auth_service_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openmarket_api_v1_auth_service_proto_rawDesc), len(file_openmarket_api_v1_auth_service_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   14,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

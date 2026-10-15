@@ -1,12 +1,14 @@
 # Apple and Google account sign-in
 
 The iOS app offers native Sign in with Apple and the Google Sign-In SDK.
-Phone login and signup remain available through the backend for older app versions. The Go
-backend verifies signed ID tokens against the provider's public keys and the
+Phone login and SMS verification are retired, including for older app versions.
+Existing phone sessions remain signed in and can link Apple or Google from
+Discover. The Go backend verifies signed ID tokens against the provider's public keys and the
 configured audience, issuer, expiry and nonce. Identity is `(provider, subject)`;
 email addresses are stored as profile data and are not used to link accounts.
 Signing in with Apple and Google creates separate accounts, even if their emails
-match. Phone accounts also remain separate; there is no automatic account linking.
+match. Ordinary sign-in never links accounts automatically; a signed-in phone
+user can explicitly replace their login through the flow below.
 Facebook browsing remains a separate, device-local session.
 
 ## Profile names
@@ -28,6 +30,11 @@ blank provider value stays NULL and does not block signup. `Viewer` returns all
 three fields. `UpdateViewer` can change them: absent leaves the field unchanged,
 while present-and-empty clears it. First and last names allow 256 Unicode code
 points each, display name 512. Account deletion clears all three columns.
+
+Successful account linking also returns these three separate name fields and
+the new sign-in provider. iOS saves the full returned `Viewer` in Keychain, so
+the updated provider and names remain available after an offline app restart.
+Linking fills missing names without replacing existing profile names.
 
 See [Apple's native sign-in guide](https://developer.apple.com/documentation/authenticationservices/implementing-user-authentication-with-sign-in-with-apple)
 and [Google profile fields](https://developers.google.com/identity/sign-in/ios/people).
@@ -111,12 +118,10 @@ See [Apple's key identifier guide](https://developer.apple.com/help/account/keys
 5. Run `make ios-generate` and rebuild. Google callbacks use the registered reversed
    client ID URL scheme and `onOpenURL` in `OpenMarketApp`.
 
-Apple and Google configuration is optional during the transition, including in
-production. An unconfigured provider returns an explicit unavailable error. When
-Apple sign-in is enabled in production, its revocation signing credentials are
-required. Existing Prelude configuration remains required for phone login;
-development's phone verification bypass is forbidden in production. See
-[phone-login.md](phone-login.md) for the SMS setup and country allowlist.
+Configure Apple and Google before releasing the app. An unconfigured provider
+returns an explicit unavailable error. When Apple sign-in is enabled in production,
+its revocation signing credentials are required. Prelude is no longer initialized
+or required by the API; the retired phone RPCs cannot send SMS.
 
 ## Flow and sessions
 
@@ -130,38 +135,57 @@ exposing the unauthenticated endpoints to significant public traffic.
 
 App access and rotating refresh tokens retain their existing behavior. Every
 protected RPC checks the session row, so deletion and logout invalidate access
-immediately. All three sign-in methods use the established Keychain token and
-viewer keys, so existing phone sessions restore on upgrade and keep their cached
-viewer during an outage. Apple credential state is checked on session restoration;
+immediately. Apple/Google sessions use the established Keychain token and viewer keys and
+keep their cached viewer during an outage. Existing phone sessions also restore
+and refresh normally, including offline restoration. Apple credential state is checked on session restoration;
 revoked Apple access signs the client out. The backend does not retain provider ID
 tokens or put them in application logs.
 
-## Gradual rollout
+## Linking existing phone accounts
 
-Migration `00015_social_auth.sql` adds APPLE and GOOGLE to the auth enum and creates
-`sign_in_challenges`. It preserves PHONE, the verification-send ledger, all
-accounts, sessions, devices, price checks, photo metadata, and model-usage history.
-The existing `GetSignInOptions`, `StartPhoneVerification`, and `VerifyPhone` RPCs
-and the `Viewer.phone_number` field remain compatible with older app versions.
-Phone verification continues to support both returning users and new accounts.
+Discover shows “We’re changing sign-in” with a “Link your account” button only
+for signed-in phone accounts. This includes a cached viewer with a phone number
+but no provider field from an older app. Guests and existing Apple/Google users
+see no Discover sign-in banner or button. If the provider is unknown offline,
+the app waits for a successful profile fetch rather than guessing.
 
-The new app offers Apple/Google sign-in only.
-Updating the app does not force logout, reset onboarding, or remove Facebook
-cookies. Existing phone sessions keep access to their saved history; signing in
-by phone after logout requires an older app version. Choosing Apple/Google
-creates a separate account unless that provider
-identity already has an account; linking providers to a phone account is not
-implemented in this iteration.
+The link screen uses native Apple/Google authorization. Cancelling or a failed
+request keeps the existing phone account signed in. Success removes the banner
+and confirms which provider to use next time. The same account ID, session tokens,
+device, onboarding, saved listings, follows, and history remain in place.
+Device-local viewing history remains local; linking does not add history sync.
 
-Keep Prelude credentials, the existing country allowlist and SMS spend controls,
-`JWT_SECRET`, and `REFRESH_TOKEN_HMAC_KEY` unchanged during rollout. Phone login
-still incurs its normal SMS fees while it is enabled. The social provider setup
-can be completed separately, without interrupting the phone service.
+`BeginLinkSignIn` and `LinkSignIn` require an existing authenticated session. The
+five-minute challenge is bound to that exact session and the chosen provider.
+Linking challenges cannot be used for ordinary sign-in or account deletion, and
+sign-in challenges cannot be used for linking. ID tokens get the same signature,
+audience, issuer, expiry, and nonce validation as ordinary sign-in.
 
-Migrations run at backend startup. Deploy the compatible backend before the new
-iOS build. Disabling phone login, retiring old app versions, and any account/data
-purge belong to a later release. No production migration is run as part of
-preparing this code change.
+One transaction attaches the provider identity to the current user ID and removes
+the phone auth method. The provider identity lock is shared with ordinary sign-in;
+account/session locks serialize linking with deletion, logout, and competing
+link requests. An identity belonging to another account is rejected without
+merging or changing either account. Retrying the same identity with a fresh
+challenge is safe. Switching between social providers afterward is not supported.
+Apple-linked accounts use the existing Apple reauthorization/revocation flow for
+account deletion.
+
+Analytics continues to use the original user ID. Linking does not reset analytics
+or emit `account_created` / `account_signed_in`. It emits `account_sign_in_linked`
+with `sign_in_provider` and refreshes profile properties on the existing identity.
+Subsequent Apple/Google sign-in resolves to that same user ID.
+
+Migration `00023_link_sign_in.sql` only adds a nullable session binding to the
+challenge table; it does not purge users or invalidate sessions. Phone sign-in
+remains retired: `GetSignInOptions` returns no countries, and the verification
+RPCs return an error without sending SMS or issuing sessions, even for old apps.
+The phone method is removed from each account only after linking succeeds.
+
+Deploy the backend migration before the iOS build. Verify Apple/Google production
+configuration and real authorization on a device. Keep `JWT_SECRET` and
+`REFRESH_TOKEN_HMAC_KEY` unchanged so existing sessions survive. A user who has
+already lost their phone session cannot recover that account through ordinary
+Apple/Google sign-in; linking requires proof of the existing account session.
 
 ## Validation
 
@@ -175,8 +199,9 @@ AUTH_TEST_DATABASE_URL=postgres://…/openmarket_auth_test go test ./cmd/api -ru
 
 The test installs the phone-only schema, creates a phone account/session and
 associated data, and checks that the additive migration preserves them. It tests
-legacy phone RPCs over HTTP, login/signup, refresh rotation, country restrictions,
-and the send ceiling, plus social challenge expiry/replay/binding, provider
+retired phone RPCs over HTTP, authenticated linking, unchanged user IDs and
+history, conflicts, concurrent linking, social login/signup, refresh rotation,
+and social challenge expiry/replay/binding, provider
 separation, concurrent signup, profile names, account deletion, and Facebook
 connection history. SMS and identity providers use test doubles.
 

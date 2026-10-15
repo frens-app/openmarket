@@ -122,7 +122,7 @@ extension ConnectError {
             return .unauthenticated
         case .resourceExhausted:
             return .rateLimited(message ?? "Too many attempts. Try again later.")
-        case .invalidArgument, .failedPrecondition, .notFound:
+        case .invalidArgument, .failedPrecondition, .notFound, .alreadyExists:
             return .message(message ?? "That didn't work.")
         default:
             return .network

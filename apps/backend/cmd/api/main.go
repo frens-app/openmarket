@@ -17,9 +17,7 @@ import (
 	"frens.lol/openmarket/backend/pkg/db"
 	"frens.lol/openmarket/backend/pkg/identity"
 	"frens.lol/openmarket/backend/pkg/llm"
-	"frens.lol/openmarket/backend/pkg/phone"
 	"frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1/apiv1connect"
-	"frens.lol/openmarket/backend/pkg/verify"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -77,22 +75,6 @@ func main() {
 
 	queries := db.New(pool)
 
-	allowlist, err := phone.NewAllowlist(cfg.AllowedCountryCodes)
-	if err != nil {
-		logger.Fatal("invalid country allowlist", zap.Error(err))
-	}
-
-	sender, err := buildSender(cfg, logger)
-	if err != nil {
-		logger.Fatal("configure verification sender", zap.Error(err))
-	}
-
-	ceiling := &sendCeiling{
-		queries: queries,
-		max:     cfg.VerificationMaxSends,
-		window:  cfg.VerificationSendWindow,
-	}
-
 	// Order matters. Validation runs first so a malformed request is rejected
 	// before it can touch the session table, then auth, then logging wraps both
 	// so a rejection is still one log line.
@@ -122,14 +104,10 @@ func main() {
 		queries:             queries,
 		pool:                pool,
 		logger:              logger.Named("auth"),
-		sender:              sender,
-		allowlist:           allowlist,
-		ceiling:             ceiling,
 		jwtSecret:           cfg.JWTSecret,
 		refreshTokenHMACKey: cfg.RefreshTokenHMACKey,
 		accessTTL:           cfg.AccessTokenTTL,
 		refreshTTL:          cfg.RefreshTokenTTL,
-		resendCooldown:      cfg.VerificationResendCooldown,
 	}
 	userSvc := &userServer{
 		identities:   identities,
@@ -247,7 +225,7 @@ func main() {
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
-	go prunePeriodically(ctx, ceiling, logger.Named("prune"))
+	go prunePeriodically(ctx, queries, logger.Named("prune"))
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -274,34 +252,7 @@ func main() {
 	}
 }
 
-// buildSender always constructs the real Prelude client, then optionally wraps
-// it so a few known numbers can skip it. Every environment talks to the real
-// Prelude API; development differs from production only in whether that bypass
-// list is empty — not in which code runs, and not in who is on the other end.
-func buildSender(cfg config.ServiceConfig, logger *zap.Logger) (verify.Sender, error) {
-	provider, err := verify.NewPreludeSender(verify.PreludeOptions{
-		APIKey:     cfg.PreludeAPIKey,
-		CodeLength: cfg.VerificationCodeLength,
-		Logger:     logger.Named("prelude"),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return verify.NewBypassSender(
-		cfg.BypassPhoneNumbers(),
-		cfg.DevVerificationCode,
-		provider,
-		logger.Named("verify"),
-	)
-}
-
 // buildModelProvider selects the vendor behind Price Check.
-//
-// The stub is a real code path chosen by configuration, the same way the
-// verification bypass is — not a test double injected here. config.LoadAPI has
-// already refused it under ENV=production and refused a real provider with no
-// key, so by this point the choice is known-good and this only has to make it.
 func buildModelProvider(cfg config.ServiceConfig) (llm.Provider, error) {
 	switch cfg.LLMProvider {
 	case config.LLMProviderStub:
@@ -344,7 +295,7 @@ func runMigrations(pool *pgxpool.Pool, logger *zap.Logger) error {
 	return nil
 }
 
-func prunePeriodically(ctx context.Context, ceiling *sendCeiling, logger *zap.Logger) {
+func prunePeriodically(ctx context.Context, queries *db.Queries, logger *zap.Logger) {
 	ticker := time.NewTicker(authPruneInterval)
 	defer ticker.Stop()
 	for {
@@ -352,11 +303,8 @@ func prunePeriodically(ctx context.Context, ceiling *sendCeiling, logger *zap.Lo
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := ceiling.queries.PruneSignInChallenges(ctx); err != nil {
+			if err := queries.PruneSignInChallenges(ctx); err != nil {
 				logger.Warn("prune sign-in challenges", zap.Error(err))
-			}
-			if err := ceiling.prune(ctx); err != nil {
-				logger.Warn("prune verification sends", zap.Error(err))
 			}
 		}
 	}

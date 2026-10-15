@@ -228,8 +228,102 @@ public nonisolated struct Openmarket_Api_V1_SignInResponse: Sendable {
   fileprivate var _device: Openmarket_Api_V1_Device? = nil
 }
 
-/// GetSignInOptions reports what the sign-in screen needs to know before it can
-/// ask for a number. Unauthenticated, and called before any account exists.
+/// One-time replacement of a phone login on the authenticated account.
+/// Linking challenges are bound to the current session, separate from sign-in.
+public nonisolated struct Openmarket_Api_V1_BeginLinkSignInRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var provider: Openmarket_Api_V1_SignInProvider = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Openmarket_Api_V1_BeginLinkSignInResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var nonce: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Openmarket_Api_V1_LinkSignInRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var provider: Openmarket_Api_V1_SignInProvider = .unspecified
+
+  public var identityToken: String = String()
+
+  public var nonce: String = String()
+
+  public var firstName: String {
+    get {_firstName ?? String()}
+    set {_firstName = newValue}
+  }
+  /// Returns true if `firstName` has been explicitly set.
+  public var hasFirstName: Bool {self._firstName != nil}
+  /// Clears the value of `firstName`. Subsequent reads from it will return its default value.
+  public mutating func clearFirstName() {self._firstName = nil}
+
+  public var lastName: String {
+    get {_lastName ?? String()}
+    set {_lastName = newValue}
+  }
+  /// Returns true if `lastName` has been explicitly set.
+  public var hasLastName: Bool {self._lastName != nil}
+  /// Clears the value of `lastName`. Subsequent reads from it will return its default value.
+  public mutating func clearLastName() {self._lastName = nil}
+
+  public var displayName: String {
+    get {_displayName ?? String()}
+    set {_displayName = newValue}
+  }
+  /// Returns true if `displayName` has been explicitly set.
+  public var hasDisplayName: Bool {self._displayName != nil}
+  /// Clears the value of `displayName`. Subsequent reads from it will return its default value.
+  public mutating func clearDisplayName() {self._displayName = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _firstName: String? = nil
+  fileprivate var _lastName: String? = nil
+  fileprivate var _displayName: String? = nil
+}
+
+public nonisolated struct Openmarket_Api_V1_LinkSignInResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Same user ID as the authenticated account; session tokens do not change.
+  public var viewer: Openmarket_Api_V1_Viewer {
+    get {_viewer ?? Openmarket_Api_V1_Viewer()}
+    set {_viewer = newValue}
+  }
+  /// Returns true if `viewer` has been explicitly set.
+  public var hasViewer: Bool {self._viewer != nil}
+  /// Clears the value of `viewer`. Subsequent reads from it will return its default value.
+  public mutating func clearViewer() {self._viewer = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _viewer: Openmarket_Api_V1_Viewer? = nil
+}
+
+/// Retired phone API retained for old clients. Returns no phone countries.
 public nonisolated struct Openmarket_Api_V1_GetSignInOptionsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -258,10 +352,7 @@ public nonisolated struct Openmarket_Api_V1_GetSignInOptionsResponse: Sendable {
   public init() {}
 }
 
-/// StartPhoneVerification asks the SMS provider to deliver a code. It is
-/// unauthenticated and it costs money on every call — see docs/backend.md §5 for
-/// what guards it, and for why almost all of that is the provider's job rather
-/// than ours.
+/// Retired: returns FAILED_PRECONDITION without sending SMS.
 public nonisolated struct Openmarket_Api_V1_StartPhoneVerificationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -310,7 +401,7 @@ public nonisolated struct Openmarket_Api_V1_StartPhoneVerificationResponse: Send
   public init() {}
 }
 
-/// VerifyPhone signs in an existing phone account or creates one after verification.
+/// Retired: returns FAILED_PRECONDITION without verifying a code or issuing a session.
 public nonisolated struct Openmarket_Api_V1_VerifyPhoneRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -648,6 +739,159 @@ nonisolated extension Openmarket_Api_V1_SignInResponse: SwiftProtobuf.Message, S
     if lhs.isNewUser != rhs.isNewUser {return false}
     if lhs.accessTokenExpiresInSeconds != rhs.accessTokenExpiresInSeconds {return false}
     if lhs._device != rhs._device {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_BeginLinkSignInRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BeginLinkSignInRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.provider) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.provider != .unspecified {
+      try visitor.visitSingularEnumField(value: self.provider, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_BeginLinkSignInRequest, rhs: Openmarket_Api_V1_BeginLinkSignInRequest) -> Bool {
+    if lhs.provider != rhs.provider {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_BeginLinkSignInResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BeginLinkSignInResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}nonce\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.nonce) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.nonce.isEmpty {
+      try visitor.visitSingularStringField(value: self.nonce, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_BeginLinkSignInResponse, rhs: Openmarket_Api_V1_BeginLinkSignInResponse) -> Bool {
+    if lhs.nonce != rhs.nonce {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_LinkSignInRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".LinkSignInRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0\u{3}identity_token\0\u{1}nonce\0\u{3}first_name\0\u{3}last_name\0\u{3}display_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.provider) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.identityToken) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.nonce) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self._firstName) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._lastName) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self._displayName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.provider != .unspecified {
+      try visitor.visitSingularEnumField(value: self.provider, fieldNumber: 1)
+    }
+    if !self.identityToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.identityToken, fieldNumber: 2)
+    }
+    if !self.nonce.isEmpty {
+      try visitor.visitSingularStringField(value: self.nonce, fieldNumber: 3)
+    }
+    try { if let v = self._firstName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+    } }()
+    try { if let v = self._lastName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
+    try { if let v = self._displayName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 6)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_LinkSignInRequest, rhs: Openmarket_Api_V1_LinkSignInRequest) -> Bool {
+    if lhs.provider != rhs.provider {return false}
+    if lhs.identityToken != rhs.identityToken {return false}
+    if lhs.nonce != rhs.nonce {return false}
+    if lhs._firstName != rhs._firstName {return false}
+    if lhs._lastName != rhs._lastName {return false}
+    if lhs._displayName != rhs._displayName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Openmarket_Api_V1_LinkSignInResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".LinkSignInResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}viewer\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._viewer) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._viewer {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_LinkSignInResponse, rhs: Openmarket_Api_V1_LinkSignInResponse) -> Bool {
+    if lhs._viewer != rhs._viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

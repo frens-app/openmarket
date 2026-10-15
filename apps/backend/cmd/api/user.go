@@ -275,6 +275,11 @@ func (s *userServer) DeleteAccount(
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
 
+	// Serialize deletion with a phone login being replaced by Apple/Google.
+	if _, err := qtx.LockUser(ctx, userID); err != nil {
+		return nil, notFoundOrInternal(err, "load user")
+	}
+
 	method, err := qtx.GetAuthMethodForUser(ctx, userID)
 	if err != nil {
 		return nil, notFoundOrInternal(err, "load sign-in provider")

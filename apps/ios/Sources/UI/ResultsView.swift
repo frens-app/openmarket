@@ -8,6 +8,7 @@ struct ResultsView: View {
         case search
     }
 
+    @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var location: LocationProvider
@@ -26,6 +27,9 @@ struct ResultsView: View {
     @State private var surface: Surface = .discover
     @State private var selected: Listing?
     @State private var selectedReferrer: Analytics.Surface = .discover
+    @State private var showAccountLink = false
+    @State private var linkedProvider: String?
+    @State private var showLinkConfirmation = false
     @State private var showSettings = false
     @State private var showFilters = false
     @State private var showSaved = false
@@ -42,7 +46,7 @@ struct ResultsView: View {
 
     private var canRecordShownListings: Bool {
         isVisible && scenePhase == .active && !isSearching && selected == nil
-            && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
+            && !showAccountLink && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
     }
 
     /// Which listings the "only new" filter is hiding right now.
@@ -107,6 +111,21 @@ struct ResultsView: View {
             }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showAccountLink, onDismiss: {
+            if linkedProvider != nil { showLinkConfirmation = true }
+        }) {
+            NavigationStack {
+                AccountLoginView(isLinking: true) { _ in
+                    linkedProvider = account.state.viewer?.signInProvider == "apple" ? "Apple" : "Google"
+                    showAccountLink = false
+                }
+            }
+        }
+        .alert("Account linked", isPresented: $showLinkConfirmation) {
+            Button("Done", role: .cancel) { linkedProvider = nil }
+        } message: {
+            Text("Use \(linkedProvider ?? "your linked provider") next time you sign in. Your existing account, saved listings, follows, and history are unchanged.")
+        }
         .onChange(of: filteredNonLocalIDs, initial: true) { _, ids in
             FilterTotals.shared.recordNonLocal(ids)
         }
@@ -234,6 +253,14 @@ struct ResultsView: View {
     private var discoverSurface: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                if account.needsPhoneLink {
+                    PhoneAccountLinkBanner {
+                        linkedProvider = nil
+                        showAccountLink = true
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                }
                 home
             }
         }

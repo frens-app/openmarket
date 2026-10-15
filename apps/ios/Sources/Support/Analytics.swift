@@ -129,6 +129,7 @@ enum Analytics {
     enum Event: String, CaseIterable {
         case accountCreated = "account_created"
         case accountSignedIn = "account_signed_in"
+        case accountSignInLinked = "account_sign_in_linked"
         case accountSignedOut = "account_signed_out"
         case accountDeleted = "account_deleted"
         case onboardingStepCompleted = "onboarding_step_completed"

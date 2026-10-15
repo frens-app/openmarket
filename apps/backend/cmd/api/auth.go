@@ -10,9 +10,7 @@ import (
 	"frens.lol/openmarket/backend/pkg/auth"
 	"frens.lol/openmarket/backend/pkg/db"
 	"frens.lol/openmarket/backend/pkg/identity"
-	"frens.lol/openmarket/backend/pkg/phone"
 	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
-	"frens.lol/openmarket/backend/pkg/verify"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,15 +23,10 @@ type identityVerifier interface {
 }
 
 type authServer struct {
-	queries        *db.Queries
-	pool           *pgxpool.Pool
-	logger         *zap.Logger
-	identities     identityVerifier
-	sender         verify.Sender
-	allowlist      *phone.Allowlist
-	ceiling        *sendCeiling
-	resendCooldown time.Duration
-
+	queries             *db.Queries
+	pool                *pgxpool.Pool
+	logger              *zap.Logger
+	identities          identityVerifier
 	jwtSecret           string
 	refreshTokenHMACKey string
 	accessTTL           time.Duration

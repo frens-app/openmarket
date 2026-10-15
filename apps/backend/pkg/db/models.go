@@ -333,10 +333,11 @@ type SellerFollow struct {
 }
 
 type SignInChallenge struct {
-	NonceHash   string
-	AuthService AuthService
-	InstallID   string
-	ExpiresAt   pgtype.Timestamptz
+	NonceHash        string
+	AuthService      AuthService
+	InstallID        string
+	ExpiresAt        pgtype.Timestamptz
+	LinkingSessionID *uuid.UUID
 }
 
 type User struct {

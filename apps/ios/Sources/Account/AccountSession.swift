@@ -219,6 +219,57 @@ final class AccountSession: ObservableObject {
         }
     }
 
+    var needsPhoneLink: Bool {
+        guard let viewer = state.viewer else { return false }
+        return viewer.signInProvider == "phone"
+            || (viewer.signInProvider.isEmpty && !viewer.phoneNumber.isEmpty)
+    }
+
+    func beginLinkSignIn(provider: SignInProvider) async throws -> String {
+        let headers = try await authorizedHeaders()
+        var request = BeginLinkSignInRequest()
+        request.provider = provider
+        let response = await auth.beginLinkSignIn(request: request, headers: headers)
+        switch response.result {
+        case .success(let message): return message.nonce
+        case .failure(let error): throw error.asAPIError
+        }
+    }
+
+    func linkSignIn(provider: SignInProvider, identityToken: String, nonce: String,
+                    expectedUserID: String, appleUserID: String? = nil,
+                    names: AccountNames = AccountNames()) async throws {
+        guard state.viewer?.id == expectedUserID else {
+            throw APIError.message("Your account changed. Please reopen the link screen.")
+        }
+        let headers = try await authorizedHeaders()
+        var request = LinkSignInRequest()
+        request.provider = provider
+        request.identityToken = identityToken
+        request.nonce = nonce
+        if let firstName = names.firstName { request.firstName = firstName }
+        if let lastName = names.lastName { request.lastName = lastName }
+        if let displayName = names.displayName { request.displayName = displayName }
+        let response = await auth.linkSignIn(request: request, headers: headers)
+        switch response.result {
+        case .success(let message):
+            guard state.viewer?.id == expectedUserID, message.viewer.id == expectedUserID else {
+                throw APIError.message("Your account changed. Please reopen the app to refresh it.")
+            }
+            if provider == .apple, let appleUserID {
+                Keychain.set(appleUserID, for: Key.appleUserID)
+                AppleSignInNames.clear(userID: appleUserID)
+            }
+            // The account ID and tokens stay unchanged: no store switch,
+            // onboarding reset, analytics reset, or new-account event.
+            cache(viewer: message.viewer)
+            state = .signedIn(message.viewer)
+            updateAnalyticsProfile(message.viewer)
+            Analytics.capture(.accountSignInLinked, ["sign_in_provider": message.viewer.signInProvider])
+        case .failure(let error): throw error.asAPIError
+        }
+    }
+
     // MARK: - Signing out
 
     func signOut() async {

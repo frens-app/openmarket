@@ -79,7 +79,7 @@ output never enter it. Railway's root directory is set to `apps/backend`.
 
 Apple and Google native sign-in are exchanged for app sessions. See
 [social-login.md](social-login.md) for provider setup, nonce validation,
-account deletion and the compatible rollout alongside phone login/signup.
+account deletion, retired phone login, and linking existing phone accounts.
 
 ### Sessions
 
@@ -197,14 +197,17 @@ creating push columns on `user_sessions` only for `00003` to remove them.
 The backend verifies provider signatures, issuer, audience, expiry and a
 single-use nonce bound to provider and install. Challenges expire in five minutes
 and are pruned every minute. Configure edge rate limits for public sign-in routes.
-The phone endpoints retain Prelude SMS delivery, its country allowlist,
-and the global verification-send ceiling. Older clients can still sign in or
-create an account. SMS charges continue for those requests; see [phone-login.md](phone-login.md).
+The phone verification endpoints now return a retired-sign-in error without
+sending SMS or issuing sessions, including to older clients. Existing phone
+sessions can link Apple/Google without changing the user ID; see
+[social-login.md](social-login.md#linking-existing-phone-accounts).
 
 ## 6. Account identity
 
 Accounts are keyed by provider and stable subject, never by email. Apple and
-Google and phone identities stay separate; provider linking is not implemented. DeleteAccount releases the identity, revokes
+Google identities remain separate unless a signed-in phone account explicitly
+links an unused provider identity. Linking preserves the user ID and analytics
+identity; existing accounts are never merged. DeleteAccount releases the identity, revokes
 app sessions and removes saved price checks. Apple deletion also revokes the
 provider grant after reauthorization; see `social-login.md`.
 

@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-func TestProductionPhoneConfigurationDoesNotRequireSocialProviders(t *testing.T) {
-	cfg := ServiceConfig{Env: "production", DatabaseURL: "postgres://test", JWTSecret: "access", RefreshTokenHMACKey: "refresh", AllowedCountryCodes: "1", PreludeAPIKey: "test", LLMProvider: LLMProviderGoogle, LLMAPIKey: "test", LLMModel: "test", LLMMaxAttempts: 1, LLMCallWindow: time.Hour}
+func TestProductionConfigurationDoesNotRequireRetiredSMSCredentials(t *testing.T) {
+	cfg := ServiceConfig{Env: "production", DatabaseURL: "postgres://test", JWTSecret: "access", RefreshTokenHMACKey: "refresh", LLMProvider: LLMProviderGoogle, LLMAPIKey: "test", LLMModel: "test", LLMMaxAttempts: 1, LLMCallWindow: time.Hour}
 	requireAPIValues(cfg)
 	cfg.GoogleClientID = "google-client"
 	requireAPIValues(cfg)

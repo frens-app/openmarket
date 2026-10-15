@@ -34,13 +34,8 @@ func init() {
 	pflag.String("apple_sign_in_private_key", "", "Sign in with Apple .p8 key contents in PKCS8 PEM format; escaped newlines accepted")
 	pflag.String("google_client_id", "", "Google web OAuth client ID used as the ID token audience")
 
-	// SMS verification, via Prelude.
-	//
-	// Deliberately no base-URL override. Every environment talks to the real
-	// Prelude API; the only thing that skips it is the bypass list below, which
-	// is in-process. An override would exist purely to point a deployment at
-	// something that isn't Prelude, and the one deployment where that matters is
-	// the one where it must never happen.
+	// Legacy SMS flags remain accepted for deployment compatibility, but phone
+	// RPCs are retired and the API no longer initializes a verification provider.
 	pflag.String("prelude_api_key", "", "Prelude API key")
 	pflag.Int("verification_code_length", 6, "digits in the verification code, reported to the client")
 	// Specific numbers that skip the provider — the dev skip button, and a demo
@@ -49,12 +44,7 @@ func init() {
 	pflag.String("dev_bypass_phone_numbers", "", "comma-separated E.164 numbers that accept dev_verification_code without SMS (never in production)")
 	pflag.String("dev_verification_code", "123456", "the code those numbers accept")
 
-	// Abuse controls on StartPhoneVerification.
-	//
-	// Per-number limiting and pumping detection are the provider's, not ours —
-	// see migration 00002. What is left here is the country allowlist (which
-	// fails closed at boot; see pkg/phone) and a ceiling on total spend, which
-	// is the one thing a per-entity limit cannot give you.
+	// Legacy SMS controls; no effect on the retired endpoints.
 	pflag.String("allowed_country_codes", "1,44,353,61,64", "comma-separated country calling codes allowed to receive codes")
 	pflag.Int("verification_max_sends", 500, "total verification sends allowed per window, across all numbers")
 	pflag.Duration("verification_send_window", time.Hour, "window the send ceiling is counted over")
@@ -192,16 +182,10 @@ func LoadAPI() ServiceConfig {
 }
 
 func requireAPIValues(cfg ServiceConfig) {
-	// The Prelude key is required everywhere, development included. There is no
-	// local substitute to fall back on and no base URL to redirect: every
-	// environment talks to the real API, and the bypass list is what makes that
-	// workable on a laptop.
 	required := []string{
 		"database_url", cfg.DatabaseURL,
 		"jwt_secret", cfg.JWTSecret,
 		"refresh_token_hmac_key", cfg.RefreshTokenHMACKey,
-		"allowed_country_codes", cfg.AllowedCountryCodes,
-		"prelude_api_key", cfg.PreludeAPIKey,
 	}
 
 	var missing []string
@@ -211,17 +195,9 @@ func requireAPIValues(cfg ServiceConfig) {
 		}
 	}
 	if len(missing) > 0 {
-		// Nothing is defaulted into place quietly. Prelude credentials are
-		// required in development too — that is what keeps dev on the same code
-		// path as production — so the first run on a fresh clone stops here, and
-		// the message says exactly how to get past it rather than leaving
-		// somebody to work out which of twenty settings is missing.
 		hint := ""
 		if !cfg.IsProduction() {
-			hint = "\n\ncp apps/backend/.env.local.example apps/backend/.env.local" +
-				"\n\nThen put a real Prelude API key in it. There is no offline mode:\n" +
-				"dev talks to the same Prelude the production service does, and the\n" +
-				"numbers on DEV_BYPASS_PHONE_NUMBERS are what skip it."
+			hint = "\n\nConfigure apps/backend/.env.local using .env.local.example."
 		}
 		panic(fmt.Sprintf("missing required config: %v%s", missing, hint))
 	}
@@ -243,10 +219,7 @@ func requireAPIValues(cfg ServiceConfig) {
 	if cfg.IsProduction() && cfg.UsesStubLLM() {
 		panic("llm_provider must not be " + LLMProviderStub + " in production")
 	}
-	// Credentials are required only when there is something to authenticate to,
-	// which is the difference from Prelude: this feature does have a local
-	// stand-in, so a fresh clone runs without a key and only a deployment that
-	// means to call a provider has to have one.
+	// Model credentials are required only when calling a real provider.
 	if !cfg.UsesStubLLM() {
 		var missingLLM []string
 		if strings.TrimSpace(cfg.LLMAPIKey) == "" {

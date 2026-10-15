@@ -5,8 +5,10 @@ import SwiftUI
 
 struct AccountLoginView: View {
     @StateObject private var model = AccountLoginModel()
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize = 40
+    var isLinking = false
     var onSkip: (() -> Void)?
     var onSignedIn: (_ isNewUser: Bool) -> Void = { _ in }
 
@@ -14,11 +16,19 @@ struct AccountLoginView: View {
         GeometryReader { geometry in
             ScrollView {
                 VStack(spacing: 0) {
-                    Text("Openmarket")
+                    Text(isLinking ? "Link your account" : "Openmarket")
                         .font(.system(size: titleSize, weight: .bold, design: .rounded))
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(.isHeader)
                         .padding(.top, 48)
+
+                    if isLinking {
+                        Text("We now use Apple and Google for sign-in. Link one to keep your existing account, saved listings, follows, and history.")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 16)
+                    }
 
                     Spacer(minLength: 48)
 
@@ -30,8 +40,8 @@ struct AccountLoginView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        providerButton(.google, title: "Continue with Google", image: "GoogleSignInLogo")
-                        providerButton(.apple, title: "Continue with Apple", image: "AppleSignInLogo")
+                        providerButton(.google, title: isLinking ? "Link with Google" : "Continue with Google", image: "GoogleSignInLogo")
+                        providerButton(.apple, title: isLinking ? "Link with Apple" : "Continue with Apple", image: "AppleSignInLogo")
 
                         if let onSkip {
                             Button("Not now, browse without an account", action: onSkip)
@@ -53,6 +63,15 @@ struct AccountLoginView: View {
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
         }
+        .interactiveDismissDisabled(isLinking && model.isBusy)
+        .toolbar {
+            if isLinking {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Not now") { dismiss() }
+                        .disabled(model.isBusy)
+                }
+            }
+        }
         .onChange(of: model.signedInIsNewUser) { _, value in
             if let value { onSignedIn(value) }
         }
@@ -60,7 +79,7 @@ struct AccountLoginView: View {
 
     private func providerButton(_ provider: SignInProvider, title: String, image: String) -> some View {
         Button {
-            Task { await model.signIn(provider: provider) }
+            Task { await model.signIn(provider: provider, linking: isLinking) }
         } label: {
             HStack(spacing: 12) {
                 Image(image)
@@ -110,7 +129,7 @@ final class AccountLoginModel: ObservableObject {
     @Published private(set) var signedInIsNewUser: Bool?
     private let apple = AppleAccountAuthorization()
 
-    func signIn(provider: SignInProvider) async {
+    func signIn(provider: SignInProvider, linking: Bool = false) async {
         guard !isBusy else { return }
         activeProvider = provider
         errorMessage = nil
@@ -139,7 +158,13 @@ final class AccountLoginModel: ObservableObject {
                 }
                 GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID, serverClientID: serverID)
             }
-            let nonce = try await AccountSession.shared.beginSignIn(provider: provider)
+            let expectedUserID = AccountSession.shared.state.viewer?.id
+            if linking && expectedUserID == nil {
+                throw APIError.message("Please reopen the app to restore your account before linking.")
+            }
+            let nonce = try await (linking
+                ? AccountSession.shared.beginLinkSignIn(provider: provider)
+                : AccountSession.shared.beginSignIn(provider: provider))
             let token: String
             var appleUserID: String?
             var names = AccountNames()
@@ -162,9 +187,17 @@ final class AccountLoginModel: ObservableObject {
                                      displayName: result.user.profile?.name)
             default: return
             }
-            signedInIsNewUser = try await AccountSession.shared.signIn(
-                provider: provider, identityToken: token, nonce: nonce, appleUserID: appleUserID, names: names
-            )
+            if linking, let expectedUserID {
+                try await AccountSession.shared.linkSignIn(
+                    provider: provider, identityToken: token, nonce: nonce,
+                    expectedUserID: expectedUserID, appleUserID: appleUserID, names: names
+                )
+                signedInIsNewUser = false
+            } else {
+                signedInIsNewUser = try await AccountSession.shared.signIn(
+                    provider: provider, identityToken: token, nonce: nonce, appleUserID: appleUserID, names: names
+                )
+            }
         } catch {
             let nsError = error as NSError
             if (nsError.domain == ASAuthorizationError.errorDomain && nsError.code == ASAuthorizationError.canceled.rawValue)
@@ -236,5 +269,25 @@ final class AppleAccountAuthorization: NSObject, ASAuthorizationControllerDelega
         let pending = continuation
         continuation = nil
         pending?.resume(with: result)
+    }
+}
+
+struct PhoneAccountLinkBanner: View {
+    var onLink: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("We’re changing sign-in", systemImage: "person.crop.circle.badge.exclamationmark")
+                .font(.headline)
+            Text("Link Apple or Google to keep your existing account and everything you’ve saved.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Link your account", action: onLink)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
     }
 }

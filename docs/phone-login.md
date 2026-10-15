@@ -8,15 +8,13 @@
 `apps/backend/pkg/verify/prelude.go`
 **Related:** `onboarding.md`, `backend.md` §3
 
-Phone login and signup remain supported by the backend for older app versions.
-The current iOS sign-in UI offers Apple and Google. In the phone flow, the app
-asks for a number in one of the served countries, Prelude sends a one-time code, and the
-backend exchanges an approved code for the app's own session. Facebook sign-in
-is a separate session for Marketplace browsing and is not part of this flow.
+Phone sign-in is retired. The backend keeps the old RPC names only to return an
+explicit error to older clients; it no longer sends SMS or verifies codes.
+Existing phone sessions stay signed in. The current iOS app prompts these users to link Apple or Google to the same account from Discover, preserving their
+user ID, history, and analytics identity. See
+[social-login.md](social-login.md#linking-existing-phone-accounts).
 
-This document records the client behavior that works on a physical iPhone, the
-iOS setting that can remove used codes from Messages or Mail, and the AutoFill
-failure modes found while building the flow.
+The remainder is a historical record of the removed phone UI and SMS integration.
 
 ## The user flow
 

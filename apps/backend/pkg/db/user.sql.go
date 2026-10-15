@@ -197,6 +197,29 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const lockUser = `-- name: LockUser :one
+SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+`
+
+func (q *Queries) LockUser(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, lockUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.TimeZone,
+		&i.OnboardingCompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.FirstName,
+		&i.LastName,
+		&i.FacebookLastConnectedAt,
+		&i.Email,
+	)
+	return i, err
+}
+
 const recordUserFacebookConnection = `-- name: RecordUserFacebookConnection :exec
 UPDATE users
 SET facebook_last_connected_at = GREATEST(facebook_last_connected_at, $2::timestamptz),
