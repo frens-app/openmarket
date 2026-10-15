@@ -21,7 +21,7 @@ struct ListingCard: View {
                         .strikethrough()
                 }
             }
-            Text(listing.title ?? " ")
+            Text(listing.title ?? "Listing")
                 .font(.subheadline)
                 .foregroundStyle(.primary)
                 .lineLimit(1, reservesSpace: true)
@@ -94,7 +94,7 @@ struct ListingCard: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if saved.contains(listing.id) {
+            if saved.contains(listing) {
                 Image(systemName: "bookmark.fill")
                     .font(.caption)
                     .foregroundStyle(.tint)

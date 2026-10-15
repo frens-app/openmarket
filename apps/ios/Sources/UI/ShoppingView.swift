@@ -176,7 +176,7 @@ struct ShoppingView: View {
             "position": position,
             "listing_id": listing.id,
             "has_price": listing.priceText != nil,
-            "is_saved": saved.contains(listing.id),
+            "is_saved": saved.contains(listing),
             "is_seen": viewed.contains(listing.id)
         ]
         properties["title"] = Analytics.text(listing.title)

@@ -1,6 +1,14 @@
 # Listing data model — proposal v0.4
 
-**Status:** proposal; no listing persistence or ingest RPC is built.
+**Status:** broader proposal; a smaller saved-listing implementation now exists.
+**Implementation, 2026-10-14:** migration `00020` stores canonical Facebook listing
+IDs with internal UUIDs, current snapshot metadata, per-field freshness, and
+account-owned saved relationships. The saved-listing API accepts explicit save,
+remove, and metadata-only changes; there is no observation-history table. See
+[the backend implementation notes](../apps/backend/README.md#saved-listings).
+The DDL below describes future expansion rather than the current database.
+Photo FBIDs are metadata, not unique listing aliases. Sellers currently live in
+`facebook_sellers`, keyed by Facebook profile ID.
 **Updated:** 2026-08-12.
 **Network-source addendum, 2026-09-30:** anonymous and authenticated Search GraphQL pagination
 supplies structured fields beyond the embedded first page; Browse GraphQL has

@@ -167,15 +167,14 @@ struct DetailView: View {
         }
     }
 
-    /// Keyed on the listing id — the photo FBID — so the grid reflects a save
-    /// the moment it happens, with no separate plumbing between the screens.
+    /// Saves retain their display data independently of the browsing cache.
     private var saveButton: some View {
-        let isSaved = saved.contains(current.id)
+        let isSaved = saved.contains(current)
         return Button {
             // Record before flagging, so the saved-items screen always has a
             // card to draw even when this fires before enrichment lands.
             store.remember(current)
-            withAnimation(.snappy(duration: 0.2)) { saved.toggle(current.id) }
+            withAnimation(.snappy(duration: 0.2)) { saved.toggle(current) }
             // `isSaved` is the state before the toggle, so the event names what
             // just happened. Two events, because a bookmark rate and a regret
             // rate are different questions.
@@ -196,6 +195,7 @@ struct DetailView: View {
             Label(isSaved ? "Saved" : "Save",
                   systemImage: isSaved ? "bookmark.fill" : "bookmark")
         }
+        .disabled(!isSaved && !current.hasSaveMetadata)
         .accessibilityLabel(isSaved ? "Saved. Tap to remove." : "Save listing")
     }
 

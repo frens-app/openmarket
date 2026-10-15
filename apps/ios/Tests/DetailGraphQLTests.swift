@@ -12,6 +12,7 @@ final class DetailDecoderTests: XCTestCase {
         XCTAssertEqual(detail.sellerProfileID, "987654321")
         XCTAssertEqual(detail.sellerPhotoURL?.absoluteString, "https://example.com/seller.jpg")
         XCTAssertEqual(detail.sellerJoined, "Joined Facebook in 2000")
+        XCTAssertEqual(detail.title, "Desk")
         XCTAssertEqual(detail.sellerRating, 4.8)
         XCTAssertEqual(detail.sellerRatingCount, 12)
         XCTAssertEqual(detail.sellerIsHighlyRated, true)

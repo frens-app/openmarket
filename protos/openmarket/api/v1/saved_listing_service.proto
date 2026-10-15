@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "openmarket/api/v1/seller_service.proto";
+
+// Latest device-observed fields, not a record of individual observations.
+// Missing fields preserve known values. Timestamps describe the actual fetch,
+// never the time an offline save is uploaded.
+message SavedListingSnapshot {
+  string facebook_listing_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
+  optional string cover_photo_fbid = 2 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
+  optional string title = 3 [(buf.validate.field).string.max_len = 2048];
+  optional string price_text = 4 [(buf.validate.field).string.max_len = 256];
+  optional string original_price_text = 5 [(buf.validate.field).string.max_len = 256];
+  optional string location_text = 6 [(buf.validate.field).string.max_len = 1024];
+  optional string condition_text = 7 [(buf.validate.field).string.max_len = 512];
+  optional string thumbnail_url = 8 [(buf.validate.field).string.max_len = 8192];
+  optional string description = 9 [(buf.validate.field).string.max_len = 10000];
+  optional string posted_text = 10 [(buf.validate.field).string.max_len = 512];
+  repeated string photo_urls = 11 [(buf.validate.field).repeated = {max_items: 12, items: {string: {max_len: 8192}}}];
+  optional bool sold = 12;
+  optional bool pending = 13;
+  optional double latitude = 14 [(buf.validate.field).double = {gte: -90, lte: 90, finite: true}];
+  optional double longitude = 15 [(buf.validate.field).double = {gte: -180, lte: 180, finite: true}];
+  FacebookSeller seller = 16;
+  // Known delivery flags; absent means this surface did not supply them.
+  optional bool ships = 17;
+  optional bool in_person = 18;
+  optional bool door_pickup = 19;
+  optional bool door_dropoff = 20;
+  optional bool public_meetup = 21;
+  google.protobuf.Timestamp card_observed_at = 22;
+  google.protobuf.Timestamp price_observed_at = 23;
+  google.protobuf.Timestamp detail_observed_at = 24;
+  google.protobuf.Timestamp availability_observed_at = 25;
+}
+
+message SavedListingChange {
+  string mutation_id = 1 [(buf.validate.field).string.uuid = true];
+  string facebook_listing_id = 2 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
+  // Absent updates metadata only; it must never recreate a removed bookmark.
+  optional bool saved = 3;
+  SavedListingSnapshot snapshot = 4;
+  // When the user saved it. Legacy imports use their import time.
+  google.protobuf.Timestamp saved_at = 5;
+}
+
+message ApplySavedListingChangesRequest {
+  // Validate entries independently so one bad snapshot cannot block the queue.
+  repeated SavedListingChange changes = 1 [(buf.validate.field).ignore = IGNORE_ALWAYS];
+}
+message SavedListingChangeResult {
+  string mutation_id = 1;
+  // Empty on success; permanent per-entry validation failures do not block peers.
+  string error = 2;
+}
+message ApplySavedListingChangesResponse {
+  repeated SavedListingChangeResult results = 1;
+}
+
+message SavedListing {
+  string listing_id = 1;
+  SavedListingSnapshot snapshot = 2;
+  google.protobuf.Timestamp saved_at = 3;
+}
+message ListSavedListingsRequest {
+  string after_id = 1 [(buf.validate.field).string = {max_len: 64, pattern: "^[0-9]*$"}];
+}
+message ListSavedListingsResponse {
+  repeated SavedListing listings = 1;
+  string next_after_id = 2;
+}
+
+service SavedListingService {
+  rpc ApplySavedListingChanges(ApplySavedListingChangesRequest) returns (ApplySavedListingChangesResponse);
+  rpc ListSavedListings(ListSavedListingsRequest) returns (ListSavedListingsResponse);
+}

@@ -12,10 +12,7 @@ import Combine
 /// possible that the remote surface can't: an "only new listings" filter
 /// (`Preferences.hideViewed`) and the recently-viewed strip on the home screen.
 ///
-/// Keyed on `Listing.id`, the photo FBID from the thumbnail CDN URL, exactly as
-/// `SavedListings` is. That key survives a card being re-parsed out of a fresh
-/// DOM on a later search, which is the only reason a view recorded today is
-/// still recognisable tomorrow.
+/// Keyed by Facebook listing ID, with legacy keys migrated from cached URLs.
 ///
 /// **Deliberately not part of `ListingCache`.** Profiles there are evicted LRU
 /// at a thousand, and eviction would silently un-see a listing — the record of
@@ -53,9 +50,15 @@ final class ViewedListings: ObservableObject {
         self.defaults = defaults
         if let data = defaults.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode([Sighting].self, from: data) {
-            sightings = decoded
-            index = Dictionary(decoded.map { ($0.id, $0.viewedAt) },
+            var seen = Set<String>()
+            sightings = decoded.compactMap { sighting in
+                let id = ListingCache.shared.profile(for: sighting.id)?.listing?.id ?? sighting.id
+                guard seen.insert(id).inserted else { return nil }
+                return Sighting(id: id, viewedAt: sighting.viewedAt)
+            }
+            index = Dictionary(sightings.map { ($0.id, $0.viewedAt) },
                                uniquingKeysWith: { first, _ in first })
+            persist()
         }
     }
 

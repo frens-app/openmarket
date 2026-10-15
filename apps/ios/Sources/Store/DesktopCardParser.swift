@@ -92,7 +92,7 @@ enum DesktopCardParser {
 
         let thumbnail = raw.imageURL.isEmpty ? nil : URL(string: raw.imageURL)
         return Listing(
-            id: thumbnail.flatMap(Listing.photoFBID).map { "p:\($0)" } ?? "fb:\(raw.id)",
+            id: "fb:\(raw.id)",
             title: title,
             priceText: priceText,
             originalPriceText: originalPriceText,
@@ -176,11 +176,7 @@ enum DesktopCardParser {
         let thumbnail = raw.imageURL.isEmpty ? nil : URL(string: raw.imageURL)
 
         return Listing(
-            // Photo identity where possible, so a desktop card and a mobile
-            // card for the same listing collide rather than duplicating
-            // (docs/surface-strategy.md §5a). Falls back to the listing id,
-            // which desktop always has and mobile never does.
-            id: thumbnail.flatMap(Listing.photoFBID).map { "p:\($0)" } ?? "fb:\(raw.id)",
+            id: "fb:\(raw.id)",
             title: title,
             priceText: priceText,
             originalPriceText: originalPriceText,

@@ -44,17 +44,6 @@ struct PayloadListing: Decodable, Equatable {
     /// Nil when this response shape supplies no delivery information.
     var fulfillment: Fulfillment? { Fulfillment(tokens: deliveryTypes) }
 
-    /// The identity the rest of the app uses. Built from the fbcdn filename
-    /// segment, **not** `photoID` — those are adjacent but different numbers
-    /// (6 of 6 sampled differ), and the filename segment is the one that is
-    /// byte-identical across the mobile and desktop surfaces, which is what
-    /// makes cross-surface dedupe an equality check. See
-    /// `docs/surface-strategy.md` §5a.
-    var listingIdentity: String? {
-        guard let photoURL, let url = URL(string: photoURL) else { return nil }
-        return Listing.photoFBID(url).map { "p:\($0)" }
-    }
-
     var locationText: String? {
         guard let city else { return nil }
         guard let state else { return city }
@@ -86,14 +75,10 @@ struct CaptureContext: Codable, Equatable, Hashable {
 extension PayloadListing {
     /// Builds a grid card from the payload.
     ///
-    /// Identity comes from the photo filename rather than the listing id, so a
-    /// card built here matches one built from a mobile card for the same
-    /// listing — that equality is what makes merging the two surfaces a lookup
-    /// instead of a fuzzy title comparison (`docs/surface-strategy.md` §5a).
-    /// Falls back to the listing id only when there is no usable photo.
+    /// Facebook listing IDs are present in both guest and authenticated feeds.
     func makeListing(cardIndex: Int) -> Listing {
         Listing(
-            id: listingIdentity ?? "fb:\(id)",
+            id: "fb:\(id)",
             title: title,
             priceText: priceFormatted,
             originalPriceText: strikethroughFormatted,
@@ -105,7 +90,9 @@ extension PayloadListing {
             badgeText: (isSold == true) ? "Sold" : nil,
             cardIndex: cardIndex,
             detail: nil,
-            capturedAt: Date()
+            capturedAt: Date(),
+            availabilityObservedAt: (isSold != nil) ? Date() : nil,
+            observedSold: isSold
         )
     }
 

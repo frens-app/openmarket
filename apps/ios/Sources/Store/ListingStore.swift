@@ -609,6 +609,7 @@ final class ListingStore: ObservableObject {
             var seeded = listing
             if let cached = cache.profile(for: listing.id) {
                 seeded.detail = cached.detail
+                seeded.detailObservedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
                 seeded.itemURL = seeded.itemURL ?? cached.itemURL
                 if seeded.locationText == nil { seeded.locationText = cached.detail?.locationText }
             }
@@ -744,6 +745,7 @@ final class ListingStore: ObservableObject {
             var seeded = listing
             if let cached = cache.profile(for: listing.id) {
                 seeded.detail = cached.detail
+                seeded.detailObservedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
                 seeded.itemURL = cached.itemURL
                 if seeded.locationText == nil { seeded.locationText = cached.detail?.locationText }
             }
@@ -804,6 +806,7 @@ final class ListingStore: ObservableObject {
         // Step 2 — the local profile store.
         if let cached = cache.profile(for: listing.id), let cachedDetail = cached.detail {
             best.detail = cachedDetail
+            best.detailObservedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
             best.itemURL = best.itemURL ?? cached.itemURL
             if best.locationText == nil { best.locationText = cachedDetail.locationText }
             apply(best)
@@ -837,6 +840,8 @@ final class ListingStore: ObservableObject {
                 onPartial: { partial in
                     var staged = listing
                     staged.detail = partial
+                    staged.title = staged.title ?? partial.title
+                    staged.detailObservedAt = Date()
                     if staged.locationText == nil { staged.locationText = partial.locationText }
                     onStage(staged)
                     Logger.store.info("tap -> detail stage in \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
@@ -844,6 +849,8 @@ final class ListingStore: ObservableObject {
             ) else { return nil }
             var updated = listing
             updated.detail = detailValue
+            updated.title = updated.title ?? detailValue.title
+            updated.detailObservedAt = Date()
             if updated.locationText == nil { updated.locationText = detailValue.locationText }
             record(updated)
             onStage(updated)
@@ -852,7 +859,7 @@ final class ListingStore: ObservableObject {
         }
 
         // No URL yet, and the card index is only meaningful against live cards.
-        guard !isShowingCachedResults else { return nil }
+        guard !isShowingCachedResults, listing.cardIndex >= 0 else { return nil }
 
         if let harvest = await feed.openItem(cardIndex: listing.cardIndex,
                                              onPartial: { partial in
@@ -875,6 +882,8 @@ final class ListingStore: ObservableObject {
         guard let url = updated.itemURL else { return nil }
         guard let detailValue = await detail.loadDetail(id: updated.id, url: url) else { return nil }
         updated.detail = detailValue
+        updated.title = updated.title ?? detailValue.title
+        updated.detailObservedAt = Date()
         if updated.locationText == nil { updated.locationText = detailValue.locationText }
         record(updated)
         onStage(updated)
@@ -887,6 +896,7 @@ final class ListingStore: ObservableObject {
     private func record(_ listing: Listing) {
         guard listing.detail != nil else { return }
         cache.store(listing, capture: capture)
+        SavedListings.shared.refresh(listing)
         apply(listing)
     }
 
@@ -913,6 +923,7 @@ final class ListingStore: ObservableObject {
         var updated = listing
         updated.itemURL = harvest.url
         updated.detail = harvest.detail.listingDetail
+        updated.detailObservedAt = Date()
         if updated.locationText == nil { updated.locationText = harvest.detail.locationText }
         return updated
     }

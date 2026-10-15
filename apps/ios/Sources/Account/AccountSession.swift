@@ -333,10 +333,12 @@ final class AccountSession: ObservableObject {
             request.appleAuthorizationCode = credential.authorizationCode
             request.nonce = nonce
         }
+        let deletingUserID = state.viewer?.id
         let response = await users.deleteAccount(request: request, headers: headers)
         if let error = response.error, error.code != .notFound {
             throw error.asAPIError
         }
+        if let deletingUserID { SavedListings.shared.deleteAccount(deletingUserID) }
         clearTokens()
         state = .signedOut
         device = nil

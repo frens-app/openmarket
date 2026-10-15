@@ -215,3 +215,64 @@ SELLER_TEST_DATABASE_URL=postgres://…/example_seller_test go test ./cmd/api -r
 
 The iOS `FollowedSellersTests` and `SellerSyncTests` cover local persistence,
 migration, offline retries, rapid toggles, reads racing changes, and account isolation.
+
+## Saved listings
+
+Migration `00020` adds `listings` (our UUID plus a unique Facebook listing ID)
+with a validated `SavedListingSnapshot` JSON payload, and `saved_listings`
+keyed by `(user_id, listing_id)` with `saved_at`. Shared metadata survives an
+unsave and account deletion. Sold/unavailable listings remain saved until removed.
+There is no observation-history table. `field_observed_at` tracks freshness for
+individual fields, including seller fields: missing values preserve known data,
+newer supplied values replace old ones, and false/zero remain meaningful. Read
+snapshots report conservative group observation times so re-uploading restored
+data cannot make a retained older field appear fresh.
+
+Both `SavedListingService` RPCs require an OpenMarket account, independently of
+Facebook login or device registration:
+
+- `ApplySavedListingChanges` accepts 1–50 ordered changes. Each has a UUID
+  `mutation_id`, a `facebook_listing_id`, and optional `saved`. `true` saves with
+  a matching snapshot and `saved_at`; `false` removes without a snapshot; absent
+  `saved` refreshes metadata without changing bookmark membership. Entries have
+  independent transactions and validation results. A transient request failure
+  can follow committed entries, so retry the same frozen mutation IDs/payloads.
+- `ListSavedListings` returns up to 100 records with metadata, internal UUID,
+  `saved_at`, and `next_after_id`. Pagination uses Facebook ID, while clients
+  display by `saved_at` descending. Finish all pages before replacing local state.
+
+`saved_listing_mutations` stores only account-scoped mutation IDs and request
+hashes, not user observation history. Receipts remain until account deletion so
+an old retry cannot resurrect a bookmark removed after that mutation committed.
+Reusing a mutation ID with different contents is rejected. Newly accepted changes
+use server processing order across devices; client clocks do not decide conflicts.
+Observation/save timestamps must be from 2004 onward and no more than five minutes
+in the future. Account deletion removes bookmarks and receipts under the same user
+row lock used by writes.
+
+On iOS, resolved cards use `fb:<Facebook listing ID>` for identity, including guest
+GraphQL and desktop DOM cards. Photo FBIDs remain optional snapshot metadata.
+Saved snapshots and pending mutations are persisted together, separately for each
+account and guest use. Sign-in claims guest saves once. The old `savedListingIDs`
+array migrates using cached item URLs; duplicates collapse, order is preserved
+using import timestamps, and unresolved legacy entries remain visible locally.
+Entries without cached metadata also remain local; item GraphQL can recover their
+title when opened. Placeholder UI text is never uploaded as a Facebook title.
+New unresolved mobile DOM cards must resolve their item URL before saving.
+Saved renders from its own persisted data, independent of browsing-cache eviction.
+
+Sync runs after changes, sign-in, foregrounding, opening Saved, and a 30-second
+retry after transient failures. Permanent per-entry errors preserve the local save
+and show a status message; refreshing the listing can repair a rejected save.
+
+Validation:
+
+```bash
+SAVED_LISTING_TEST_DATABASE_URL=postgres://…/example_saved_listing_test \
+  go test -race ./cmd/api -run 'TestSavedListingIntegration|TestListingMerge|TestListingChange' -count=1
+```
+
+The database must be disposable and its name must end in `_saved_listing_test`.
+`SavedListingSyncTests` covers migration, account isolation, offline removals,
+lost acknowledgements, in-flight edits, metadata-only refresh, and fresh-device
+restoration. Snapshot URLs can expire; sync retains metadata, not image binaries.

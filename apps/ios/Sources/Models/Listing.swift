@@ -8,14 +8,11 @@ extension Logger {
     static let parse = Logger(subsystem: "lol.frens.openmarket", category: "parse")
 }
 
-/// A card as it appears in the results grid.
-///
-/// The mobile surface exposes no listing id on the grid (see
-/// docs/feasibility-2026-07-31.md), so identity comes from the photo FBID
-/// embedded in the thumbnail CDN URL, with a title+price hash as fallback.
-/// The canonical `itemURL` is resolved lazily, when the user opens the listing.
+/// A Facebook listing. Resolved cards use `fb:<listing ID>` locally; the server
+/// assigns its own UUID independently. Old mobile DOM cards can remain unresolved
+/// until opened, but their photo/text keys are never server listing identities.
 struct Listing: Identifiable, Codable, Equatable, Hashable {
-    let id: String
+    var id: String
     var title: String?
     var priceText: String?      // kept as displayed: "Free", "$1,200", ranges
     var originalPriceText: String?
@@ -32,6 +29,11 @@ struct Listing: Identifiable, Codable, Equatable, Hashable {
     var cardIndex: Int          // position in the DOM, used to re-find the card
     var detail: ListingDetail?
     var capturedAt: Date
+    var priceObservedAt: Date? = nil
+    var detailObservedAt: Date? = nil
+    var availabilityObservedAt: Date? = nil
+    var observedSold: Bool? = nil
+    var observedPending: Bool? = nil
 
     var isResolved: Bool { itemURL != nil }
 }
@@ -87,6 +89,8 @@ struct ListingDetail: Codable, Equatable, Hashable {
     /// helpful, because the whole value of the field is that it is Facebook's
     /// answer rather than ours.
     var fulfillment: Fulfillment?
+    /// Item GraphQL can recover a saved card whose original cache is missing.
+    var title: String? = nil
 }
 
 /// How a listing can change hands, from Facebook's `delivery_types`.
@@ -174,14 +178,41 @@ struct Fulfillment: Codable, Equatable, Hashable {
 }
 
 extension Listing {
-    /// Stable-enough identity for dedupe and the hidden-listings list.
+    var facebookListingID: String? {
+        if id.hasPrefix("fb:"), Self.validFacebookID(String(id.dropFirst(3))) {
+            return String(id.dropFirst(3))
+        }
+        return itemURL.flatMap(Self.facebookListingID(from:))
+    }
+
+    static func validFacebookID(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 64 && value.utf8.allSatisfy { (48...57).contains($0) }
+    }
+
+    static func facebookListingID(from url: URL) -> String? {
+        guard url.scheme == "https", url.user == nil,
+              let host = url.host?.lowercased(), host == "facebook.com" || host.hasSuffix(".facebook.com") else { return nil }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 3, parts[0] == "marketplace", parts[1] == "item", validFacebookID(parts[2]) else { return nil }
+        return parts[2]
+    }
+
+    var canonicalized: Listing {
+        guard let facebookListingID else { return self }
+        var value = self
+        value.id = "fb:\(facebookListingID)"
+        value.itemURL = URL(string: "https://www.facebook.com/marketplace/item/\(facebookListingID)/")
+        return value
+    }
+
+    /// Temporary identity only for the legacy mobile DOM route. Never uploaded.
     static func identity(thumbnailURL: URL?, title: String?, priceText: String?) -> String {
         if let fbid = thumbnailURL.flatMap(Self.photoFBID) { return "p:\(fbid)" }
         return "h:\((title ?? "") + "|" + (priceText ?? ""))".lowercased()
     }
 
     /// fbcdn filenames look like `729964685_1105285382678938_1161471387555069882_n.jpg`;
-    /// the middle group is the photo's FBID and is stable for the listing.
+    /// the middle group is the photo's FBID, retained as media metadata.
     static func photoFBID(_ url: URL) -> String? {
         let name = url.deletingPathExtension().lastPathComponent
         let parts = name.split(separator: "_")

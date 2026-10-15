@@ -239,6 +239,15 @@ type FacebookSeller struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type Listing struct {
+	ID                uuid.UUID
+	FacebookListingID string
+	Snapshot          []byte
+	FieldObservedAt   []byte
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type LlmRun struct {
 	ID                uuid.UUID
 	PriceCheckID      *uuid.UUID
@@ -290,6 +299,18 @@ type PriceCheckPhoto struct {
 	Bytes        int32
 	Width        int32
 	Height       int32
+}
+
+type SavedListing struct {
+	UserID    uuid.UUID
+	ListingID uuid.UUID
+	SavedAt   pgtype.Timestamptz
+}
+
+type SavedListingMutation struct {
+	UserID      uuid.UUID
+	MutationID  uuid.UUID
+	RequestHash []byte
 }
 
 type SellerFollow struct {

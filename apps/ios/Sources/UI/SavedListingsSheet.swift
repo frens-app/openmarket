@@ -4,7 +4,6 @@ import SwiftUI
 /// leaves the underlying Discover or search scroll position untouched.
 struct SavedListingsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var saved: SavedListings
     @State private var selected: Listing?
     @Namespace private var namespace
@@ -12,7 +11,7 @@ struct SavedListingsSheet: View {
     let onOpen: (Listing, Int) -> Void
 
     var body: some View {
-        let items = store.listings(for: saved.ids)
+        let items = saved.listings
 
         NavigationStack {
             Group {
@@ -37,6 +36,12 @@ struct SavedListingsSheet: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                Text(saved.statusText).font(.caption).foregroundStyle(.secondary)
+                    .padding().frame(maxWidth: .infinity).background(.bar)
+            }
+            .onAppear { saved.synchronize() }
+            .refreshable { saved.synchronize() }
             .navigationTitle("Saved")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

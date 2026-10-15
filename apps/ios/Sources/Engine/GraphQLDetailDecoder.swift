@@ -46,7 +46,8 @@ enum GraphQLDetailDecoder {
             sellerIsHighlyRated: badge.map { $0.localizedCaseInsensitiveContains("Highly rated") },
             latitude: validPoint ? lat : nil, longitude: validPoint ? lon : nil,
             isSold: boolean(target["is_sold"]), isPending: boolean(target["is_pending"]),
-            fulfillment: (target["delivery_types"] as? [String]).flatMap(Fulfillment.init(tokens:)))
+            fulfillment: (target["delivery_types"] as? [String]).flatMap(Fulfillment.init(tokens:)),
+            title: target["marketplace_listing_title"] as? String)
     }
 
     static func photos(_ data: Data, itemID: String) throws -> [URL] {

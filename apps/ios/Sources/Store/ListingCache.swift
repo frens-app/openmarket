@@ -35,8 +35,9 @@ struct CachedProfile: Codable {
     var listing: Listing? {
         guard var listing = card else { return nil }
         listing.detail = detail
+        if detail != nil, listing.detailObservedAt == nil { listing.detailObservedAt = fetchedAt }
         listing.itemURL = listing.itemURL ?? itemURL
-        return listing
+        return listing.canonicalized
     }
 
     /// Seller identity is only exposed to a signed-in desktop session, so a
@@ -92,6 +93,9 @@ final class ListingCache {
     static let profileLimit = 1000
 
     private var profiles: [String: CachedProfile] = [:]
+    // Keep legacy file keys readable during migration without scanning every
+    // cached profile on each new feed-card lookup.
+    private var canonicalProfileKeys: [String: String] = [:]
     private var results: CachedResults?
     private var saveTask: Task<Void, Never>?
     private let directory: URL
@@ -116,9 +120,10 @@ final class ListingCache {
     /// Synchronous by design: this is read on the tap path, where the whole
     /// point is to have something on screen in the same frame.
     func profile(for id: String) -> CachedProfile? {
-        guard var hit = profiles[id] else { return nil }
+        let key = profiles[id] != nil ? id : canonicalProfileKeys[id]
+        guard let key, var hit = profiles[key] else { return nil }
         hit.usedAt = Date()
-        profiles[id] = hit          // keeps LRU honest without a second structure
+        profiles[key] = hit          // keeps LRU honest without a second structure
         scheduleSave()
         return hit
     }
@@ -129,7 +134,9 @@ final class ListingCache {
     /// carrying no detail — a save made before the first enrichment landed —
     /// keeps whatever was already there rather than blanking it.
     func store(_ listing: Listing, capture: CaptureContext? = nil) {
-        let existing = profiles[listing.id]
+        let listing = listing.canonicalized
+        let key = canonicalProfileKeys[listing.id] ?? listing.id
+        let existing = profiles[key]
         var card = listing
         card.detail = nil       // held alongside, not inside; don't store it twice
 
@@ -143,7 +150,7 @@ final class ListingCache {
             return capture.canCarrySellerIdentity || !old.canCarrySellerIdentity ? capture : old
         }()
 
-        profiles[listing.id] = CachedProfile(
+        profiles[key] = CachedProfile(
             card: card,
             detail: listing.detail ?? existing?.detail,
             // Never trade a known URL for nil — a revalidation that couldn't
@@ -153,6 +160,7 @@ final class ListingCache {
             usedAt: Date(),
             capture: mergedCapture
         )
+        canonicalProfileKeys[listing.id] = key
         evictIfNeeded()
         scheduleSave()
     }
@@ -166,7 +174,7 @@ final class ListingCache {
     /// Saved listings, most recently saved first, skipping any whose profile
     /// has gone (nothing evicts a saved one, but a cache file can be deleted).
     func listings(for ids: [String]) -> [Listing] {
-        ids.compactMap { profiles[$0]?.listing }
+        ids.compactMap { profile(for: $0)?.listing }
     }
 
     var profileCount: Int { profiles.count }
@@ -177,10 +185,15 @@ final class ListingCache {
     private func evictIfNeeded() {
         guard profiles.count > Self.profileLimit else { return }
         let doomed = profiles
-            .filter { !isSaved($0.key) }
+            .filter { !isSaved($0.key) && !isSaved($0.value.listing?.id ?? $0.key) }
             .sorted { $0.value.usedAt < $1.value.usedAt }
             .prefix(profiles.count - Self.profileLimit)
-        for (id, _) in doomed { profiles.removeValue(forKey: id) }
+        for (id, profile) in doomed {
+            profiles.removeValue(forKey: id)
+            if let canonical = profile.listing?.id, canonicalProfileKeys[canonical] == id {
+                canonicalProfileKeys.removeValue(forKey: canonical)
+            }
+        }
         Logger.cache.info("evicted \(doomed.count) profiles, \(self.profiles.count) remain")
     }
 
@@ -218,10 +231,17 @@ final class ListingCache {
         if let data = try? Data(contentsOf: profilesFile),
            let decoded = try? decoder.decode([String: CachedProfile].self, from: data) {
             profiles = decoded
+            for (key, profile) in decoded.sorted(by: { $0.value.fetchedAt > $1.value.fetchedAt }) {
+                if let id = profile.listing?.id, canonicalProfileKeys[id] == nil {
+                    canonicalProfileKeys[id] = key
+                }
+            }
         }
         if let data = try? Data(contentsOf: resultsFile),
            let decoded = try? decoder.decode(CachedResults.self, from: data) {
-            results = decoded
+            var restored = decoded
+            restored.listings = decoded.listings.map(\.canonicalized)
+            results = restored
         }
         Logger.cache.info("loaded \(self.profiles.count) profiles, \(self.results?.listings.count ?? 0) cards")
     }
