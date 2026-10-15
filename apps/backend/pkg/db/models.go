@@ -253,6 +253,12 @@ type Listing struct {
 	LastDetailSource     *string
 	LastDetailUpdatedBy  *uuid.UUID
 	LastDetailReceivedAt pgtype.Timestamptz
+	// Current asking price in exact major currency units; NULL means unknown.
+	PriceAmount pgtype.Numeric
+	// Currency of the asking prices; NULL when the source is ambiguous.
+	PriceCurrencyCode *string
+	// Previous asking price shown crossed out by Facebook, not the first price we observed; NULL means unavailable.
+	OriginalPriceAmount pgtype.Numeric
 }
 
 type LlmRun struct {

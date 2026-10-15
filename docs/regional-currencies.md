@@ -64,14 +64,27 @@ two fractional digits. They are never floating-point numbers or Facebook offset
 integers. GraphQL's numeric amount takes precedence over compact display text
 such as `$1.23M`.
 
-The existing PostgreSQL `listings.snapshot` JSONB column holds these fields;
-no table migration or speculative backfill is needed. For example, CAD 1234.56
-is stored as `"priceCurrencyCode": "CAD"` and
-`"priceAmountDecimal": "1234.56"`. Local saves, sync responses, and shopping
-results carry the same fields. An unambiguous source marker can supply a missing
-code, but bare `$` remains unknown unless GraphQL supplies the code. Ranges are
-not inferred to be exact amounts; free prices are zero with unknown currency
-unless the source identifies it.
+PostgreSQL stores the normalized values in dedicated `listings.price_amount`
+(`numeric`), `price_currency_code` (`text`), and `original_price_amount`
+(`numeric`) columns. `price_amount` is the current asking price;
+`original_price_amount` is the previous asking price Facebook shows crossed out,
+not the first price this app observed. A listing reduced from CAD 100 to CAD 80
+has `price_amount = 80`, `original_price_amount = 100`, and
+`price_currency_code = 'CAD'`. A missing previous price remains NULL.
+
+Migration `00022_listing_price_columns.sql` backfills valid explicit structured
+JSONB values and removes those keys from the snapshot. The columns are the
+single source of truth; source display text and other listing details remain
+in JSONB. The API reconstructs its existing decimal-string fields from the
+columns, preserving client compatibility. Database checks reject negative,
+nonfinite, out-of-range, and excess-precision values without rounding. Rollback
+restores the structured JSONB fields before dropping the columns.
+
+Local saves, sync responses, and shopping results carry the same wire fields.
+An unambiguous source marker can supply a missing code, but bare `$` remains
+unknown unless GraphQL supplies the code. Ranges are not inferred to be exact
+amounts; free prices are zero with unknown currency unless the source identifies
+it. The migration never guesses currency from old formatted text.
 
 The server validates decimal/code syntax and observation times. Price text and
 its numeric metadata update together. A newer legacy text-only update clears
@@ -88,7 +101,7 @@ uses its existing fixed-hundredths wire format and whole-unit recommendations.
 - iOS simulator build and test suite passed: 220 tests, one opt-in live Amazon
   test skipped, zero failures.
 - Backend build, vet, and tests pass. A disposable PostgreSQL database verifies
-  API save/load and JSONB values for CAD, EUR, INR, IDR, VND, and COP, including
+  migration up/down/backfill, database constraints, and API save/load for CAD, EUR, INR, IDR, VND, and COP, including
   zero and an exact amount larger than 2^53. Swift wire/local-storage tests
   cover all 24 currencies.
 - Cookie-free GraphQL: two search pages and one Discover page in one city per

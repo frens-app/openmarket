@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -49,6 +50,7 @@ func TestSavedListingIntegration(t *testing.T) {
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
+	verifyListingPriceMigration(t, ctx, sqlDB, pool)
 	if err := goose.Up(sqlDB, "../../deployments/migrations"); err != nil {
 		t.Fatal(err)
 	}
@@ -270,8 +272,17 @@ func TestSavedListingIntegration(t *testing.T) {
 				t.Fatal(err)
 			}
 			var amount, code string
-			if err := pool.QueryRow(ctx, "SELECT snapshot->>'priceAmountDecimal', snapshot->>'priceCurrencyCode' FROM listings WHERE id=$1", row.ID).Scan(&amount, &code); err != nil {
+			if err := pool.QueryRow(ctx, "SELECT price_amount::text, price_currency_code FROM listings WHERE id=$1", row.ID).Scan(&amount, &code); err != nil {
 				t.Fatal(err)
+			}
+			var stored map[string]any
+			if err := json.Unmarshal(row.Snapshot, &stored); err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"priceAmountDecimal", "priceCurrencyCode", "originalPriceAmountDecimal"} {
+				if _, present := stored[key]; present {
+					t.Fatalf("duplicate structured price in JSONB: %s", key)
+				}
 			}
 			if amount != sample.amount || code != sample.code {
 				t.Fatalf("database changed price: %s %s", code, amount)
@@ -289,6 +300,60 @@ func TestSavedListingIntegration(t *testing.T) {
 			if !found {
 				t.Fatal("saved price missing from API response")
 			}
+		}
+	})
+
+	t.Run("detail updates and legacy clients use price columns", func(t *testing.T) {
+		initial := makeSave("888899999")
+		initial.Snapshot.PriceText = proto.String("CA$80")
+		initial.Snapshot.PriceAmountDecimal = proto.String("80.00")
+		initial.Snapshot.PriceCurrencyCode = proto.String("CAD")
+		initial.Snapshot.OriginalPriceText = proto.String("CA$100")
+		initial.Snapshot.OriginalPriceAmountDecimal = proto.String("100.00")
+		assertApply(tokenB, initial)
+		detail := &v1.SavedListingSnapshot{FacebookListingId: initial.FacebookListingId,
+			Description: proto.String("Desk"), DetailObservedAt: timestamppb.Now()}
+		send := func() {
+			request := connect.NewRequest(&v1.SubmitListingViewRequest{FacebookListingId: initial.FacebookListingId,
+				ViewedAt: timestamppb.Now(), Snapshot: detail, Source: v1.ListingViewSource_LISTING_VIEW_SOURCE_ANONYMOUS_GRAPHQL})
+			request.Header().Set("Authorization", "Bearer "+tokenB)
+			if _, err := viewClient.SubmitListingView(ctx, request); err != nil {
+				t.Fatal(err)
+			}
+		}
+		send()
+		read := func() *v1.SavedListingSnapshot {
+			for _, saved := range list(tokenB, "").Listings {
+				if saved.Snapshot.FacebookListingId == initial.FacebookListingId {
+					return saved.Snapshot
+				}
+			}
+			t.Fatal("listing disappeared")
+			return nil
+		}
+		if got := read(); got.GetPriceAmountDecimal() != "80.00" || got.GetPriceCurrencyCode() != "CAD" || got.GetOriginalPriceAmountDecimal() != "100.00" {
+			t.Fatal("detail-only update lost column values", got)
+		}
+		detail.PriceText = proto.String("CA$75.50")
+		detail.PriceAmountDecimal = proto.String("75.50")
+		detail.PriceCurrencyCode = proto.String("CAD")
+		detail.PriceObservedAt = timestamppb.New(time.Now().Add(time.Second))
+		send()
+		if got := read(); got.GetPriceAmountDecimal() != "75.50" || got.GetOriginalPriceAmountDecimal() != "100.00" {
+			t.Fatal("detail price did not update columns", got)
+		}
+		legacy := makeSave(initial.FacebookListingId)
+		legacy.Snapshot.PriceText = proto.String("$70")
+		legacy.Snapshot.PriceObservedAt = timestamppb.New(time.Now().Add(2 * time.Second))
+		assertApply(tokenB, legacy)
+		if got := read(); got.PriceAmountDecimal != nil || got.PriceCurrencyCode != nil || got.OriginalPriceAmountDecimal != nil {
+			t.Fatal("legacy update retained stale columns", got)
+		}
+		older := proto.Clone(initial).(*v1.SavedListingChange)
+		older.MutationId = uuid.NewString()
+		assertApply(tokenB, older)
+		if got := read(); got.PriceAmountDecimal != nil || got.PriceCurrencyCode != nil {
+			t.Fatal("older update restored cleared columns", got)
 		}
 	})
 

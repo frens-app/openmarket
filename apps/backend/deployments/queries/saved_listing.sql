@@ -11,10 +11,16 @@ INSERT INTO saved_listing_mutations (user_id, mutation_id, request_hash) VALUES 
 INSERT INTO listings (facebook_listing_id) VALUES ($1) ON CONFLICT DO NOTHING;
 
 -- name: LockListing :one
-SELECT * FROM listings WHERE facebook_listing_id = $1 FOR UPDATE;
+SELECT listings.*, COALESCE(price_amount::text, '')::text AS price_amount_decimal,
+    COALESCE(original_price_amount::text, '')::text AS original_price_amount_decimal
+FROM listings WHERE facebook_listing_id = $1 FOR UPDATE;
 
 -- name: UpdateListingSnapshot :exec
-UPDATE listings SET snapshot = $2, field_observed_at = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $1;
+UPDATE listings SET snapshot = $2, field_observed_at = $3,
+    price_amount = sqlc.narg(price_amount_decimal)::text::numeric,
+    price_currency_code = sqlc.narg(price_currency_code),
+    original_price_amount = sqlc.narg(original_price_amount_decimal)::text::numeric,
+    updated_at = CURRENT_TIMESTAMP WHERE id = $1;
 
 -- name: SaveListing :exec
 INSERT INTO saved_listings (user_id, listing_id, saved_at) VALUES ($1, $2, $3)
@@ -25,7 +31,9 @@ DELETE FROM saved_listings WHERE user_id = $1 AND listing_id IN
     (SELECT id FROM listings WHERE facebook_listing_id = $2);
 
 -- name: ListSavedListings :many
-SELECT l.id, l.snapshot, s.saved_at FROM saved_listings s
+SELECT l.id, l.snapshot, COALESCE(l.price_amount::text, '')::text AS price_amount_decimal,
+    l.price_currency_code, COALESCE(l.original_price_amount::text, '')::text AS original_price_amount_decimal,
+    s.saved_at FROM saved_listings s
 JOIN listings l ON l.id = s.listing_id
 WHERE s.user_id = $1 AND l.facebook_listing_id > sqlc.arg('after_id')::text
 ORDER BY l.facebook_listing_id LIMIT sqlc.arg('page_limit')::integer;

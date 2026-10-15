@@ -68,7 +68,9 @@ func (q *Queries) GetSavedListingMutation(ctx context.Context, arg GetSavedListi
 }
 
 const listSavedListings = `-- name: ListSavedListings :many
-SELECT l.id, l.snapshot, s.saved_at FROM saved_listings s
+SELECT l.id, l.snapshot, COALESCE(l.price_amount::text, '')::text AS price_amount_decimal,
+    l.price_currency_code, COALESCE(l.original_price_amount::text, '')::text AS original_price_amount_decimal,
+    s.saved_at FROM saved_listings s
 JOIN listings l ON l.id = s.listing_id
 WHERE s.user_id = $1 AND l.facebook_listing_id > $2::text
 ORDER BY l.facebook_listing_id LIMIT $3::integer
@@ -81,9 +83,12 @@ type ListSavedListingsParams struct {
 }
 
 type ListSavedListingsRow struct {
-	ID       uuid.UUID
-	Snapshot []byte
-	SavedAt  pgtype.Timestamptz
+	ID                         uuid.UUID
+	Snapshot                   []byte
+	PriceAmountDecimal         string
+	PriceCurrencyCode          *string
+	OriginalPriceAmountDecimal string
+	SavedAt                    pgtype.Timestamptz
 }
 
 func (q *Queries) ListSavedListings(ctx context.Context, arg ListSavedListingsParams) ([]ListSavedListingsRow, error) {
@@ -95,7 +100,14 @@ func (q *Queries) ListSavedListings(ctx context.Context, arg ListSavedListingsPa
 	var items []ListSavedListingsRow
 	for rows.Next() {
 		var i ListSavedListingsRow
-		if err := rows.Scan(&i.ID, &i.Snapshot, &i.SavedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Snapshot,
+			&i.PriceAmountDecimal,
+			&i.PriceCurrencyCode,
+			&i.OriginalPriceAmountDecimal,
+			&i.SavedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -107,12 +119,35 @@ func (q *Queries) ListSavedListings(ctx context.Context, arg ListSavedListingsPa
 }
 
 const lockListing = `-- name: LockListing :one
-SELECT id, facebook_listing_id, snapshot, field_observed_at, created_at, updated_at, last_viewed_at, last_viewed_by, last_view_received_at, last_detail_observed_at, last_detail_source, last_detail_updated_by, last_detail_received_at FROM listings WHERE facebook_listing_id = $1 FOR UPDATE
+SELECT listings.id, listings.facebook_listing_id, listings.snapshot, listings.field_observed_at, listings.created_at, listings.updated_at, listings.last_viewed_at, listings.last_viewed_by, listings.last_view_received_at, listings.last_detail_observed_at, listings.last_detail_source, listings.last_detail_updated_by, listings.last_detail_received_at, listings.price_amount, listings.price_currency_code, listings.original_price_amount, COALESCE(price_amount::text, '')::text AS price_amount_decimal,
+    COALESCE(original_price_amount::text, '')::text AS original_price_amount_decimal
+FROM listings WHERE facebook_listing_id = $1 FOR UPDATE
 `
 
-func (q *Queries) LockListing(ctx context.Context, facebookListingID string) (Listing, error) {
+type LockListingRow struct {
+	ID                         uuid.UUID
+	FacebookListingID          string
+	Snapshot                   []byte
+	FieldObservedAt            []byte
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	LastViewedAt               pgtype.Timestamptz
+	LastViewedBy               *uuid.UUID
+	LastViewReceivedAt         pgtype.Timestamptz
+	LastDetailObservedAt       pgtype.Timestamptz
+	LastDetailSource           *string
+	LastDetailUpdatedBy        *uuid.UUID
+	LastDetailReceivedAt       pgtype.Timestamptz
+	PriceAmount                pgtype.Numeric
+	PriceCurrencyCode          *string
+	OriginalPriceAmount        pgtype.Numeric
+	PriceAmountDecimal         string
+	OriginalPriceAmountDecimal string
+}
+
+func (q *Queries) LockListing(ctx context.Context, facebookListingID string) (LockListingRow, error) {
 	row := q.db.QueryRow(ctx, lockListing, facebookListingID)
-	var i Listing
+	var i LockListingRow
 	err := row.Scan(
 		&i.ID,
 		&i.FacebookListingID,
@@ -127,6 +162,11 @@ func (q *Queries) LockListing(ctx context.Context, facebookListingID string) (Li
 		&i.LastDetailSource,
 		&i.LastDetailUpdatedBy,
 		&i.LastDetailReceivedAt,
+		&i.PriceAmount,
+		&i.PriceCurrencyCode,
+		&i.OriginalPriceAmount,
+		&i.PriceAmountDecimal,
+		&i.OriginalPriceAmountDecimal,
 	)
 	return i, err
 }
@@ -237,16 +277,30 @@ func (q *Queries) SaveListing(ctx context.Context, arg SaveListingParams) error 
 }
 
 const updateListingSnapshot = `-- name: UpdateListingSnapshot :exec
-UPDATE listings SET snapshot = $2, field_observed_at = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $1
+UPDATE listings SET snapshot = $2, field_observed_at = $3,
+    price_amount = $4::text::numeric,
+    price_currency_code = $5,
+    original_price_amount = $6::text::numeric,
+    updated_at = CURRENT_TIMESTAMP WHERE id = $1
 `
 
 type UpdateListingSnapshotParams struct {
-	ID              uuid.UUID
-	Snapshot        []byte
-	FieldObservedAt []byte
+	ID                         uuid.UUID
+	Snapshot                   []byte
+	FieldObservedAt            []byte
+	PriceAmountDecimal         *string
+	PriceCurrencyCode          *string
+	OriginalPriceAmountDecimal *string
 }
 
 func (q *Queries) UpdateListingSnapshot(ctx context.Context, arg UpdateListingSnapshotParams) error {
-	_, err := q.db.Exec(ctx, updateListingSnapshot, arg.ID, arg.Snapshot, arg.FieldObservedAt)
+	_, err := q.db.Exec(ctx, updateListingSnapshot,
+		arg.ID,
+		arg.Snapshot,
+		arg.FieldObservedAt,
+		arg.PriceAmountDecimal,
+		arg.PriceCurrencyCode,
+		arg.OriginalPriceAmountDecimal,
+	)
 	return err
 }

@@ -19,7 +19,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -274,8 +273,8 @@ func (s *savedListingServer) apply(ctx context.Context, userID uuid.UUID, c *v1.
 		if err != nil {
 			return err
 		}
-		snapshot := &v1.SavedListingSnapshot{}
-		if err = protojson.Unmarshal(row.Snapshot, snapshot); err != nil {
+		snapshot, err := decodeListingSnapshot(row.Snapshot, row.PriceAmountDecimal, row.PriceCurrencyCode, row.OriginalPriceAmountDecimal)
+		if err != nil {
 			return err
 		}
 		ages := map[string]time.Time{}
@@ -286,15 +285,11 @@ func (s *savedListingServer) apply(ctx context.Context, userID uuid.UUID, c *v1.
 		if snapshot.GetSold() && snapshot.GetPending() {
 			return connect.NewError(connect.CodeInvalidArgument, errors.New("conflicting availability; refresh both sold and pending"))
 		}
-		payload, err := protojson.Marshal(snapshot)
+		update, err := listingSnapshotUpdate(row.ID, snapshot, ages)
 		if err != nil {
 			return err
 		}
-		freshness, err := json.Marshal(ages)
-		if err != nil {
-			return err
-		}
-		if err = q.UpdateListingSnapshot(ctx, db.UpdateListingSnapshotParams{ID: row.ID, Snapshot: payload, FieldObservedAt: freshness}); err != nil {
+		if err = q.UpdateListingSnapshot(ctx, update); err != nil {
 			return err
 		}
 		if c.GetSaved() {
@@ -351,8 +346,8 @@ func (s *savedListingServer) ListSavedListings(ctx context.Context, req *connect
 		rows = rows[:100]
 	}
 	for _, row := range rows {
-		snapshot := &v1.SavedListingSnapshot{}
-		if err = protojson.Unmarshal(row.Snapshot, snapshot); err != nil {
+		snapshot, err := decodeListingSnapshot(row.Snapshot, row.PriceAmountDecimal, row.PriceCurrencyCode, row.OriginalPriceAmountDecimal)
+		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		response.Listings = append(response.Listings, &v1.SavedListing{ListingId: row.ID.String(), Snapshot: snapshot, SavedAt: timestamppb.New(row.SavedAt.Time)})

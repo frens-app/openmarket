@@ -12,7 +12,6 @@ import (
 	"frens.lol/openmarket/backend/pkg/db"
 	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -73,8 +72,8 @@ func (s *listingViewServer) SubmitListingView(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if r.Snapshot != nil && (!row.LastDetailReceivedAt.Valid || receivedAt.After(row.LastDetailReceivedAt.Time)) {
-		snapshot := &v1.SavedListingSnapshot{}
-		if err = protojson.Unmarshal(row.Snapshot, snapshot); err != nil {
+		snapshot, err := decodeListingSnapshot(row.Snapshot, row.PriceAmountDecimal, row.PriceCurrencyCode, row.OriginalPriceAmountDecimal)
+		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		ages := map[string]time.Time{}
@@ -85,15 +84,11 @@ func (s *listingViewServer) SubmitListingView(ctx context.Context, req *connect.
 		if snapshot.GetSold() && snapshot.GetPending() {
 			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("conflicting availability"))
 		}
-		payload, err := protojson.Marshal(snapshot)
+		update, err := listingSnapshotUpdate(row.ID, snapshot, ages)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		freshness, err := json.Marshal(ages)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		if err = q.UpdateListingSnapshot(ctx, db.UpdateListingSnapshotParams{ID: row.ID, Snapshot: payload, FieldObservedAt: freshness}); err != nil {
+		if err = q.UpdateListingSnapshot(ctx, update); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		if err = q.RecordListingDetailSource(ctx, db.RecordListingDetailSourceParams{ID: row.ID, ObservedAt: timestamptz(r.Snapshot.DetailObservedAt.AsTime()), Source: proto.String(r.Source.String()), Observer: &userID, ReceivedAt: timestamptz(receivedAt)}); err != nil {
