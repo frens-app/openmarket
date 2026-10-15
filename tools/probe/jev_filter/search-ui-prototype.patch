@@ -1,0 +1,1217 @@
+diff --git a/apps/ios/Sources/Account/APIClient.swift b/apps/ios/Sources/Account/APIClient.swift
+index 8d4cc87..b9c6337 100644
+--- a/apps/ios/Sources/Account/APIClient.swift
++++ b/apps/ios/Sources/Account/APIClient.swift
+@@ -69,9 +69,14 @@ enum API {
+         return "\(scheme)://\(host)"
+     }
+ 
+-    static func makeProtocolClient() -> ProtocolClient {
+-        ProtocolClient(
+-            httpClient: URLSessionHTTPClient(),
++    static func makeProtocolClient(timeout: TimeInterval? = nil) -> ProtocolClient {
++        let configuration = URLSessionConfiguration.default
++        if let timeout {
++            configuration.timeoutIntervalForRequest = timeout
++            configuration.timeoutIntervalForResource = timeout
++        }
++        return ProtocolClient(
++            httpClient: URLSessionHTTPClient(configuration: configuration),
+             config: ProtocolClientConfig(
+                 host: baseURL,
+                 // JSON over Connect, not binary proto. The schema is where the
+@@ -79,7 +84,8 @@ enum API {
+                 // curl-able while the API is still moving. Switching is a
+                 // one-line change here.
+                 networkProtocol: .connect,
+-                codec: JSONCodec()
++                codec: JSONCodec(),
++                timeout: timeout
+             )
+         )
+     }
+diff --git a/apps/ios/Sources/Store/FilterTotals.swift b/apps/ios/Sources/Store/FilterTotals.swift
+index d21509d..5f54727 100644
+--- a/apps/ios/Sources/Store/FilterTotals.swift
++++ b/apps/ios/Sources/Store/FilterTotals.swift
+@@ -12,11 +12,13 @@ final class FilterTotals: ObservableObject {
+ 
+     @Published private(set) var nonLocalListings: Int
+     @Published private(set) var ads: Int
++    @Published private(set) var aiFilteredListings: Int
+     @Published private(set) var discoverListings: Int
+     @Published private(set) var searchListings: Int
+     private let defaults: UserDefaults
+     private var nonLocalIDs: Set<String>
+     private var sponsoredIDs: Set<String>
++    private var aiFilteredIDs: Set<String>
+     private var discoverIDs: Set<String>
+     private var searchIDs: Set<String>
+ 
+@@ -24,10 +26,14 @@ final class FilterTotals: ObservableObject {
+         self.defaults = defaults
+         nonLocalIDs = Set(defaults.stringArray(forKey: "filterTotals.nonLocalIDs") ?? [])
+         sponsoredIDs = Set(defaults.stringArray(forKey: "filterTotals.sponsoredIDs") ?? [])
++        nonLocalIDs.subtract(sponsoredIDs)
++        aiFilteredIDs = Set(defaults.stringArray(forKey: "filterTotals.aiFilteredIDs") ?? [])
++            .subtracting(sponsoredIDs).subtracting(nonLocalIDs)
+         discoverIDs = Set(defaults.stringArray(forKey: "filterTotals.discoverIDs") ?? [])
+         searchIDs = Set(defaults.stringArray(forKey: "filterTotals.searchIDs") ?? [])
+         nonLocalListings = nonLocalIDs.count
+         ads = defaults.integer(forKey: "filterTotals.ads")
++        aiFilteredListings = aiFilteredIDs.count
+         discoverListings = discoverIDs.count
+         searchListings = searchIDs.count
+     }
+@@ -47,18 +53,36 @@ final class FilterTotals: ObservableObject {
+ 
+     func recordNonLocal(_ ids: [String]) {
+         let previous = nonLocalIDs.count
+-        nonLocalIDs.formUnion(ids)
++        nonLocalIDs.formUnion(Set(ids).subtracting(sponsoredIDs))
+         guard nonLocalIDs.count != previous else { return }
+-        nonLocalListings = nonLocalIDs.count
+-        defaults.set(Array(nonLocalIDs), forKey: "filterTotals.nonLocalIDs")
++        aiFilteredIDs.subtract(nonLocalIDs)
++        persistListingFilters()
++    }
++
++    func recordAIFiltered(_ ids: [String]) {
++        let previous = aiFilteredIDs.count
++        aiFilteredIDs.formUnion(Set(ids).subtracting(sponsoredIDs).subtracting(nonLocalIDs))
++        guard aiFilteredIDs.count != previous else { return }
++        persistListingFilters()
+     }
+ 
+     func recordSponsoredListing(_ id: String) {
+         guard sponsoredIDs.insert(id).inserted else { return }
+         defaults.set(Array(sponsoredIDs), forKey: "filterTotals.sponsoredIDs")
++        // A higher-priority reason replaces an earlier one, even across searches.
++        nonLocalIDs.remove(id)
++        aiFilteredIDs.remove(id)
++        persistListingFilters()
+         recordAds(1)
+     }
+ 
++    private func persistListingFilters() {
++        nonLocalListings = nonLocalIDs.count
++        aiFilteredListings = aiFilteredIDs.count
++        defaults.set(Array(nonLocalIDs), forKey: "filterTotals.nonLocalIDs")
++        defaults.set(Array(aiFilteredIDs), forKey: "filterTotals.aiFilteredIDs")
++    }
++
+     // Ad stories can lack stable IDs; count their slots once per accepted page.
+     func recordAds(_ count: Int) {
+         guard count > 0 else { return }
+diff --git a/apps/ios/Sources/Store/ListingStore.swift b/apps/ios/Sources/Store/ListingStore.swift
+index 7779d56..1b72dad 100644
+--- a/apps/ios/Sources/Store/ListingStore.swift
++++ b/apps/ios/Sources/Store/ListingStore.swift
+@@ -12,7 +12,9 @@ extension Logger {
+ /// counters behind the telemetry and the debug parity report.
+ @MainActor
+ final class ListingStore: ObservableObject {
+-    @Published private(set) var listings: [Listing] = []
++    @Published private(set) var listings: [Listing] = [] {
++        didSet { recordFilterTotals() }
++    }
+     private(set) var distanceSnapshot = ListingDistanceSnapshot()
+     @Published private(set) var isLoadingFirstPage = false
+     @Published private(set) var isLoadingMore = false
+@@ -44,6 +46,29 @@ final class ListingStore: ObservableObject {
+     private let metrics: MetricsReporter
+     private let cache: ListingCache
+     private var detailUpdates: AnyCancellable?
++    private var filterUpdates: AnyCancellable?
++    let aiFilter: SearchResultFilter
++
++    var displayedListings: [Listing] { aiFilter.visible(listings) }
++    var aiHiddenIDs: Set<String> { Set(listings.filter { aiFilter.isHidden($0) }.map(\.id)) }
++
++    func setAIFilterEnabled(_ enabled: Bool) async {
++        aiFilter.setEnabled(enabled)
++        deepestVisibleIndexSeen = -1
++        scrolledSinceLastPage = false
++        if enabled {
++            await filterBeforePublishing(listings + paginationBuffer, generation: resultsGeneration,
++                                        distanceSnapshot: distanceSnapshot)
++            recordFilterTotals()
++        }
++    }
++
++    func setAIHiddenVisible(_ visible: Bool) {
++        aiFilter.showHidden = visible
++        deepestVisibleIndexSeen = -1
++        scrolledSinceLastPage = false
++        recordFilterTotals()
++    }
+     private let authenticated: any GraphQLFeedLoading
+     private let anonymous: any GraphQLFeedLoading
+     private var graphQLPagination: GraphQLFeedPagination?
+@@ -85,6 +110,7 @@ final class ListingStore: ObservableObject {
+         detail.cancel()
+         self.session = session
+         resultsGeneration += 1
++        aiFilter.begin(query: query)
+         graphQLRequest?.cancel()
+         graphQLPagination = nil
+         graphQLState = nil
+@@ -114,7 +140,8 @@ final class ListingStore: ObservableObject {
+          anonymous: (any GraphQLFeedLoading)? = nil,
+          authenticated: (any GraphQLFeedLoading)? = nil,
+          distances: DistanceResolver = .shared,
+-         paginationTimeBudget: Duration = .seconds(8)) {
++         paginationTimeBudget: Duration = .seconds(8),
++         searchFilter: (any SearchFiltering)? = nil) {
+         self.desktop = desktop ?? DesktopFeedEngine()
+         self.feed = feed ?? FeedEngine()
+         self.detail = detail ?? DetailEngine()
+@@ -127,6 +154,10 @@ final class ListingStore: ObservableObject {
+         self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.desktop.webView)
+         self.distances = distances
+         self.paginationTimeBudget = paginationTimeBudget
++        self.aiFilter = SearchResultFilter(service: searchFilter ?? SearchFilterService())
++        filterUpdates = aiFilter.objectWillChange.sink { [weak self] in
++            self?.objectWillChange.send()
++        }
+         detailUpdates = cache.detailUpdates.sink { [weak self] id in
+             self?.restoreCachedDetails(for: id)
+         }
+@@ -165,6 +196,7 @@ final class ListingStore: ObservableObject {
+     func run(_ query: SearchQuery, hiddenAsViewed: Set<String> = []) async {
+         graphQLRequest?.cancel()
+         self.query = query
++        aiFilter.begin(query: query)
+         resultsGeneration += 1
+         let generation = resultsGeneration
+         graphQLPagination = nil
+@@ -185,21 +217,6 @@ final class ListingStore: ObservableObject {
+         isRefreshingSearch = true
+         health = ParseHealth()
+ 
+-        // Last session's cards for this exact query, on the first frame. The
+-        // live load underneath takes 5.13s to produce anything; there is no
+-        // reason to show a skeleton for it when we know what was there.
+-        if let cached = cache.results(for: query, session: session) {
+-            let restored = cached.map { cache.restoringDetails(to: $0) }
+-            distanceSnapshot.capture(restored, using: distances)
+-            listings = restored
+-            seenIDs = Set(cached.map(\.id))
+-            isShowingCachedResults = true
+-            isLoadingFirstPage = false
+-            Logger.store.info("restored \(cached.count) cards from cache")
+-        } else {
+-            isLoadingFirstPage = true
+-        }
+-
+         defer {
+             if generation == resultsGeneration {
+                 isLoadingFirstPage = false
+@@ -212,6 +229,23 @@ final class ListingStore: ObservableObject {
+                 }
+             }
+         }
++        if let cached = cache.results(for: query, session: session) {
++            let restored = cached.map { cache.restoringDetails(to: $0) }.filter { !shouldFilter($0) }
++            isLoadingFirstPage = true
++            var snapshot = ListingDistanceSnapshot()
++            snapshot.capture(restored, using: distances)
++            await filterBeforePublishing(restored, generation: generation, distanceSnapshot: snapshot)
++            guard generation == resultsGeneration, !Task.isCancelled else { return }
++            distanceSnapshot = snapshot
++            listings = restored
++            seenIDs = Set(cached.map(\.id))
++            isShowingCachedResults = true
++            isLoadingFirstPage = false
++            Logger.store.info("restored \(cached.count) cards from cache")
++        } else {
++            isLoadingFirstPage = true
++        }
++
+         graphQLState = .loading
+         do {
+             var pagination = GraphQLFeedPagination()
+@@ -327,6 +361,7 @@ final class ListingStore: ObservableObject {
+ 
+     func updateHiddenAsViewed(_ hidden: Set<String>) {
+         paginationHiddenAsViewed = hidden
++        recordFilterTotals()
+     }
+ 
+     /// Re-check even an armed drag: a cache refresh or filter may have changed
+@@ -356,7 +391,7 @@ final class ListingStore: ObservableObject {
+     /// page ahead, maximum).
+     private func topUpIfAtMargin() async {
+         let visibleCount = visibleListings(in: listings).count
+-        guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore,
++        guard query != nil, !isRefreshingSearch, !isLoadingMore, !aiFilter.isFiltering, canLoadMore,
+               scrolledSinceLastPage, paginationError == nil,
+               (visibleCount == 0 || deepestVisibleIndexSeen >= 0),
+               deepestVisibleIndexSeen >= visibleCount - Self.prefetchMargin else { return }
+@@ -381,7 +416,7 @@ final class ListingStore: ObservableObject {
+     }
+ 
+     private func performTopUp() async {
+-        guard query != nil, !isRefreshingSearch, !isLoadingMore, canLoadMore else { return }
++        guard query != nil, !isRefreshingSearch, !isLoadingMore, !aiFilter.isFiltering, canLoadMore else { return }
+         paginationPaused = false
+         scrolledSinceLastPage = false
+         let generation = resultsGeneration
+@@ -628,12 +663,15 @@ final class ListingStore: ObservableObject {
+         await distances.resolveAll(unresolved.map(\.locationText))
+         guard generation == resultsGeneration, !Task.isCancelled else { return }
+         let geocodeMS = Int(resolving.duration(to: .now) / .milliseconds(1))
++        var snapshot = replacingCache ? ListingDistanceSnapshot() : distanceSnapshot
++        snapshot.capture(fresh, using: distances)
++        await filterBeforePublishing(fresh, generation: generation, distanceSnapshot: snapshot)
++        guard generation == resultsGeneration, !Task.isCancelled else { return }
+         Logger.store.info("search distance resolution: cards=\(fresh.count, privacy: .public) geocode_ms=\(geocodeMS, privacy: .public)")
+ 
+         let observedIDs = replacingCache ? Set(visibleListings(in: listings)
+             .prefix(deepestVisibleIndexSeen + 1).map(\.id)) : []
+-        if replacingCache { distanceSnapshot = ListingDistanceSnapshot() }
+-        distanceSnapshot.capture(fresh, using: distances)
++        distanceSnapshot = snapshot
+ 
+         if replacingCache {
+             isShowingCachedResults = false
+@@ -655,6 +693,18 @@ final class ListingStore: ObservableObject {
+         metrics.parseHealth(counts)
+     }
+ 
++    private func filterBeforePublishing(_ cards: [Listing], generation: Int,
++                                       distanceSnapshot: ListingDistanceSnapshot) async {
++        while generation == resultsGeneration, !Task.isCancelled {
++            let revision = aiFilter.revision
++            // Keep decisions for viewed cards so turning off "Only new" needs no extra request.
++            let eligible = listingsBeforeAI(cards, hidingViewed: false, distanceSnapshot: distanceSnapshot).items
++            await aiFilter.evaluate(eligible)
++            // Off→on can invalidate an in-flight decision without changing the search.
++            if revision == aiFilter.revision || !aiFilter.isEnabled { return }
++        }
++    }
++
+     /// Visible pagination cards include staged rows so the six-card target is
+     /// about what the user will receive, not merely what parsing found.
+     private var visiblePaginationCount: Int {
+@@ -662,14 +712,27 @@ final class ListingStore: ObservableObject {
+     }
+ 
+     private func visibleListings(in candidates: [Listing]) -> [Listing] {
++        aiFilter.visible(listingsBeforeAI(candidates).items)
++    }
++
++    private func listingsBeforeAI(_ candidates: [Listing], hidingViewed: Bool = true,
++                                  distanceSnapshot: ListingDistanceSnapshot? = nil) -> WinnowedListings {
+         ListingWinnower.apply(
+             to: candidates,
+             hiddenAsViewed: paginationHiddenAsViewed,
+-            hidingViewed: true,
++            hidingViewed: hidingViewed,
+             radiusKM: prefs.radiusKM,
+             distances: distances,
+-            distanceSnapshot: distanceSnapshot
+-        ).items
++            distanceSnapshot: distanceSnapshot ?? self.distanceSnapshot
++        )
++    }
++
++    private func recordFilterTotals() {
++        guard let filterTotals else { return }
++        let beforeAI = listingsBeforeAI(listings)
++        filterTotals.recordNonLocal(beforeAI.nonLocalIDs)
++        guard !aiFilter.showHidden else { return }
++        filterTotals.recordAIFiltered(beforeAI.items.filter { aiFilter.isHidden($0) }.map(\.id))
+     }
+ 
+     /// Publishes the first visible cards immediately into the reserved row,
+@@ -719,61 +782,8 @@ final class ListingStore: ObservableObject {
+     /// Extraction returns every card in the DOM each time, so this is
+     /// idempotent: known ids are skipped and only genuinely new cards append.
+     private func ingest(_ raw: [FeedEngine.RawCard]) async {
+-        // Replace rather than merge: merging keeps last session's `cardIndex`,
+-        // which now points at a different card, and a tap opens the wrong
+-        // listing. Detail already fetched comes back from the profile cache.
+-        let isReplacingCached = isShowingCachedResults && !raw.isEmpty
+-        // A copy, so a replacement that yields nothing leaves the restored grid
+-        // intact rather than half-dismantled.
+-        var seen = isReplacingCached ? Set<String>() : seenIDs
+-
+-        var counts = ParseHealth()
+-        counts.domCards = raw.count
+-
+-        var fresh: [Listing] = []
+-        for card in raw {
+-            guard let listing = CardParser.parse(card) else { continue }
+-            counts.extracted += 1
+-            counts.fieldCounts["title", default: 0] += listing.title != nil ? 1 : 0
+-            counts.fieldCounts["price", default: 0] += listing.priceText != nil ? 1 : 0
+-            counts.fieldCounts["thumbnail", default: 0] += listing.thumbnailURL != nil ? 1 : 0
+-            counts.fieldCounts["location", default: 0] += listing.locationText != nil ? 1 : 0
+-
+-            guard !shouldFilter(listing) else {
+-                counts.dropped += 1
+-                continue
+-            }
+-            guard !seen.contains(listing.id) else {
+-                fillGaps(from: listing)
+-                continue
+-            }
+-            seen.insert(listing.id)
+-            // A card we've fully read before arrives already complete, so its
+-            // detail screen opens with everything on the first frame.
+-            fresh.append(cache.restoringDetails(to: listing))
+-        }
+-
+-        guard !fresh.isEmpty else { return }       // keep the restored grid
+-
+-        // Same rule as the desktop path: every distance known before anything
+-        // is drawn, so the grid can't resize itself afterwards.
+-        let unresolved = fresh.filter { distances.enrichedCoordinate(for: $0) == nil }
+-        await distances.resolveAll(unresolved.map(\.locationText))
+-
+-        if isReplacingCached { distanceSnapshot = ListingDistanceSnapshot() }
+-        distanceSnapshot.capture(fresh, using: distances)
+-
+-        if isReplacingCached {
+-            isShowingCachedResults = false
+-            counts.rendered = fresh.count
+-            listings = fresh                       // one assignment, never empty
+-        } else {
+-            counts.rendered = listings.count + fresh.count
+-            listings.append(contentsOf: fresh)
+-        }
+-        seenIDs = seen
+-        health = counts
+-        metrics.parseHealth(counts)
++        let parsed = raw.compactMap { CardParser.parse($0) }
++        await absorb(parsed, replacingCache: isShowingCachedResults && !parsed.isEmpty)
+     }
+ 
+     /// Filtering happens in Swift, after extraction, so the page's own
+diff --git a/apps/ios/Sources/UI/ResultsView.swift b/apps/ios/Sources/UI/ResultsView.swift
+index fc78bee..ef00dee 100644
+--- a/apps/ios/Sources/UI/ResultsView.swift
++++ b/apps/ios/Sources/UI/ResultsView.swift
+@@ -9,6 +9,7 @@ struct ResultsView: View {
+     }
+ 
+     @EnvironmentObject private var store: ListingStore
++    @EnvironmentObject private var account: AccountSession
+     @EnvironmentObject private var prefs: Preferences
+     @EnvironmentObject private var location: LocationProvider
+     @EnvironmentObject private var distances: DistanceResolver
+@@ -32,6 +33,7 @@ struct ResultsView: View {
+     @State private var showLocationPicker = false
+ 
+     @State private var showSignIn = false
++    @State private var showFilterSignIn = false
+     /// One sheet serves two offers — the wall mid-search and the footer at the
+     /// end of a feed — and they convert differently.
+     @State private var signInSurface: Analytics.Surface = .search
+@@ -42,7 +44,7 @@ struct ResultsView: View {
+ 
+     private var canRecordShownListings: Bool {
+         isVisible && scenePhase == .active && !isSearching && selected == nil
+-            && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
++            && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn && !showFilterSignIn
+     }
+ 
+     /// Which listings the "only new" filter is hiding right now.
+@@ -79,6 +81,7 @@ struct ResultsView: View {
+         .safeAreaInset(edge: .top, spacing: 0) {
+             VStack(spacing: 0) {
+                 searchBar
++                if surface == .search || isSearching { aiFilterBar }
+                 if surface == .search && !isSearching {
+                     ActiveFilterBar(
+                         onLocation: { showLocationPicker = true },
+@@ -107,6 +110,19 @@ struct ResultsView: View {
+             }
+         }
+         .sheet(isPresented: $showSettings) { SettingsView() }
++        .sheet(isPresented: $showFilterSignIn) {
++            NavigationStack {
++                AccountLoginView(onSkip: { showFilterSignIn = false }) { _ in
++                    showFilterSignIn = false
++                    Task { await store.setAIFilterEnabled(true) }
++                }
++                .navigationTitle("Sign in to filter with AI")
++                .navigationBarTitleDisplayMode(.inline)
++            }
++        }
++        .onChange(of: account.isSignedIn) { _, signedIn in
++            if !signedIn { Task { await store.setAIFilterEnabled(false) } }
++        }
+         .onChange(of: filteredNonLocalIDs, initial: true) { _, ids in
+             FilterTotals.shared.recordNonLocal(ids)
+         }
+@@ -356,6 +372,51 @@ struct ResultsView: View {
+         .accessibilityLabel(prefs.hasNonDefaultFilters ? "Filters, active" : "Filters")
+     }
+ 
++    private var aiFilterBar: some View {
++        let hiddenCount = winnowed(store.listings).items.filter { store.aiFilter.isHidden($0) }.count
++        return VStack(alignment: .leading, spacing: 6) {
++            Toggle(isOn: Binding(
++                get: { store.aiFilter.isEnabled },
++                set: { enabled in
++                    if enabled && !account.isSignedIn {
++                        showFilterSignIn = true
++                    } else {
++                        Task { await store.setAIFilterEnabled(enabled) }
++                    }
++                }
++            )) {
++                Label("Filter with AI", systemImage: "sparkles")
++                    .font(.subheadline)
++            }
++            .controlSize(.small)
++            .accessibilityHint("Checks listing titles and photos against your search. Keeps uncertain matches.")
++
++            if store.aiFilter.isEnabled {
++                HStack(spacing: 8) {
++                    if store.aiFilter.isFiltering {
++                        ProgressView().controlSize(.mini)
++                        Text("Checking titles and photos…")
++                    } else {
++                        Text(hiddenCount == 0 ? "Uncertain matches stay visible" : "\(hiddenCount) hidden by AI")
++                    }
++                    Spacer(minLength: 0)
++                    if hiddenCount > 0 {
++                        Button(store.aiFilter.showHidden ? "Hide again" : "Show hidden") {
++                            store.setAIHiddenVisible(!store.aiFilter.showHidden)
++                        }
++                    }
++                }
++                .font(.caption)
++                .foregroundStyle(.secondary)
++                if let notice = store.aiFilter.notice {
++                    Text(notice).font(.caption).foregroundStyle(.secondary)
++                }
++            }
++        }
++        .padding(.horizontal, 16)
++        .padding(.vertical, 8)
++    }
++
+     @ViewBuilder
+     private var searchContent: some View {
+         switch store.feedState {
+@@ -370,7 +431,7 @@ struct ResultsView: View {
+             InlineNotice(text: message, actionTitle: "Try again") { Task { await store.retry() } }
+                 .padding()
+         default:
+-            if store.isLoadingFirstPage {
++            if store.isLoadingFirstPage || (store.aiFilter.isFiltering && !store.isLoadingMore && !store.isRefreshingSearch) {
+                 SkeletonGrid()
+             } else if store.listings.isEmpty {
+                 if store.canLoadMore {
+@@ -540,10 +601,12 @@ struct ResultsView: View {
+     }
+ 
+     private var searchGrid: some View {
+-        let winnowed = winnowed(store.listings)
++        let beforeAI = winnowed(store.listings)
++        let winnowed = winnowed(store.displayedListings)
+         return PaginatedListingGrid(
+             items: winnowed.items,
+             namespace: searchNamespace,
++            aiHiddenIDs: store.aiHiddenIDs,
+             loadingPlaceholderCount: 0,
+             tracksVisibleListings: canRecordShownListings && surface == .search,
+             onItemVisible: { FilterTotals.shared.recordShownListing($0.id, on: .search) },
+@@ -555,6 +618,13 @@ struct ResultsView: View {
+                 )
+             }
+         ) {
++            if winnowed.items.isEmpty, !beforeAI.items.isEmpty, !store.aiHiddenIDs.isEmpty, !store.aiFilter.showHidden {
++                Text("AI hid the results that clearly differed from your search. Use Show hidden to review them.")
++                    .font(.subheadline)
++                    .foregroundStyle(.secondary)
++                    .multilineTextAlignment(.center)
++                    .padding()
++            }
+             // "Only new listings" runs here rather than at Facebook, so the
+             // cards it removes disappear with no explanation unless one is given.
+             if winnowed.hiddenAsViewed > 0 {
+@@ -860,6 +930,7 @@ struct ResultsView: View {
+ private struct PaginatedListingGrid<Footer: View>: View {
+     let items: [Listing]
+     let namespace: Namespace.ID
++    let aiHiddenIDs: Set<String>
+     let loadingPlaceholderCount: Int
+     let tracksVisibleListings: Bool
+     let onItemVisible: (Listing) -> Void
+@@ -870,6 +941,7 @@ private struct PaginatedListingGrid<Footer: View>: View {
+ 
+     init(items: [Listing],
+          namespace: Namespace.ID,
++         aiHiddenIDs: Set<String> = [],
+          loadingPlaceholderCount: Int,
+          tracksVisibleListings: Bool,
+          onItemVisible: @escaping (Listing) -> Void,
+@@ -878,6 +950,7 @@ private struct PaginatedListingGrid<Footer: View>: View {
+          @ViewBuilder footer: () -> Footer) {
+         self.items = items
+         self.namespace = namespace
++        self.aiHiddenIDs = aiHiddenIDs
+         self.loadingPlaceholderCount = loadingPlaceholderCount
+         self.tracksVisibleListings = tracksVisibleListings
+         self.onItemVisible = onItemVisible
+@@ -895,6 +968,16 @@ private struct PaginatedListingGrid<Footer: View>: View {
+                 loadingPlaceholderCount: loadingPlaceholderCount
+             ) { listing in
+                 ListingCard(listing: listing, namespace: namespace)
++                    .overlay(alignment: .topLeading) {
++                        if aiHiddenIDs.contains(listing.id) {
++                            Text("Hidden by AI")
++                                .font(.caption.weight(.semibold))
++                                .padding(6)
++                                .background(.regularMaterial, in: Capsule())
++                                .padding(6)
++                                .allowsHitTesting(false)
++                        }
++                    }
+                     .modifier(ListingVisibilityTracker(isEnabled: tracksVisibleListings) {
+                         onItemVisible(listing)
+                     })
+diff --git a/apps/ios/Sources/UI/SettingsView.swift b/apps/ios/Sources/UI/SettingsView.swift
+index b45206a..4c023ed 100644
+--- a/apps/ios/Sources/UI/SettingsView.swift
++++ b/apps/ios/Sources/UI/SettingsView.swift
+@@ -29,10 +29,11 @@ struct SettingsView: View {
+         NavigationStack {
+             Form {
+                 Section {
+-                    totalHeadline(filterTotals.nonLocalListings, title: "Non-local listings filtered out")
+                     totalHeadline(filterTotals.ads, title: "Ads filtered out")
++                    totalHeadline(filterTotals.nonLocalListings, title: "Non-local listings filtered out")
++                    totalHeadline(filterTotals.aiFilteredListings, title: "Search listings filtered out by AI")
+                 } footer: {
+-                    Text("All time on this device · Search and Discover")
++                    Text("All time on this device · Ads and distance are filtered first. AI filtering applies to Search.")
+                 }
+ 
+                 Section {
+diff --git a/apps/ios/Tests/FilterTotalsTests.swift b/apps/ios/Tests/FilterTotalsTests.swift
+index e4cd330..eb4a578 100644
+--- a/apps/ios/Tests/FilterTotalsTests.swift
++++ b/apps/ios/Tests/FilterTotalsTests.swift
+@@ -10,6 +10,7 @@ final class FilterTotalsTests: XCTestCase {
+         let totals = FilterTotals(defaults: defaults)
+         XCTAssertEqual(totals.nonLocalListings, 0)
+         XCTAssertEqual(totals.ads, 0)
++        XCTAssertEqual(totals.aiFilteredListings, 0)
+         XCTAssertEqual(totals.discoverListings, 0)
+         XCTAssertEqual(totals.searchListings, 0)
+         totals.recordNonLocal(["one", "two", "one"])
+@@ -17,15 +18,58 @@ final class FilterTotalsTests: XCTestCase {
+         totals.recordSponsoredListing("ad")
+         totals.recordAds(3)
+         totals.recordAds(0)
++        totals.recordAIFiltered(["ai-one", "ai-two", "ai-one"])
+ 
+         let restored = FilterTotals(defaults: defaults)
+         restored.recordNonLocal(["two", "three"])
+         restored.recordSponsoredListing("ad")
++        restored.recordAIFiltered(["ai-two", "ai-three"])
+         XCTAssertEqual(restored.nonLocalListings, 3)
+         XCTAssertEqual(restored.ads, 4)
++        XCTAssertEqual(restored.aiFilteredListings, 3)
++        XCTAssertEqual(FilterTotals(defaults: defaults).aiFilteredListings, 3)
+         XCTAssertEqual(FilterTotals(defaults: defaults).nonLocalListings, 3)
+     }
+ 
++    func testRemovalReasonsStayExclusiveRegardlessOfRecordingOrder() {
++        let suite = "FilterTotalsTests.\(UUID().uuidString)"
++        let defaults = UserDefaults(suiteName: suite)!
++        defer { defaults.removePersistentDomain(forName: suite) }
++        let totals = FilterTotals(defaults: defaults)
++        totals.recordAIFiltered(["ad-later", "far-later", "ai-only"])
++        totals.recordNonLocal(["ad-later", "far-later", "far-first"])
++        totals.recordSponsoredListing("ad-later")
++        totals.recordSponsoredListing("ad-first")
++        totals.recordNonLocal(["ad-first"])
++        totals.recordAIFiltered(["ad-first", "ad-later", "far-first", "far-later"])
++        XCTAssertEqual(totals.ads, 2)
++        XCTAssertEqual(totals.nonLocalListings, 2)
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++
++        let restored = FilterTotals(defaults: defaults)
++        restored.recordSponsoredListing("far-later")
++        restored.recordAIFiltered(["ad-later", "far-later", "far-first", "ai-only"])
++        restored.recordNonLocal(["ad-first", "far-later"])
++        XCTAssertEqual(restored.ads, 3)
++        XCTAssertEqual(restored.nonLocalListings, 1)
++        XCTAssertEqual(restored.aiFilteredListings, 1)
++        XCTAssertEqual(FilterTotals(defaults: defaults).aiFilteredListings, 1)
++    }
++
++    func testRestoringOverlappingLegacyTotalsAppliesReasonPriority() {
++        let suite = "FilterTotalsTests.\(UUID().uuidString)"
++        let defaults = UserDefaults(suiteName: suite)!
++        defer { defaults.removePersistentDomain(forName: suite) }
++        defaults.set(["ad"], forKey: "filterTotals.sponsoredIDs")
++        defaults.set(1, forKey: "filterTotals.ads")
++        defaults.set(["ad", "far"], forKey: "filterTotals.nonLocalIDs")
++        defaults.set(["ad", "far", "ai"], forKey: "filterTotals.aiFilteredIDs")
++        let totals = FilterTotals(defaults: defaults)
++        XCTAssertEqual(totals.ads, 1)
++        XCTAssertEqual(totals.nonLocalListings, 1)
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++    }
++
+     func testShownListingsPersistAndDeduplicateSeparatelyForEachSurface() {
+         let suite = "FilterTotalsTests.\(UUID().uuidString)"
+         let defaults = UserDefaults(suiteName: suite)!
+diff --git a/apps/ios/Tests/SearchPaginationTests.swift b/apps/ios/Tests/SearchPaginationTests.swift
+index 47db5c5..f560123 100644
+--- a/apps/ios/Tests/SearchPaginationTests.swift
++++ b/apps/ios/Tests/SearchPaginationTests.swift
+@@ -314,8 +314,154 @@ final class SearchPaginationTests: XCTestCase {
+         XCTFail("Pagination did not finish")
+     }
+ 
++    func testAIFilterChecksBeforePublicationAndIncludesPagination() async {
++        let totals = FilterTotals(defaults: UserDefaults(suiteName: UUID().uuidString)!)
++        let service = SearchFilterTestClient()
++        service.suspendNext = true
++        service.verdicts = ["fb:hidden": .mismatch, "fb:later-hidden": .mismatch, "fb:far": .mismatch]
++        let client = SearchStub([
++            .success(page([card("keep"), card("hidden"), card("far", city: "Far")], cursor: "A")),
++            .success(page([card("later-hidden")] + (0..<6).map { card("next-\($0)") }, cursor: nil))
++        ])
++        let store = makeStore(client, filterTotals: totals, searchFilter: service)
++        await store.setAIFilterEnabled(true)
++        let search = Task { await store.run(query()) }
++        await service.waitUntilSuspended()
++        XCTAssertTrue(store.listings.isEmpty, "No unchecked first page should be published")
++        XCTAssertEqual(totals.aiFilteredListings, 0)
++        XCTAssertEqual(service.calls.first?.candidates.map(\.id), ["fb:keep", "fb:hidden"])
++        service.resume()
++        await search.value
++        XCTAssertEqual(store.listings.map(\.id), ["fb:keep", "fb:hidden", "fb:far"])
++        XCTAssertEqual(store.displayedListings.map(\.id), ["fb:keep", "fb:far"])
++        XCTAssertEqual(totals.nonLocalListings, 1)
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++        await store.loadMore()
++        XCTAssertEqual(service.calls.count, 2)
++        XCTAssertEqual(store.listings.count, 10)
++        XCTAssertEqual(store.displayedListings.count, 8)
++        XCTAssertEqual(totals.aiFilteredListings, 2)
++        XCTAssertEqual(store.aiHiddenIDs, ["fb:hidden", "fb:later-hidden"])
++        store.setAIHiddenVisible(true)
++        XCTAssertEqual(store.displayedListings, store.listings)
++        await store.setAIFilterEnabled(false)
++        XCTAssertEqual(store.displayedListings, store.listings)
++        await store.setAIFilterEnabled(true)
++        XCTAssertEqual(totals.aiFilteredListings, 2)
++        XCTAssertFalse(service.calls.flatMap(\.candidates).contains { $0.id == "fb:far" })
++    }
++
++    func testToggleOffAndBackOnDuringArrivalCannotPublishUncheckedCards() async {
++        let service = SearchFilterTestClient()
++        service.suspendNext = true
++        service.verdicts = ["fb:hidden": .mismatch]
++        let store = makeStore(SearchStub([.success(page([card("keep"), card("hidden")], cursor: nil))]), searchFilter: service)
++        await store.setAIFilterEnabled(true)
++        let search = Task { await store.run(query()) }
++        await service.waitUntilSuspended()
++        await store.setAIFilterEnabled(false)
++        await store.setAIFilterEnabled(true)
++        service.resume()
++        await search.value
++        XCTAssertEqual(service.calls.count, 2)
++        XCTAssertEqual(store.displayedListings.map(\.id), ["fb:keep"])
++        XCTAssertEqual(store.listings.count, 2)
++    }
++
++    func testAIFilterChecksCachedCardsAndReusesDecisionsForLiveCards() async {
++        let totals = FilterTotals(defaults: UserDefaults(suiteName: UUID().uuidString)!)
++        let service = SearchFilterTestClient()
++        service.suspendNext = true
++        service.verdicts = ["fb:hidden": .mismatch]
++        let cards = [card("keep"), card("hidden")]
++        let cache = ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), isSaved: { _ in false })
++        cache.saveResults(cards.enumerated().map { $0.element.makeListing(cardIndex: $0.offset) }, for: query(), session: .unauthed)
++        let store = makeStore(SearchStub([.success(page(cards, cursor: nil))]), filterTotals: totals,
++                              cache: cache, searchFilter: service)
++        await store.setAIFilterEnabled(true)
++        let search = Task { await store.run(query()) }
++        await service.waitUntilSuspended()
++        XCTAssertTrue(store.listings.isEmpty)
++        service.resume()
++        await search.value
++        XCTAssertEqual(service.calls.count, 1)
++        XCTAssertEqual(store.displayedListings.map(\.id), ["fb:keep"])
++        XCTAssertEqual(store.listings.count, 2)
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++        await store.run(query())
++        XCTAssertEqual(totals.aiFilteredListings, 1, "Replaying cached results does not add another removal")
++    }
++
++    func testCachedAdsAndDistantListingsNeverReachAI() async {
++        let totals = FilterTotals(defaults: UserDefaults(suiteName: UUID().uuidString)!)
++        let service = SearchFilterTestClient()
++        service.verdicts = ["fb:ad": .mismatch, "fb:far": .mismatch, "fb:hidden": .mismatch]
++        let cache = ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
++                                 isSaved: { _ in false })
++        var ad = card("ad", city: "Far").makeListing(cardIndex: 0)
++        ad.badgeText = "Sponsored"
++        cache.saveResults([ad, card("far", city: "Far").makeListing(cardIndex: 1),
++                           card("hidden").makeListing(cardIndex: 2)], for: query(), session: .unauthed)
++        let store = makeStore(SearchStub([.failure(.blocked)]), filterTotals: totals, cache: cache, searchFilter: service)
++        await store.setAIFilterEnabled(true)
++        await store.run(query())
++        XCTAssertEqual(service.calls.first?.candidates.map(\.id), ["fb:hidden"])
++        XCTAssertEqual(totals.ads, 1)
++        XCTAssertEqual(totals.nonLocalListings, 1)
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++    }
++
++    func testViewedAndInspectedCardsCountOnlyWhenActuallyHiddenByAI() async {
++        let totals = FilterTotals(defaults: UserDefaults(suiteName: UUID().uuidString)!)
++        let service = SearchFilterTestClient()
++        service.verdicts = ["fb:viewed": .mismatch, "fb:later-hidden": .mismatch, "fb:uncertain": .unknown]
++        let store = makeStore(SearchStub([
++            .success(page([card("keep"), card("viewed"), card("uncertain")], cursor: "A")),
++            .success(page([card("later-hidden")], cursor: nil))
++        ]), filterTotals: totals, searchFilter: service)
++        await store.setAIFilterEnabled(true)
++        await store.run(query(), hiddenAsViewed: ["fb:viewed"])
++        XCTAssertEqual(totals.aiFilteredListings, 0)
++        store.updateHiddenAsViewed([])
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++        XCTAssertEqual(service.calls.count, 1)
++        store.setAIHiddenVisible(true)
++        await store.loadMore()
++        XCTAssertEqual(totals.aiFilteredListings, 1)
++        store.setAIHiddenVisible(false)
++        XCTAssertEqual(totals.aiFilteredListings, 2)
++        store.updateHiddenAsViewed(["fb:viewed"])
++        store.updateHiddenAsViewed([])
++        XCTAssertEqual(totals.aiFilteredListings, 2)
++    }
++
++    func testFailedAndStaleAIFilterRequestsDoNotIncreaseTotals() async {
++        let totals = FilterTotals(defaults: UserDefaults(suiteName: UUID().uuidString)!)
++        let service = SearchFilterTestClient()
++        service.verdicts = ["fb:stale": .mismatch, "fb:failed": .mismatch]
++        service.suspendNext = true
++        let store = makeStore(SearchStub([
++            .success(page([card("stale")], cursor: nil)),
++            .success(page([card("keep")], cursor: nil)),
++            .success(page([card("failed")], cursor: nil))
++        ]), filterTotals: totals, searchFilter: service)
++        await store.setAIFilterEnabled(true)
++        let stale = Task { await store.run(query("old")) }
++        await service.waitUntilSuspended()
++        await store.run(query("new"))
++        service.resume()
++        await stale.value
++        XCTAssertEqual(totals.aiFilteredListings, 0)
++        XCTAssertEqual(store.listings.map(\.id), ["fb:keep"])
++        service.fails = true
++        await store.run(query("failure"))
++        XCTAssertEqual(totals.aiFilteredListings, 0)
++        XCTAssertEqual(store.displayedListings.map(\.id), ["fb:failed"])
++    }
++
+     private func makeStore(_ client: any GraphQLFeedLoading, filterTotals: FilterTotals? = nil,
+-                           timeBudget: Duration = .seconds(8), cache: ListingCache? = nil) -> ListingStore {
++                           timeBudget: Duration = .seconds(8), cache: ListingCache? = nil,
++                           searchFilter: (any SearchFiltering)? = nil) -> ListingStore {
+         let defaults = UserDefaults(suiteName: UUID().uuidString)!
+         defaults.set(["Near, CA": [37.7793, -122.419], "Far, CA": [34.05, -118.24]], forKey: "placeCoordinates")
+         let prefs = Preferences(defaults: defaults)
+@@ -324,7 +470,7 @@ final class SearchPaginationTests: XCTestCase {
+         distances.setUserLocation(query().coordinate)
+         let cache = cache ?? ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), isSaved: { _ in false })
+         return ListingStore(prefs: prefs, filterTotals: filterTotals, cache: cache, anonymous: client,
+-                            distances: distances, paginationTimeBudget: timeBudget)
++                            distances: distances, paginationTimeBudget: timeBudget, searchFilter: searchFilter)
+     }
+ 
+     private func query(_ term: String = "desk") -> SearchQuery {
+diff --git a/docs/analytics.md b/docs/analytics.md
+index 0a0e26d..5b9ab74 100644
+--- a/docs/analytics.md
++++ b/docs/analytics.md
+@@ -25,13 +25,24 @@ other three stay local.
+ 
+ ### Settings counters
+ 
+-`FilterTotals` also stays on the device. Settings shows ads and non-local
+-listings filtered out, plus separate totals for listings shown in Discover and
+-Search. A shown listing counts when at least half its card enters the viewport
+-on the active feed. Filtered cards, offscreen prefetches, hidden feeds, search
++`FilterTotals` also stays on the device. Settings shows ads, non-local listings,
++and Search listings filtered out by AI, plus separate totals for listings shown
++in Discover and Search. A shown listing counts when at least half its card enters
++the viewport on the active feed. Filtered cards, offscreen prefetches, hidden feeds, search
+ suggestions, sheets, detail pages, other tabs, and background activity do not
+ add shown listings.
+ 
++AI removals count only when a committed Search result would otherwise pass the
++distance and “Only new” filters. Ads and out-of-range listings are excluded before
++calling Jev. Unknown decisions, failed requests, stale searches, and cards being
++inspected with “Show hidden” do not add AI removals. Totals persist across launches
++and deduplicate listing IDs across refreshes, cached results, pagination, and
++toggle changes. Turning AI off or inspecting hidden results does not undo earlier
++removals. For identified listings, each ID belongs to one removal total: ads take
++precedence over distance, then AI. A newly observed higher-priority reason moves
++the ID out of its earlier total. Ad slots without listing IDs retain their
++per-accepted-page count because they cannot be matched to a listing.
++
+ Shown totals deduplicate listing IDs separately for each surface and persist
+ across launches. The same listing can count once in Discover and once in Search;
+ refreshing or revisiting it on the same surface does not count again. Existing
+diff --git a/apps/ios/Sources/Account/SearchFilterService.swift b/apps/ios/Sources/Account/SearchFilterService.swift
+new file mode 100644
+index 0000000..eb4940b
+--- /dev/null
++++ b/apps/ios/Sources/Account/SearchFilterService.swift
+@@ -0,0 +1,27 @@
++import Connect
++import Foundation
++import OpenMarketProtos
++
++@MainActor
++protocol SearchFiltering {
++    func filter(query: String, candidates: [SearchFilterCandidate]) async throws -> [SearchFilterDecision]
++}
++
++@MainActor
++final class SearchFilterService: SearchFiltering {
++    private let session: AccountSession
++    private lazy var client = SearchServiceClient(client: API.makeProtocolClient(timeout: 7))
++
++    init(session: AccountSession = .shared) { self.session = session }
++
++    func filter(query: String, candidates: [SearchFilterCandidate]) async throws -> [SearchFilterDecision] {
++        var request = FilterListingsRequest()
++        request.query = query
++        request.candidates = candidates
++        let response = await client.filterListings(request: request, headers: try await session.authorizedHeaders())
++        guard let message = response.message else {
++            throw response.error.map { ($0 as? ConnectError)?.asAPIError ?? APIError.network } ?? APIError.network
++        }
++        return message.decisions
++    }
++}
+diff --git a/apps/ios/Sources/Store/SearchResultFilter.swift b/apps/ios/Sources/Store/SearchResultFilter.swift
+new file mode 100644
+index 0000000..4e50ccd
+--- /dev/null
++++ b/apps/ios/Sources/Store/SearchResultFilter.swift
+@@ -0,0 +1,144 @@
++import Combine
++import Foundation
++import OpenMarketProtos
++
++@MainActor
++final class SearchResultFilter: ObservableObject {
++    @Published private(set) var isEnabled = false
++    @Published private(set) var isFiltering = false
++    @Published private(set) var notice: String?
++    @Published private var decisions: [Card: SearchFilterDecision] = [:]
++    @Published var showHidden = false
++
++    private struct Card: Hashable {
++        let id: String
++        let title: String
++        let imageURL: String
++        init(_ listing: Listing) {
++            id = listing.id
++            title = String((listing.title ?? "").prefix(500))
++            imageURL = listing.thumbnailURL?.absoluteString ?? ""
++        }
++        var candidate: SearchFilterCandidate {
++            var candidate = SearchFilterCandidate()
++            candidate.id = id
++            candidate.title = title
++            candidate.headlineImageURL = imageURL.count <= 2048 ? imageURL : ""
++            return candidate
++        }
++    }
++    private struct Job {
++        let id = UUID()
++        let cards: [Card]
++        let task: Task<Result<[SearchFilterDecision], Error>, Never>
++    }
++    private let service: any SearchFiltering
++    private var query: String?
++    private(set) var revision = 0
++    private var job: Job?
++
++    init(service: any SearchFiltering) { self.service = service }
++
++    func begin(query: SearchQuery?) {
++        reset()
++        if case .search(let text) = query?.kind {
++            self.query = text.trimmingCharacters(in: .whitespacesAndNewlines)
++        } else {
++            self.query = nil
++        }
++    }
++
++    func setEnabled(_ enabled: Bool) {
++        guard enabled != isEnabled else { return }
++        reset()
++        isEnabled = enabled
++    }
++
++    private func reset() {
++        revision += 1
++        job?.task.cancel()
++        job = nil
++        decisions = [:]
++        isFiltering = false
++        notice = nil
++        showHidden = false
++    }
++
++    func isHidden(_ listing: Listing) -> Bool {
++        isEnabled && decisions[Card(listing)]?.verdict == .mismatch
++    }
++
++    func visible(_ listings: [Listing]) -> [Listing] {
++        guard isEnabled, !showHidden else { return listings }
++        return listings.filter { !isHidden($0) }
++    }
++
++    func evaluate(_ listings: [Listing]) async {
++        guard isEnabled, let query, !query.isEmpty else { return }
++        guard query.count <= 300 else {
++            notice = "AI filtering supports searches up to 300 characters. All listings kept."
++            return
++        }
++        let revision = revision
++        // A toggle and a newly arriving page can need the same cards concurrently.
++        while let current = job {
++            let result = await current.task.value
++            guard revision == self.revision, !Task.isCancelled else { return }
++            finish(current, result: result)
++        }
++        guard revision == self.revision, !Task.isCancelled else { return }
++        var seen = Set<String>()
++        let cards = listings.map(Card.init).filter { decisions[$0] == nil && seen.insert($0.id).inserted }
++        guard !cards.isEmpty else { return }
++        let service = service
++        let current = Job(cards: cards, task: Task {
++            do {
++                var all: [SearchFilterDecision] = []
++                for start in stride(from: 0, to: cards.count, by: 20) {
++                    try Task.checkCancellation()
++                    let batch = Array(cards[start..<min(start + 20, cards.count)])
++                    let results = try await service.filter(query: query, candidates: batch.map(\.candidate))
++                    let expected = Set(batch.map(\.id))
++                    guard results.count == batch.count, Set(results.map(\.id)) == expected,
++                          results.allSatisfy({ [.match, .unknown, .mismatch].contains($0.verdict) && ($0.verdict != .mismatch || $0.imageUsed) }) else {
++                        throw APIError.message("Incomplete AI filter response.")
++                    }
++                    all.append(contentsOf: results)
++                }
++                return .success(all)
++            } catch { return .failure(error) }
++        })
++        job = current
++        isFiltering = true
++        let result = await current.task.value
++        guard revision == self.revision else { return }
++        finish(current, result: result)
++    }
++
++    private func finish(_ current: Job, result: Result<[SearchFilterDecision], Error>) {
++        guard job?.id == current.id else { return }
++        job = nil
++        isFiltering = false
++        switch result {
++        case .success(let results):
++            let byID = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
++            for card in current.cards { decisions[card] = byID[card.id] }
++            if results.contains(where: { !$0.imageUsed }) {
++                notice = "Listings with unreadable photos were kept."
++            }
++        case .failure(let error):
++            // Cache the fail-open result for this search so duplicate cards cannot trigger a retry loop.
++            for card in current.cards {
++                var decision = SearchFilterDecision()
++                decision.id = card.id
++                decision.verdict = .unknown
++                decisions[card] = decision
++            }
++            if case APIError.rateLimited = error {
++                notice = "AI filter limit reached. New listings are being kept."
++            } else {
++                notice = "AI filtering unavailable. Unchecked listings were kept."
++            }
++        }
++    }
++}
+diff --git a/apps/ios/Tests/SearchResultFilterTests.swift b/apps/ios/Tests/SearchResultFilterTests.swift
+new file mode 100644
+index 0000000..b4c0b07
+--- /dev/null
++++ b/apps/ios/Tests/SearchResultFilterTests.swift
+@@ -0,0 +1,159 @@
++import OpenMarketProtos
++import XCTest
++@testable import OpenMarket
++
++@MainActor
++final class SearchResultFilterTests: XCTestCase {
++    func testOnlyClearMismatchesHideAndOriginalOrderIsRecoverable() async {
++        let service = SearchFilterTestClient()
++        service.verdicts = ["a": .match, "b": .mismatch, "c": .unknown]
++        let filter = SearchResultFilter(service: service)
++        filter.begin(query: query())
++        let cards = [card("a"), card("b"), card("c")]
++        await filter.evaluate(cards)
++        XCTAssertTrue(service.calls.isEmpty, "Default off must make no paid calls")
++        filter.setEnabled(true)
++        await filter.evaluate(cards)
++        XCTAssertEqual(filter.visible(cards).map(\.id), ["a", "c"])
++        filter.showHidden = true
++        XCTAssertEqual(filter.visible(cards), cards)
++        filter.setEnabled(false)
++        XCTAssertEqual(filter.visible(cards), cards)
++    }
++
++    func testBatchingAndCardCacheAvoidRepeatCallsButNoticeNewEvidence() async {
++        let service = SearchFilterTestClient()
++        let filter = SearchResultFilter(service: service)
++        filter.begin(query: query())
++        filter.setEnabled(true)
++        let cards = (0..<25).map { card("\($0)") }
++        await filter.evaluate(cards)
++        await filter.evaluate(cards + [cards[0]])
++        XCTAssertEqual(service.calls.map { $0.candidates.count }, [20, 5])
++        var changed = cards[0]
++        changed.title = "White desk"
++        await filter.evaluate([changed])
++        XCTAssertEqual(service.calls.last?.candidates.map(\.title), ["White desk"])
++        XCTAssertEqual(service.calls.count, 3)
++    }
++
++    func testFailuresAndMissingEvidenceKeepListings() async {
++        for mode in 0..<5 {
++            let service = SearchFilterTestClient()
++            service.verdicts = ["a": .mismatch]
++            service.fails = mode == 0
++            service.transform = { decisions in
++                switch mode {
++                case 1: return []
++                case 2: return [decisions[0], decisions[0]]
++                case 3, 4:
++                    var result = decisions[0]
++                    if mode == 4 { result.verdict = .unknown }
++                    result.imageUsed = false
++                    return [result]
++                default: return decisions
++                }
++            }
++            let filter = SearchResultFilter(service: service)
++            filter.begin(query: query())
++            filter.setEnabled(true)
++            let cards = [card("a")]
++            await filter.evaluate(cards)
++            XCTAssertEqual(filter.visible(cards), cards)
++            XCTAssertNotNil(filter.notice)
++            await filter.evaluate(cards)
++            XCTAssertEqual(service.calls.count, 1, "Failed cards must not cause a retry loop")
++        }
++    }
++
++    func testOldQueryAndDisabledRequestsCannotHideNewResults() async {
++        for disable in [false, true] {
++            let service = SearchFilterTestClient()
++            service.verdicts = ["a": .mismatch]
++            service.suspendNext = true
++            let filter = SearchResultFilter(service: service)
++            filter.begin(query: query())
++            filter.setEnabled(true)
++            let cards = [card("a")]
++            let task = Task { await filter.evaluate(cards) }
++            await service.waitUntilSuspended()
++            if disable { filter.setEnabled(false) }
++            else { filter.begin(query: query("white desk")) }
++            service.resume()
++            await task.value
++            XCTAssertEqual(filter.visible(cards), cards)
++            XCTAssertFalse(filter.isFiltering)
++            if !disable {
++                service.verdicts = ["a": .match]
++                await filter.evaluate(cards)
++                XCTAssertEqual(service.calls.last?.query, "white desk")
++                XCTAssertEqual(filter.visible(cards), cards)
++            }
++        }
++    }
++
++    func testOverlappingEvaluationsShareThePendingBatch() async {
++        let service = SearchFilterTestClient()
++        service.suspendNext = true
++        service.verdicts = ["a": .mismatch]
++        let filter = SearchResultFilter(service: service)
++        filter.begin(query: query())
++        filter.setEnabled(true)
++        let cards = [card("a")]
++        let first = Task { await filter.evaluate(cards) }
++        await service.waitUntilSuspended()
++        let second = Task { await filter.evaluate(cards) }
++        await Task.yield()
++        service.resume()
++        await first.value
++        await second.value
++        XCTAssertEqual(service.calls.count, 1)
++        XCTAssertTrue(filter.visible(cards).isEmpty)
++        XCTAssertFalse(filter.isFiltering)
++    }
++
++    private func query(_ text: String = "black standing desk") -> SearchQuery {
++        SearchQuery(kind: .search(text), radiusKM: 8, citySlug: "sanfrancisco")
++    }
++    private func card(_ id: String) -> Listing {
++        Listing(id: id, title: "Desk", thumbnailURL: URL(string: "https://scontent.fbcdn.net/\(id).jpg"), cardIndex: 0, capturedAt: Date())
++    }
++}
++
++@MainActor
++final class SearchFilterTestClient: SearchFiltering {
++    struct Call { let query: String; let candidates: [SearchFilterCandidate] }
++    var calls: [Call] = []
++    var verdicts: [String: SearchFilterVerdict] = [:]
++    var fails = false
++    var suspendNext = false
++    var transform: (([SearchFilterDecision]) -> [SearchFilterDecision])?
++    private var pending: CheckedContinuation<Void, Never>?
++    private var waiter: CheckedContinuation<Void, Never>?
++
++    func filter(query: String, candidates: [SearchFilterCandidate]) async throws -> [SearchFilterDecision] {
++        calls.append(Call(query: query, candidates: candidates))
++        if suspendNext {
++            suspendNext = false
++            await withCheckedContinuation {
++                pending = $0
++                waiter?.resume()
++                waiter = nil
++            }
++        }
++        if fails { throw APIError.network }
++        let decisions = candidates.map { candidate in
++            var d = SearchFilterDecision()
++            d.id = candidate.id
++            d.verdict = verdicts[d.id] ?? .match
++            d.imageUsed = true
++            return d
++        }
++        return transform?(decisions) ?? decisions
++    }
++    func waitUntilSuspended() async {
++        if pending != nil { return }
++        await withCheckedContinuation { waiter = $0 }
++    }
++    func resume() { pending?.resume(); pending = nil }
++}

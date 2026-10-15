@@ -59,7 +59,7 @@ relevance afterwards. `EvaluateComparables` uses Jev through Vercel's
 The phone computes all prices and sold-time statistics from accepted listings.
 Rejected results remain visible at the end of the evidence carousels.
 
-Jev uses `AI_GATEWAY_API_KEY`, falling back to `LLM_API_KEY` when
+Comparison relevance uses `AI_GATEWAY_API_KEY`, falling back to `LLM_API_KEY` when
 `LLM_PROVIDER=vercel`. Google identification can therefore coexist with Jev by
 setting a separate gateway key. Missing credentials disable relevance checks
 with an explicit error; the identification stub never fabricates relevance.
@@ -141,26 +141,57 @@ also the list the Railway service needs.
 The server refuses missing session signing keys, equal access/refresh keys, and
 incomplete production identity-provider settings.
 
+## Experimental search result filtering endpoint
+
+`SearchService.FilterListings` exposes the image filter for explicit experiments. The iOS
+Search screen does not call it. Configure `JEV_API_KEY` in `.env.local` or the
+deployed backend environment. This calls TypeSafe directly with `jev-1.14.0` and
+its image header. AI Search shares this image-filter runner; Price Check relevance and the AI Search conversation model use their existing Gateway paths.
+
+The authenticated endpoint accepts a query and up to 20 search cards containing
+only an ID, title, and headline photo URL. It downloads Facebook CDN thumbnails
+with four workers and a two-second total image budget, bounds decoding, and
+resizes/pads to Jev-compatible JPEGs. It returns match, unknown, or mismatch
+decisions; missing photos produce unknown decisions. Model failures return an
+error for the caller to handle. A five-second model-run deadline includes image preparation, with no
+retries. Existing per-user model limits and `llm_runs` usage recording apply.
+
+The withdrawn Search UI prototype, accuracy/cost measurements, and lessons about
+repeated live evaluations are preserved in the
+[research findings](../../tools/probe/jev_filter/README.md).
+
+The optional billed smoke harness exercises the production image downloader and
+provider against a frozen research dataset. From `apps/backend`, run
+`go run ../../tools/probe/jev_filter/smoke.go ../../build/jev-research/dataset-0.json`.
+It reads only `JEV_API_KEY` from `.env.local`; frozen datasets are local research
+artifacts, not committed fixtures. Normal unit tests make no paid requests.
+
 ## AI Search
 
 `ShoppingService` runs an authenticated, temporary shopping conversation. Both
 Openmarket and the device's reported Facebook connection are required. Configure
-`AI_GATEWAY_API_KEY` (or `LLM_API_KEY` with `LLM_PROVIDER=vercel`) and optionally
+`AI_GATEWAY_API_KEY` (or `LLM_API_KEY` with `LLM_PROVIDER=vercel`),
+`JEV_API_KEY` for direct image relevance, and optionally
 `SHOPPING_MODEL`, which defaults to `google/gemini-3.5-flash-lite` for faster
 tool selection, using the model's default minimal thinking level. AI Search uses the
 Gateway independently of Price Check's configured identification provider. Missing
 credentials disable AI Search explicitly; there are no fabricated shopping results.
 
-The phone executes search, inspection, and display actions. Jev evaluates search
-cards against the broad query only; the conversation model evaluates full user
-requirements after receiving parsed details. See [the spec](../../docs/ai-search.md).
+The phone executes search, inspection, and display actions. The backend sends
+card titles and headline photo URLs through the shared direct `jev-1.14.0` image
+filter against the search query. Match and unknown decisions are retained; only
+clear mismatches are removed. Missing photos remain unknown. The conversation
+model receives each retained card's verdict and image-use flag, then evaluates
+full user requirements using parsed details. A failed model batch reports an
+error for the whole page; it never supplies a partially filtered page. See [the spec](../../docs/ai-search.md).
 
 Sessions expire after 30 minutes without client activity and are lost on process
 restart. Use one backend replica for this first version; multiple replicas need
 session affinity. No chat tables are created. Migration 00014 adds only the
 `SHOPPING` model-accounting stage; existing usage ceilings include these calls.
-Tool responses are capped at 256 KB before processing, and each Jev batch at 30
-candidates. The model has at most five planning calls plus a closing response restricted to
+Tool responses are capped at 256 KB before processing, and each Jev batch at 20
+candidates, with a five-second deadline and no automatic retry per image-filter batch.
+The model has at most five planning calls plus a closing response restricted to
 display or text, two source-page actions and three inspections per user message.
 Retrieval stops after 60 seconds; displaying existing evidence remains possible.
 Successful product display finishes the run without another model call. Repeated

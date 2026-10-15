@@ -15,7 +15,7 @@ The first version needs no database storage for conversations or tool execution.
 - Require both Openmarket and Facebook sign-in for assistant work.
 - Fetch product details in the background and show inspection status in chat.
 - Search with a broad `query` and individually typed filter fields. There is no separate semantic description or nested filter object.
-- Jev makes a binary match or non-match decision against the search query alone. It does not decide whether a listing satisfies the full shopping request or needs inspection.
+- Jev checks titles and headline photos against the search query, removing clear mismatches and retaining match/unknown decisions. It does not decide whether a listing satisfies the full shopping request or needs inspection.
 - The assistant chooses which retained listings to inspect and does most nuanced filtering after fetching details.
 - Inspection returns the same parsed listing information as tapping a listing in the app.
 - Support pagination wherever the existing search path can supply another page.
@@ -36,13 +36,13 @@ The assistant can finish with a shortlist, ask a question, or explain that it fo
 
 Allow one active run per session. A new user message stops the previous run before starting the next. Switching tabs or opening details preserves the session while the app remains alive. Backgrounding pauses frontend work; resumption is best effort while temporary state survives. If the app process or backend session is lost, explain that the session ended and offer to start again.
 
-Assistant-driven purchases, payments, seller messages, offers, saving, background monitoring, and other marketplaces are out of scope for the proposed first version. Existing manual save and Facebook handoff actions remain available from product details. User photo uploads and model analysis of listing photos are deferred; photos still render in the app.
+Assistant-driven purchases, payments, seller messages, offers, saving, background monitoring, and other marketplaces are out of scope for the proposed first version. Existing manual save and Facebook handoff actions remain available from product details. User photo uploads are deferred. Jev analyzes headline photos for query relevance; the conversation model receives those decisions and card/detail text, while photos render in the app.
 
 ## Search strategy and assistant context
 
 Every model call includes server-owned shopping instructions and tool definitions, the temporary conversation, the full user request, observed tool results, effective search-area context, supported capabilities, and remaining run limits.
 
-The assistant should search for the core product rather than turning the user's entire request into a keyword string. For “a solid wood desk under $150, at least 48 inches wide, with drawers,” start with `desk` and `max_price: 150`. Do not start with `solid wood desk 48 inch drawers under 150`. A distinctive model name can be appropriate for an exact-product request; broad does not mean discarding the product's identity.
+The assistant should search for the core product rather than turning the user's entire request into a keyword string. For “a solid wood desk under $150, at least 48 inches wide, with drawers,” start with `desk` and `max_price: 150`. Do not start with `solid wood desk 48 inch drawers under 150`. Include important visible descriptors such as color and product subtype in a concise query like `black standing desk`. A distinctive model name can be appropriate for an exact-product request; broad does not mean discarding the product's identity.
 
 Use exposed filters for criteria they directly support. Keep requirements such as material, dimensions, layout, style, and included accessories in conversation context. Inspect promising listings to check those requirements against the full description and parsed attributes. The assistant can use card evidence to prioritize inspection or skip an obvious poor fit, but a short card that omits a requirement is not evidence that the product fails it.
 
@@ -56,11 +56,18 @@ Names and wire types are proposed. Define typed protobuf messages and generate G
 
 | Tool | Inputs | Frontend action | Backend result to the assistant |
 |---|---|---|---|
-| `search` | `query`, individual optional fields below, optional `cursor` | Fetch one page using the existing search path, apply supported filters and device search area, and upload card observations. | Run binary Jev filtering against `query`; return matching cards, counts, applied settings, and pagination metadata. |
+| `search` | `query`, individual optional fields below, optional `cursor` | Fetch one page using the existing search path, apply supported filters and device search area, and upload card observations. | Run Jev title/photo filtering against `query`; return match/unknown cards, per-card filter decisions, counts, applied settings, and pagination metadata. |
 | `inspect_product` | Known `listing_id` | Run the same detail loading and parsing path used when the user taps that listing, in the background. | Return the parsed details and their observation time to the assistant for assessment against the full request. |
 | `display_products` | Ordered known listing IDs, reasons, caveats, optional group title | Render native cards from observed listing data and acknowledge the rendered IDs. | Acknowledge the displayed cards and complete the run without another model call. |
 
 Clarifications and final answers are normal assistant messages. A display acknowledgement means cards were rendered, not that the user saw or accepted them. Inspection and display only accept listing IDs already observed in this session; navigation uses app-resolved listing URLs.
+
+The phone renders a display call immediately. The backend commits its display
+message synchronously before returning the successful acknowledgement, using the
+same tool-call ID. That response already contains the cards and completed status;
+an intermediate response without the message would remove the optimistic carousel
+until the next poll and trigger another auto-scroll. Duplicate acknowledgements
+return the existing message without appending it again.
 
 ### Individual search fields
 
@@ -94,15 +101,15 @@ Deduplicate by listing ID across pages and queries while preserving newer observ
 
 Each retained card includes observed fields, stable listing ID, capture context, and observation time. Return fetched, duplicate, matched, and rejected counts for the page. Split a source page exceeding the Jev batch limit into bounded evaluation batches; do not silently drop its remaining cards. Only expose a successfully evaluated page as filtered. If evaluation fails, return a filtering error rather than a misleading empty page.
 
-### Binary Jev filtering
+### Jev image filtering
 
-For every candidate, Jev answers: “Does this listing offer the product described by this search query?” Its target is only the exact `query`, not the full user message, a generated description, or the filter fields. It can read the candidate's available card text; it does not fetch detail pages.
+For every candidate, Jev checks whether its title and headline photo plausibly offer the product described by the exact search `query`. It does not use the full user message or fetch detail pages. The backend reuses `JevSearchFilter`, pinned to `jev-1.14.0`, through the same usage-accounted runner as the experimental search-filter endpoint. It calls TypeSafe directly with `JEV_API_KEY`, rather than routing images through Gateway.
 
-The output is match or non-match. Match means relevant to the broad query, not confirmed to satisfy the shopper's request. Reject clearly unrelated products and accessory-only offers when the query requests the main product. Do not reject a plausible desk merely because its card lacks material or dimensions. For query `desk`, both solid wood and particleboard desks may pass; the assistant checks material after inspection.
+The output is `match`, `unknown`, or `mismatch`. Only clear mismatches are removed. Missing or unreadable photos produce `unknown` and remain available for inspection. A match supports relevance to the query; it does not confirm the shopper's full requirements. For query `desk`, both solid wood and particleboard desks may pass; the assistant checks material after inspection. Explicit visual descriptors such as `black standing desk` can be evaluated from the photo.
 
-Reuse the existing Jev transport, boolean probability handling, response validation, and accounting with query-specific criteria. There is no three-state classifier, inspection-status label, attribute evidence schema, or second Jev pass on details in v1. The current comparable threshold of 0.8 is a starting candidate to evaluate, not a proven shopping threshold.
+Search tool outcomes include `filter_decisions` for retained cards: `id`, `verdict`, and `image_used`. The assistant must preserve uncertainty and must not claim it personally viewed the photos. Rejected card bodies stay out of its context. This is one query-relevance pass; there is no second Jev pass over inspection results.
 
-Rejected card bodies stay out of the conversation model's context. Raw bounded batches necessarily reach the backend for Jev evaluation. Invalid or incomplete evaluations fail explicitly and may retry within budget; never silently supply unfiltered cards to the assistant.
+Each batch contains at most 20 cards, with four image download workers, a two-second image preparation budget and a five-second overall deadline. Host/IP checks, image size bounds, and resizing reuse the search-filter implementation. Missing images are handled per card; failed, incomplete, duplicate-ID, or invalid model decisions fail the entire source page explicitly, including any earlier successful batches. Provider calls have no automatic retry. Duplicate tool-result submissions do not repeat evaluation. Filtering does not fetch extra pages; another page requires another model-selected search within the existing two-page budget.
 
 ### Inspection parity with tapping a listing
 
@@ -133,7 +140,7 @@ Existing account storage and model-usage accounting remain useful and stay in pl
 
 ## Limits and failure handling
 
-Limits per user message are 5 model planning calls plus one closing response restricted to displaying known products or text, 2 source page fetches across queries, 3 detail fetches, and 6 cards per displayed group. Jev batches contain at most 30 candidates. Allow one retry for a transient failure, counting it against applicable limits. Cap active retrieval time at 60 seconds, excluding paused time. These are ceilings, not targets. Normally use one search, a batch of up to three necessary inspections, then a shortlist. A second page is a fallback for poor results. Successful display ends the run immediately; requests for more options start a new user turn. Repeated identical search pages and repeated inspections within a run are rejected. Status polling backs off from 0.5 to 2 seconds while progress is unchanged.
+Limits per user message are 5 model planning calls plus one closing response restricted to displaying known products or text, 2 source page fetches across queries, 3 detail fetches, and 6 cards per displayed group. Jev batches contain at most 20 candidates and have no automatic retry. Conversation-model calls allow one retry for a transient failure, counting it against applicable limits. Cap active retrieval time at 60 seconds, excluding paused time. These are ceilings, not targets. Normally use one search, a batch of up to three necessary inspections, then a shortlist. A second page is a fallback for poor results. Successful display ends the run immediately; requests for more options start a new user turn. Repeated identical search pages and repeated inspections within a run are rejected. Status polling backs off from 0.5 to 2 seconds while progress is unchanged.
 
 Apply the existing model usage ceiling to conversation and Jev calls. Enforce run limits in the backend and source limits in the client. At a limit, return useful partial results and explain what remains unchecked. Reserve capacity to display existing evidence even after the retrieval limit; if it fails, keep existing cards and show a deterministic stop reason.
 
@@ -158,7 +165,7 @@ Keep credentials and raw authenticated requests on the device. Bound payload siz
 | Search and pagination | [`SearchQuery.swift`](../apps/ios/Sources/Engine/SearchQuery.swift), [`AuthenticatedFeedClient.swift`](../apps/ios/Sources/Engine/AuthenticatedFeedClient.swift), [`GraphQLFeed.swift`](../apps/ios/Sources/Engine/GraphQLFeed.swift) | Individual tool-field adapter, device-area snapshot, cursor handles, and card uploads. |
 | Detail loading | [`DetailEngine.swift`](../apps/ios/Sources/Engine/DetailEngine.swift) and existing listing/detail parsing | Background adapter returning the same parsed data as a manual open. |
 | Source pacing | [`RequestPacer.swift`](../apps/ios/Sources/Engine/RequestPacer.swift) | Share pacing and coordinate engine ownership. |
-| Jev | [`relevance.go`](../apps/backend/pkg/llm/relevance.go) | Binary candidate-versus-query policy. |
+| Jev | [`search_filter.go`](../apps/backend/pkg/llm/search_filter.go) | Direct title/photo query relevance; retain match and unknown. |
 | Model integration | [`pkg/llm`](../apps/backend/pkg/llm) | Conversation/tool continuation interface and usage accounting. |
 | API and observations | [`listing.proto`](../protos/openmarket/api/v1/listing.proto), existing authenticated Connect service | Typed assistant operations and temporary session management; review capture-context enums before reusing observation messages. |
 
@@ -169,7 +176,7 @@ Keep credentials and raw authenticated requests on the device. Bound payload siz
 3. The phone fetches one page. Jev compares each card to `desk`, excludes unrelated chairs and accessories, and returns matching desk cards plus a next-page cursor.
 4. The assistant selects promising IDs and calls `inspect_product`. The phone returns the same parsed details the user would see after opening each listing.
 5. The assistant finds one desk is particleboard, one is only 42 inches wide, and another description states solid oak, 54 inches wide, and drawers. It excludes the first two from the shortlist and retains the third based on listing evidence.
-6. If it needs more choices, it calls `search` again with the same query and price field plus the returned cursor. Each new page receives the same binary Jev filtering.
+6. If it needs more choices, it calls `search` again with the same query and price field plus the returned cursor. Each new page receives the same title/photo Jev filtering.
 7. The assistant calls `display_products` and explains why the shortlist fits, labeling any missing information. A follow-up such as “Anything darker?” continues within the temporary session.
 
 ## Acceptance criteria and evaluation
@@ -178,7 +185,7 @@ Keep credentials and raw authenticated requests on the device. Bound payload siz
 - Marketplace searches and detail loads execute on the frontend. Without frontend results, the backend cannot advance a dependent action.
 - The search schema has individually typed fields, no semantic description or nested filters, and no model-controlled location or radius.
 - For detailed requests, the assistant starts with a broad core-product query and checks nuanced requirements using detail observations. It does not treat a Jev match as proof that all requirements are satisfied.
-- Jev evaluates only relevance to the query and returns binary decisions. A relevant short card survives despite missing dimensions or material; irrelevant card bodies do not enter the assistant context.
+- Jev evaluates title/photo relevance to the query and returns match, unknown, or mismatch decisions; match and unknown are retained. A relevant short card survives despite missing dimensions or material; irrelevant card bodies do not enter the assistant context.
 - Background inspection returns the same parsed fields as a manual listing open, preserves missing values, and leaves navigation in chat.
 - Another page can be requested without changing query, filters, or device area. Empty filtered pages retain valid continuation; invalid and repeated cursors stop safely.
 - Ordinary retries within a live session do not duplicate cards or model continuation. Cancellation makes late results inert; state loss is reported as an ended session.
@@ -192,9 +199,9 @@ Measure time to first useful card, product opens, relevant candidates retained b
 
 The first implementation uses `ShoppingService` in Connect, a bounded in-memory
 backend session, native Gateway tool calls, and the iOS AI Search tab. Configure
-`AI_GATEWAY_API_KEY` and optionally `SHOPPING_MODEL` (default
+`AI_GATEWAY_API_KEY`, `JEV_API_KEY`, and optionally `SHOPPING_MODEL` (default
 `google/gemini-3.5-flash-lite`, using its default minimal thinking level); the
-Vercel Price Check key is also accepted. The only migration adds `SHOPPING` to existing model usage
+Vercel Price Check key is also accepted for the conversation model. Direct Jev credentials are required for image relevance; missing either provider disables AI Search explicitly. The only migration adds `SHOPPING` to existing model usage
 accounting. Deployment should use one backend replica or session affinity.
 
 Search cursors stay on the phone. Each active query has its own browser host,

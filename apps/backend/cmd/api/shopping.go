@@ -30,19 +30,16 @@ const (
 type shoppingPlanner interface {
 	Shop(context.Context, llm.Subject, llm.ShoppingInput) (llm.ShoppingMessage, error)
 }
-type shoppingEvaluator interface {
-	Evaluate(context.Context, llm.Subject, llm.EvaluationInput) ([]llm.Decision, error)
-}
 type shoppingDeviceStore interface {
 	GetDeviceForSession(context.Context, uuid.UUID) (db.UserDevice, error)
 }
 type shoppingServer struct {
-	mu        sync.Mutex
-	sessions  map[string]*shoppingSession
-	planner   shoppingPlanner
-	evaluator shoppingEvaluator
-	devices   shoppingDeviceStore
-	now       func() time.Time
+	mu       sync.Mutex
+	sessions map[string]*shoppingSession
+	planner  shoppingPlanner
+	filter   searchFilterRunner
+	devices  shoppingDeviceStore
+	now      func() time.Time
 }
 type shoppingSession struct {
 	owner, authSession           uuid.UUID
@@ -62,8 +59,8 @@ type shoppingSession struct {
 	cancel                       context.CancelFunc
 }
 
-func newShoppingServer(p shoppingPlanner, e shoppingEvaluator, d shoppingDeviceStore) *shoppingServer {
-	return &shoppingServer{sessions: map[string]*shoppingSession{}, planner: p, evaluator: e, devices: d, now: time.Now}
+func newShoppingServer(p shoppingPlanner, filter searchFilterRunner, d shoppingDeviceStore) *shoppingServer {
+	return &shoppingServer{sessions: map[string]*shoppingSession{}, planner: p, filter: filter, devices: d, now: time.Now}
 }
 func shoppingError(code connect.Code, msg string) error {
 	return connect.NewError(code, errors.New(msg))
@@ -126,7 +123,7 @@ func (s *shoppingServer) StartShopping(ctx context.Context, req *connect.Request
 	if len(req.Msg.RequestId) == 0 || len(req.Msg.RequestId) > 100 {
 		return nil, shoppingError(connect.CodeInvalidArgument, "A request ID is required.")
 	}
-	if s.planner == nil || s.evaluator == nil {
+	if s.planner == nil || s.filter == nil {
 		return nil, shoppingError(connect.CodeFailedPrecondition, "AI Search is not configured on this server.")
 	}
 	sid, _ := auth.SessionID(ctx)
@@ -484,6 +481,17 @@ func (s *shoppingServer) completeBatch(x *shoppingSession) {
 	}
 	s.plan(x)
 }
+
+func (s *shoppingServer) finishToolResult(x *shoppingSession, callID string) {
+	x.view.PendingCalls = slices.DeleteFunc(x.view.PendingCalls, func(c *v1.ShoppingToolCall) bool { return c.Id == callID })
+	if len(x.view.PendingCalls) == 0 {
+		s.completeBatch(x)
+	} else {
+		x.view.Status = "awaiting_client"
+		x.view.Progress = "Waiting for your device"
+	}
+}
+
 func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *connect.Request[v1.SubmitShoppingToolResultRequest]) (*connect.Response[v1.SubmitShoppingToolResultResponse], error) {
 	if err := s.facebook(ctx); err != nil {
 		return nil, err
@@ -523,6 +531,15 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 		return nil, shoppingError(connect.CodeInvalidArgument, err.Error())
 	}
 	x.results[r.CallId] = true
+	if display := call.GetDisplay(); display != nil && r.Error == "" {
+		// The phone already rendered these cards. Acknowledging before committing
+		// the message would remove them until the next status poll.
+		x.displayed = true
+		x.view.Messages = append(x.view.Messages, &v1.ShoppingMessage{Id: call.Id, Role: "assistant", Display: display})
+		x.outcomes[r.CallId] = fmt.Sprintf(`{"result":%s,"fetched":0,"rejected":0}`, protoText(r))
+		s.finishToolResult(x, r.CallId)
+		return connect.NewResponse(&v1.SubmitShoppingToolResultResponse{Session: snapshot(x)}), nil
+	}
 	x.view.Status = "processing_results"
 	x.view.Progress = "Checking results"
 	if call.GetSearch() != nil {
@@ -536,21 +553,22 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 		defer cancel()
 		filtered := r.Listings
 		rejected := 0
+		var retainedDecisions []llm.SearchFilterDecision
 		if q := call.GetSearch(); q != nil && r.Error == "" {
 			filtered = nil
-			for start := 0; start < len(r.Listings); start += 30 {
-				batch := r.Listings[start:min(start+30, len(r.Listings))]
-				in := llm.EvaluationInput{SearchQuery: q.Query}
+			for start := 0; start < len(r.Listings); start += llm.SearchFilterBatchSize {
+				batch := r.Listings[start:min(start+llm.SearchFilterBatchSize, len(r.Listings))]
+				in := llm.SearchFilterInput{Query: q.Query}
 				for _, l := range batch {
-					in.Candidates = append(in.Candidates, llm.Candidate{ID: l.Id, Item: llm.ComparisonItem{Title: l.GetTitle(), Condition: l.GetConditionText()}})
+					in.Candidates = append(in.Candidates, llm.SearchCandidate{ID: l.Id, Title: l.GetTitle(), ImageURL: l.GetThumbnailUrl()})
 				}
-				decisions, err := s.evaluator.Evaluate(workCtx, llm.Subject{UserID: x.owner}, in)
+				decisions, err := s.filter.FilterSearch(workCtx, llm.Subject{UserID: x.owner}, in)
 				if err != nil || len(decisions) != len(batch) {
 					r.Error = "Relevance filtering failed. This page was not supplied as filtered results."
 					filtered = nil
 					break
 				}
-				accepted := map[string]bool{}
+				byID := map[string]llm.SearchFilterDecision{}
 				valid := true
 				ids := map[string]bool{}
 				for _, l := range batch {
@@ -560,10 +578,14 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 					if !ids[d.ID] {
 						valid = false
 					}
-					if _, exists := accepted[d.ID]; exists {
+					if _, exists := byID[d.ID]; exists {
 						valid = false
 					}
-					accepted[d.ID] = d.UseInComparison
+					if !slices.Contains([]llm.SearchVerdict{llm.SearchMatch, llm.SearchUnknown, llm.SearchMismatch}, d.Verdict) ||
+						(d.Verdict != llm.SearchUnknown && !d.ImageUsed) {
+						valid = false
+					}
+					byID[d.ID] = d
 				}
 				if !valid {
 					r.Error = "Invalid relevance decisions."
@@ -571,8 +593,10 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 					break
 				}
 				for _, l := range batch {
-					if accepted[l.Id] {
+					d := byID[l.Id]
+					if d.Verdict != llm.SearchMismatch {
 						filtered = append(filtered, l)
+						retainedDecisions = append(retainedDecisions, d)
 					} else {
 						rejected++
 					}
@@ -620,23 +644,17 @@ func (s *shoppingServer) SubmitShoppingToolResult(ctx context.Context, req *conn
 			}
 			result := proto.Clone(r).(*v1.ShoppingToolResult)
 			result.Listings = filtered
-			x.outcomes[r.CallId] = fmt.Sprintf(`{"result":%s,"fetched":%d,"rejected":%d}`, protoText(result), len(r.Listings), rejected)
-			if display := call.GetDisplay(); display != nil {
-				x.displayed = true
-				x.view.Messages = append(x.view.Messages, &v1.ShoppingMessage{Id: call.Id, Role: "assistant", Display: display})
+			outcome := fmt.Sprintf(`{"result":%s,"fetched":%d,"rejected":%d}`, protoText(result), len(r.Listings), rejected)
+			if call.GetSearch() != nil {
+				outcome = fmt.Sprintf(`{"result":%s,"fetched":%d,"rejected":%d,"filter_decisions":%s}`, protoText(result), len(r.Listings), rejected, jsonText(retainedDecisions))
 			}
+			x.outcomes[r.CallId] = outcome
 			x.view.Listings = nil
 			for _, l := range x.known {
 				x.view.Listings = append(x.view.Listings, l)
 			}
 		}
-		x.view.PendingCalls = slices.DeleteFunc(x.view.PendingCalls, func(c *v1.ShoppingToolCall) bool { return c.Id == r.CallId })
-		if len(x.view.PendingCalls) == 0 {
-			s.completeBatch(x)
-		} else {
-			x.view.Status = "awaiting_client"
-			x.view.Progress = "Waiting for your device"
-		}
+		s.finishToolResult(x, r.CallId)
 	}()
 	return connect.NewResponse(&v1.SubmitShoppingToolResultResponse{Session: snapshot(x)}), nil
 }

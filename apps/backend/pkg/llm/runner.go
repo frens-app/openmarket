@@ -43,12 +43,13 @@ type Subject struct {
 // caller can forget to do, because the only way to reach the provider is
 // through here.
 type Runner struct {
-	provider   interface{ Name() string }
-	identifier Provider
-	evaluator  Evaluator
-	shopper    Shopper
-	store      Store
-	logger     *zap.Logger
+	provider     interface{ Name() string }
+	identifier   Provider
+	evaluator    Evaluator
+	shopper      Shopper
+	searchFilter SearchFilter
+	store        Store
+	logger       *zap.Logger
 
 	// Per user, per window. Calls rather than money: there is no rate table
 	// yet, and calls are the right unit for what this actually guards against
@@ -107,6 +108,19 @@ func NewEvaluationRunner(evaluator Evaluator, store Store, logger *zap.Logger, c
 func (r *Runner) Evaluate(ctx context.Context, sub Subject, in EvaluationInput) ([]Decision, error) {
 	return call(ctx, r, StageRelevance, sub, func(ctx context.Context) ([]Decision, Usage, error) {
 		return r.evaluator.Evaluate(ctx, in)
+	})
+}
+
+func NewSearchFilterRunner(filter SearchFilter, store Store, logger *zap.Logger, cfg Config) *Runner {
+	r := NewRunner(nil, store, logger, cfg)
+	r.provider = filter
+	r.searchFilter = filter
+	return r
+}
+
+func (r *Runner) FilterSearch(ctx context.Context, sub Subject, in SearchFilterInput) ([]SearchFilterDecision, error) {
+	return call(ctx, r, StageRelevance, sub, func(ctx context.Context) ([]SearchFilterDecision, Usage, error) {
+		return r.searchFilter.FilterSearch(ctx, in)
 	})
 }
 

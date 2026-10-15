@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -40,22 +42,40 @@ func (p *scriptedShopper) Shop(ctx context.Context, _ llm.Subject, in llm.Shoppi
 	return r, nil
 }
 
-type queryEvaluator struct {
-	mu      sync.Mutex
-	queries []string
-	invalid bool
+type shoppingImageFilter struct {
+	mu        sync.Mutex
+	inputs    []llm.SearchFilterInput
+	subjects  []llm.Subject
+	transform func([]llm.SearchFilterDecision) []llm.SearchFilterDecision
+	err       error
+	failAt    int
+	invalid   bool
 }
 
-func (e *queryEvaluator) Evaluate(_ context.Context, _ llm.Subject, in llm.EvaluationInput) ([]llm.Decision, error) {
+func (e *shoppingImageFilter) FilterSearch(_ context.Context, sub llm.Subject, in llm.SearchFilterInput) ([]llm.SearchFilterDecision, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.queries = append(e.queries, in.SearchQuery)
+	e.inputs = append(e.inputs, in)
+	e.subjects = append(e.subjects, sub)
+	if e.err != nil && (e.failAt == 0 || len(e.inputs) == e.failAt) {
+		return nil, e.err
+	}
 	if e.invalid {
 		return nil, nil
 	}
-	out := []llm.Decision{}
+	out := []llm.SearchFilterDecision{}
 	for _, c := range in.Candidates {
-		out = append(out, llm.Decision{ID: c.ID, UseInComparison: c.Item.Title != "Chair"})
+		verdict := llm.SearchMatch
+		if c.Title == "Chair" {
+			verdict = llm.SearchMismatch
+		}
+		if c.ImageURL == "" {
+			verdict = llm.SearchUnknown
+		}
+		out = append(out, llm.SearchFilterDecision{ID: c.ID, Verdict: verdict, ImageUsed: c.ImageURL != ""})
+	}
+	if e.transform != nil {
+		out = e.transform(out)
 	}
 	return out, nil
 }
@@ -65,7 +85,7 @@ func action(id, name, args string) llm.ShoppingMessage {
 	c.Function.Arguments = args
 	return llm.ShoppingMessage{Role: "assistant", ToolCalls: []llm.ShoppingCall{c}}
 }
-func setupShopping(t *testing.T, p *scriptedShopper, e *queryEvaluator) (*shoppingServer, context.Context, *v1.ShoppingSession) {
+func setupShopping(t *testing.T, p *scriptedShopper, e *shoppingImageFilter) (*shoppingServer, context.Context, *v1.ShoppingSession) {
 	t.Helper()
 	s := newShoppingServer(p, e, nil)
 	ctx := auth.WithSessionID(auth.WithUserID(context.Background(), uuid.New()), uuid.New())
@@ -108,7 +128,7 @@ func submitShopping(t *testing.T, s *shoppingServer, ctx context.Context, x *v1.
 }
 func strptr(v string) *string { return &v }
 func observation(id, title string) *v1.ShoppingListing {
-	return &v1.ShoppingListing{Id: id, Title: strptr(title), ObservedAtUnix: time.Now().Unix()}
+	return &v1.ShoppingListing{Id: id, Title: strptr(title), ThumbnailUrl: strptr("https://scontent.fbcdn.net/" + id + ".jpg"), ObservedAtUnix: time.Now().Unix()}
 }
 
 func TestShoppingFullFrontendLoop(t *testing.T) {
@@ -118,7 +138,7 @@ func TestShoppingFullFrontendLoop(t *testing.T) {
 		action("d", "display_products", `{"products":[{"listing_id":"desk","reason":"The description says oak and drawers","caveat":"Seller claim"}]}`),
 		{Role: "assistant", Content: "Here is an option."},
 	}}
-	e := &queryEvaluator{}
+	e := &shoppingImageFilter{}
 	s, ctx, x := setupShopping(t, p, e)
 	x = sendShopping(t, s, ctx, x)
 	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
@@ -145,8 +165,8 @@ func TestShoppingFullFrontendLoop(t *testing.T) {
 		t.Fatalf("missing display or duplicate message: %v", x.Messages)
 	}
 	e.mu.Lock()
-	if len(e.queries) != 1 || e.queries[0] != "desk" {
-		t.Errorf("wrong Jev target: %v", e.queries)
+	if len(e.inputs) != 1 || e.inputs[0].Query != "desk" {
+		t.Errorf("wrong Jev target: %v", e.inputs)
 	}
 	e.mu.Unlock()
 	p.mu.Lock()
@@ -163,7 +183,7 @@ func TestShoppingFullFrontendLoop(t *testing.T) {
 	}
 }
 func TestShoppingOwnershipExpiryAndStartIdempotency(t *testing.T) {
-	s, ctx, x := setupShopping(t, &scriptedShopper{}, &queryEvaluator{})
+	s, ctx, x := setupShopping(t, &scriptedShopper{}, &shoppingImageFilter{})
 	r, err := s.StartShopping(ctx, connect.NewRequest(&v1.StartShoppingRequest{RequestId: "start", FacebookConnected: true}))
 	if err != nil || r.Msg.Session.Id != x.Id {
 		t.Fatal("start retry was not idempotent")
@@ -180,7 +200,7 @@ func TestShoppingOwnershipExpiryAndStartIdempotency(t *testing.T) {
 }
 func TestShoppingCancellationRejectsLateWork(t *testing.T) {
 	p := &scriptedShopper{wait: make(chan struct{}), replies: []llm.ShoppingMessage{action("s", "search", `{"query":"desk"}`)}}
-	s, ctx, x := setupShopping(t, p, &queryEvaluator{})
+	s, ctx, x := setupShopping(t, p, &shoppingImageFilter{})
 	x = sendShopping(t, s, ctx, x)
 	_, err := s.ControlShoppingSession(ctx, connect.NewRequest(&v1.ControlShoppingSessionRequest{SessionId: x.Id, RunId: x.RunId, Action: "stop"}))
 	if err != nil {
@@ -199,7 +219,7 @@ func TestShoppingCancellationRejectsLateWork(t *testing.T) {
 }
 func TestShoppingFilteringFailureDoesNotSupplyCards(t *testing.T) {
 	p := &scriptedShopper{replies: []llm.ShoppingMessage{action("s", "search", `{"query":"desk"}`)}}
-	s, ctx, x := setupShopping(t, p, &queryEvaluator{invalid: true})
+	s, ctx, x := setupShopping(t, p, &shoppingImageFilter{invalid: true})
 	x = sendShopping(t, s, ctx, x)
 	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
 	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "s", Listings: []*v1.ShoppingListing{observation("d", "Desk")}, PaginationStatus: "exhausted"})
@@ -219,8 +239,124 @@ func TestShoppingFilteringFailureDoesNotSupplyCards(t *testing.T) {
 		t.Fatal("filter error was concealed from model")
 	}
 }
+
+func TestShoppingImageFilteringBatchesCardsAndPreservesUncertainty(t *testing.T) {
+	p := &scriptedShopper{replies: []llm.ShoppingMessage{action("s", "search", `{"query":"black standing desk"}`)}}
+	e := &shoppingImageFilter{transform: func(ds []llm.SearchFilterDecision) []llm.SearchFilterDecision {
+		for i := range ds {
+			if ds[i].ID == "desk-1" {
+				ds[i].Verdict = llm.SearchUnknown
+			}
+		}
+		return ds
+	}}
+	s, ctx, x := setupShopping(t, p, e)
+	x = sendShopping(t, s, ctx, x)
+	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
+	var cards []*v1.ShoppingListing
+	for i := range 41 {
+		cards = append(cards, observation(fmt.Sprintf("desk-%d", i), "Standing desk"))
+	}
+	cards[0].ThumbnailUrl = nil
+	cards[2].Title = strptr("Chair")
+	r := &v1.ShoppingToolResult{CallId: "s", Listings: cards, HasMore: true, NextCursor: "next", PaginationStatus: "more"}
+	submitShopping(t, s, ctx, x, r)
+	x = waitShopping(t, s, ctx, x.Id, "completed")
+	submitShopping(t, s, ctx, x, r)
+	if len(x.Listings) != 40 {
+		t.Fatalf("want matches and unknowns, got %d cards", len(x.Listings))
+	}
+	owner, _ := auth.UserID(ctx)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.inputs) != 3 {
+		t.Fatalf("want three batches, no extra call for duplicate submission: %d", len(e.inputs))
+	}
+	for i, size := range []int{20, 20, 1} {
+		if e.inputs[i].Query != "black standing desk" || len(e.inputs[i].Candidates) != size || e.subjects[i].UserID != owner {
+			t.Fatalf("wrong query, batch, or billing subject: %+v", e.inputs[i])
+		}
+	}
+	if c := e.inputs[0].Candidates[1]; c.ID != cards[1].Id || c.Title != cards[1].GetTitle() || c.ImageURL != cards[1].GetThumbnailUrl() {
+		t.Fatalf("headline image was not forwarded with its card: %+v", c)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var outcome struct {
+		Result          json.RawMessage            `json:"result"`
+		Fetched         int                        `json:"fetched"`
+		Rejected        int                        `json:"rejected"`
+		FilterDecisions []llm.SearchFilterDecision `json:"filter_decisions"`
+	}
+	for _, m := range p.inputs[1].Messages {
+		if m.Role == "tool" && m.ToolCallID == "s" {
+			if err := json.Unmarshal([]byte(m.Content), &outcome); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if outcome.Fetched != 41 || outcome.Rejected != 1 || len(outcome.FilterDecisions) != 40 {
+		t.Fatalf("incorrect filtering counts or evidence: %+v", outcome)
+	}
+	if outcome.FilterDecisions[0].Verdict != llm.SearchUnknown || outcome.FilterDecisions[0].ImageUsed ||
+		outcome.FilterDecisions[1].Verdict != llm.SearchUnknown || !outcome.FilterDecisions[1].ImageUsed {
+		t.Fatal("assistant cannot distinguish missing images from uncertain visual decisions")
+	}
+	if strings.Contains(string(outcome.Result), "Chair") || !strings.Contains(string(outcome.Result), "next") {
+		t.Fatal("rejected content leaked or continuation was lost")
+	}
+}
+
+func TestShoppingImageFilteringRejectsInvalidAndFailedBatches(t *testing.T) {
+	for name, filter := range map[string]*shoppingImageFilter{
+		"unknown ID":      {transform: func(ds []llm.SearchFilterDecision) []llm.SearchFilterDecision { ds[0].ID = "invented"; return ds }},
+		"duplicate ID":    {transform: func(ds []llm.SearchFilterDecision) []llm.SearchFilterDecision { ds[1].ID = ds[0].ID; return ds }},
+		"invalid verdict": {transform: func(ds []llm.SearchFilterDecision) []llm.SearchFilterDecision { ds[0].Verdict = "invalid"; return ds }},
+		"mismatch without image": {transform: func(ds []llm.SearchFilterDecision) []llm.SearchFilterDecision {
+			ds[0].Verdict = llm.SearchMismatch
+			ds[0].ImageUsed = false
+			return ds
+		}},
+		"quota":                {err: llm.ErrCeilingReached},
+		"second batch timeout": {err: context.DeadlineExceeded, failAt: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := &scriptedShopper{replies: []llm.ShoppingMessage{action("s", "search", `{"query":"desk"}`)}}
+			s, ctx, x := setupShopping(t, p, filter)
+			x = sendShopping(t, s, ctx, x)
+			x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
+			var cards []*v1.ShoppingListing
+			for i := range 21 {
+				cards = append(cards, observation(fmt.Sprintf("desk-%d", i), "Private card title"))
+			}
+			submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "s", Listings: cards, PaginationStatus: "exhausted"})
+			x = waitShopping(t, s, ctx, x.Id, "completed")
+			if len(x.Listings) != 0 {
+				t.Fatal("failed page exposed partial results")
+			}
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			for _, m := range p.inputs[1].Messages {
+				if m.Role == "tool" {
+					if !strings.Contains(m.Content, `"error"`) || strings.Contains(m.Content, "Private card title") {
+						t.Fatalf("failed evaluation was concealed or leaked cards: %s", m.Content)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestShoppingRequiresImageFilterConfiguration(t *testing.T) {
+	s := newShoppingServer(&scriptedShopper{}, nil, nil)
+	ctx := auth.WithUserID(context.Background(), uuid.New())
+	_, err := s.StartShopping(ctx, connect.NewRequest(&v1.StartShoppingRequest{RequestId: "start", FacebookConnected: true}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("AI Search silently started without the image filter: %v", err)
+	}
+}
 func TestShoppingSearchSchemaAndCursorBinding(t *testing.T) {
-	s, _, view := setupShopping(t, &scriptedShopper{}, &queryEvaluator{})
+	s, _, view := setupShopping(t, &scriptedShopper{}, &shoppingImageFilter{})
 	x := s.sessions[view.Id]
 	for _, args := range []string{`{"query":"desk","location":"Paris"}`, `{"query":"desk","filters":{}}`, `{"query":"desk","description":"wood"}`, `{"query":"desk","max_price":-1}`, `{"query":"desk","cursor":"invented"}`, `{"query":"desk","sort":"random"}`} {
 		if _, err := s.parseCall(x, action("s", "search", args).ToolCalls[0]); err == nil {
@@ -243,7 +379,7 @@ func TestShoppingInspectionAndDisplayValidation(t *testing.T) {
 	if validateShoppingResult(call, &v1.ShoppingToolResult{Listings: []*v1.ShoppingListing{wrong}}) == nil {
 		t.Fatal("wrong product inspection accepted")
 	}
-	s, _, v := setupShopping(t, &scriptedShopper{}, &queryEvaluator{})
+	s, _, v := setupShopping(t, &scriptedShopper{}, &shoppingImageFilter{})
 	x := s.sessions[v.Id]
 	sold := true
 	x.known["desk"] = observation("desk", "Desk")
@@ -254,7 +390,7 @@ func TestShoppingInspectionAndDisplayValidation(t *testing.T) {
 }
 func TestShoppingPauseBlocksContinuationUntilResume(t *testing.T) {
 	p := &scriptedShopper{replies: []llm.ShoppingMessage{action("s", "search", `{"query":"desk"}`)}}
-	s, ctx, x := setupShopping(t, p, &queryEvaluator{})
+	s, ctx, x := setupShopping(t, p, &shoppingImageFilter{})
 	x = sendShopping(t, s, ctx, x)
 	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
 	_, err := s.ControlShoppingSession(ctx, connect.NewRequest(&v1.ControlShoppingSessionRequest{SessionId: x.Id, RunId: x.RunId, Action: "pause"}))
@@ -274,7 +410,7 @@ func TestShoppingPauseBlocksContinuationUntilResume(t *testing.T) {
 }
 
 func TestShoppingReducedBudgetsAndDuplicateWork(t *testing.T) {
-	s, _, v := setupShopping(t, &scriptedShopper{}, &queryEvaluator{})
+	s, _, v := setupShopping(t, &scriptedShopper{}, &shoppingImageFilter{})
 	x := s.sessions[v.Id]
 	x.started = time.Now()
 	search := action("s1", "search", `{"query":"desk"}`).ToolCalls[0]
@@ -315,7 +451,7 @@ func TestShoppingReducedBudgetsAndDuplicateWork(t *testing.T) {
 
 func TestShoppingClosingCallCanOnlyDisplay(t *testing.T) {
 	p := &scriptedShopper{}
-	s, ctx, v := setupShopping(t, p, &queryEvaluator{})
+	s, ctx, v := setupShopping(t, p, &shoppingImageFilter{})
 	s.mu.Lock()
 	x := s.sessions[v.Id]
 	x.view.RunId = "run"
@@ -336,7 +472,7 @@ func TestShoppingDisplaySkipsAdditionalRequestsInSameBatch(t *testing.T) {
 	display := action("display", "display_products", `{"products":[{"listing_id":"desk"}]}`)
 	display.ToolCalls = append(display.ToolCalls, action("extra", "search", `{"query":"writing desk"}`).ToolCalls[0])
 	p := &scriptedShopper{replies: []llm.ShoppingMessage{action("search", "search", `{"query":"desk"}`), display}}
-	s, ctx, x := setupShopping(t, p, &queryEvaluator{})
+	s, ctx, x := setupShopping(t, p, &shoppingImageFilter{})
 	x = sendShopping(t, s, ctx, x)
 	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
 	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "search", Listings: []*v1.ShoppingListing{observation("desk", "Desk")}, PaginationStatus: "exhausted"})
@@ -350,5 +486,45 @@ func TestShoppingDisplaySkipsAdditionalRequestsInSameBatch(t *testing.T) {
 	defer p.mu.Unlock()
 	if len(p.inputs) != 2 {
 		t.Fatal("model called again after display")
+	}
+}
+
+func TestShoppingDisplayAcknowledgmentAlreadyContainsRenderedResults(t *testing.T) {
+	p := &scriptedShopper{replies: []llm.ShoppingMessage{
+		action("search", "search", `{"query":"desk"}`),
+		action("display", "display_products", `{"title":"Your options","products":[{"listing_id":"desk"}]}`),
+	}}
+	s, ctx, x := setupShopping(t, p, &shoppingImageFilter{})
+	x = sendShopping(t, s, ctx, x)
+	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
+	submitShopping(t, s, ctx, x, &v1.ShoppingToolResult{CallId: "search", Listings: []*v1.ShoppingListing{observation("desk", "Desk")}, PaginationStatus: "exhausted"})
+	x = waitShopping(t, s, ctx, x.Id, "awaiting_client")
+	request := connect.NewRequest(&v1.SubmitShoppingToolResultRequest{
+		SessionId: x.Id, RunId: x.RunId,
+		Result: &v1.ShoppingToolResult{CallId: "display", DisplayedIds: []string{"desk"}},
+	})
+	request.Msg.Result.DisplayedIds = []string{"wrong"}
+	if _, err := s.SubmitShoppingToolResult(ctx, request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("invalid display acknowledgment was accepted: %v", err)
+	}
+	request.Msg.Result.DisplayedIds = []string{"desk"}
+	for range 2 {
+		response, err := s.SubmitShoppingToolResult(ctx, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		view := response.Msg.Session
+		if view.Status != "completed" || len(view.PendingCalls) != 0 {
+			t.Fatalf("display acknowledgment requires another poll: status=%s pending=%d", view.Status, len(view.PendingCalls))
+		}
+		var displays int
+		for _, message := range view.Messages {
+			if message.Id == "display" && message.GetDisplay() != nil {
+				displays++
+			}
+		}
+		if displays != 1 || len(view.Listings) != 1 || view.Listings[0].Id != "desk" {
+			t.Fatalf("optimistic cards would disappear or duplicate on acknowledgment: %+v", view)
+		}
 	}
 }

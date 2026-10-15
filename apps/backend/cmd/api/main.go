@@ -168,6 +168,14 @@ func main() {
 		logger.Warn("listing relevance unavailable: configure AI_GATEWAY_API_KEY or a Vercel LLM_API_KEY")
 	}
 
+	searchSvc := &searchServer{}
+	if cfg.JEVAPIKey != "" {
+		searchSvc.filter = llm.NewSearchFilterRunner(llm.NewJevSearchFilter(cfg.JEVAPIKey), queries, logger.Named("search-filter"), llm.Config{
+			MaxCallsPerUser: cfg.LLMMaxCallsPerUser, Window: cfg.LLMCallWindow,
+			MaxAttempts: 1, Timeout: 5 * time.Second,
+		})
+	}
+
 	var shoppingRunner *llm.Runner
 	if gatewayKey != "" {
 		provider, err := llm.NewGatewayProvider(llm.GatewayOptions{APIKey: gatewayKey, Model: cfg.ShoppingModel})
@@ -180,9 +188,11 @@ func main() {
 		})
 	}
 	shoppingSvc := newShoppingServer(nil, nil, queries)
-	if shoppingRunner != nil && pricingSvc.relevance != nil {
+	if shoppingRunner != nil && searchSvc.filter != nil {
 		shoppingSvc.planner = shoppingRunner
-		shoppingSvc.evaluator = pricingSvc.relevance
+		shoppingSvc.filter = searchSvc.filter
+	} else {
+		logger.Warn("AI Search unavailable: configure a Gateway key and JEV_API_KEY")
 	}
 	go func() {
 		ticker := time.NewTicker(time.Minute)
@@ -207,6 +217,7 @@ func main() {
 	mux.Handle(apiv1connect.NewSavedListingServiceHandler(&savedListingServer{queries: queries, pool: pool}, interceptors, connect.WithReadMaxBytes(8_000_000)))
 	mux.Handle(apiv1connect.NewPricingServiceHandler(pricingSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewShoppingServiceHandler(shoppingSvc, interceptors, connect.WithReadMaxBytes(300000)))
+	mux.Handle(apiv1connect.NewSearchServiceHandler(searchSvc, interceptors, connect.WithReadMaxBytes(100000)))
 	mux.HandleFunc("/health", healthHandler(pool))
 
 	// Reflection is for grpcurl against a local server. Off in production:
@@ -221,6 +232,7 @@ func main() {
 			apiv1connect.ListingViewServiceName,
 			apiv1connect.PricingServiceName,
 			apiv1connect.ShoppingServiceName,
+			apiv1connect.SearchServiceName,
 		)
 		mux.Handle(grpcreflect.NewHandlerV1(reflector))
 		mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))

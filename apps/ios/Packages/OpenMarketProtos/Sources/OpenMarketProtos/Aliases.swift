@@ -93,3 +93,9 @@ public typealias ListSavedListingsRequest = Openmarket_Api_V1_ListSavedListingsR
 public typealias ListingViewServiceClient = Openmarket_Api_V1_ListingViewServiceClient
 public typealias ListingViewSource = Openmarket_Api_V1_ListingViewSource
 public typealias SubmitListingViewRequest = Openmarket_Api_V1_SubmitListingViewRequest
+
+public typealias SearchServiceClient = Openmarket_Api_V1_SearchServiceClient
+public typealias SearchFilterCandidate = Openmarket_Api_V1_SearchFilterCandidate
+public typealias SearchFilterDecision = Openmarket_Api_V1_SearchFilterDecision
+public typealias SearchFilterVerdict = Openmarket_Api_V1_SearchFilterVerdict
+public typealias FilterListingsRequest = Openmarket_Api_V1_FilterListingsRequest

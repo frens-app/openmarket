@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package openmarket.api.v1;
+
+import "buf/validate/validate.proto";
+
+service SearchService {
+  rpc FilterListings(FilterListingsRequest) returns (FilterListingsResponse);
+}
+
+message SearchFilterCandidate {
+  string id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+  string title = 2 [(buf.validate.field).string.max_len = 500];
+  string headline_image_url = 3 [(buf.validate.field).string.max_len = 2048];
+}
+
+message FilterListingsRequest {
+  string query = 1 [(buf.validate.field).string = {min_len: 1, max_len: 300}];
+  repeated SearchFilterCandidate candidates = 2 [(buf.validate.field).repeated = {min_items: 1, max_items: 20}];
+}
+
+enum SearchFilterVerdict {
+  SEARCH_FILTER_VERDICT_UNSPECIFIED = 0;
+  SEARCH_FILTER_VERDICT_MATCH = 1;
+  SEARCH_FILTER_VERDICT_UNKNOWN = 2;
+  SEARCH_FILTER_VERDICT_MISMATCH = 3;
+}
+
+message SearchFilterDecision {
+  string id = 1;
+  SearchFilterVerdict verdict = 2;
+  bool image_used = 3;
+}
+
+message FilterListingsResponse {
+  repeated SearchFilterDecision decisions = 1;
+}

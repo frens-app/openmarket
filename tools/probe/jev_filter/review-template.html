@@ -1,0 +1,88 @@
+<div id="jev-research-results">
+  <div class="viz-controls">
+    <label class="form-label">Search sample
+      <select class="form-select" id="jev-dataset">
+        <option value="0">Black standing desk · Toronto</option>
+        <option value="1" selected>Black standing desk · San Francisco</option>
+        <option value="2">White dresser · Toronto</option>
+      </select>
+    </label>
+    <label class="form-label">Measured filter
+      <select class="form-select" id="jev-method">
+      </select>
+    </label>
+  </div>
+  <div class="viz-row">
+    <label class="form-check form-switch"><input class="form-check-input" id="jev-on" type="checkbox" checked><span class="form-check-label">Filter with AI</span></label>
+    <label class="form-check"><input class="form-check-input" id="jev-hidden" type="checkbox"><span class="form-check-label">Show hidden listings</span></label>
+  </div>
+  <p id="jev-count" aria-live="polite" class="tabular-nums"></p>
+  <div id="jev-cards"></div>
+  <p class="text-small text-muted">Assistant-reviewed labels · original search order · majority decision across repeats · headline image and title only</p>
+  <script type="application/json" id="jev-data">__JEV_DATA__</script>
+</div>
+<style>
+#jev-research-results #jev-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:20px; }
+#jev-research-results figure { margin:0; min-width:0; }
+#jev-research-results figure img { width:100%; aspect-ratio:1; object-fit:contain; }
+#jev-research-results figcaption { overflow-wrap:anywhere; margin-top:8px; }
+#jev-research-results .jev-decision { display:block; margin-top:5px; }
+#jev-research-results .jev-label { display:block; margin-top:4px; color:var(--muted-foreground); }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('jev-research-results');
+  const data = JSON.parse(root.querySelector('#jev-data').textContent);
+  const dataset = root.querySelector('#jev-dataset');
+  const method = root.querySelector('#jev-method');
+  const enabled = root.querySelector('#jev-on');
+  const hidden = root.querySelector('#jev-hidden');
+  const count = root.querySelector('#jev-count');
+  const cards = root.querySelector('#jev-cards');
+  data.methods.forEach(m => {
+    const option = document.createElement('option');
+    option.value = m; option.textContent = data.methodLabels[m] || m;
+    method.append(option);
+  });
+  method.value = data.methods.includes('jev-1.14.0_triage_vision') ? 'jev-1.14.0_triage_vision' : 'gemini_vision';
+  function applySaved(state) {
+    const s = state && state.privateContent;
+    if (!s) return;
+    if (data.datasets[s.dataset]) dataset.value = String(s.dataset);
+    if (data.methods.includes(s.method)) method.value = s.method;
+    if (typeof s.enabled === 'boolean') enabled.checked = s.enabled;
+    if (typeof s.hidden === 'boolean') hidden.checked = s.hidden;
+  }
+  function render() {
+    const ds = data.datasets[Number(dataset.value)];
+    const retained = ds.cards.filter(c => !enabled.checked || c.decisions[method.value]);
+    const validHidden = ds.cards.filter(c => c.label === 'yes' && !retained.includes(c)).length;
+    const mismatchesKept = retained.filter(c => c.label === 'no').length;
+    count.textContent = `${retained.length} of ${ds.cards.length} retained · ${ds.cards.length-retained.length} hidden · ${mismatchesKept} known mismatches retained · ${validHidden} known matches hidden`;
+    cards.replaceChildren();
+    ds.cards.forEach(c => {
+      const keep = !enabled.checked || c.decisions[method.value];
+      if (!keep && !hidden.checked) return;
+      const figure = document.createElement('figure');
+      const img = document.createElement('img');
+      img.src = c.image; img.alt = c.title; img.loading = 'lazy';
+      const caption = document.createElement('figcaption');
+      const title = document.createElement('span'); title.textContent = c.title;
+      const decision = document.createElement('span'); decision.className = 'jev-decision';
+      decision.textContent = enabled.checked ? (keep ? 'Retained' : 'Hidden by AI') : 'Unfiltered';
+      const label = document.createElement('span'); label.className = 'jev-label text-small';
+      label.textContent = `Review: ${c.label === 'yes' ? 'match' : c.label === 'no' ? 'mismatch' : 'uncertain'} — ${c.reason}`;
+      caption.append(title,decision,label); figure.append(img,caption); cards.append(figure);
+    });
+  }
+  function change() {
+    render();
+    if (window.openai && window.openai.setWidgetState) {
+      window.openai.setWidgetState({modelContent:{search:data.datasets[Number(dataset.value)].name,method:method.value,filterEnabled:enabled.checked,showHidden:hidden.checked},privateContent:{dataset:dataset.value,method:method.value,enabled:enabled.checked,hidden:hidden.checked}}).catch(()=>{});
+    }
+  }
+  [dataset,method,enabled,hidden].forEach(el => el.addEventListener('change',change));
+  applySaved(window.openai && window.openai.widgetState); render();
+  window.addEventListener('openai:set_globals',e=>{if(e.detail && e.detail.globals && e.detail.globals.widgetState){applySaved(e.detail.globals.widgetState);render();}});
+})();
+</script>
