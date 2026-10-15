@@ -339,8 +339,8 @@ func (s *userServer) DeleteAccount(
 	if err := qtx.DeleteSellerFollowsForUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete seller follows: %w", err))
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM user_price_alerts WHERE user_id=$1`, userID); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete price alerts: %w", err))
+	if _, err := tx.Exec(ctx, `DELETE FROM user_listing_alerts WHERE user_id=$1`, userID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete listing alerts: %w", err))
 	}
 	if err := qtx.DeletePriceChecksForUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete price checks: %w", err))

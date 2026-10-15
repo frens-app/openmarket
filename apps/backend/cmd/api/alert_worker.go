@@ -23,7 +23,7 @@ func (s *alertsServer) run(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 			tickCtx, cancel := context.WithTimeout(ctx, 50*time.Second)
 			if err := s.tick(tickCtx, interval); err != nil && !errors.Is(err, context.Canceled) {
-				s.logger.Warn("price alert worker", zap.Error(err))
+				s.logger.Warn("listing alert worker", zap.Error(err))
 			}
 			cancel()
 		}
@@ -65,7 +65,7 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 		return err
 	}
 	defer tx.Rollback(ctx)
-	tag, err := tx.Exec(ctx, `UPDATE price_alert_worker_clock SET next_dispatch_at=now()+$1*interval '1 second' WHERE id=1 AND next_dispatch_at<=now()`, interval.Seconds())
+	tag, err := tx.Exec(ctx, `UPDATE listing_alert_worker_clock SET next_dispatch_at=now()+$1*interval '1 second' WHERE id=1 AND next_dispatch_at<=now()`, interval.Seconds())
 	if err != nil {
 		return err
 	}
@@ -73,12 +73,12 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 		return nil
 	}
 	// SKIP LOCKED keeps account edits and uploads from stalling the scheduler.
-	_, err = tx.Exec(ctx, `INSERT INTO price_alert_check_runs(alert_id)
- SELECT a.id FROM user_price_alerts a JOIN user_devices d ON d.id=a.device_id JOIN users u ON u.id=a.user_id
+	_, err = tx.Exec(ctx, `INSERT INTO listing_alert_check_runs(alert_id)
+ SELECT a.id FROM user_listing_alerts a JOIN user_devices d ON d.id=a.device_id JOIN users u ON u.id=a.user_id
  WHERE NOT a.paused AND u.deleted_at IS NULL AND a.next_check_at<=now()
  AND (a.last_checked_at IS NULL OR a.last_checked_at<=now()-interval '24 hours')
  AND `+eligibleAlertDevice+`
- AND NOT EXISTS(SELECT 1 FROM price_alert_check_runs c WHERE c.alert_id=a.id AND c.completed_at IS NULL)
+ AND NOT EXISTS(SELECT 1 FROM listing_alert_check_runs c WHERE c.alert_id=a.id AND c.completed_at IS NULL)
  ORDER BY a.next_check_at,a.last_checked_at NULLS FIRST,a.created_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED
  ON CONFLICT DO NOTHING`)
 	if err != nil {
@@ -86,9 +86,9 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 	}
 	var checkID, alertID, deviceID uuid.UUID
 	var token string
-	err = tx.QueryRow(ctx, `SELECT c.id,a.id,d.id,d.push_token FROM price_alert_check_runs c JOIN user_price_alerts a ON a.id=c.alert_id JOIN user_devices d ON d.id=a.device_id
+	err = tx.QueryRow(ctx, `SELECT c.id,a.id,d.id,d.push_token FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id JOIN user_devices d ON d.id=a.device_id
  WHERE NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete AND c.next_push_at<=now() AND `+eligibleAlertDevice+`
- AND NOT EXISTS(SELECT 1 FROM price_alert_check_runs other JOIN user_price_alerts oa ON oa.id=other.alert_id WHERE oa.device_id=d.id AND other.last_push_at>now()-interval '30 minutes')
+ AND NOT EXISTS(SELECT 1 FROM listing_alert_check_runs other JOIN user_listing_alerts oa ON oa.id=other.alert_id WHERE oa.device_id=d.id AND other.last_push_at>now()-interval '30 minutes')
  ORDER BY c.next_push_at,c.created_at LIMIT 1 FOR UPDATE OF c SKIP LOCKED`).Scan(&checkID, &alertID, &deviceID, &token)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tx.Commit(ctx)
@@ -96,7 +96,7 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE price_alert_check_runs SET push_attempts=push_attempts+1,last_push_at=now(),next_push_at=now()+CASE WHEN (push_attempts+1)%3=0 THEN interval '22 hours' ELSE interval '1 hour' END WHERE id=$1`, checkID)
+	_, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET push_attempts=push_attempts+1,last_push_at=now(),next_push_at=now()+CASE WHEN (push_attempts+1)%3=0 THEN interval '22 hours' ELSE interval '1 hour' END WHERE id=$1`, checkID)
 	if err != nil {
 		return err
 	}
@@ -111,14 +111,14 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	var checkID, alertID, userID uuid.UUID
 	var query string
-	err := s.pool.QueryRow(ctx, `SELECT c.id,a.id,a.user_id,a.query FROM price_alert_check_runs c JOIN user_price_alerts a ON a.id=c.alert_id JOIN users u ON u.id=a.user_id WHERE NOT a.paused AND u.deleted_at IS NULL AND c.completed_at IS NULL AND c.evaluation_after<=now() AND (c.scan_complete OR EXISTS(SELECT 1 FROM price_alert_listings l WHERE l.check_id=c.id AND l.checked_at IS NULL)) ORDER BY c.evaluation_after,c.created_at LIMIT 1`).Scan(&checkID, &alertID, &userID, &query)
+	err := s.pool.QueryRow(ctx, `SELECT c.id,a.id,a.user_id,a.query FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id JOIN users u ON u.id=a.user_id WHERE NOT a.paused AND u.deleted_at IS NULL AND c.completed_at IS NULL AND c.evaluation_after<=now() AND (c.scan_complete OR EXISTS(SELECT 1 FROM listing_alert_listings l WHERE l.check_id=c.id AND l.checked_at IS NULL)) ORDER BY c.evaluation_after,c.created_at LIMIT 1`).Scan(&checkID, &alertID, &userID, &query)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT listing FROM price_alert_listings WHERE check_id=$1 AND checked_at IS NULL ORDER BY listing_id LIMIT 30`, checkID)
+	rows, err := s.pool.Query(ctx, `SELECT listing FROM listing_alert_listings WHERE check_id=$1 AND checked_at IS NULL ORDER BY listing_id LIMIT 30`, checkID)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	if len(in.Candidates) > 0 {
 		decisions, err = s.evaluator.Evaluate(ctx, llm.Subject{UserID: userID}, in)
 		if err != nil {
-			_, updateErr := s.pool.Exec(ctx, `UPDATE price_alert_check_runs SET evaluation_after=now()+interval '1 hour' WHERE id=$1`, checkID)
+			_, updateErr := s.pool.Exec(ctx, `UPDATE listing_alert_check_runs SET evaluation_after=now()+interval '1 hour' WHERE id=$1`, checkID)
 			if updateErr != nil {
 				return updateErr
 			}
@@ -158,7 +158,7 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 	var active uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT id FROM user_price_alerts WHERE id=$1 AND NOT paused FOR UPDATE`, alertID).Scan(&active)
+	err = tx.QueryRow(ctx, `SELECT id FROM user_listing_alerts WHERE id=$1 AND NOT paused FOR UPDATE`, alertID).Scan(&active)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -166,29 +166,29 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 		return err
 	}
 	for _, d := range decisions {
-		_, e := tx.Exec(ctx, `UPDATE price_alert_listings SET checked_at=now(),matched=$3,probability=$4,matched_at=CASE WHEN $3 THEN now() END WHERE alert_id=$1 AND listing_id=$2 AND checked_at IS NULL`, alertID, d.ID, d.UseInComparison, d.Probability)
+		_, e := tx.Exec(ctx, `UPDATE listing_alert_listings SET checked_at=now(),matched=$3,probability=$4,matched_at=CASE WHEN $3 THEN now() END WHERE alert_id=$1 AND listing_id=$2 AND checked_at IS NULL`, alertID, d.ID, d.UseInComparison, d.Probability)
 		if e != nil {
 			return e
 		}
 	}
 	var finished bool
-	err = tx.QueryRow(ctx, `SELECT scan_complete AND NOT EXISTS(SELECT 1 FROM price_alert_listings WHERE check_id=$1 AND checked_at IS NULL) FROM price_alert_check_runs WHERE id=$1`, checkID).Scan(&finished)
+	err = tx.QueryRow(ctx, `SELECT scan_complete AND NOT EXISTS(SELECT 1 FROM listing_alert_listings WHERE check_id=$1 AND checked_at IS NULL) FROM listing_alert_check_runs WHERE id=$1`, checkID).Scan(&finished)
 	if err != nil {
 		return err
 	}
 	if finished {
-		_, err = tx.Exec(ctx, `INSERT INTO price_alert_notification_outbox(alert_id,check_id,listing_ids)
-            SELECT $1,$2,array_agg(listing_id) FROM price_alert_listings
+		_, err = tx.Exec(ctx, `INSERT INTO listing_alert_notification_outbox(alert_id,check_id,listing_ids)
+            SELECT $1,$2,array_agg(listing_id) FROM listing_alert_listings
             WHERE check_id=$2 AND matched HAVING count(*)>0 ON CONFLICT(check_id) DO NOTHING`, alertID, checkID)
 		if err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE price_alert_check_runs SET completed_at=now() WHERE id=$1`, checkID); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET completed_at=now() WHERE id=$1`, checkID); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE user_price_alerts SET last_checked_at=now(),next_check_at=(date_trunc('day',now() AT TIME ZONE 'UTC')+alert_hour*interval '1 hour'+interval '1 day') AT TIME ZONE 'UTC' WHERE id=$1`, alertID)
+		_, err = tx.Exec(ctx, `UPDATE user_listing_alerts SET last_checked_at=now(),next_check_at=(date_trunc('day',now() AT TIME ZONE 'UTC')+alert_hour*interval '1 hour'+interval '1 day') AT TIME ZONE 'UTC' WHERE id=$1`, alertID)
 	} else {
-		_, err = tx.Exec(ctx, `UPDATE price_alert_check_runs SET evaluation_after=now() WHERE id=$1`, checkID)
+		_, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET evaluation_after=now() WHERE id=$1`, checkID)
 	}
 	if err != nil {
 		return err
@@ -200,7 +200,7 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 	var notificationID, alertID, deviceID uuid.UUID
 	var token, query string
 	var ids []string
-	err := s.pool.QueryRow(ctx, `SELECT n.id,a.id,d.id,d.push_token,a.query,n.listing_ids FROM price_alert_notification_outbox n JOIN user_price_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id WHERE n.sent_at IS NULL AND n.next_attempt_at<=now() AND NOT a.paused AND `+eligibleAlertDevice+` ORDER BY n.created_at LIMIT 1`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
+	err := s.pool.QueryRow(ctx, `SELECT n.id,a.id,d.id,d.push_token,a.query,n.listing_ids FROM listing_alert_notification_outbox n JOIN user_listing_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id WHERE n.sent_at IS NULL AND n.next_attempt_at<=now() AND NOT a.paused AND `+eligibleAlertDevice+` ORDER BY n.created_at LIMIT 1`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -208,10 +208,10 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 	// Record a retry deadline before the network call so a crash cannot hot-loop APNs.
-	if _, err = s.pool.Exec(ctx, `UPDATE price_alert_notification_outbox SET attempts=attempts+1,next_attempt_at=now()+interval '15 minutes' WHERE id=$1`, notificationID); err != nil {
+	if _, err = s.pool.Exec(ctx, `UPDATE listing_alert_notification_outbox SET attempts=attempts+1,next_attempt_at=now()+interval '15 minutes' WHERE id=$1`, notificationID); err != nil {
 		return err
 	}
-	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New price alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String()})
+	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New listing alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String()})
 	if err != nil {
 		s.invalidateToken(ctx, deviceID, token, err)
 		return err
@@ -221,10 +221,10 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `UPDATE price_alert_notification_outbox SET sent_at=now() WHERE id=$1`, notificationID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE listing_alert_notification_outbox SET sent_at=now() WHERE id=$1`, notificationID); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE price_alert_listings SET notification_sent_at=COALESCE(notification_sent_at,now()) WHERE alert_id=$1 AND listing_id=ANY($2)`, alertID, ids); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE listing_alert_listings SET notification_sent_at=COALESCE(notification_sent_at,now()) WHERE alert_id=$1 AND listing_id=ANY($2)`, alertID, ids); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

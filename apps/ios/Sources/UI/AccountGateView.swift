@@ -8,7 +8,7 @@ struct AccountGateView: View {
             switch self {
             case .priceCheck: return "Price Check"
             case .shopping: return "AI Search"
-            case .priceAlerts: return "Price alerts"
+            case .priceAlerts: return "Listing alerts"
             }
         }
     }

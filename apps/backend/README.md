@@ -1,6 +1,6 @@
 # Backend
 
-Go + Connect RPC + Postgres. Accounts, Apple/Google/phone login, seller follows, Price Check, AI Search, and price alerts.
+Go + Connect RPC + Postgres. Accounts, Apple/Google/phone login, seller follows, Price Check, AI Search, and listing alerts.
 
 **Full write-up: [`docs/backend.md`](../../docs/backend.md).** The platform
 evaluation that led here is [`docs/backend-platform.md`](../../docs/backend-platform.md).
@@ -338,8 +338,8 @@ Account deletion clears both viewer and data-submitter attribution.
 The endpoint neither saves a bookmark nor appends view history. Contents, source,
 and client observation times are client-reported, not independently verified.
 
-## Price alerts
+## Listing alerts
 
 The API hosts the staggered daily alert worker and APNs sender. Setup, delivery
 constraints, database/API behavior, and device verification are documented in
-[`docs/price-alerts.md`](../../docs/price-alerts.md).
+[`docs/listing-alerts.md`](../../docs/listing-alerts.md).

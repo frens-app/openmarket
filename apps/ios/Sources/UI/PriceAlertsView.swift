@@ -46,7 +46,7 @@ struct PriceAlertsView: View {
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
                 if alerts.isEmpty && account.isSignedIn {
-                    ContentUnavailableView("No price alerts yet", systemImage: "bell", description: Text("Create an alert for a product you want to find."))
+                    ContentUnavailableView("No listing alerts yet", systemImage: "bell", description: Text("Create an alert for a product you want to find."))
                 }
                 ForEach(alerts) { alert in
                     NavigationLink(value: alert.id) {
@@ -77,11 +77,11 @@ struct PriceAlertsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Price alerts")
+            .navigationTitle("Listing alerts")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { query = ""; showCreate = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("Create price alert")
+                        .accessibilityLabel("Create listing alert")
                         .disabled(alerts.count >= 3 || !account.isSignedIn || !connected || !push.isEnabled || busy)
                 }
             }
@@ -126,7 +126,7 @@ struct PriceAlertsView: View {
                 Section("Search location") { Text(prefs.locationName ?? "Choose a location in Browse first") }
                 if let error { Text(error).foregroundStyle(.red) }
             }
-            .navigationTitle("New price alert")
+            .navigationTitle("New listing alert")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showCreate = false } }
                 ToolbarItem(placement: .confirmationAction) {

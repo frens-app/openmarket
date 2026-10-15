@@ -1,8 +1,8 @@
-# Price alerts
+# Listing alerts
 
-The `user_price_alerts` table stores each user’s alert and its schedule.
-`price_alert_check_runs` stores each search run and its upload/evaluation progress.
-`price_alert_notification_outbox` stores grouped match notifications and their delivery/retry state.
+The `user_listing_alerts` table stores each user’s alert and its schedule.
+`listing_alert_check_runs` stores each search run and its upload/evaluation progress.
+`listing_alert_notification_outbox` stores grouped match notifications and their delivery/retry state.
 An account can hold three alerts, including paused alerts. Each alert saves the
 buyer's text, the current search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
@@ -12,6 +12,14 @@ Creation and resume require an active OpenMarket session, Facebook connected on
 that same install, notification permission enabled, and a registered APNs token.
 Resuming binds an alert to the current device. Facebook cookies and request
 tokens remain in the phone's WebKit store; the backend never receives them.
+
+## Alerts tab
+
+Use the plus button to create an alert. The tab lists active and paused alerts
+with match and unread counts. Open an alert to see its matching listings, or use
+its options menu to pause, resume, or delete it. Opening a push notification takes
+you to that alert. Matches have individual viewed status; there is no separate
+notification-history inbox.
 
 ## Deployment configuration
 
@@ -50,7 +58,7 @@ Alert matching respects explicit product requirements and price limits in the
 buyer's text; the more permissive Price Check comparable rules remain separate.
 
 The existing `DATABASE_URL`, authentication, and other required backend settings
-still apply. Migration `00022_price_alerts.sql` runs automatically at API startup, after main's existing
+still apply. Migration `00022_listing_alerts.sql` runs automatically at API startup, after main's existing
 migrations through `00021_listing_views.sql`.
 There is no external cron service: the API hosts the recurring worker. Keep at
 least one instance running continuously. A PostgreSQL advisory lock serializes

@@ -124,7 +124,7 @@ final class PriceAlertsService {
         guard let response = response as? HTTPURLResponse else { throw APIError.network }
         guard (200..<300).contains(response.statusCode) else {
             if response.statusCode == 401 { throw APIError.unauthenticated }
-            throw APIError.message((try? JSONDecoder().decode(Failure.self, from: data).error) ?? "Couldn't load price alerts.")
+            throw APIError.message((try? JSONDecoder().decode(Failure.self, from: data).error) ?? "Couldn't load listing alerts.")
         }
         return try Self.decoder().decode(type, from: data)
     }
