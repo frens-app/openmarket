@@ -177,7 +177,7 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 		return err
 	}
 	if finished {
-		_, err = tx.Exec(ctx, `INSERT INTO price_alert_notifications(alert_id,check_id,listing_ids)
+		_, err = tx.Exec(ctx, `INSERT INTO price_alert_notification_outbox(alert_id,check_id,listing_ids)
             SELECT $1,$2,array_agg(listing_id) FROM price_alert_listings
             WHERE check_id=$2 AND matched HAVING count(*)>0 ON CONFLICT(check_id) DO NOTHING`, alertID, checkID)
 		if err != nil {
@@ -200,7 +200,7 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 	var notificationID, alertID, deviceID uuid.UUID
 	var token, query string
 	var ids []string
-	err := s.pool.QueryRow(ctx, `SELECT n.id,a.id,d.id,d.push_token,a.query,n.listing_ids FROM price_alert_notifications n JOIN user_price_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id WHERE n.sent_at IS NULL AND n.next_attempt_at<=now() AND NOT a.paused AND `+eligibleAlertDevice+` ORDER BY n.created_at LIMIT 1`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
+	err := s.pool.QueryRow(ctx, `SELECT n.id,a.id,d.id,d.push_token,a.query,n.listing_ids FROM price_alert_notification_outbox n JOIN user_price_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id WHERE n.sent_at IS NULL AND n.next_attempt_at<=now() AND NOT a.paused AND `+eligibleAlertDevice+` ORDER BY n.created_at LIMIT 1`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -208,7 +208,7 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 	// Record a retry deadline before the network call so a crash cannot hot-loop APNs.
-	if _, err = s.pool.Exec(ctx, `UPDATE price_alert_notifications SET attempts=attempts+1,next_attempt_at=now()+interval '15 minutes' WHERE id=$1`, notificationID); err != nil {
+	if _, err = s.pool.Exec(ctx, `UPDATE price_alert_notification_outbox SET attempts=attempts+1,next_attempt_at=now()+interval '15 minutes' WHERE id=$1`, notificationID); err != nil {
 		return err
 	}
 	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New price alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String()})
@@ -221,7 +221,7 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `UPDATE price_alert_notifications SET sent_at=now() WHERE id=$1`, notificationID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE price_alert_notification_outbox SET sent_at=now() WHERE id=$1`, notificationID); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE price_alert_listings SET notification_sent_at=COALESCE(notification_sent_at,now()) WHERE alert_id=$1 AND listing_id=ANY($2)`, alertID, ids); err != nil {

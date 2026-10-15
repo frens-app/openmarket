@@ -48,7 +48,7 @@ CREATE TABLE price_alert_listings (
 CREATE INDEX price_alert_listings_pending ON price_alert_listings(check_id) WHERE checked_at IS NULL;
 CREATE INDEX price_alert_listings_matches ON price_alert_listings(alert_id, matched_at DESC) WHERE matched;
 
-CREATE TABLE price_alert_notifications (
+CREATE TABLE price_alert_notification_outbox (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
     check_id uuid NOT NULL UNIQUE REFERENCES price_alert_check_runs(id) ON DELETE CASCADE,
@@ -59,14 +59,14 @@ CREATE TABLE price_alert_notifications (
     attempts integer NOT NULL DEFAULT 0
 );
 
-CREATE INDEX price_alert_notifications_due ON price_alert_notifications(next_attempt_at, created_at) WHERE sent_at IS NULL;
+CREATE INDEX price_alert_notification_outbox_due ON price_alert_notification_outbox(next_attempt_at, created_at) WHERE sent_at IS NULL;
 
 CREATE TABLE price_alert_worker_clock (id integer PRIMARY KEY CHECK(id=1), next_dispatch_at timestamptz NOT NULL);
 INSERT INTO price_alert_worker_clock VALUES (1,now());
 
 -- +goose Down
 DROP TABLE price_alert_worker_clock;
-DROP TABLE price_alert_notifications;
+DROP TABLE price_alert_notification_outbox;
 DROP TABLE price_alert_listings;
 DROP TABLE price_alert_check_runs;
 DROP TABLE user_price_alerts;

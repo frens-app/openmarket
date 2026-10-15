@@ -262,7 +262,7 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal("expected APNs error")
 		}
 		p.fail = false
-		exec(t, `UPDATE price_alert_notifications SET next_attempt_at=now() WHERE alert_id=$1`, id)
+		exec(t, `UPDATE price_alert_notification_outbox SET next_attempt_at=now() WHERE alert_id=$1`, id)
 		if err := s.notifyMatches(ctx); err != nil {
 			t.Fatal(err)
 		}

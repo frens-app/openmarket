@@ -2,6 +2,7 @@
 
 The `user_price_alerts` table stores each user’s alert and its schedule.
 `price_alert_check_runs` stores each search run and its upload/evaluation progress.
+`price_alert_notification_outbox` stores grouped match notifications and their delivery/retry state.
 An account can hold three alerts, including paused alerts. Each alert saves the
 buyer's text, the current search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
