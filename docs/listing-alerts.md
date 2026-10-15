@@ -58,8 +58,8 @@ Alert matching respects explicit product requirements and price limits in the
 buyer's text; the more permissive Price Check comparable rules remain separate.
 
 The existing `DATABASE_URL`, authentication, and other required backend settings
-still apply. Migration `00022_listing_alerts.sql` runs automatically at API startup, after main's existing
-migrations through `00021_listing_views.sql`.
+still apply. Migration `00024_listing_alerts.sql` runs automatically at API
+startup, after main's existing migrations through `00023_link_sign_in.sql`.
 There is no external cron service: the API hosts the recurring worker. Keep at
 least one instance running continuously. A PostgreSQL advisory lock serializes
 worker activity across replicas, and a shared dispatch deadline preserves the
@@ -157,9 +157,9 @@ These tests apply migrations, create isolated accounts, and clean up those
 accounts. They cover concurrent limits, scheduling, permissions, cross-account
 access, upload retries, cursor recovery, matched/rejected deduplication,
 notification retries, pagination, and viewed state. A separate migration test
-applies main through version 21, seeds existing account/saved-listing/view data,
-then upgrades to version 22 and rolls back/reapplies it, checking that the
-existing data remains intact. The APNs tests verify signed
+applies main through version 23, seeds existing account, listing price,
+saved-listing/view, and sign-in linking data, then upgrades to version 24 and
+rolls back/reapplies it, checking that the existing data remains intact. The APNs tests verify signed
 provider tokens and push headers against a local HTTP server. No unit/integration
 test sends real pushes or bills Jev.
 

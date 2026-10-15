@@ -446,33 +446,46 @@ func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
 		t.Fatal(err)
 	}
 	const migrations = "../../deployments/migrations"
-	if err = goose.UpTo(sqlDB, migrations, 21); err != nil {
+	if err = goose.UpTo(sqlDB, migrations, 23); err != nil {
 		t.Fatal(err)
 	}
 	var user, listing uuid.UUID
 	if err = pool.QueryRow(ctx, `INSERT INTO users(first_name,email) VALUES('Migration test','migration@example.test') RETURNING id`).Scan(&user); err != nil {
 		t.Fatal(err)
 	}
-	if err = pool.QueryRow(ctx, `INSERT INTO listings(facebook_listing_id,snapshot,last_viewed_by,last_viewed_at) VALUES('123456789','{"title":"Existing saved listing"}',$1,now()) RETURNING id`, user).Scan(&listing); err != nil {
+	if err = pool.QueryRow(ctx, `INSERT INTO listings(facebook_listing_id,snapshot,last_viewed_by,last_viewed_at,price_amount,price_currency_code,original_price_amount) VALUES('123456789','{"title":"Existing saved listing"}',$1,now(),123.45,'CAD',150.00) RETURNING id`, user).Scan(&listing); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO saved_listings(user_id,listing_id,saved_at) VALUES($1,$2,now())`, user, listing); err != nil {
 		t.Fatal(err)
 	}
+	var session uuid.UUID
+	if err = pool.QueryRow(ctx, `INSERT INTO user_sessions(user_id,device_platform,refresh_token_hash,refresh_token_expires_at) VALUES($1,'IOS','migration-session',now()+interval '1 day') RETURNING id`, user).Scan(&session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO sign_in_challenges(nonce_hash,auth_service,install_id,linking_session_id) VALUES('migration-challenge','APPLE','migration-install',$1)`, session); err != nil {
+		t.Fatal(err)
+	}
 	assertMainData := func() {
 		t.Helper()
 		var count int
-		if err := pool.QueryRow(ctx, `SELECT count(*) FROM saved_listings s JOIN listings l ON l.id=s.listing_id JOIN users u ON u.id=s.user_id WHERE u.id=$1 AND u.first_name='Migration test' AND u.email='migration@example.test' AND l.id=$2 AND l.last_viewed_by=u.id AND l.snapshot->>'title'='Existing saved listing'`, user, listing).Scan(&count); err != nil {
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM saved_listings s JOIN listings l ON l.id=s.listing_id JOIN users u ON u.id=s.user_id WHERE u.id=$1 AND u.first_name='Migration test' AND u.email='migration@example.test' AND l.id=$2 AND l.last_viewed_by=u.id AND l.snapshot->>'title'='Existing saved listing' AND l.price_amount=123.45 AND l.price_currency_code='CAD' AND l.original_price_amount=150.00`, user, listing).Scan(&count); err != nil {
 			t.Fatal(err)
 		}
 		if count != 1 {
-			t.Fatal("main's account, saved listing, or view data changed")
+			t.Fatal("main's account, saved listing, price, or view data changed")
+		}
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM sign_in_challenges c JOIN user_sessions s ON s.id=c.linking_session_id WHERE c.nonce_hash='migration-challenge' AND c.auth_service='APPLE' AND c.install_id='migration-install' AND s.id=$1 AND s.user_id=$2`, session, user).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatal("main's sign-in linking data changed")
 		}
 	}
 	if err = goose.Up(sqlDB, migrations); err != nil {
 		t.Fatal(err)
 	}
-	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 22 {
+	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 24 {
 		t.Fatalf("migration version = %d, error = %v", version, err)
 	}
 	assertMainData()
@@ -480,7 +493,7 @@ func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT to_regclass('user_listing_alerts')::text`).Scan(&alertTable); err != nil || alertTable == nil {
 		t.Fatalf("missing alerts table: %v", err)
 	}
-	if err = goose.DownTo(sqlDB, migrations, 21); err != nil {
+	if err = goose.DownTo(sqlDB, migrations, 23); err != nil {
 		t.Fatal(err)
 	}
 	assertMainData()
