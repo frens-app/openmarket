@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import os
 
 extension Logger {
@@ -88,6 +89,9 @@ struct CachedResults: Codable {
 final class ListingCache {
     static let shared = ListingCache()
 
+    private let detailUpdated = PassthroughSubject<String, Never>()
+    var detailUpdates: AnyPublisher<String, Never> { detailUpdated.eraseToAnyPublisher() }
+
     /// Roughly a few MB at the ceiling: descriptions are already clamped to
     /// 1500 characters and galleries to 12 URLs.
     static let profileLimit = 1000
@@ -128,6 +132,21 @@ final class ListingCache {
         return hit
     }
 
+    func restoringDetails(to listing: Listing) -> Listing {
+        guard let cached = profile(for: listing.id) else { return listing }
+        var restored = listing
+        let observedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
+        if let detail = cached.detail,
+           restored.detail == nil || observedAt > (restored.detailObservedAt ?? .distantPast) {
+            restored.detail = detail
+            restored.detailObservedAt = observedAt
+        }
+        restored.title = restored.title ?? restored.detail?.title
+        restored.itemURL = restored.itemURL ?? cached.itemURL
+        if restored.locationText == nil { restored.locationText = restored.detail?.locationText }
+        return restored
+    }
+
     /// Records everything currently known about a listing.
     ///
     /// A sighting can never reduce what we know (docs/data-model.md): a call
@@ -163,6 +182,7 @@ final class ListingCache {
         canonicalProfileKeys[listing.id] = key
         evictIfNeeded()
         scheduleSave()
+        if listing.detail != nil { detailUpdated.send(listing.id) }
     }
 
     /// Profiles worth re-fetching now that a session exists — captured without

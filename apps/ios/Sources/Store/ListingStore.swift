@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import SwiftUI
 import os
 
@@ -11,6 +12,7 @@ extension Logger {
 @MainActor
 final class ListingStore: ObservableObject {
     @Published private(set) var listings: [Listing] = []
+    private(set) var distanceSnapshot = ListingDistanceSnapshot()
     @Published private(set) var isLoadingFirstPage = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var paginationPaused = false
@@ -40,6 +42,7 @@ final class ListingStore: ObservableObject {
     private let prefs: Preferences
     private let metrics: MetricsReporter
     private let cache: ListingCache
+    private var detailUpdates: AnyCancellable?
     private let authenticated: any GraphQLFeedLoading
     private let anonymous: any GraphQLFeedLoading
     private var graphQLPagination: GraphQLFeedPagination?
@@ -123,6 +126,9 @@ final class ListingStore: ObservableObject {
         self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.desktop.webView)
         self.distances = distances
         self.paginationTimeBudget = paginationTimeBudget
+        detailUpdates = cache.detailUpdates.sink { [weak self] id in
+            self?.restoreCachedDetails(for: id)
+        }
     }
 
     /// The desktop engine's state, mapped onto the shape the UI already knows.
@@ -167,6 +173,7 @@ final class ListingStore: ObservableObject {
         paginationHiddenAsViewed = hiddenAsViewed
         isLoadingMore = false
         isShowingCachedResults = false
+        distanceSnapshot = ListingDistanceSnapshot()
         listings = []
         seenIDs = []
         deepestVisibleIndexSeen = -1
@@ -181,7 +188,9 @@ final class ListingStore: ObservableObject {
         // live load underneath takes 5.13s to produce anything; there is no
         // reason to show a skeleton for it when we know what was there.
         if let cached = cache.results(for: query, session: session) {
-            listings = cached
+            let restored = cached.map { cache.restoringDetails(to: $0) }
+            distanceSnapshot.capture(restored, using: distances)
+            listings = restored
             seenIDs = Set(cached.map(\.id))
             isShowingCachedResults = true
             isLoadingFirstPage = false
@@ -606,14 +615,7 @@ final class ListingStore: ObservableObject {
             seen.insert(listing.id)
             // A listing we've fully read before arrives already complete, so its
             // detail screen opens with everything on the first frame.
-            var seeded = listing
-            if let cached = cache.profile(for: listing.id) {
-                seeded.detail = cached.detail
-                seeded.detailObservedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
-                seeded.itemURL = seeded.itemURL ?? cached.itemURL
-                if seeded.locationText == nil { seeded.locationText = cached.detail?.locationText }
-            }
-            fresh.append(seeded)
+            fresh.append(cache.restoringDetails(to: listing))
         }
 
         guard !fresh.isEmpty else { return }       // keep whatever is on screen
@@ -621,17 +623,21 @@ final class ListingStore: ObservableObject {
         // Before anything is published: everything below is an assignment to
         // `@Published` state, and so a frame the user sees.
         let resolving = ContinuousClock.now
-        await distances.resolveAll(fresh.map(\.locationText))
+        let unresolved = fresh.filter { distances.enrichedCoordinate(for: $0) == nil }
+        await distances.resolveAll(unresolved.map(\.locationText))
         guard generation == resultsGeneration, !Task.isCancelled else { return }
         let geocodeMS = Int(resolving.duration(to: .now) / .milliseconds(1))
         Logger.store.info("search distance resolution: cards=\(fresh.count, privacy: .public) geocode_ms=\(geocodeMS, privacy: .public)")
+
+        let observedIDs = replacingCache ? Set(visibleListings(in: listings)
+            .prefix(deepestVisibleIndexSeen + 1).map(\.id)) : []
+        if replacingCache { distanceSnapshot = ListingDistanceSnapshot() }
+        distanceSnapshot.capture(fresh, using: distances)
 
         if replacingCache {
             isShowingCachedResults = false
             // SwiftUI retains cached cells with the same IDs without rerunning
             // their appearance tasks. Remap observed IDs into the live order.
-            let observedIDs = Set(visibleListings(in: listings)
-                .prefix(deepestVisibleIndexSeen + 1).map(\.id))
             deepestVisibleIndexSeen = visibleListings(in: fresh)
                 .lastIndex(where: { observedIDs.contains($0.id) }) ?? -1
             counts.rendered = fresh.count
@@ -660,7 +666,8 @@ final class ListingStore: ObservableObject {
             hiddenAsViewed: paginationHiddenAsViewed,
             hidingViewed: true,
             radiusKM: prefs.radiusKM,
-            distances: distances
+            distances: distances,
+            distanceSnapshot: distanceSnapshot
         ).items
     }
 
@@ -742,21 +749,18 @@ final class ListingStore: ObservableObject {
             seen.insert(listing.id)
             // A card we've fully read before arrives already complete, so its
             // detail screen opens with everything on the first frame.
-            var seeded = listing
-            if let cached = cache.profile(for: listing.id) {
-                seeded.detail = cached.detail
-                seeded.detailObservedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
-                seeded.itemURL = cached.itemURL
-                if seeded.locationText == nil { seeded.locationText = cached.detail?.locationText }
-            }
-            fresh.append(seeded)
+            fresh.append(cache.restoringDetails(to: listing))
         }
 
         guard !fresh.isEmpty else { return }       // keep the restored grid
 
         // Same rule as the desktop path: every distance known before anything
         // is drawn, so the grid can't resize itself afterwards.
-        await distances.resolveAll(fresh.map(\.locationText))
+        let unresolved = fresh.filter { distances.enrichedCoordinate(for: $0) == nil }
+        await distances.resolveAll(unresolved.map(\.locationText))
+
+        if isReplacingCached { distanceSnapshot = ListingDistanceSnapshot() }
+        distanceSnapshot.capture(fresh, using: distances)
 
         if isReplacingCached {
             isShowingCachedResults = false
@@ -809,7 +813,7 @@ final class ListingStore: ObservableObject {
             best.detailObservedAt = cached.card?.detailObservedAt ?? cached.fetchedAt
             best.itemURL = best.itemURL ?? cached.itemURL
             if best.locationText == nil { best.locationText = cachedDetail.locationText }
-            apply(best)
+            restoreCachedDetails(for: listing.id)
             onStage(best)
             Logger.store.info("tap -> cache in \(String(format: "%.3f", Date().timeIntervalSince(started)))s (age \(Int(Date().timeIntervalSince(cached.fetchedAt)))s)")
         }
@@ -897,7 +901,6 @@ final class ListingStore: ObservableObject {
         guard listing.detail != nil else { return }
         cache.store(listing, capture: capture)
         SavedListings.shared.refresh(listing)
-        apply(listing)
     }
 
     /// Guarantees a saved listing has something behind it. The save control is
@@ -954,8 +957,12 @@ final class ListingStore: ObservableObject {
         if changed { listings[index] = existing }
     }
 
-    private func apply(_ listing: Listing) {
-        guard let index = listings.firstIndex(where: { $0.id == listing.id }) else { return }
-        listings[index] = listing
+    private func restoreCachedDetails(for id: String) {
+        if let index = listings.firstIndex(where: { $0.id == id }) {
+            listings[index] = cache.restoringDetails(to: listings[index])
+        }
+        if let index = paginationBuffer.firstIndex(where: { $0.id == id }) {
+            paginationBuffer[index] = cache.restoringDetails(to: paginationBuffer[index])
+        }
     }
 }

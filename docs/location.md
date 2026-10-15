@@ -91,6 +91,20 @@ targeting is coordinate-sensitive, but strict radius enforcement is not
 established: listing points are approximate, and the local filter still uses
 city centroids when item-level coordinates are unavailable.
 
+Search and Discover restore previously opened listings' details from the shared
+profile cache before filtering new pages. Search also restores newer details
+onto its saved result set. A valid cached listing point takes precedence over
+the city centre and avoids waiting for city geocoding. Both feeds keep listings
+whose distance remains unknown; this avoids hiding nearby items when geocoding
+fails, but can also admit distant items. Coordinate reuse adds no detail requests.
+
+Completed detail reads update matching cards in both grids immediately. Displayed
+distances use the new listing point, while filtering retains the distance captured
+when each page arrived. Opening a listing therefore does not remove or reorder
+cards, even if its point is outside the selected radius. Refreshing or rerunning
+the search captures new filter distances from the latest cached details. Pagination
+uses the same snapshots as the grid, and newly loaded cards are filtered normally.
+
 ---
 
 ## 2. What each input does

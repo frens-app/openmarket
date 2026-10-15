@@ -235,20 +235,22 @@ keep scrolling until it has `browseTarget` (12) cards actually worth showing.
 `ResultsView.winnowed` still runs afterwards; it is a few cached lookups and it
 keeps one distance rule in one place for every list on screen.
 
-**Listings whose distance isn't known are dropped here** — the opposite of the
-rule everywhere else in the app, and the exception is deliberate. Everywhere
-else the list is a search Facebook already localised, so an unresolved place is
-probably nearby and hiding it punishes a card for being unrecognised. This feed
-is not localised in any comparable sense: a signed-in Seattle feed served
-Vancouver WA, Bellingham, Wilsonville OR, and a cardboard cutout of a US senator
-in Citrus Heights, California — the last of which reached the screen under the
-keep-if-unknown rule, with no distance line, ~700 miles out.
+Previously opened listings receive their cached details before filtering, on
+both GraphQL and browser paths. Their approximate listing points take precedence
+over city centres; only cards without valid points need city geocoding.
 
-Safe to drop rather than defer because `resolveAll` has already had its turn by
-then: this runs after geocoding, not during it, so the card never enters the feed
-and nothing vanishes from under a reader later. Geocoding is lossy — one measured
-batch resolved 1 of 2 places — so this does discard the occasional real
-neighbour, which is the price of not showing California.
+Completed detail reads update cards already displayed in Discover through the
+shared cache. The distance label changes immediately, but filtering keeps each
+page's original distance snapshot until refresh. An opened card stays in place
+even if its newly learned point is outside the radius; no feed request is needed
+for this update. Search uses the same rule.
+
+**Listings whose distance remains unknown stay visible**, using the same
+`ListingWinnower` rule as Search. Geocoding is lossy — one measured batch resolved
+1 of 2 places — so failure alone cannot establish that a listing is outside the
+radius. This can admit distant listings: a signed-in Seattle feed once supplied
+a card from Citrus Heights, California, roughly 700 miles away. The policy
+favors retaining possible nearby matches over excluding every unknown location.
 
 A signed-in harvest attempt stops on one of three things:
 
@@ -496,9 +498,8 @@ a three-card home screen with nothing to do about it. The search-seeded feed it
 replaced published up to 30, and the spread here is §3's churn measured from a
 different angle: same URL, same session, half the feed different.
 
-Neither obvious lever is free. Keeping unknown-distance cards is the wrong one:
-§0.1 explains why this feed drops them, and the runs above resolved every place
-they were given, so the losses are genuine distance rather than geocoding.
+The runs above resolved every place they were given, so keeping unknown-distance
+cards would not have changed their yield: the losses were from distance filtering.
 Widening the radius is the user's setting, not ours to override. The honest
 candidates are to say more in the empty case than the grid currently does, or to
 treat "your area is quiet without an account" as a first-class state on this

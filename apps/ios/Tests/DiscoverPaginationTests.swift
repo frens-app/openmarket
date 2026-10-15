@@ -5,6 +5,82 @@ import XCTest
 @MainActor
 final class DiscoverPaginationTests: XCTestCase {
 
+    func testCachedListingPointsOverrideCityCentersAcrossPages() async throws {
+        let cache = makeCache()
+        var nearby = card("nearby", city: "Far").makeListing(cardIndex: 0)
+        nearby.detail = ListingDetail(latitude: 37.7793, longitude: -122.419)
+        nearby.detailObservedAt = Date(timeIntervalSince1970: 123)
+        cache.store(nearby)
+        var distant = card("distant").makeListing(cardIndex: 1)
+        distant.detail = ListingDetail(latitude: 34.05, longitude: -118.24)
+        cache.store(distant)
+
+        let client = DiscoverStub([
+            .success(page([card("distant"), card("uncached-far", city: "Far")], cursor: "A")),
+            .success(page([card("nearby", city: "Far"), card("uncached-near")], cursor: nil))
+        ])
+        let discover = makeDiscover(client, cache: cache)
+        await discover.loadIfNeeded(citySlug: "sanfrancisco")
+
+        XCTAssertEqual(discover.listings.compactMap(\.title), ["nearby", "uncached-near"])
+        let restored = try XCTUnwrap(discover.listings.first)
+        XCTAssertEqual(restored.detail?.latitude, nearby.detail?.latitude)
+        XCTAssertEqual(restored.detailObservedAt, nearby.detailObservedAt)
+        XCTAssertEqual(restored.cardIndex, 0)
+        let cursors = await client.cursors
+        XCTAssertEqual(cursors, [nil, "A"])
+    }
+
+    func testRefreshUsesNewlyCachedPointsAndTheySurviveRelaunch() async {
+        let cache = makeCache()
+        let response = page([card("123456789")], cursor: nil)
+        let client = DiscoverStub([.success(response), .success(response)])
+        let discover = makeDiscover(client, cache: cache)
+        await discover.loadIfNeeded(citySlug: "sanfrancisco")
+        XCTAssertEqual(discover.listings.count, 1)
+
+        let detail = DetailEngine(graphQL: DiscoverLocationDetailStub(), actorProvider: { nil })
+        let store = ListingStore(detail: detail, cache: cache)
+        let opened = await store.enrich(discover.listings[0])
+        let distances = DistanceResolver(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        distances.setUserLocation(.init(latitude: 37.7793, longitude: -122.419))
+        XCTAssertEqual(discover.listings.first?.detail?.latitude, 34.05)
+        XCTAssertNotNil(distances.bestDistanceText(for: discover.listings[0]))
+        let visible = ListingWinnower.apply(to: discover.listings, hiddenAsViewed: [], hidingViewed: false,
+                                            radiusKM: 8, distances: distances,
+                                            distanceSnapshot: discover.distanceSnapshot)
+        XCTAssertEqual(visible.items.map(\.id), [opened.id])
+        XCTAssertEqual(visible.hiddenByDistance, 0)
+        let beforeRefresh = await client.cursors
+        XCTAssertEqual(beforeRefresh, [nil], "Updating details must not fetch the feed again")
+        await discover.loadIfNeeded(citySlug: "sanfrancisco", force: true)
+        XCTAssertTrue(discover.listings.isEmpty)
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let persisted = ListingCache(directory: directory, isSaved: { _ in false })
+        persisted.store(opened)
+        await persisted.writeToDisk()
+        let restored = ListingCache(directory: directory, isSaved: { _ in false })
+        let relaunched = makeDiscover(DiscoverStub([.success(response)]), cache: restored)
+        await relaunched.loadIfNeeded(citySlug: "sanfrancisco")
+        XCTAssertTrue(relaunched.listings.isEmpty)
+    }
+
+    func testUnknownDistancesStayVisibleAndInvalidPointsUseCityFallback() async {
+        let cache = makeCache()
+        for (id, city) in [("invalid-near", "Near"), ("invalid-far", "Far")] {
+            var listing = card(id, city: city).makeListing(cardIndex: 0)
+            listing.detail = ListingDetail(latitude: 91, longitude: 0)
+            cache.store(listing)
+        }
+        let unknown = card("unknown", city: nil)
+        let response = page([unknown, card("invalid-near"), card("invalid-far", city: "Far")], cursor: nil)
+        let discover = makeDiscover(DiscoverStub([.success(response)]), cache: cache)
+        await discover.loadIfNeeded(citySlug: "sanfrancisco")
+        XCTAssertEqual(discover.listings.compactMap(\.title), ["unknown", "invalid-near"])
+    }
+
     func testOnlyOptedInFeedUpdatesFilterTotals() async {
         let suite = "DiscoverPaginationTests.totals.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -233,7 +309,7 @@ final class DiscoverPaginationTests: XCTestCase {
 
     private func makeDiscover(_ client: any GraphQLFeedLoading, filterTotals: FilterTotals? = nil,
                               timeBudget: Duration = .seconds(8),
-                              radiusKM: Int? = 8) -> DiscoverFeed {
+                              radiusKM: Int? = 8, cache: ListingCache? = nil) -> DiscoverFeed {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         defaults.set(["Near, CA": [37.7793, -122.419], "Far, CA": [34.05, -118.24],
                       "Mid, CA": [37.995, -122.419], "Regional, CA": [38.23, -122.419]], forKey: "placeCoordinates")
@@ -244,19 +320,35 @@ final class DiscoverPaginationTests: XCTestCase {
         if let radiusKM { prefs.radiusKM = radiusKM }
         let distances = DistanceResolver(defaults: defaults)
         distances.setUserLocation(point)
-        return DiscoverFeed(prefs: prefs, filterTotals: filterTotals, distances: distances, anonymous: client,
+        return DiscoverFeed(prefs: prefs, filterTotals: filterTotals, distances: distances,
+                            cache: cache ?? makeCache(), anonymous: client,
                             paginationTimeBudget: timeBudget, currentSession: { .unauthed })
     }
 
-    private func card(_ id: String, city: String = "Near", shipping: Bool = false) -> PayloadListing {
+    private func makeCache() -> ListingCache {
+        ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+                     isSaved: { _ in false })
+    }
+
+    private func card(_ id: String, city: String? = "Near", shipping: Bool = false) -> PayloadListing {
         PayloadListing(id: id, title: id, creationTime: nil, priceAmount: "20", priceFormatted: "$20",
-                       strikethroughFormatted: nil, photoURL: nil, photoID: nil, city: city, state: "CA",
+                       strikethroughFormatted: nil, photoURL: nil, photoID: nil, city: city, state: city == nil ? nil : "CA",
                        cityPageID: nil, deliveryTypes: shipping ? ["SHIPPING_ONSITE"] : ["IN_PERSON"],
                        isSold: nil, isLive: nil, categoryID: nil, createdWithSellerApp: nil)
     }
 
     private func page(_ cards: [PayloadListing], cursor: String?) -> GraphQLFeedPage {
         .init(listings: cards, endCursor: cursor, hasNextPage: cursor != nil)
+    }
+}
+
+@MainActor
+private final class DiscoverLocationDetailStub: GraphQLDetailLoading {
+    func load(itemID: String, actor: String?,
+              onPartial: @escaping @MainActor (ListingDetail) -> Void) async throws -> ListingDetail {
+        let detail = ListingDetail(latitude: 34.05, longitude: -118.24)
+        onPartial(detail)
+        return detail
     }
 }
 

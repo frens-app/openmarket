@@ -5,6 +5,78 @@ import XCTest
 @MainActor
 final class SearchPaginationTests: XCTestCase {
 
+    func testDetailUpdatesPreserveGridMembershipAndPaginationUntilRefresh() async throws {
+        let cache = ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+                                 isSaved: { _ in false })
+        let initial = [card("opened"), card("untouched"), card("hidden", city: "Far")]
+        let additions = (0..<6).map { card("next-\($0)") }
+        let client = SearchStub([
+            .success(page(initial, cursor: "A")),
+            .success(page(additions, cursor: nil)),
+            .success(page(initial, cursor: nil))
+        ])
+        let store = makeStore(client, cache: cache)
+        let distances = DistanceResolver(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        distances.setUserLocation(query().coordinate)
+        func visible(hidden: Set<String> = []) -> WinnowedListings {
+            ListingWinnower.apply(to: store.listings, hiddenAsViewed: hidden, hidingViewed: true,
+                                  radiusKM: 8, distances: distances, distanceSnapshot: store.distanceSnapshot)
+        }
+        await store.run(query())
+        XCTAssertEqual(visible().items.compactMap(\.title), ["opened", "untouched"])
+        let generation = store.resultsGeneration
+        var opened = try XCTUnwrap(store.listings.first)
+        opened.detail = ListingDetail(latitude: 34.05, longitude: -118.24)
+        cache.store(opened)
+        var hidden = try XCTUnwrap(store.listings.last)
+        hidden.detail = ListingDetail(latitude: 37.7793, longitude: -122.419)
+        cache.store(hidden)
+
+        XCTAssertNotNil(distances.bestDistanceText(for: store.listings[0]))
+        XCTAssertEqual(visible().items.compactMap(\.title), ["opened", "untouched"])
+        XCTAssertEqual(visible().nonLocalIDs, [hidden.id])
+        XCTAssertEqual(visible(hidden: [opened.id]).items.compactMap(\.title), ["untouched"])
+        XCTAssertEqual(store.resultsGeneration, generation)
+        let beforePagination = await client.cursors
+        XCTAssertEqual(beforePagination, [nil])
+
+        await store.loadMore()
+        XCTAssertEqual(visible().items.compactMap(\.title), ["opened", "untouched"] + additions.compactMap(\.title))
+        await store.run(query())
+        XCTAssertEqual(visible().items.compactMap(\.title), ["untouched", "hidden"])
+        let cursors = await client.cursors
+        XCTAssertEqual(cursors, [nil, "A", nil])
+    }
+
+    func testCachedSearchRestoresLocationLearnedAfterResultsWereSaved() async throws {
+        let cache = ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+                                 isSaved: { _ in false })
+        let snapshot = card("opened", city: "Far").makeListing(cardIndex: 0)
+        var newerSnapshot = card("newer").makeListing(cardIndex: 1)
+        newerSnapshot.detail = ListingDetail(latitude: 37.7793, longitude: -122.419)
+        newerSnapshot.detailObservedAt = Date(timeIntervalSince1970: 200)
+        cache.saveResults([snapshot, newerSnapshot], for: query(), session: .unauthed)
+        var opened = snapshot
+        opened.detail = ListingDetail(latitude: 37.7793, longitude: -122.419)
+        opened.detailObservedAt = Date(timeIntervalSince1970: 123)
+        cache.store(opened)
+        var olderProfile = newerSnapshot
+        olderProfile.detail = ListingDetail(latitude: 34.05, longitude: -118.24)
+        olderProfile.detailObservedAt = Date(timeIntervalSince1970: 100)
+        cache.store(olderProfile)
+
+        let store = makeStore(SearchStub([.failure(.blocked)]), cache: cache)
+        await store.run(query())
+
+        let restored = try XCTUnwrap(store.listings.first)
+        XCTAssertEqual(restored.detail?.latitude, opened.detail?.latitude)
+        XCTAssertEqual(restored.detail?.longitude, opened.detail?.longitude)
+        XCTAssertEqual(restored.detailObservedAt, opened.detailObservedAt)
+        XCTAssertEqual(restored.locationText, "Far, CA")
+        XCTAssertEqual(store.listings.last?.detail?.latitude, newerSnapshot.detail?.latitude)
+        XCTAssertEqual(store.listings.last?.detailObservedAt, newerSnapshot.detailObservedAt)
+    }
+
     func testOnlyOptedInFeedUpdatesFilterTotals() async {
         let suite = "SearchPaginationTests.totals.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -242,14 +314,15 @@ final class SearchPaginationTests: XCTestCase {
         XCTFail("Pagination did not finish")
     }
 
-    private func makeStore(_ client: any GraphQLFeedLoading, filterTotals: FilterTotals? = nil, timeBudget: Duration = .seconds(8)) -> ListingStore {
+    private func makeStore(_ client: any GraphQLFeedLoading, filterTotals: FilterTotals? = nil,
+                           timeBudget: Duration = .seconds(8), cache: ListingCache? = nil) -> ListingStore {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         defaults.set(["Near, CA": [37.7793, -122.419], "Far, CA": [34.05, -118.24]], forKey: "placeCoordinates")
         let prefs = Preferences(defaults: defaults)
         prefs.radiusKM = 8
         let distances = DistanceResolver(defaults: defaults)
         distances.setUserLocation(query().coordinate)
-        let cache = ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), isSaved: { _ in false })
+        let cache = cache ?? ListingCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), isSaved: { _ in false })
         return ListingStore(prefs: prefs, filterTotals: filterTotals, cache: cache, anonymous: client,
                             distances: distances, paginationTimeBudget: timeBudget)
     }

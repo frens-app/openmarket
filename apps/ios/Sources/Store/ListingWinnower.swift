@@ -1,5 +1,26 @@
 import Foundation
 
+/// Filtering holds the distance measured when a page arrived, including unknown
+/// distances. Detail updates can change the label without moving grid cards.
+@MainActor
+struct ListingDistanceSnapshot {
+    private struct Estimate {
+        let kilometres: Double?
+    }
+    private var estimates: [String: Estimate] = [:]
+
+    mutating func capture(_ listings: [Listing], using distances: DistanceResolver) {
+        for listing in listings {
+            estimates[listing.id] = Estimate(kilometres: distances.distanceKM(
+                for: listing.locationText, coordinate: distances.enrichedCoordinate(for: listing)))
+        }
+    }
+
+    func distanceKM(for id: String) -> Double? {
+        estimates[id]?.kilometres
+    }
+}
+
 /// The client-side filters shared by the rendered grid and Search pagination.
 ///
 /// Facebook does not reliably apply the requested radius, and "Only new" is
@@ -22,7 +43,8 @@ enum ListingWinnower {
         hiddenAsViewed: Set<String>,
         hidingViewed: Bool,
         radiusKM: Int,
-        distances: DistanceResolver
+        distances: DistanceResolver,
+        distanceSnapshot: ListingDistanceSnapshot? = nil
     ) -> WinnowedListings {
         var result = WinnowedListings()
         for listing in listings {
@@ -34,13 +56,14 @@ enum ListingWinnower {
                 result.items.append(listing)
                 continue
             }
-            // Filtering uses the city centroid until a listing point is known.
-            // Displayed distances require the listing point.
-            let coordinate = distances.enrichedCoordinate(for: listing)
-            if let km = distances.distanceKM(
-                for: listing.locationText,
-                coordinate: coordinate
-            ), km > Double(radiusKM) {
+            let kilometres: Double?
+            if let distanceSnapshot {
+                kilometres = distanceSnapshot.distanceKM(for: listing.id)
+            } else {
+                kilometres = distances.distanceKM(for: listing.locationText,
+                                                   coordinate: distances.enrichedCoordinate(for: listing))
+            }
+            if let km = kilometres, km > Double(radiusKM) {
                 result.hiddenByDistance += 1
                 result.nonLocalIDs.append(listing.id)
                 result.nearestHiddenKM = min(

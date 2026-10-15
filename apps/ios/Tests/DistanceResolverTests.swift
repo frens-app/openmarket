@@ -4,6 +4,24 @@ import XCTest
 
 @MainActor
 final class DistanceResolverTests: XCTestCase {
+    func testUnknownDistanceStaysVisibleUntilSnapshotIsRefreshed() {
+        let resolver = DistanceResolver(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        resolver.setUserLocation(.init(latitude: 0, longitude: 0))
+        var listing = Listing(id: "unknown", cardIndex: 0, capturedAt: Date())
+        var snapshot = ListingDistanceSnapshot()
+        snapshot.capture([listing], using: resolver)
+        listing.detail = ListingDetail(latitude: 1, longitude: 0)
+        func filtered() -> WinnowedListings {
+            ListingWinnower.apply(to: [listing], hiddenAsViewed: [], hidingViewed: false,
+                                  radiusKM: 8, distances: resolver, distanceSnapshot: snapshot)
+        }
+
+        XCTAssertNotNil(resolver.bestDistanceText(for: listing))
+        XCTAssertEqual(filtered().items.map(\.id), [listing.id])
+        snapshot.capture([listing], using: resolver)
+        XCTAssertTrue(filtered().items.isEmpty)
+    }
+
     func testCityCenterDoesNotBecomeListingDistance() throws {
         let suite = "DistanceResolverTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

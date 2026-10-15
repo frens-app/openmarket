@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import WebKit
 import os
 
@@ -7,6 +8,7 @@ import os
 @MainActor
 final class DiscoverFeed: ObservableObject {
     @Published private(set) var listings: [Listing] = []
+    private(set) var distanceSnapshot = ListingDistanceSnapshot()
     @Published private(set) var isLoading = false
     /// Scrolling for more, with cards already on screen.
     @Published private(set) var isLoadingMore = false
@@ -73,6 +75,8 @@ final class DiscoverFeed: ObservableObject {
     private let filterTotals: FilterTotals?
     private let prefs: Preferences
     private let distances: DistanceResolver
+    private let cache: ListingCache
+    private var detailUpdates: AnyCancellable?
     private var hasLoaded = false
     /// Which session the current cards were fetched under, so a sign-in or
     /// sign-out rebuilds the feed.
@@ -94,6 +98,7 @@ final class DiscoverFeed: ObservableObject {
          prefs: Preferences = .shared,
          filterTotals: FilterTotals? = nil,
          distances: DistanceResolver = .shared,
+         cache: ListingCache? = nil,
          anonymous: (any GraphQLFeedLoading)? = nil,
          authenticated: (any GraphQLFeedLoading)? = nil,
          paginationTimeBudget: Duration = .seconds(8),
@@ -104,10 +109,15 @@ final class DiscoverFeed: ObservableObject {
         self.prefs = prefs
         self.filterTotals = filterTotals
         self.distances = distances
+        self.cache = cache ?? .shared
         self.anonymous = anonymous ?? AnonymousFeedClient()
         self.authenticated = authenticated ?? AuthenticatedFeedClient(webView: self.engine.webView)
         self.currentSession = currentSession
         self.paginationTimeBudget = paginationTimeBudget
+        detailUpdates = self.cache.detailUpdates.sink { [weak self] id in
+            guard let self, let index = self.listings.firstIndex(where: { $0.id == id }) else { return }
+            self.listings[index] = self.cache.restoringDetails(to: self.listings[index])
+        }
     }
 
     /// Fills once per launch. `force` is the pull-to-refresh path. Also refills
@@ -171,6 +181,7 @@ final class DiscoverFeed: ObservableObject {
     /// Facebook's Marketplace feed for this place, cut to the user's radius.
     private func fill(query: SearchQuery, session: BrowserSession, generation current: Int) async {
         browseSeen = []
+        distanceSnapshot = ListingDistanceSnapshot()
         isAnonymous = session == .unauthed
         engine.session = session
         do {
@@ -519,19 +530,18 @@ final class DiscoverFeed: ObservableObject {
     private func withinRadius(_ parsed: [Listing]) async -> (kept: [Listing], newCards: Int) {
         let current = generation
         let started = ContinuousClock.now
-        await distances.resolveAll(parsed.map(\.locationText))
+        let enriched = parsed.map { cache.restoringDetails(to: $0) }
+        let unresolved = enriched.filter { distances.enrichedCoordinate(for: $0) == nil }
+        await distances.resolveAll(unresolved.map(\.locationText))
         let elapsed = Int(started.duration(to: .now) / .milliseconds(1))
         Logger.discover.info("distance resolution: cards=\(parsed.count, privacy: .public) geocode_ms=\(elapsed, privacy: .public)")
         guard current == generation, !Task.isCancelled else { return ([], 0) }
-        var nonLocalIDs: [String] = []
-        let kept = parsed.filter { listing in
-            guard let km = distances.distanceKM(for: listing.locationText,
-                                                coordinate: distances.enrichedCoordinate(for: listing)) else { return false }
-            if km > Double(radiusKM) { nonLocalIDs.append(listing.id) }
-            return km <= Double(radiusKM)
-        }
-        filterTotals?.recordNonLocal(nonLocalIDs)
-        return (kept, parsed.count)
+        distanceSnapshot.capture(enriched, using: distances)
+        let result = ListingWinnower.apply(to: enriched, hiddenAsViewed: [], hidingViewed: false,
+                                          radiusKM: radiusKM, distances: distances,
+                                          distanceSnapshot: distanceSnapshot)
+        filterTotals?.recordNonLocal(result.nonLocalIDs)
+        return (result.items, parsed.count)
     }
 
     /// Rendered cards, minus everything this feed shouldn't carry: duplicates,

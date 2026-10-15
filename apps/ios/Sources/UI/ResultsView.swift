@@ -146,12 +146,7 @@ struct ResultsView: View {
         // Observe the coordinate too: two selected points can share one slug.
         // The search refreshes first, then Discover rebuilds behind it.
         .onChange(of: prefs.resolvedPlace) {
-            // The origin moves first, and synchronously. Every grid here is
-            // filtered by distance from `DistanceResolver.userLocation`, so a
-            // stale origin measures the new city's cards from the old one and
-            // drops all of them — thirty cards in memory, an empty screen. It
-            // cannot go inside the `Task`: a grid can be re-winnowed on the next
-            // frame, before any await resumes.
+            // Set the origin before either feed captures distances for its new pages.
             distances.setUserLocation(DistanceResolver.origin(for: prefs.resolvedPlace,
                                                               deviceFix: location.coordinate))
             Task {
@@ -391,7 +386,8 @@ struct ResultsView: View {
 
     /// Saved listings have their own sheet; Discover leads with the feed.
     private var home: some View {
-        let discovered = winnowed(discover.listings, hidingViewed: false, radiusKM: discover.radiusKM)
+        let discovered = winnowed(discover.listings, hidingViewed: false, radiusKM: discover.radiusKM,
+                                  distanceSnapshot: discover.distanceSnapshot)
 
         return discoverSection(discovered)
             .padding(.top, 16)
@@ -520,14 +516,16 @@ struct ResultsView: View {
     private func winnowed(
         _ listings: [Listing],
         hidingViewed: Bool = true,
-        radiusKM: Int? = nil
+        radiusKM: Int? = nil,
+        distanceSnapshot: ListingDistanceSnapshot? = nil
     ) -> WinnowedListings {
         ListingWinnower.apply(
             to: listings,
             hiddenAsViewed: hiddenAsViewed,
             hidingViewed: hidingViewed,
             radiusKM: radiusKM ?? prefs.radiusKM,
-            distances: distances
+            distances: distances,
+            distanceSnapshot: distanceSnapshot ?? store.distanceSnapshot
         )
     }
 
@@ -536,7 +534,8 @@ struct ResultsView: View {
         case .search: return winnowed(store.listings).nonLocalIDs
         case .discover:
             return winnowed(discover.listings, hidingViewed: false,
-                            radiusKM: discover.radiusKM).nonLocalIDs
+                            radiusKM: discover.radiusKM,
+                            distanceSnapshot: discover.distanceSnapshot).nonLocalIDs
         }
     }
 
