@@ -27,7 +27,6 @@ enum GraphQLFeedDecoder {
         switch kind {
         case .browse: isBrowse = true
         case .search: isBrowse = false
-        case .category: throw GraphQLFeedError.unsupportedQuery
         }
         var edges: [Int: Object] = [:]
         var info: Object?

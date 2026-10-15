@@ -15,8 +15,6 @@ final class Preferences: ObservableObject {
         static let lastAccountID = "lastAccountID"
         static let locationName = "locationName"
         static let locationSlug = "locationSlug"
-        static let lastQueryKind = "lastQueryKind"
-        static let lastQueryValue = "lastQueryValue"
         static let sortBy = "sortBy"
         static let deliveryMethod = "deliveryMethod"
         static let minPrice = "minPrice"
@@ -89,11 +87,6 @@ final class Preferences: ObservableObject {
             "radius_km": radiusKM
         ])
     }
-    /// The last thing the user looked at, so reopening the app lands them back
-    /// there instead of on an empty screen.
-    @Published private(set) var lastQueryKind: String? { didSet { defaults.set(lastQueryKind, forKey: Key.lastQueryKind) } }
-    @Published private(set) var lastQueryValue: String? { didSet { defaults.set(lastQueryValue, forKey: Key.lastQueryValue) } }
-
     /// Both are applied server-side by Facebook, so changing either means
     /// re-running the search rather than re-sorting what's on screen.
     @Published var sort: SearchQuery.Sort { didSet { defaults.set(sort.rawValue, forKey: Key.sortBy) } }
@@ -173,6 +166,8 @@ final class Preferences: ObservableObject {
         self.defaults = defaults
         // Retire the selections saved by older versions of the app.
         defaults.removeObject(forKey: "interests")
+        defaults.removeObject(forKey: "lastQueryKind")
+        defaults.removeObject(forKey: "lastQueryValue")
         recentSearches = defaults.stringArray(forKey: Key.recentSearches) ?? []
         // `object(forKey:)`, not `bool(forKey:)`: the latter returns false for a
         // key that was never written, silently shipping history recording off
@@ -192,8 +187,6 @@ final class Preferences: ObservableObject {
         locationSlug = defaults.string(forKey: Key.locationSlug)
         resolvedPlace = (defaults.data(forKey: Key.resolvedPlace))
             .flatMap { try? JSONDecoder().decode(ResolvedPlace.self, from: $0) }
-        lastQueryKind = defaults.string(forKey: Key.lastQueryKind)
-        lastQueryValue = defaults.string(forKey: Key.lastQueryValue)
         sort = defaults.string(forKey: Key.sortBy)
             .flatMap(SearchQuery.Sort.init(rawValue:)) ?? .bestMatch
         delivery = defaults.string(forKey: Key.deliveryMethod)
@@ -232,37 +225,6 @@ final class Preferences: ObservableObject {
             || hideViewed
     }
 
-    /// Remembers what to reopen on. Categories are remembered too — browsing
-    /// "Free Stuff" is just as much "where I was" as typing a search.
-    func recordLastQuery(_ kind: SearchQuery.Kind) {
-        switch kind {
-        case .search(let term):
-            lastQueryKind = "search"
-            lastQueryValue = term
-        case .category(let name):
-            lastQueryKind = "category"
-            lastQueryValue = name
-        // Browse is the home screen, which is where an app with no last query
-        // opens anyway.
-        case .browse:
-            break
-        }
-    }
-
-    var lastQuery: SearchQuery.Kind? {
-        guard let lastQueryValue, !lastQueryValue.isEmpty else { return nil }
-        switch lastQueryKind {
-        case "search": return .search(lastQueryValue)
-        case "category": return .category(lastQueryValue)
-        default: return nil
-        }
-    }
-
-    func clearLastQuery() {
-        lastQueryKind = nil
-        lastQueryValue = nil
-    }
-
     /// Records a search the *user* ran, for the suggestions list.
     ///
     /// Tools-tab searches deliberately never reach here: those terms are
@@ -276,10 +238,6 @@ final class Preferences: ObservableObject {
         var next = recentSearches.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
         next.insert(trimmed, at: 0)
         recentSearches = Array(next.prefix(Self.maxRecentSearches))
-    }
-
-    func removeSearch(_ term: String) {
-        recentSearches.removeAll { $0.caseInsensitiveCompare(term) == .orderedSame }
     }
 
 }

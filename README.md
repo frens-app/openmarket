@@ -376,9 +376,9 @@ happened to live in San Francisco and happened to want furniture.
 The place is required so the app knows where to browse. Interests are no longer
 collected or shown; search suggestions come from recent searches.
 
-- **A Facebook account**, on the last screen, with the three things it changes
-  named on it: seller identity, results that keep loading, and a home feed that
-  keeps scrolling. The primary button signs in — on Facebook's own page,
+- **A Facebook account**, on the last screen, with seller identity and a
+  personalized home feed named as benefits. The primary button signs in — on
+  Facebook's own page,
   presented by `SignInView` — and "Not now" is a text button underneath it,
   next to an honest line about what the signed-out app still does. This is the
   one step that isn't a gate, because the reduced version genuinely works;
@@ -410,11 +410,9 @@ user's place — the default Discover screen — cut to the radius they set. Bef
 it existed, a new install landed on an empty state and a search field and had to
 think of something to type before the app would do anything at all.
 
-**The session decides how far it goes, and nothing else.** Signed in it pages
-indefinitely, a screen at a time as the user nears the end. Anonymous it is one
-page: Facebook serves about twenty cards to a session it doesn't recognise and
-then never loads more, so that feed publishes what it got and ends in the offer
-to log in, which is a description of what happens next rather than a nag.
+**Both signed-in and guest browsing support pagination through GraphQL.** The
+browser fallback can limit guest results and ask the user to sign in. Connecting
+Facebook also adds seller identity and personalizes the home feed.
 
 **This replaced a feed built from the user's own recent searches**, topped up
 from interests picked at onboarding, three re-run and shuffled together per

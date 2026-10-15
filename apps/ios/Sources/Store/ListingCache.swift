@@ -185,12 +185,6 @@ final class ListingCache {
         if listing.detail != nil { detailUpdated.send(listing.id) }
     }
 
-    /// Profiles worth re-fetching now that a session exists — captured without
-    /// one, so their seller fields are unknown rather than absent.
-    func idsNeedingSellerRefresh() -> [String] {
-        profiles.filter { $0.value.wouldBenefitFromRefetch }.map(\.key)
-    }
-
     /// Saved listings, most recently saved first, skipping any whose profile
     /// has gone (nothing evicts a saved one, but a cache file can be deleted).
     func listings(for ids: [String]) -> [Listing] {

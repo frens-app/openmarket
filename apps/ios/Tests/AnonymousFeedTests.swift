@@ -131,12 +131,9 @@ final class AnonymousFeedDecoderTests: XCTestCase {
         XCTAssertFalse(fields.contains { ["fb_dtsg", "lsd", "jazoest"].contains($0.name) })
     }
 
-    func testUnsupportedQueryFallsBackRatherThanLosingFiltersOrGuessingLocation() {
+    func testMissingCoordinateFallsBackRatherThanGuessingLocation() {
         var query = testQuery()
         query.coordinate = nil
-        XCTAssertThrowsError(try AnonymousFeedClient.request(for: query, cursor: nil))
-        query = testQuery()
-        query.kind = .category("Furniture")
         XCTAssertThrowsError(try AnonymousFeedClient.request(for: query, cursor: nil))
     }
 

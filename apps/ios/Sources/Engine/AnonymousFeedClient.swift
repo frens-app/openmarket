@@ -117,8 +117,6 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
                 "__relay_internal__pv__MarketplaceCometAdmodulerelayprovider": true,
                 "__relay_internal__pv__CometMarketplaceShouldShowFeedShippingIconrelayprovider": false
             ]
-        case .category:
-            throw GraphQLFeedError.unsupportedQuery
         }
         let data = try JSONSerialization.data(withJSONObject: variables, options: [.sortedKeys])
         let fields = [

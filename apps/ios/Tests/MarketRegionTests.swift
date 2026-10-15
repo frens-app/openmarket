@@ -4,21 +4,8 @@ import XCTest
 
 @MainActor
 final class MarketRegionTests: XCTestCase {
-    func testOfflinePhoneFallbackComesFromCountryCatalog() {
-        XCTAssertEqual(MarketRegion.defaultPhoneCallingCodes, ["1", "44", "353", "61", "64"])
-        XCTAssertEqual(PhoneCountry.fallbackCallingCodes, MarketRegion.defaultPhoneCallingCodes)
-
-        let expectedCountries = Set(
-            MarketRegion.all.filter(\.phoneEnabledByDefault).map(\.countryCode)
-        )
-        let offeredCountries = Set(
-            PhoneCountry.served(callingCodes: PhoneCountry.fallbackCallingCodes).map(\.regionCode)
-        )
-        XCTAssertEqual(offeredCountries, expectedCountries)
-    }
-
     func testEverySupportedCountryDeclaresARecognizedPricePrefix() {
-        for region in MarketRegion.all where region.phoneEnabledByDefault || region.marketplaceVerified {
+        for region in MarketRegion.all where region.marketplaceVerified {
             XCTAssertFalse(region.pricePrefixes.isEmpty, "Missing prices for \(region.countryCode)")
             for prefix in region.pricePrefixes {
                 XCTAssertTrue(PriceRun.isPrice("\(prefix)25"),
@@ -27,7 +14,7 @@ final class MarketRegionTests: XCTestCase {
         }
     }
 
-    func testCurrenciesOutsidePhoneCatalogAreNotAcceptedAsPrices() {
+    func testCurrenciesOutsideSupportedMarketsAreNotAcceptedAsPrices() {
         XCTAssertFalse(PriceRun.isPrice("¥25"))
         XCTAssertFalse(PriceRun.isPrice("₹25"))
         XCTAssertFalse(PriceRun.isPrice("₩25"))

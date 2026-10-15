@@ -7,7 +7,6 @@ import CoreLocation
 struct SearchQuery: Equatable {
     enum Kind: Equatable {
         case search(String)
-        case category(String)
         /// No search term: Facebook's own Marketplace feed for a place.
         ///
         /// Back, after being removed once, and now the whole of Discover.
@@ -142,7 +141,6 @@ struct SearchQuery: Equatable {
     var displayName: String {
         switch kind {
         case .search(let term): return term
-        case .category(let name): return name
         case .browse: return "Nearby"
         }
     }
@@ -157,8 +155,6 @@ struct SearchQuery: Equatable {
         case .search(let term):
             components.path = "/marketplace/\(citySlug)/search/"
             items.append(URLQueryItem(name: "query", value: term))
-        case .category(let name):
-            components.path = "/marketplace/\(citySlug)/\(Self.categorySlug(name))/"
         case .browse:
             // Bare, and returned early: the point of this path is to be the
             // screen Facebook would have shown, so it carries no parameters at
@@ -216,10 +212,6 @@ struct SearchQuery: Equatable {
     var hasActiveFilters: Bool {
         sort != .bestMatch || delivery != .any || age != .any || availability != .any
             || !conditions.isEmpty || minPrice != nil || maxPrice != nil
-    }
-
-    static func categorySlug(_ name: String) -> String {
-        name.lowercased().replacingOccurrences(of: " ", with: "")
     }
 
     static func kilometresToMiles(_ km: Int) -> Int {

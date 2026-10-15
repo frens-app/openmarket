@@ -85,11 +85,6 @@ actor ImageLoader {
         cache.object(forKey: url as NSURL)
     }
 
-    /// Whether this URL has already answered 403/404 — a card can render
-    /// "expired" immediately rather than spinning through three doomed
-    /// attempts.
-    func isKnownExpired(_ url: URL) -> Bool { expired.contains(url) }
-
     func image(for url: URL) async throws -> UIImage {
         if let hit = cached(url) { return hit }
         if expired.contains(url) { throw Failure.permanent }

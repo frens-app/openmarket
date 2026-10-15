@@ -66,8 +66,8 @@ struct SettingsView: View {
                         showSignIn = true
                     }
                     Text(store.session == .authed
-                         ? "Seller names and ratings are visible, results keep loading past the first page, and the home screen uses Facebook's own picks."
-                         : "This is the reduced version of the app. Signing in adds seller names and ratings, lets results load past the first ~15, and builds the home screen from Facebook's own picks.")
+                         ? "Seller names and ratings are visible, and the home screen uses Facebook's picks for your account."
+                         : "You can browse and search without signing in. Connecting Facebook adds seller names and ratings and personalizes the home screen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -91,7 +91,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("Signing in happens on Facebook's own page — this app has no login form of its own. It's the version of the app worth having, and browsing without it still works. Messaging a seller opens the Facebook app.")
+                    Text("Signing in happens on Facebook's own page — this app has no login form of its own. Browsing without signing in also works. Messaging a seller opens the Facebook app.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

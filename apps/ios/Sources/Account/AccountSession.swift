@@ -75,6 +75,7 @@ final class AccountSession: ObservableObject {
 
     init(protocolClient: any ProtocolClientInterface = API.makeProtocolClient()) {
         self.protocolClient = protocolClient
+        defaults.removeObject(forKey: "sign_in_calling_codes")
     }
     private lazy var auth = AuthServiceClient(client: protocolClient)
     private lazy var users = UserServiceClient(client: protocolClient)
@@ -84,7 +85,6 @@ final class AccountSession: ObservableObject {
         static let refreshToken = "refresh_token"
         static let accessExpiry = "access_token_expiry"
         static let viewer = "viewer"
-        static let signInCallingCodes = "sign_in_calling_codes"
         static let appleUserID = "social_apple_user_id"
     }
 
@@ -214,85 +214,6 @@ final class AccountSession: ObservableObject {
         case .failure(let error):
             if error.code == .unauthenticated {
                 throw APIError.message(error.message ?? "Couldn't verify your sign-in. Please try again.")
-            }
-            throw error.asAPIError
-        }
-    }
-
-    func signInCallingCodes() async -> [String] {
-        let response = await auth.getSignInOptions(request: GetSignInOptionsRequest())
-        if let codes = response.message?.phoneCountryCallingCodes, !codes.isEmpty {
-            defaults.set(codes, forKey: Key.signInCallingCodes)
-            return codes
-        }
-        return defaults.stringArray(forKey: Key.signInCallingCodes)
-            ?? PhoneCountry.fallbackCallingCodes
-    }
-
-    /// Sends a code. Returns how many digits to expect and how long until a
-    /// resend is allowed, both decided by the server.
-    func startVerification(phoneNumber: String) async throws -> (codeLength: Int, resendAfter: Int) {
-        var request = StartPhoneVerificationRequest()
-        request.phoneNumber = phoneNumber
-        request.devicePlatform = .ios
-        // Not stored anywhere at this point — no account exists yet. It goes to
-        // the verification provider as an anti-fraud signal, which is how a real
-        // install asking about one number is told apart from a script walking a
-        // range. `verify(phoneNumber:code:)` sends the same value again, and
-        // that call is the one that persists it.
-        request.installID = InstallIdentity.current
-
-        let response = await auth.startPhoneVerification(request: request)
-        switch response.result {
-        case .success(let message):
-            return (
-                codeLength: message.codeLength > 0 ? Int(message.codeLength) : 6,
-                resendAfter: Int(message.resendAvailableInSeconds)
-            )
-        case .failure(let error):
-            throw error.asAPIError
-        }
-    }
-
-    /// Exchanges a code for a session. Returns true if this call created the
-    /// account, which is what decides whether onboarding runs.
-    @discardableResult
-    func verify(phoneNumber: String, code: String) async throws -> Bool {
-        var request = VerifyPhoneRequest()
-        request.phoneNumber = phoneNumber
-        request.code = code
-        request.devicePlatform = .ios
-        request.timeZone = TimeZone.current.identifier
-        // The only call that *stores* it: the session records which install it
-        // belongs to, and every later RPC derives the device from the session.
-        // startVerification sends the same value, but purely as a provider
-        // signal — it has no account to attach it to.
-        request.installID = InstallIdentity.current
-
-        let response = await auth.verifyPhone(request: request)
-        switch response.result {
-        case .success(let message):
-            store(
-                accessToken: message.accessToken,
-                refreshToken: message.refreshToken,
-                expiresIn: TimeInterval(message.accessTokenExpiresInSeconds)
-            )
-            Keychain.delete(Key.appleUserID)
-            cache(viewer: message.viewer)
-            state = .signedIn(message.viewer)
-            if message.hasDevice { device = message.device }
-            // Before the event, so the signup lands on the person's profile
-            // rather than the anonymous one it replaces.
-            updateAnalyticsProfile(message.viewer)
-            Analytics.capture(message.isNewUser ? .accountCreated : .accountSignedIn)
-            return message.isNewUser
-        case .failure(let error):
-            // On this call `unauthenticated` means "wrong code", not "your
-            // session ended" — mapping it the usual way would tell the user
-            // their session expired while they are in the middle of creating
-            // one.
-            if error.code == .unauthenticated {
-                throw APIError.message(error.message ?? "That code isn't right.")
             }
             throw error.asAPIError
         }

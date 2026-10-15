@@ -104,23 +104,6 @@ struct DesktopPageLocation: Equatable {
     /// Was the requested place accepted? False only when Facebook rewrote it.
     var wasAccepted: Bool { urlPlace != .refused }
 
-    /// Does the pill agree with the place we believe we asked for?
-    ///
-    /// Compared loosely — "San Francisco, California" against "San Francisco" —
-    /// since the pill renders a display name while the request carries a slug or
-    /// an id. **Nil means unknown** (no pill, or nothing to compare against),
-    /// which callers must not treat as a failure: a page mid-load has no pill.
-    func pillAgrees(withRequestedName expected: String?) -> Bool? {
-        guard let expected, let shown = pill?.placeName else { return nil }
-        let a = Self.simplify(expected), b = Self.simplify(shown)
-        guard !a.isEmpty, !b.isEmpty else { return nil }
-        return b.hasPrefix(a) || a.hasPrefix(b)
-    }
-
-    private static func simplify(_ value: String) -> String {
-        value.lowercased().filter { $0.isLetter || $0.isNumber }
-    }
-
     /// One line for the log: what was asked for, and what came back.
     var summary: String {
         let place = pill?.placeName ?? "unknown place"

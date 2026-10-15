@@ -478,36 +478,6 @@ final class DesktopFeedEngine: NSObject, ObservableObject, WKNavigationDelegate 
 
     // MARK: - The login overlay
 
-    /// Dismisses the "See more on Facebook" overlay if it offers a way out.
-    ///
-    /// Logged out there is exactly one free dismissal per page load: it unlocks
-    /// the document (600px → 2340px) and scrolling paginates 15 → 39, after
-    /// which the overlay returns with no close control at all. Not worth using
-    /// for depth — cards 16–39 carry no payload — but kept for the case where
-    /// the overlay is merely covering the first 15.
-    @discardableResult
-    func dismissOverlayIfPresent() async -> Bool {
-        let result = await evaluate(Self.dismissOverlayJS)
-        return result?.contains("dismissed") ?? false
-    }
-
-    private static let dismissOverlayJS = """
-    (function(){
-      var dialogs = document.querySelectorAll('[role="dialog"]');
-      for (var i = 0; i < dialogs.length; i++) {
-        var buttons = dialogs[i].querySelectorAll('[aria-label], [role="button"]');
-        for (var j = 0; j < buttons.length; j++) {
-          var label = (buttons[j].getAttribute('aria-label') || buttons[j].innerText || '').trim();
-          if (label === 'Close' || label === 'Not now') {
-            buttons[j].click();
-            return 'dismissed';
-          }
-        }
-      }
-      return 'none';
-    })()
-    """
-
     // MARK: - Plumbing
 
     private func navigate(to url: URL) async {

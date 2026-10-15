@@ -760,7 +760,6 @@ struct ResultsView: View {
         // afterwards whether it was already there always answers yes.
         let source = searchSource(for: trimmed)
         prefs.recordSearch(trimmed)
-        prefs.recordLastQuery(.search(trimmed))
         var properties: [String: Any] = [
             "source": source.rawValue,
             "term_length": trimmed.count,
@@ -791,17 +790,6 @@ struct ResultsView: View {
     private func run(_ kind: SearchQuery.Kind) async {
         hiddenAsViewed = prefs.hideViewed ? viewed.allIDs : []
         await store.run(makeQuery(kind), hiddenAsViewed: hiddenAsViewed)
-    }
-
-    /// Currently unreachable: the category pills that called it are gone, and
-    /// the suggestions run categories as ordinary searches. Kept because
-    /// `SearchQuery.Kind.category` still builds a valid URL — but note that
-    /// category *paths* have never been through the desktop payload extractor,
-    /// which is verified only against `/search/`. Anything reviving this should
-    /// check the payload parses there first.
-    private func browse(category: String) async {
-        prefs.recordLastQuery(.category(category))
-        await run(.category(category))
     }
 
     private func rerunCurrentQuery() async {
