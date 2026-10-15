@@ -230,7 +230,7 @@ func TestAlertsIntegration(t *testing.T) {
 		exec(t, `UPDATE user_price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		var count int
-		_ = pool.QueryRow(ctx, `SELECT count(*) FROM price_alert_checks WHERE alert_id=$1`, id).Scan(&count)
+		_ = pool.QueryRow(ctx, `SELECT count(*) FROM price_alert_check_runs WHERE alert_id=$1`, id).Scan(&count)
 		if count != 0 {
 			t.Fatal("dispatched disabled device")
 		}
@@ -363,7 +363,7 @@ func TestAlertsIntegration(t *testing.T) {
 		s, c, _, _, _, _ := fixture(t)
 		id := create(t, s, c)
 		var check uuid.UUID
-		if err := pool.QueryRow(ctx, `INSERT INTO price_alert_checks(alert_id) VALUES($1) RETURNING id`, id).Scan(&check); err != nil {
+		if err := pool.QueryRow(ctx, `INSERT INTO price_alert_check_runs(alert_id) VALUES($1) RETURNING id`, id).Scan(&check); err != nil {
 			t.Fatal(err)
 		}
 		for i := 0; i < 105; i++ {

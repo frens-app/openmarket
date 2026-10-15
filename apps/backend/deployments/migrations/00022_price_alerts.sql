@@ -14,7 +14,7 @@ CREATE TABLE user_price_alerts (
 CREATE INDEX user_price_alerts_due ON user_price_alerts(next_check_at, created_at) WHERE NOT paused;
 CREATE INDEX user_price_alerts_user ON user_price_alerts(user_id);
 
-CREATE TABLE price_alert_checks (
+CREATE TABLE price_alert_check_runs (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -28,14 +28,14 @@ CREATE TABLE price_alert_checks (
     push_attempts integer NOT NULL DEFAULT 0,
     evaluation_after timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX price_alert_checks_dispatch ON price_alert_checks(next_push_at, created_at) WHERE completed_at IS NULL AND NOT scan_complete;
-CREATE INDEX price_alert_checks_evaluation ON price_alert_checks(evaluation_after, created_at) WHERE completed_at IS NULL;
-CREATE UNIQUE INDEX price_alert_checks_active ON price_alert_checks(alert_id) WHERE completed_at IS NULL;
+CREATE INDEX price_alert_check_runs_dispatch ON price_alert_check_runs(next_push_at, created_at) WHERE completed_at IS NULL AND NOT scan_complete;
+CREATE INDEX price_alert_check_runs_evaluation ON price_alert_check_runs(evaluation_after, created_at) WHERE completed_at IS NULL;
+CREATE UNIQUE INDEX price_alert_check_runs_active ON price_alert_check_runs(alert_id) WHERE completed_at IS NULL;
 
 CREATE TABLE price_alert_listings (
     alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
     listing_id text NOT NULL,
-    check_id uuid NOT NULL REFERENCES price_alert_checks(id) ON DELETE CASCADE,
+    check_id uuid NOT NULL REFERENCES price_alert_check_runs(id) ON DELETE CASCADE,
     listing jsonb NOT NULL,
     checked_at timestamptz,
     matched boolean,
@@ -51,7 +51,7 @@ CREATE INDEX price_alert_listings_matches ON price_alert_listings(alert_id, matc
 CREATE TABLE price_alert_notifications (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
-    check_id uuid NOT NULL UNIQUE REFERENCES price_alert_checks(id) ON DELETE CASCADE,
+    check_id uuid NOT NULL UNIQUE REFERENCES price_alert_check_runs(id) ON DELETE CASCADE,
     listing_ids text[] NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     next_attempt_at timestamptz NOT NULL DEFAULT now(),
@@ -68,5 +68,5 @@ INSERT INTO price_alert_worker_clock VALUES (1,now());
 DROP TABLE price_alert_worker_clock;
 DROP TABLE price_alert_notifications;
 DROP TABLE price_alert_listings;
-DROP TABLE price_alert_checks;
+DROP TABLE price_alert_check_runs;
 DROP TABLE user_price_alerts;

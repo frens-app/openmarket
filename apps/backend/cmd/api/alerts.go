@@ -223,7 +223,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 				return nil, e
 			}
 			// A resumed alert binds to the current install; old device cursors cannot travel.
-			_, err = tx.Exec(ctx, `UPDATE price_alert_checks SET cursor=NULL,facebook_actor=NULL,page_number=page_number+1,next_push_at=now(),push_attempts=0 WHERE alert_id=$1 AND completed_at IS NULL AND NOT scan_complete`, id)
+			_, err = tx.Exec(ctx, `UPDATE price_alert_check_runs SET cursor=NULL,facebook_actor=NULL,page_number=page_number+1,next_push_at=now(),push_attempts=0 WHERE alert_id=$1 AND completed_at IS NULL AND NOT scan_complete`, id)
 			if err == nil {
 				_, err = tx.Exec(ctx, `UPDATE user_price_alerts SET paused=false,device_id=$2 WHERE id=$1`, id, device)
 			}
@@ -237,7 +237,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		if err != nil {
 			return nil, err
 		}
-		rows, err := s.pool.Query(ctx, `SELECT c.id,a.id,a.query,a.location,c.cursor,c.facebook_actor,c.page_number FROM price_alert_checks c JOIN user_price_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete ORDER BY c.created_at LIMIT 3`, userID, device)
+		rows, err := s.pool.Query(ctx, `SELECT c.id,a.id,a.query,a.location,c.cursor,c.facebook_actor,c.page_number FROM price_alert_check_runs c JOIN user_price_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete ORDER BY c.created_at LIMIT 3`, userID, device)
 		if err != nil {
 			return nil, err
 		}
@@ -369,7 +369,7 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 	var page int
 	var actor, cursor *string
 	var done bool
-	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM price_alert_checks c JOIN user_price_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused AND c.completed_at IS NULL FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
+	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM price_alert_check_runs c JOIN user_price_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused AND c.completed_at IS NULL FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
 	if err != nil {
 		return alertNotFound(err)
 	}
@@ -391,7 +391,7 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE price_alert_checks SET cursor=$2,facebook_actor=$3,page_number=page_number+1,scan_complete=$4 WHERE id=$1`, id, in.Cursor, in.Actor, in.Complete)
+	_, err = tx.Exec(ctx, `UPDATE price_alert_check_runs SET cursor=$2,facebook_actor=$3,page_number=page_number+1,scan_complete=$4 WHERE id=$1`, id, in.Cursor, in.Actor, in.Complete)
 	if err != nil {
 		return err
 	}
