@@ -216,12 +216,8 @@ final class ShoppingTools: ObservableObject {
     }
     private static func canonical(_ listing: Listing) -> Listing {
         guard let id = listing.itemURL?.marketplaceItemID else { return listing }
-        var value = Listing(id: "fb:\(id)", title: listing.title, priceText: listing.priceText,
-                            originalPriceText: listing.originalPriceText, locationText: listing.locationText,
-                            conditionText: listing.conditionText, fulfillment: listing.fulfillment,
-                            thumbnailURL: listing.thumbnailURL, itemURL: listing.itemURL,
-                            badgeText: listing.badgeText, cardIndex: listing.cardIndex, capturedAt: listing.capturedAt)
-        value.detail = listing.detail
+        var value = listing
+        value.id = "fb:\(id)"
         return value
     }
 }

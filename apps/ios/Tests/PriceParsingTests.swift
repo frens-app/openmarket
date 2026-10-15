@@ -254,7 +254,7 @@ final class PriceParsingTests: XCTestCase {
     func testNonPriceTextAndUnsupportedCurrenciesAreRejected() {
         XCTAssertFalse(PriceRun.isPrice("Desk1"))
         XCTAssertFalse(PriceRun.isPrice("¥25"))
-        XCTAssertFalse(PriceRun.isPrice("₹25"))
+        XCTAssertTrue(PriceRun.isPrice("₹25"))
         XCTAssertFalse(PriceRun.isPrice("₩25"))
     }
 

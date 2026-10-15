@@ -26,13 +26,14 @@ struct MarketCheck: Equatable {
     let guide: PriceGuide
     let marketName: String
 
-    init(term: String, price: Int, comps: [MarketComp], sold: SoldSignal, marketName: String) {
+    init(term: String, price: Int, comps: [MarketComp], sold: SoldSignal, marketName: String,
+         currencySymbol: String? = nil) {
         self.term = term
         self.price = price
         self.comps = MarketComp.comparableFirst(comps)
-        self.sold = sold
+        self.sold = SoldSignal(comps: sold.comps, currencySymbol: currencySymbol)
         self.marketName = marketName
-        guide = PriceGuide(comps: comps)
+        guide = PriceGuide(comps: comps, currencySymbol: currencySymbol)
     }
 
     /// Quartiles where the sample supports them, the median where it doesn't.

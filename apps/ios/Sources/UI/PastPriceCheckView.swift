@@ -86,7 +86,7 @@ struct PastPriceCheckView: View {
 
                 Button(action: { copyPrice(price) }) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("\(check.currency)\(price)")
+                        Text(check.priceText ?? "—")
                             .font(.system(size: 44, weight: .bold, design: .rounded))
                             .minimumScaleFactor(0.5)
                             .lineLimit(1)

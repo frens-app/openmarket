@@ -1,0 +1,150 @@
+{
+  "date": "2026-10-15",
+  "source": "https://www.facebook.com/marketplace/jakarta/search/?query=desk",
+  "currencies": {
+    "USD": {
+      "format": "{symbol}{amount}",
+      "symbol": "$",
+      "offset": 100,
+      "screen_name": "US Dollars"
+    },
+    "CAD": {
+      "format": "{symbol}{amount}",
+      "symbol": "$",
+      "offset": 100,
+      "screen_name": "Canadian Dollar"
+    },
+    "GBP": {
+      "format": "{symbol}{amount}",
+      "symbol": "£",
+      "offset": 100,
+      "screen_name": "British Pound"
+    },
+    "EUR": {
+      "format": "{symbol} {amount}",
+      "symbol": "€",
+      "offset": 100,
+      "screen_name": "Euro"
+    },
+    "AUD": {
+      "format": "{symbol}{amount}",
+      "symbol": "$",
+      "offset": 100,
+      "screen_name": "Australian Dollar"
+    },
+    "NZD": {
+      "format": "{symbol}{amount}",
+      "symbol": "$",
+      "offset": 100,
+      "screen_name": "New Zealand Dollar"
+    },
+    "DKK": {
+      "format": "{amount} {symbol}",
+      "symbol": "kr.",
+      "offset": 100,
+      "screen_name": "Danish Krone"
+    },
+    "TWD": {
+      "format": "{symbol}{amount}",
+      "symbol": "NT$",
+      "offset": 1,
+      "screen_name": "Taiwan Dollar"
+    },
+    "INR": {
+      "format": "{symbol} {amount}",
+      "symbol": "₹",
+      "offset": 100,
+      "screen_name": "Indian Rupee"
+    },
+    "IDR": {
+      "format": "{symbol} {amount}",
+      "symbol": "Rp",
+      "offset": 1,
+      "screen_name": "Indonesian Rupiah"
+    },
+    "BRL": {
+      "format": "{symbol} {amount}",
+      "symbol": "R$",
+      "offset": 100,
+      "screen_name": "Brazilian Real"
+    },
+    "PHP": {
+      "format": "{symbol}{amount}",
+      "symbol": "₱",
+      "offset": 100,
+      "screen_name": "Philippine Peso"
+    },
+    "MXN": {
+      "format": "{symbol}{amount}",
+      "symbol": "$",
+      "offset": 100,
+      "screen_name": "Mexican Peso"
+    },
+    "VND": {
+      "format": "{amount} {symbol}",
+      "symbol": "₫",
+      "offset": 1,
+      "screen_name": "Vietnamese Dong"
+    },
+    "BDT": {
+      "format": "{symbol}{amount}",
+      "symbol": "৳",
+      "offset": 100,
+      "screen_name": "Bangladeshi Taka"
+    },
+    "PKR": {
+      "format": "{symbol}{amount}",
+      "symbol": "Rs",
+      "offset": 100,
+      "screen_name": "Pakistani Rupee"
+    },
+    "EGP": {
+      "format": "{symbol} {amount}",
+      "symbol": "ج.م.",
+      "offset": 100,
+      "screen_name": "Egyptian Pound"
+    },
+    "THB": {
+      "format": "{symbol}{amount}",
+      "symbol": "฿",
+      "offset": 100,
+      "screen_name": "Thai Baht"
+    },
+    "NGN": {
+      "format": "{symbol}{amount}",
+      "symbol": "₦",
+      "offset": 100,
+      "screen_name": "Nigerian Naira"
+    },
+    "COP": {
+      "format": "{symbol} {amount}",
+      "symbol": "$",
+      "offset": 1,
+      "screen_name": "Colombian Peso"
+    },
+    "TRY": {
+      "format": "{amount} {symbol}",
+      "symbol": "TL",
+      "offset": 100,
+      "screen_name": "Turkish Lira"
+    },
+    "ARS": {
+      "format": "{symbol} {amount}",
+      "symbol": "$",
+      "offset": 100,
+      "screen_name": "Argentine Peso"
+    },
+    "ZAR": {
+      "format": "{symbol} {amount}",
+      "symbol": "R",
+      "offset": 100,
+      "screen_name": "South African Rand"
+    },
+    "DZD": {
+      "format": "{amount} {symbol}",
+      "symbol": "DA",
+      "offset": 100,
+      "screen_name": "Algerian Dinar"
+    }
+  }
+}

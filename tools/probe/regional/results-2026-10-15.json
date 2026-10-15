@@ -1,0 +1,2438 @@
+{
+  "date": "2026-10-15",
+  "method": "Cookie-free search (two pages) and Discover (one page), city coordinates, English query desk. No signed-in, detail, or UI verification implied.",
+  "markets": [
+    {
+      "country": "FR",
+      "city": "Paris",
+      "pages": [
+        {
+          "bytes": 38848,
+          "records": 1,
+          "listings": 14,
+          "new_ids": 14,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 14,
+            "marketplace_listing_title": 14,
+            "creation_time": 14,
+            "listing_price": 14,
+            "location": 14,
+            "delivery_types": 14,
+            "is_sold": 14,
+            "primary_listing_photo": 14
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "€30",
+              "amount_with_offset_in_currency": "3340",
+              "amount": "30.00"
+            },
+            {
+              "formatted_amount": "€50",
+              "amount_with_offset_in_currency": "5567",
+              "amount": "50.00"
+            },
+            {
+              "formatted_amount": "€55",
+              "amount_with_offset_in_currency": "6124",
+              "amount": "55.00"
+            }
+          ]
+        },
+        {
+          "bytes": 62870,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "€0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "€10",
+              "amount_with_offset_in_currency": "1113",
+              "amount": "10.00"
+            },
+            {
+              "formatted_amount": "€30",
+              "amount_with_offset_in_currency": "3340",
+              "amount": "30.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79703,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "600.00"
+            },
+            {
+              "amount": "70.00"
+            },
+            {
+              "amount": "500.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "EUR",
+              "amount_with_offset": "235000"
+            },
+            {
+              "currency": "EUR",
+              "amount_with_offset": "70000"
+            },
+            {
+              "currency": "EUR",
+              "amount_with_offset": "150000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "IT",
+      "city": "Rome",
+      "pages": [
+        {
+          "bytes": 41760,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "€50",
+              "amount_with_offset_in_currency": "5567",
+              "amount": "50.00"
+            },
+            {
+              "formatted_amount": "€40",
+              "amount_with_offset_in_currency": "4454",
+              "amount": "40.00"
+            },
+            {
+              "formatted_amount": "€400",
+              "amount_with_offset_in_currency": "44540",
+              "amount": "400.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65465,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "€0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "€40",
+              "amount_with_offset_in_currency": "4454",
+              "amount": "40.00"
+            },
+            {
+              "formatted_amount": "€49",
+              "amount_with_offset_in_currency": "5456",
+              "amount": "49.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79644,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "300.00"
+            },
+            {
+              "amount": "1.00"
+            },
+            {
+              "amount": "90000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "EUR",
+              "amount_with_offset": "300000"
+            },
+            {
+              "currency": "EUR",
+              "amount_with_offset": "480000"
+            },
+            {
+              "currency": "EUR",
+              "amount_with_offset": "370000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "DE",
+      "city": "Berlin",
+      "pages": [
+        {
+          "bytes": 38745,
+          "records": 1,
+          "listings": 14,
+          "new_ids": 14,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 14,
+            "marketplace_listing_title": 14,
+            "creation_time": 14,
+            "listing_price": 14,
+            "location": 14,
+            "delivery_types": 14,
+            "is_sold": 14,
+            "primary_listing_photo": 14
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "€30",
+              "amount_with_offset_in_currency": "3340",
+              "amount": "30.00"
+            },
+            {
+              "formatted_amount": "€50",
+              "amount_with_offset_in_currency": "5567",
+              "amount": "50.00"
+            },
+            {
+              "formatted_amount": "€20",
+              "amount_with_offset_in_currency": "2227",
+              "amount": "20.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65095,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "€10",
+              "amount_with_offset_in_currency": "1113",
+              "amount": "10.00"
+            },
+            {
+              "formatted_amount": "€0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "€40",
+              "amount_with_offset_in_currency": "4454",
+              "amount": "40.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79777,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "5555166.00"
+            },
+            {
+              "amount": "7100.00"
+            },
+            {
+              "amount": "1.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "EUR",
+              "amount_with_offset": "900000"
+            },
+            {
+              "currency": "EUR",
+              "amount_with_offset": "250000"
+            },
+            {
+              "currency": "EUR",
+              "amount_with_offset": "1200"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "MX",
+      "city": "Mexico City",
+      "pages": [
+        {
+          "bytes": 41990,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "MX$2,000",
+              "amount_with_offset_in_currency": "10776",
+              "amount": "2000.00"
+            },
+            {
+              "formatted_amount": "MX$10,999",
+              "amount_with_offset_in_currency": "59264",
+              "amount": "10999.00"
+            },
+            {
+              "formatted_amount": "MX$4,499",
+              "amount_with_offset_in_currency": "24241",
+              "amount": "4499.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65599,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "MX$250",
+              "amount_with_offset_in_currency": "1347",
+              "amount": "250.00"
+            },
+            {
+              "formatted_amount": "MX$700",
+              "amount_with_offset_in_currency": "3772",
+              "amount": "700.00"
+            },
+            {
+              "formatted_amount": "MX$600",
+              "amount_with_offset_in_currency": "3233",
+              "amount": "600.00"
+            }
+          ]
+        },
+        {
+          "bytes": 80315,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "170.00"
+            },
+            {
+              "amount": "28000.00"
+            },
+            {
+              "amount": "73000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "MXN",
+              "amount_with_offset": "4000000"
+            },
+            {
+              "currency": "MXN",
+              "amount_with_offset": "21000000"
+            },
+            {
+              "currency": "MXN",
+              "amount_with_offset": "3500000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "PH",
+      "city": "Manila",
+      "pages": [
+        {
+          "bytes": 37547,
+          "records": 1,
+          "listings": 14,
+          "new_ids": 14,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 14,
+            "marketplace_listing_title": 14,
+            "creation_time": 14,
+            "listing_price": 14,
+            "location": 14,
+            "delivery_types": 14,
+            "is_sold": 14,
+            "primary_listing_photo": 14
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "PHP2,000",
+              "amount_with_offset_in_currency": "3161",
+              "amount": "2000.00"
+            },
+            {
+              "formatted_amount": "PHP28",
+              "amount_with_offset_in_currency": "44",
+              "amount": "28.00"
+            },
+            {
+              "formatted_amount": "PHP2,200",
+              "amount_with_offset_in_currency": "3478",
+              "amount": "2200.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65441,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "PHP799",
+              "amount_with_offset_in_currency": "1263",
+              "amount": "799.00"
+            },
+            {
+              "formatted_amount": "PHP123",
+              "amount_with_offset_in_currency": "194",
+              "amount": "123.00"
+            },
+            {
+              "formatted_amount": "PHP3,500",
+              "amount_with_offset_in_currency": "5533",
+              "amount": "3500.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79723,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "17000.00"
+            },
+            {
+              "amount": "1000.00"
+            },
+            {
+              "amount": "600.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "PHP",
+              "amount_with_offset": "22000"
+            },
+            {
+              "currency": "PHP",
+              "amount_with_offset": "6500000"
+            },
+            {
+              "currency": "PHP",
+              "amount_with_offset": "15800000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "BR",
+      "city": "São Paulo",
+      "pages": [
+        {
+          "bytes": 36439,
+          "records": 1,
+          "listings": 13,
+          "new_ids": 13,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 13,
+            "marketplace_listing_title": 13,
+            "creation_time": 13,
+            "listing_price": 13,
+            "location": 13,
+            "delivery_types": 13,
+            "is_sold": 13,
+            "primary_listing_photo": 13
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "R$1,699",
+              "amount_with_offset_in_currency": "33471",
+              "amount": "1699.00"
+            },
+            {
+              "formatted_amount": "R$150",
+              "amount_with_offset_in_currency": "2955",
+              "amount": "150.00"
+            },
+            {
+              "formatted_amount": "R$60",
+              "amount_with_offset_in_currency": "1182",
+              "amount": "60.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65906,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "R$400",
+              "amount_with_offset_in_currency": "7880",
+              "amount": "400.00"
+            },
+            {
+              "formatted_amount": "R$0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "R$150",
+              "amount_with_offset_in_currency": "2955",
+              "amount": "150.00"
+            }
+          ]
+        },
+        {
+          "bytes": 80202,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "230000.00"
+            },
+            {
+              "amount": "0.00"
+            },
+            {
+              "amount": "9000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "BRL",
+              "amount_with_offset": "110000"
+            },
+            {
+              "currency": "BRL",
+              "amount_with_offset": "16000000"
+            },
+            {
+              "currency": "BRL",
+              "amount_with_offset": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "IN",
+      "city": "Mumbai",
+      "pages": [
+        {
+          "bytes": 41833,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "₹1,000",
+              "amount_with_offset_in_currency": "1047",
+              "amount": "1000.00"
+            },
+            {
+              "formatted_amount": "₹1,799",
+              "amount_with_offset_in_currency": "1883",
+              "amount": "1799.00"
+            },
+            {
+              "formatted_amount": "₹2,500",
+              "amount_with_offset_in_currency": "2617",
+              "amount": "2500.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65532,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "₹135",
+              "amount_with_offset_in_currency": "141",
+              "amount": "135.00"
+            },
+            {
+              "formatted_amount": "₹1,000",
+              "amount_with_offset_in_currency": "1047",
+              "amount": "1000.00"
+            },
+            {
+              "formatted_amount": "₹5,000",
+              "amount_with_offset_in_currency": "5233",
+              "amount": "5000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 80039,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "30000.00"
+            },
+            {
+              "amount": "12000.00"
+            },
+            {
+              "amount": "7000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "INR",
+              "amount_with_offset": "150000"
+            },
+            {
+              "currency": "INR",
+              "amount_with_offset": "30000000"
+            },
+            {
+              "currency": "INR",
+              "amount_with_offset": "50000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "ID",
+      "city": "Jakarta",
+      "pages": [
+        {
+          "bytes": 41591,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "IDR0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0"
+            },
+            {
+              "formatted_amount": "IDR200,000",
+              "amount_with_offset_in_currency": "1111",
+              "amount": "200000"
+            },
+            {
+              "formatted_amount": "IDR3,999,999",
+              "amount_with_offset_in_currency": "22226",
+              "amount": "3999999"
+            }
+          ]
+        },
+        {
+          "bytes": 65170,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "IDR1,500,000",
+              "amount_with_offset_in_currency": "8335",
+              "amount": "1500000"
+            },
+            {
+              "formatted_amount": "IDR50,000",
+              "amount_with_offset_in_currency": "278",
+              "amount": "50000"
+            },
+            {
+              "formatted_amount": "IDR500",
+              "amount_with_offset_in_currency": "3",
+              "amount": "500"
+            }
+          ]
+        },
+        {
+          "bytes": 79716,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "7900000"
+            },
+            {
+              "amount": "135"
+            },
+            {
+              "amount": "55"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "IDR",
+              "amount_with_offset": "12345678900"
+            },
+            {
+              "currency": "IDR",
+              "amount_with_offset": "4500"
+            },
+            {
+              "currency": "IDR",
+              "amount_with_offset": "12345600"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "VN",
+      "city": "Ho Chi Minh City",
+      "pages": [
+        {
+          "bytes": 39111,
+          "records": 1,
+          "listings": 14,
+          "new_ids": 14,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 14,
+            "marketplace_listing_title": 14,
+            "creation_time": 14,
+            "listing_price": 14,
+            "location": 14,
+            "delivery_types": 14,
+            "is_sold": 14,
+            "primary_listing_photo": 14
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "₫0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0"
+            },
+            {
+              "formatted_amount": "₫800,000",
+              "amount_with_offset_in_currency": "3071",
+              "amount": "800000"
+            },
+            {
+              "formatted_amount": "₫400",
+              "amount_with_offset_in_currency": "2",
+              "amount": "400"
+            }
+          ]
+        },
+        {
+          "bytes": 65616,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "₫500,000",
+              "amount_with_offset_in_currency": "1919",
+              "amount": "500000"
+            },
+            {
+              "formatted_amount": "₫123",
+              "amount_with_offset_in_currency": "0",
+              "amount": "123"
+            },
+            {
+              "formatted_amount": "₫0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0"
+            }
+          ]
+        },
+        {
+          "bytes": 80454,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "25000"
+            },
+            {
+              "amount": "120"
+            },
+            {
+              "amount": "2999"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "VND",
+              "amount_with_offset": "100"
+            },
+            {
+              "currency": "VND",
+              "amount_with_offset": "40000000"
+            },
+            {
+              "currency": "VND",
+              "amount_with_offset": "11111100"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "BD",
+      "city": "Dhaka",
+      "pages": [
+        {
+          "bytes": 36456,
+          "records": 1,
+          "listings": 13,
+          "new_ids": 13,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 13,
+            "marketplace_listing_title": 13,
+            "creation_time": 13,
+            "listing_price": 13,
+            "location": 13,
+            "delivery_types": 13,
+            "is_sold": 13,
+            "primary_listing_photo": 13
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "BDT55",
+              "amount_with_offset_in_currency": "44",
+              "amount": "55.00"
+            },
+            {
+              "formatted_amount": "BDT4,000",
+              "amount_with_offset_in_currency": "3219",
+              "amount": "4000.00"
+            },
+            {
+              "formatted_amount": "BDT5,000",
+              "amount_with_offset_in_currency": "4024",
+              "amount": "5000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65977,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "BDT1,200",
+              "amount_with_offset_in_currency": "966",
+              "amount": "1200.00"
+            },
+            {
+              "formatted_amount": "BDT7,000",
+              "amount_with_offset_in_currency": "5634",
+              "amount": "7000.00"
+            },
+            {
+              "formatted_amount": "BDT0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79878,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "60000.00"
+            },
+            {
+              "amount": "250.00"
+            },
+            {
+              "amount": "14000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "BDT",
+              "amount_with_offset": "1500000"
+            },
+            {
+              "currency": "BDT",
+              "amount_with_offset": "3000000"
+            },
+            {
+              "currency": "BDT",
+              "amount_with_offset": "100"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "PK",
+      "city": "Karachi",
+      "pages": [
+        {
+          "bytes": 41487,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "PKR3,000",
+              "amount_with_offset_in_currency": "1078",
+              "amount": "3000.00"
+            },
+            {
+              "formatted_amount": "PKR0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "PKR6,500",
+              "amount_with_offset_in_currency": "2336",
+              "amount": "6500.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65316,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "PKR3,000",
+              "amount_with_offset_in_currency": "1078",
+              "amount": "3000.00"
+            },
+            {
+              "formatted_amount": "PKR0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "PKR5,000",
+              "amount_with_offset_in_currency": "1797",
+              "amount": "5000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 80010,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "20000.00"
+            },
+            {
+              "amount": "50000.00"
+            },
+            {
+              "amount": "275000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "PKR",
+              "amount_with_offset": "5500000"
+            },
+            {
+              "currency": "PKR",
+              "amount_with_offset": "15600000"
+            },
+            {
+              "currency": "PKR",
+              "amount_with_offset": "700000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "EG",
+      "city": "Cairo",
+      "pages": [
+        {
+          "bytes": 36694,
+          "records": 1,
+          "listings": 13,
+          "new_ids": 13,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 13,
+            "marketplace_listing_title": 13,
+            "creation_time": 13,
+            "listing_price": 13,
+            "location": 13,
+            "delivery_types": 13,
+            "is_sold": 13,
+            "primary_listing_photo": 13
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "EGP1,500",
+              "amount_with_offset_in_currency": "2809",
+              "amount": "1500.00"
+            },
+            {
+              "formatted_amount": "EGP5,000",
+              "amount_with_offset_in_currency": "9364",
+              "amount": "5000.00"
+            },
+            {
+              "formatted_amount": "EGP0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            }
+          ]
+        },
+        {
+          "bytes": 68516,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "EGP1",
+              "amount_with_offset_in_currency": "2",
+              "amount": "1.00"
+            },
+            {
+              "formatted_amount": "EGP0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "EGP1,000",
+              "amount_with_offset_in_currency": "1873",
+              "amount": "1000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 82972,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "0.00"
+            },
+            {
+              "amount": "24500.00"
+            },
+            {
+              "amount": "150000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "EGP",
+              "amount_with_offset": "125000000"
+            },
+            {
+              "currency": "EGP",
+              "amount_with_offset": "0"
+            },
+            {
+              "currency": "EGP",
+              "amount_with_offset": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "TH",
+      "city": "Bangkok",
+      "pages": [
+        {
+          "bytes": 42608,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "฿400",
+              "amount_with_offset_in_currency": "1183",
+              "amount": "400.00"
+            },
+            {
+              "formatted_amount": "฿1,500",
+              "amount_with_offset_in_currency": "4437",
+              "amount": "1500.00"
+            },
+            {
+              "formatted_amount": "฿300",
+              "amount_with_offset_in_currency": "887",
+              "amount": "300.00"
+            }
+          ]
+        },
+        {
+          "bytes": 68031,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "฿200",
+              "amount_with_offset_in_currency": "592",
+              "amount": "200.00"
+            },
+            {
+              "formatted_amount": "฿450",
+              "amount_with_offset_in_currency": "1331",
+              "amount": "450.00"
+            },
+            {
+              "formatted_amount": "฿5,500",
+              "amount_with_offset_in_currency": "16269",
+              "amount": "5500.00"
+            }
+          ]
+        },
+        {
+          "bytes": 81485,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "4000.00"
+            },
+            {
+              "amount": "600.00"
+            },
+            {
+              "amount": "1390.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "THB",
+              "amount_with_offset": "1750000"
+            },
+            {
+              "currency": "THB",
+              "amount_with_offset": "3900000"
+            },
+            {
+              "currency": "THB",
+              "amount_with_offset": "2900"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "NG",
+      "city": "Lagos",
+      "pages": [
+        {
+          "bytes": 39821,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "NGN30,000",
+              "amount_with_offset_in_currency": "2251",
+              "amount": "30000.00"
+            },
+            {
+              "formatted_amount": "NGN31,000",
+              "amount_with_offset_in_currency": "2326",
+              "amount": "31000.00"
+            },
+            {
+              "formatted_amount": "NGN75,000",
+              "amount_with_offset_in_currency": "5628",
+              "amount": "75000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 62992,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "NGN25,000",
+              "amount_with_offset_in_currency": "1876",
+              "amount": "25000.00"
+            },
+            {
+              "formatted_amount": "NGN120,000",
+              "amount_with_offset_in_currency": "9004",
+              "amount": "120000.00"
+            },
+            {
+              "formatted_amount": "NGN130",
+              "amount_with_offset_in_currency": "10",
+              "amount": "130.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79639,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "1680000.00"
+            },
+            {
+              "amount": "8000.00"
+            },
+            {
+              "amount": "2650000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "NGN",
+              "amount_with_offset": "180000000"
+            },
+            {
+              "currency": "NGN",
+              "amount_with_offset": "50000000"
+            },
+            {
+              "currency": "NGN",
+              "amount_with_offset": "2500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "CO",
+      "city": "Bogotá",
+      "pages": [
+        {
+          "bytes": 39426,
+          "records": 1,
+          "listings": 14,
+          "new_ids": 14,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 14,
+            "marketplace_listing_title": 14,
+            "creation_time": 14,
+            "listing_price": 14,
+            "location": 14,
+            "delivery_types": 14,
+            "is_sold": 14,
+            "primary_listing_photo": 14
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "COP120,000",
+              "amount_with_offset_in_currency": "3756",
+              "amount": "120000"
+            },
+            {
+              "formatted_amount": "COP650,000",
+              "amount_with_offset_in_currency": "20347",
+              "amount": "650000"
+            },
+            {
+              "formatted_amount": "COP100,000",
+              "amount_with_offset_in_currency": "3130",
+              "amount": "100000"
+            }
+          ]
+        },
+        {
+          "bytes": 66231,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "COP100,000",
+              "amount_with_offset_in_currency": "3130",
+              "amount": "100000"
+            },
+            {
+              "formatted_amount": "COP150,000",
+              "amount_with_offset_in_currency": "4696",
+              "amount": "150000"
+            },
+            {
+              "formatted_amount": "COP1,390,000",
+              "amount_with_offset_in_currency": "43512",
+              "amount": "1390000"
+            }
+          ]
+        },
+        {
+          "bytes": 79823,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "42000"
+            },
+            {
+              "amount": "25800000"
+            },
+            {
+              "amount": "40000"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "COP",
+              "amount_with_offset": "68000"
+            },
+            {
+              "currency": "COP",
+              "amount_with_offset": "12345600"
+            },
+            {
+              "currency": "COP",
+              "amount_with_offset": "9800"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "TR",
+      "city": "Istanbul",
+      "pages": [
+        {
+          "bytes": 41920,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "TRY600",
+              "amount_with_offset_in_currency": "1210",
+              "amount": "600.00"
+            },
+            {
+              "formatted_amount": "TRY4,500",
+              "amount_with_offset_in_currency": "9074",
+              "amount": "4500.00"
+            },
+            {
+              "formatted_amount": "TRY1,000",
+              "amount_with_offset_in_currency": "2016",
+              "amount": "1000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65836,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "TRY500",
+              "amount_with_offset_in_currency": "1008",
+              "amount": "500.00"
+            },
+            {
+              "formatted_amount": "TRY0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "TRY300",
+              "amount_with_offset_in_currency": "605",
+              "amount": "300.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79698,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "52.00"
+            },
+            {
+              "amount": "2.00"
+            },
+            {
+              "amount": "25000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "TRY",
+              "amount_with_offset": "899000"
+            },
+            {
+              "currency": "TRY",
+              "amount_with_offset": "1000000"
+            },
+            {
+              "currency": "TRY",
+              "amount_with_offset": "360000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "AR",
+      "city": "Buenos Aires",
+      "pages": [
+        {
+          "bytes": 42449,
+          "records": 1,
+          "listings": 15,
+          "new_ids": 15,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 15,
+            "marketplace_listing_title": 15,
+            "creation_time": 15,
+            "listing_price": 15,
+            "location": 15,
+            "delivery_types": 15,
+            "is_sold": 15,
+            "primary_listing_photo": 15
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "ARS95,000",
+              "amount_with_offset_in_currency": "6247",
+              "amount": "95000.00"
+            },
+            {
+              "formatted_amount": "ARS200,000",
+              "amount_with_offset_in_currency": "13152",
+              "amount": "200000.00"
+            },
+            {
+              "formatted_amount": "ARS330,000",
+              "amount_with_offset_in_currency": "21701",
+              "amount": "330000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65907,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "ARS80,000",
+              "amount_with_offset_in_currency": "5261",
+              "amount": "80000.00"
+            },
+            {
+              "formatted_amount": "ARS0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "ARS550,000",
+              "amount_with_offset_in_currency": "36169",
+              "amount": "550000.00"
+            }
+          ]
+        },
+        {
+          "bytes": 80258,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "16000.00"
+            },
+            {
+              "amount": "0.00"
+            },
+            {
+              "amount": "999000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "ARS",
+              "amount_with_offset": "0"
+            },
+            {
+              "currency": "ARS",
+              "amount_with_offset": "100"
+            },
+            {
+              "currency": "ARS",
+              "amount_with_offset": "1000000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "ZA",
+      "city": "Johannesburg",
+      "pages": [
+        {
+          "bytes": 39132,
+          "records": 1,
+          "listings": 14,
+          "new_ids": 14,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 14,
+            "marketplace_listing_title": 14,
+            "creation_time": 14,
+            "listing_price": 14,
+            "location": 14,
+            "delivery_types": 14,
+            "is_sold": 14,
+            "primary_listing_photo": 14
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "ZAR600",
+              "amount_with_offset_in_currency": "3600",
+              "amount": "600.00"
+            },
+            {
+              "formatted_amount": "ZAR500",
+              "amount_with_offset_in_currency": "3000",
+              "amount": "500.00"
+            },
+            {
+              "formatted_amount": "ZAR1",
+              "amount_with_offset_in_currency": "6",
+              "amount": "1.00"
+            }
+          ]
+        },
+        {
+          "bytes": 65289,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "ZAR1,000",
+              "amount_with_offset_in_currency": "6001",
+              "amount": "1000.00"
+            },
+            {
+              "formatted_amount": "ZAR500",
+              "amount_with_offset_in_currency": "3000",
+              "amount": "500.00"
+            },
+            {
+              "formatted_amount": "ZAR900",
+              "amount_with_offset_in_currency": "5401",
+              "amount": "900.00"
+            }
+          ]
+        },
+        {
+          "bytes": 79600,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "285000.00"
+            },
+            {
+              "amount": "350.00"
+            },
+            {
+              "amount": "190.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "ZAR",
+              "amount_with_offset": "600000"
+            },
+            {
+              "currency": "ZAR",
+              "amount_with_offset": "28000000"
+            },
+            {
+              "currency": "ZAR",
+              "amount_with_offset": "850000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "country": "DZ",
+      "city": "Algiers",
+      "pages": [
+        {
+          "bytes": 37199,
+          "records": 1,
+          "listings": 13,
+          "new_ids": 13,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 13,
+            "marketplace_listing_title": 13,
+            "creation_time": 13,
+            "listing_price": 13,
+            "location": 13,
+            "delivery_types": 13,
+            "is_sold": 13,
+            "primary_listing_photo": 13
+          },
+          "surface": "search",
+          "page": 0,
+          "prices": [
+            {
+              "formatted_amount": "DZD0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "DZD25,000",
+              "amount_with_offset_in_currency": "18522",
+              "amount": "25000.00"
+            },
+            {
+              "formatted_amount": "DZD129",
+              "amount_with_offset_in_currency": "96",
+              "amount": "129.00"
+            }
+          ]
+        },
+        {
+          "bytes": 67423,
+          "records": 1,
+          "listings": 24,
+          "new_ids": 24,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 24,
+            "marketplace_listing_title": 24,
+            "creation_time": 24,
+            "listing_price": 24,
+            "location": 24,
+            "delivery_types": 24,
+            "is_sold": 24,
+            "primary_listing_photo": 24
+          },
+          "surface": "search",
+          "page": 1,
+          "prices": [
+            {
+              "formatted_amount": "DZD25",
+              "amount_with_offset_in_currency": "19",
+              "amount": "25.00"
+            },
+            {
+              "formatted_amount": "DZD0",
+              "amount_with_offset_in_currency": "0",
+              "amount": "0.00"
+            },
+            {
+              "formatted_amount": "DZD3",
+              "amount_with_offset_in_currency": "2",
+              "amount": "3.00"
+            }
+          ]
+        },
+        {
+          "bytes": 81488,
+          "records": 8,
+          "listings": 26,
+          "new_ids": 26,
+          "duplicate_ids": 0,
+          "has_next_page": true,
+          "errors": [],
+          "field_coverage": {
+            "id": 26,
+            "marketplace_listing_title": 26,
+            "creation_time": 26,
+            "listing_price": 26,
+            "location": 26,
+            "delivery_types": 20,
+            "is_sold": 20,
+            "primary_listing_photo": 26
+          },
+          "surface": "browse",
+          "page": 0,
+          "prices": [
+            {
+              "amount": "4000.00"
+            },
+            {
+              "amount": "10000.00"
+            },
+            {
+              "amount": "77000.00"
+            }
+          ],
+          "general_listing_prices": [
+            {
+              "currency": "DZD",
+              "amount_with_offset": "0"
+            },
+            {
+              "currency": "DZD",
+              "amount_with_offset": "0"
+            },
+            {
+              "currency": "DZD",
+              "amount_with_offset": "100"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

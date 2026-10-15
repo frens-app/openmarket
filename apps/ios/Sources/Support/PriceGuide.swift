@@ -13,14 +13,7 @@ struct PriceGuide: Equatable {
     /// Results excluded by relevance or by the usable-price rules.
     let skipped: Int
 
-    /// What the market quotes in, taken from the cards themselves.
-    ///
-    /// Not cosmetic. Facebook prices in the currency of the place being
-    /// browsed, so a Toronto search comes back as "CA$80" — and a
-    /// recommendation rendered as "$80" beside a strip of CA$ comparables is
-    /// quietly wrong by about a third. Nothing here converts anything; the
-    /// arithmetic is done on the numbers as listed, and this just makes sure
-    /// the answer is labelled the same way the evidence is.
+    /// Source currency marker, retained for storage. Shorten only for display.
     let currency: String
 
     var count: Int { prices.count }
@@ -76,11 +69,16 @@ struct PriceGuide: Equatable {
     ///   about what the seller is *competing with*, where a listing that
     ///   stopped being one isn't competition. True for a guide about what
     ///   actually moved, where they are the entire point.
-    init(comps: [MarketComp], countingSold: Bool = false) {
+    init(comps: [MarketComp], countingSold: Bool = false, currencySymbol: String? = nil) {
+        let eligible = comps.filter { $0.isComparable && (countingSold || !$0.isSold) && ($0.price ?? 0) > 0 }
+        currency = currencySymbol ?? Self.dominantCurrency(among: eligible) ?? "$"
+        let currencyCode = MarketCurrency.currency(symbol: currency)?.code
         var usable: [Int] = []
         var dropped = 0
         for comp in comps {
-            guard comp.isComparable, countingSold || !comp.isSold, let price = comp.price, price > 0 else {
+            guard comp.isComparable, countingSold || !comp.isSold, let price = comp.price, price > 0,
+                  let symbol = Self.currencySymbol(in: comp.listing.priceText),
+                  MarketCurrency.currency(symbol: symbol)?.code == currencyCode else {
                 dropped += 1
                 continue
             }
@@ -88,11 +86,10 @@ struct PriceGuide: Equatable {
         }
         prices = usable.sorted()
         skipped = dropped
-        currency = Self.dominantCurrency(among: comps.filter(\.isComparable)) ?? "$"
     }
 
     /// A price written the way the comparables are written.
-    func money(_ amount: Int) -> String { "\(currency)\(amount)" }
+    func money(_ amount: Int) -> String { "\(MarketCurrency.localSymbol(for: currency))\(amount)" }
 
     /// Holds a recommendation inside the evidence that produced it.
     ///
@@ -169,56 +166,27 @@ struct PriceGuide: Equatable {
     /// among fifteen shouldn't relabel the whole guide.
     static func dominantCurrency(among comps: [MarketComp]) -> String? {
         var counts: [String: Int] = [:]
+        var symbols: [String: String] = [:]
         for comp in comps {
-            guard let symbol = currencySymbol(in: comp.listing.priceText) else { continue }
-            counts[symbol, default: 0] += 1
+            guard let symbol = currencySymbol(in: comp.listing.priceText),
+                  let code = MarketCurrency.currency(symbol: symbol)?.code else { continue }
+            counts[code, default: 0] += 1
+            if symbols[code] == nil { symbols[code] = symbol }
         }
-        return counts.max { $0.value < $1.value }?.key
+        let code = counts.keys.sorted().max { counts[$0, default: 0] < counts[$1, default: 0] }
+        return code.flatMap { symbols[$0] }
     }
 
-    /// Whatever sits in front of the number — `$`, `CA$`, `£`, `€`.
-    ///
-    /// Requires a digit after optional whitespace, which keeps "Free" from
-    /// being read as a four-character currency symbol.
     static func currencySymbol(in text: String?) -> String? {
-        guard let text else { return nil }
-        let symbol = text.prefix { !$0.isNumber && !$0.isWhitespace }
-        guard !symbol.isEmpty, symbol.count <= 4,
-              text.dropFirst(symbol.count).drop(while: { $0.isWhitespace }).first?.isNumber == true else { return nil }
-        return String(symbol)
+        guard let price = MarketplacePrice.parse(text), !price.symbol.isEmpty else { return nil }
+        return price.symbol
     }
 
-    /// Reads a price out of the text Facebook renders on a card.
-    ///
-    /// The formatted string is parsed rather than the payload's numeric
-    /// `listing_price.amount`, deliberately. That field's unit is unverified —
-    /// Facebook's price objects carry both a major-unit `amount` and a
-    /// minor-unit `amount_with_offset`, and we have never confirmed which one
-    /// this extractor is reading. A hundredfold error in a price
-    /// recommendation is the worst bug this feature could have, and the
-    /// displayed text has no such ambiguity: it is what the user is looking at
-    /// on the card beside it.
-    ///
-    /// It is also the only price the markup fallback has, so parsing it keeps
-    /// one code path instead of two.
+    /// Price recommendations use whole major units. Parse decimals exactly
+    /// before truncating, so 1.234,56 contributes 1234, never 1 or 123456.
     static func parse(_ text: String?) -> Int? {
-        guard let text else { return nil }
-        if text.localizedCaseInsensitiveContains("free") { return 0 }
-        // First run of digits, with thousands separators folded in. Ranges
-        // ("$20 - $40") therefore take the lower bound, which is the one a
-        // buyer is comparing against.
-        var digits = ""
-        var started = false
-        for character in text {
-            if character.isNumber {
-                digits.append(character)
-                started = true
-            } else if character == "," && started {
-                continue
-            } else if started {
-                break
-            }
-        }
-        return Int(digits)
+        guard let amount = MarketplacePrice.parse(text)?.amount,
+              amount >= 0, amount <= Decimal(Int64.max / 100) else { return nil }
+        return NSDecimalNumber(decimal: amount).intValue
     }
 }

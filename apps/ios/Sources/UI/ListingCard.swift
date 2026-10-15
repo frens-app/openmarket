@@ -12,9 +12,9 @@ struct ListingCard: View {
             thumbnail
             // Price carries the heaviest weight in the cell.
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(listing.priceText ?? "—")
+                Text(listing.displayPrice ?? "—")
                     .font(.headline)
-                if let original = listing.originalPriceText {
+                if let original = listing.displayOriginalPrice {
                     Text(original)
                         .font(.footnote)
                         .foregroundStyle(.secondary)

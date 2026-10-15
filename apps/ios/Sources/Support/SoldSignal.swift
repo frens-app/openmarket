@@ -34,9 +34,9 @@ struct SoldSignal: Equatable {
     /// Prices of the sold ones, free items excluded.
     let guide: PriceGuide
 
-    init(comps: [MarketComp]) {
+    init(comps: [MarketComp], currencySymbol: String? = nil) {
         self.comps = MarketComp.comparableFirst(comps.sorted { ($0.daysListed ?? .max) < ($1.daysListed ?? .max) })
-        guide = PriceGuide(comps: comps, countingSold: true)
+        guide = PriceGuide(comps: comps, countingSold: true, currencySymbol: currencySymbol)
     }
 
     var comparableComps: [MarketComp] { comps.filter(\.isComparable) }

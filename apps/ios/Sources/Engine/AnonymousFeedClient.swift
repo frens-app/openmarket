@@ -150,6 +150,8 @@ actor AnonymousFeedClient: GraphQLFeedLoading {
         return (0...age.rawValue).map { String(today - $0) }.joined(separator: ";")
     }
 
+    // Search bounds use hundredths even for IDR/VND (live probe, 2026-10-15).
+    // This is independent of the Discover price currency offset.
     private static func priceBound(_ price: Int?, defaultValue: Int) throws -> Int {
         guard let price else { return defaultValue }
         let (minorUnits, overflow) = price.multipliedReportingOverflow(by: 100)

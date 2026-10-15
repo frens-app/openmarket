@@ -324,111 +324,139 @@ public nonisolated struct Openmarket_Api_V1_ShoppingFulfillment: Sendable {
   public init() {}
 }
 
-public nonisolated struct Openmarket_Api_V1_ShoppingListing: Sendable {
+public nonisolated struct Openmarket_Api_V1_ShoppingListing: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: String = String()
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
   public var title: String {
-    get {_title ?? String()}
-    set {_title = newValue}
+    get {_storage._title ?? String()}
+    set {_uniqueStorage()._title = newValue}
   }
   /// Returns true if `title` has been explicitly set.
-  public var hasTitle: Bool {self._title != nil}
+  public var hasTitle: Bool {_storage._title != nil}
   /// Clears the value of `title`. Subsequent reads from it will return its default value.
-  public mutating func clearTitle() {self._title = nil}
+  public mutating func clearTitle() {_uniqueStorage()._title = nil}
 
   public var priceText: String {
-    get {_priceText ?? String()}
-    set {_priceText = newValue}
+    get {_storage._priceText ?? String()}
+    set {_uniqueStorage()._priceText = newValue}
   }
   /// Returns true if `priceText` has been explicitly set.
-  public var hasPriceText: Bool {self._priceText != nil}
+  public var hasPriceText: Bool {_storage._priceText != nil}
   /// Clears the value of `priceText`. Subsequent reads from it will return its default value.
-  public mutating func clearPriceText() {self._priceText = nil}
+  public mutating func clearPriceText() {_uniqueStorage()._priceText = nil}
 
   public var originalPriceText: String {
-    get {_originalPriceText ?? String()}
-    set {_originalPriceText = newValue}
+    get {_storage._originalPriceText ?? String()}
+    set {_uniqueStorage()._originalPriceText = newValue}
   }
   /// Returns true if `originalPriceText` has been explicitly set.
-  public var hasOriginalPriceText: Bool {self._originalPriceText != nil}
+  public var hasOriginalPriceText: Bool {_storage._originalPriceText != nil}
   /// Clears the value of `originalPriceText`. Subsequent reads from it will return its default value.
-  public mutating func clearOriginalPriceText() {self._originalPriceText = nil}
+  public mutating func clearOriginalPriceText() {_uniqueStorage()._originalPriceText = nil}
 
   public var locationText: String {
-    get {_locationText ?? String()}
-    set {_locationText = newValue}
+    get {_storage._locationText ?? String()}
+    set {_uniqueStorage()._locationText = newValue}
   }
   /// Returns true if `locationText` has been explicitly set.
-  public var hasLocationText: Bool {self._locationText != nil}
+  public var hasLocationText: Bool {_storage._locationText != nil}
   /// Clears the value of `locationText`. Subsequent reads from it will return its default value.
-  public mutating func clearLocationText() {self._locationText = nil}
+  public mutating func clearLocationText() {_uniqueStorage()._locationText = nil}
 
   public var conditionText: String {
-    get {_conditionText ?? String()}
-    set {_conditionText = newValue}
+    get {_storage._conditionText ?? String()}
+    set {_uniqueStorage()._conditionText = newValue}
   }
   /// Returns true if `conditionText` has been explicitly set.
-  public var hasConditionText: Bool {self._conditionText != nil}
+  public var hasConditionText: Bool {_storage._conditionText != nil}
   /// Clears the value of `conditionText`. Subsequent reads from it will return its default value.
-  public mutating func clearConditionText() {self._conditionText = nil}
+  public mutating func clearConditionText() {_uniqueStorage()._conditionText = nil}
 
   public var thumbnailURL: String {
-    get {_thumbnailURL ?? String()}
-    set {_thumbnailURL = newValue}
+    get {_storage._thumbnailURL ?? String()}
+    set {_uniqueStorage()._thumbnailURL = newValue}
   }
   /// Returns true if `thumbnailURL` has been explicitly set.
-  public var hasThumbnailURL: Bool {self._thumbnailURL != nil}
+  public var hasThumbnailURL: Bool {_storage._thumbnailURL != nil}
   /// Clears the value of `thumbnailURL`. Subsequent reads from it will return its default value.
-  public mutating func clearThumbnailURL() {self._thumbnailURL = nil}
+  public mutating func clearThumbnailURL() {_uniqueStorage()._thumbnailURL = nil}
 
   public var badgeText: String {
-    get {_badgeText ?? String()}
-    set {_badgeText = newValue}
+    get {_storage._badgeText ?? String()}
+    set {_uniqueStorage()._badgeText = newValue}
   }
   /// Returns true if `badgeText` has been explicitly set.
-  public var hasBadgeText: Bool {self._badgeText != nil}
+  public var hasBadgeText: Bool {_storage._badgeText != nil}
   /// Clears the value of `badgeText`. Subsequent reads from it will return its default value.
-  public mutating func clearBadgeText() {self._badgeText = nil}
+  public mutating func clearBadgeText() {_uniqueStorage()._badgeText = nil}
 
   public var fulfillment: Openmarket_Api_V1_ShoppingFulfillment {
-    get {_fulfillment ?? Openmarket_Api_V1_ShoppingFulfillment()}
-    set {_fulfillment = newValue}
+    get {_storage._fulfillment ?? Openmarket_Api_V1_ShoppingFulfillment()}
+    set {_uniqueStorage()._fulfillment = newValue}
   }
   /// Returns true if `fulfillment` has been explicitly set.
-  public var hasFulfillment: Bool {self._fulfillment != nil}
+  public var hasFulfillment: Bool {_storage._fulfillment != nil}
   /// Clears the value of `fulfillment`. Subsequent reads from it will return its default value.
-  public mutating func clearFulfillment() {self._fulfillment = nil}
+  public mutating func clearFulfillment() {_uniqueStorage()._fulfillment = nil}
 
   public var detail: Openmarket_Api_V1_ShoppingDetail {
-    get {_detail ?? Openmarket_Api_V1_ShoppingDetail()}
-    set {_detail = newValue}
+    get {_storage._detail ?? Openmarket_Api_V1_ShoppingDetail()}
+    set {_uniqueStorage()._detail = newValue}
   }
   /// Returns true if `detail` has been explicitly set.
-  public var hasDetail: Bool {self._detail != nil}
+  public var hasDetail: Bool {_storage._detail != nil}
   /// Clears the value of `detail`. Subsequent reads from it will return its default value.
-  public mutating func clearDetail() {self._detail = nil}
+  public mutating func clearDetail() {_uniqueStorage()._detail = nil}
 
-  public var observedAtUnix: Int64 = 0
+  public var observedAtUnix: Int64 {
+    get {_storage._observedAtUnix}
+    set {_uniqueStorage()._observedAtUnix = newValue}
+  }
 
-  public var captureSource: String = String()
+  public var captureSource: String {
+    get {_storage._captureSource}
+    set {_uniqueStorage()._captureSource = newValue}
+  }
+
+  public var priceAmountDecimal: String {
+    get {_storage._priceAmountDecimal ?? String()}
+    set {_uniqueStorage()._priceAmountDecimal = newValue}
+  }
+  /// Returns true if `priceAmountDecimal` has been explicitly set.
+  public var hasPriceAmountDecimal: Bool {_storage._priceAmountDecimal != nil}
+  /// Clears the value of `priceAmountDecimal`. Subsequent reads from it will return its default value.
+  public mutating func clearPriceAmountDecimal() {_uniqueStorage()._priceAmountDecimal = nil}
+
+  public var priceCurrencyCode: String {
+    get {_storage._priceCurrencyCode ?? String()}
+    set {_uniqueStorage()._priceCurrencyCode = newValue}
+  }
+  /// Returns true if `priceCurrencyCode` has been explicitly set.
+  public var hasPriceCurrencyCode: Bool {_storage._priceCurrencyCode != nil}
+  /// Clears the value of `priceCurrencyCode`. Subsequent reads from it will return its default value.
+  public mutating func clearPriceCurrencyCode() {_uniqueStorage()._priceCurrencyCode = nil}
+
+  public var originalPriceAmountDecimal: String {
+    get {_storage._originalPriceAmountDecimal ?? String()}
+    set {_uniqueStorage()._originalPriceAmountDecimal = newValue}
+  }
+  /// Returns true if `originalPriceAmountDecimal` has been explicitly set.
+  public var hasOriginalPriceAmountDecimal: Bool {_storage._originalPriceAmountDecimal != nil}
+  /// Clears the value of `originalPriceAmountDecimal`. Subsequent reads from it will return its default value.
+  public mutating func clearOriginalPriceAmountDecimal() {_uniqueStorage()._originalPriceAmountDecimal = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _title: String? = nil
-  fileprivate var _priceText: String? = nil
-  fileprivate var _originalPriceText: String? = nil
-  fileprivate var _locationText: String? = nil
-  fileprivate var _conditionText: String? = nil
-  fileprivate var _thumbnailURL: String? = nil
-  fileprivate var _badgeText: String? = nil
-  fileprivate var _fulfillment: Openmarket_Api_V1_ShoppingFulfillment? = nil
-  fileprivate var _detail: Openmarket_Api_V1_ShoppingDetail? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public nonisolated struct Openmarket_Api_V1_ShoppingToolResult: Sendable {
@@ -1204,88 +1232,167 @@ nonisolated extension Openmarket_Api_V1_ShoppingFulfillment: SwiftProtobuf.Messa
 
 nonisolated extension Openmarket_Api_V1_ShoppingListing: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ShoppingListing"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}title\0\u{3}price_text\0\u{3}original_price_text\0\u{3}location_text\0\u{3}condition_text\0\u{3}thumbnail_url\0\u{3}badge_text\0\u{1}fulfillment\0\u{1}detail\0\u{3}observed_at_unix\0\u{3}capture_source\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}title\0\u{3}price_text\0\u{3}original_price_text\0\u{3}location_text\0\u{3}condition_text\0\u{3}thumbnail_url\0\u{3}badge_text\0\u{1}fulfillment\0\u{1}detail\0\u{3}observed_at_unix\0\u{3}capture_source\0\u{3}price_amount_decimal\0\u{3}price_currency_code\0\u{3}original_price_amount_decimal\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _title: String? = nil
+    var _priceText: String? = nil
+    var _originalPriceText: String? = nil
+    var _locationText: String? = nil
+    var _conditionText: String? = nil
+    var _thumbnailURL: String? = nil
+    var _badgeText: String? = nil
+    var _fulfillment: Openmarket_Api_V1_ShoppingFulfillment? = nil
+    var _detail: Openmarket_Api_V1_ShoppingDetail? = nil
+    var _observedAtUnix: Int64 = 0
+    var _captureSource: String = String()
+    var _priceAmountDecimal: String? = nil
+    var _priceCurrencyCode: String? = nil
+    var _originalPriceAmountDecimal: String? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _title = source._title
+      _priceText = source._priceText
+      _originalPriceText = source._originalPriceText
+      _locationText = source._locationText
+      _conditionText = source._conditionText
+      _thumbnailURL = source._thumbnailURL
+      _badgeText = source._badgeText
+      _fulfillment = source._fulfillment
+      _detail = source._detail
+      _observedAtUnix = source._observedAtUnix
+      _captureSource = source._captureSource
+      _priceAmountDecimal = source._priceAmountDecimal
+      _priceCurrencyCode = source._priceCurrencyCode
+      _originalPriceAmountDecimal = source._originalPriceAmountDecimal
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self._title) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self._priceText) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self._originalPriceText) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self._locationText) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self._conditionText) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self._thumbnailURL) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self._badgeText) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._fulfillment) }()
-      case 10: try { try decoder.decodeSingularMessageField(value: &self._detail) }()
-      case 11: try { try decoder.decodeSingularInt64Field(value: &self.observedAtUnix) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self.captureSource) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._title) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._priceText) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._originalPriceText) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._locationText) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._conditionText) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._thumbnailURL) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._badgeText) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._fulfillment) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._detail) }()
+        case 11: try { try decoder.decodeSingularInt64Field(value: &_storage._observedAtUnix) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._captureSource) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._priceAmountDecimal) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._priceCurrencyCode) }()
+        case 15: try { try decoder.decodeSingularStringField(value: &_storage._originalPriceAmountDecimal) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
-    }
-    try { if let v = self._title {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
-    } }()
-    try { if let v = self._priceText {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
-    } }()
-    try { if let v = self._originalPriceText {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
-    } }()
-    try { if let v = self._locationText {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
-    try { if let v = self._conditionText {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 6)
-    } }()
-    try { if let v = self._thumbnailURL {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
-    } }()
-    try { if let v = self._badgeText {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
-    } }()
-    try { if let v = self._fulfillment {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    try { if let v = self._detail {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
-    } }()
-    if self.observedAtUnix != 0 {
-      try visitor.visitSingularInt64Field(value: self.observedAtUnix, fieldNumber: 11)
-    }
-    if !self.captureSource.isEmpty {
-      try visitor.visitSingularStringField(value: self.captureSource, fieldNumber: 12)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      try { if let v = _storage._title {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+      } }()
+      try { if let v = _storage._priceText {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._originalPriceText {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._locationText {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._conditionText {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._thumbnailURL {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._badgeText {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._fulfillment {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      try { if let v = _storage._detail {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
+      if _storage._observedAtUnix != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._observedAtUnix, fieldNumber: 11)
+      }
+      if !_storage._captureSource.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._captureSource, fieldNumber: 12)
+      }
+      try { if let v = _storage._priceAmountDecimal {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 13)
+      } }()
+      try { if let v = _storage._priceCurrencyCode {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 14)
+      } }()
+      try { if let v = _storage._originalPriceAmountDecimal {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 15)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Openmarket_Api_V1_ShoppingListing, rhs: Openmarket_Api_V1_ShoppingListing) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs._title != rhs._title {return false}
-    if lhs._priceText != rhs._priceText {return false}
-    if lhs._originalPriceText != rhs._originalPriceText {return false}
-    if lhs._locationText != rhs._locationText {return false}
-    if lhs._conditionText != rhs._conditionText {return false}
-    if lhs._thumbnailURL != rhs._thumbnailURL {return false}
-    if lhs._badgeText != rhs._badgeText {return false}
-    if lhs._fulfillment != rhs._fulfillment {return false}
-    if lhs._detail != rhs._detail {return false}
-    if lhs.observedAtUnix != rhs.observedAtUnix {return false}
-    if lhs.captureSource != rhs.captureSource {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._title != rhs_storage._title {return false}
+        if _storage._priceText != rhs_storage._priceText {return false}
+        if _storage._originalPriceText != rhs_storage._originalPriceText {return false}
+        if _storage._locationText != rhs_storage._locationText {return false}
+        if _storage._conditionText != rhs_storage._conditionText {return false}
+        if _storage._thumbnailURL != rhs_storage._thumbnailURL {return false}
+        if _storage._badgeText != rhs_storage._badgeText {return false}
+        if _storage._fulfillment != rhs_storage._fulfillment {return false}
+        if _storage._detail != rhs_storage._detail {return false}
+        if _storage._observedAtUnix != rhs_storage._observedAtUnix {return false}
+        if _storage._captureSource != rhs_storage._captureSource {return false}
+        if _storage._priceAmountDecimal != rhs_storage._priceAmountDecimal {return false}
+        if _storage._priceCurrencyCode != rhs_storage._priceCurrencyCode {return false}
+        if _storage._originalPriceAmountDecimal != rhs_storage._originalPriceAmountDecimal {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

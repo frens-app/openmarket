@@ -36,7 +36,7 @@ func validListingTime(t *timestamppb.Timestamp, now time.Time) bool {
 
 func listingFieldGroup(n protoreflect.FieldNumber) string {
 	switch n {
-	case 4, 5:
+	case 4, 5, 26, 27, 28:
 		return "price"
 	case 9, 10, 11, 14, 15, 16:
 		return "detail"
@@ -45,6 +45,10 @@ func listingFieldGroup(n protoreflect.FieldNumber) string {
 	default:
 		return "card"
 	}
+}
+
+func listingSnapshotField(n protoreflect.FieldNumber) bool {
+	return n >= 2 && n <= 21 || n >= 26 && n <= 28
 }
 
 func listingTimes(s *v1.SavedListingSnapshot) map[string]*timestamppb.Timestamp {
@@ -71,6 +75,12 @@ func validateListingChange(c *v1.SavedListingChange, now time.Time) error {
 	if s == nil || s.FacebookListingId != c.FacebookListingId {
 		return errors.New("matching listing snapshot is required")
 	}
+	if (s.PriceAmountDecimal != nil || s.PriceCurrencyCode != nil) && s.PriceText == nil {
+		return errors.New("structured price requires source price text")
+	}
+	if s.OriginalPriceAmountDecimal != nil && s.OriginalPriceText == nil {
+		return errors.New("structured original price requires source text")
+	}
 	if c.GetSaved() && (strings.TrimSpace(s.GetTitle()) == "" || !validListingTime(s.CardObservedAt, now)) {
 		return errors.New("saving requires a title and card observation time")
 	}
@@ -85,7 +95,7 @@ func validateListingChange(c *v1.SavedListingChange, now time.Time) error {
 	}
 	var fieldErr error
 	s.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
-		if f.Number() >= 2 && f.Number() <= 21 && !validListingTime(times[listingFieldGroup(f.Number())], now) {
+		if listingSnapshotField(f.Number()) && !validListingTime(times[listingFieldGroup(f.Number())], now) {
 			fieldErr = fmt.Errorf("observation time required for %s", f.Name())
 			return false
 		}
@@ -118,6 +128,7 @@ func validateListingChange(c *v1.SavedListingChange, now time.Time) error {
 func mergeListingSnapshot(old, incoming *v1.SavedListingSnapshot, ages map[string]time.Time) {
 	old.FacebookListingId = incoming.FacebookListingId
 	times := listingTimes(incoming)
+	mergeListingPrices(old, incoming, ages)
 	var merge func(protoreflect.Message, protoreflect.Message, string, time.Time)
 	merge = func(dst, src protoreflect.Message, prefix string, at time.Time) {
 		src.Range(func(f protoreflect.FieldDescriptor, v protoreflect.Value) bool {
@@ -142,7 +153,7 @@ func mergeListingSnapshot(old, incoming *v1.SavedListingSnapshot, ages map[strin
 		})
 	}
 	incoming.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if f.Number() < 2 || f.Number() > 21 {
+		if !listingSnapshotField(f.Number()) || listingFieldGroup(f.Number()) == "price" {
 			return true
 		}
 		at := times[listingFieldGroup(f.Number())].AsTime()
@@ -153,7 +164,7 @@ func mergeListingSnapshot(old, incoming *v1.SavedListingSnapshot, ages map[strin
 	})
 	oldest := map[string]time.Time{}
 	old.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
-		if f.Number() < 2 || f.Number() > 21 {
+		if !listingSnapshotField(f.Number()) {
 			return true
 		}
 		group := listingFieldGroup(f.Number())
@@ -183,6 +194,37 @@ func mergeListingSnapshot(old, incoming *v1.SavedListingSnapshot, ages map[strin
 		case "availability":
 			old.AvailabilityObservedAt = t
 		}
+	}
+}
+
+// Replace each price with its metadata atomically. A newer text-only client
+// invalidates older numeric values rather than attaching them to a new price.
+func mergeListingPrices(old, incoming *v1.SavedListingSnapshot, ages map[string]time.Time) {
+	at := incoming.PriceObservedAt.AsTime()
+	for _, key := range []string{"price_text", "original_price_text"} {
+		if previous, ok := ages[key]; ok && !at.After(previous) {
+			return
+		}
+	}
+	if incoming.PriceText != nil {
+		if old.GetPriceCurrencyCode() != incoming.GetPriceCurrencyCode() {
+			old.OriginalPriceText = nil
+			old.OriginalPriceAmountDecimal = nil
+			ages["original_price_text"] = at
+			ages["original_price_amount_decimal"] = at
+		}
+		old.PriceText = incoming.PriceText
+		old.PriceAmountDecimal = incoming.PriceAmountDecimal
+		old.PriceCurrencyCode = incoming.PriceCurrencyCode
+		for _, key := range []string{"price_text", "price_amount_decimal", "price_currency_code"} {
+			ages[key] = at
+		}
+	}
+	if incoming.OriginalPriceText != nil {
+		old.OriginalPriceText = incoming.OriginalPriceText
+		old.OriginalPriceAmountDecimal = incoming.OriginalPriceAmountDecimal
+		ages["original_price_text"] = at
+		ages["original_price_amount_decimal"] = at
 	}
 }
 

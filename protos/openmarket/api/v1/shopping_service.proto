@@ -68,6 +68,9 @@ message ShoppingListing {
   optional ShoppingDetail detail = 10;
   int64 observed_at_unix = 11;
   string capture_source = 12;
+  optional string price_amount_decimal = 13;
+  optional string price_currency_code = 14;
+  optional string original_price_amount_decimal = 15;
 }
 message ShoppingToolResult {
   string call_id = 1;

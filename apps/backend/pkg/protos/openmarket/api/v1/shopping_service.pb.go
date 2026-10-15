@@ -632,21 +632,24 @@ func (x *ShoppingFulfillment) GetPublicMeetup() bool {
 }
 
 type ShoppingListing struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title             *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	PriceText         *string                `protobuf:"bytes,3,opt,name=price_text,json=priceText,proto3,oneof" json:"price_text,omitempty"`
-	OriginalPriceText *string                `protobuf:"bytes,4,opt,name=original_price_text,json=originalPriceText,proto3,oneof" json:"original_price_text,omitempty"`
-	LocationText      *string                `protobuf:"bytes,5,opt,name=location_text,json=locationText,proto3,oneof" json:"location_text,omitempty"`
-	ConditionText     *string                `protobuf:"bytes,6,opt,name=condition_text,json=conditionText,proto3,oneof" json:"condition_text,omitempty"`
-	ThumbnailUrl      *string                `protobuf:"bytes,7,opt,name=thumbnail_url,json=thumbnailUrl,proto3,oneof" json:"thumbnail_url,omitempty"`
-	BadgeText         *string                `protobuf:"bytes,8,opt,name=badge_text,json=badgeText,proto3,oneof" json:"badge_text,omitempty"`
-	Fulfillment       *ShoppingFulfillment   `protobuf:"bytes,9,opt,name=fulfillment,proto3,oneof" json:"fulfillment,omitempty"`
-	Detail            *ShoppingDetail        `protobuf:"bytes,10,opt,name=detail,proto3,oneof" json:"detail,omitempty"`
-	ObservedAtUnix    int64                  `protobuf:"varint,11,opt,name=observed_at_unix,json=observedAtUnix,proto3" json:"observed_at_unix,omitempty"`
-	CaptureSource     string                 `protobuf:"bytes,12,opt,name=capture_source,json=captureSource,proto3" json:"capture_source,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"open.v1"`
+	Id                         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title                      *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	PriceText                  *string                `protobuf:"bytes,3,opt,name=price_text,json=priceText,proto3,oneof" json:"price_text,omitempty"`
+	OriginalPriceText          *string                `protobuf:"bytes,4,opt,name=original_price_text,json=originalPriceText,proto3,oneof" json:"original_price_text,omitempty"`
+	LocationText               *string                `protobuf:"bytes,5,opt,name=location_text,json=locationText,proto3,oneof" json:"location_text,omitempty"`
+	ConditionText              *string                `protobuf:"bytes,6,opt,name=condition_text,json=conditionText,proto3,oneof" json:"condition_text,omitempty"`
+	ThumbnailUrl               *string                `protobuf:"bytes,7,opt,name=thumbnail_url,json=thumbnailUrl,proto3,oneof" json:"thumbnail_url,omitempty"`
+	BadgeText                  *string                `protobuf:"bytes,8,opt,name=badge_text,json=badgeText,proto3,oneof" json:"badge_text,omitempty"`
+	Fulfillment                *ShoppingFulfillment   `protobuf:"bytes,9,opt,name=fulfillment,proto3,oneof" json:"fulfillment,omitempty"`
+	Detail                     *ShoppingDetail        `protobuf:"bytes,10,opt,name=detail,proto3,oneof" json:"detail,omitempty"`
+	ObservedAtUnix             int64                  `protobuf:"varint,11,opt,name=observed_at_unix,json=observedAtUnix,proto3" json:"observed_at_unix,omitempty"`
+	CaptureSource              string                 `protobuf:"bytes,12,opt,name=capture_source,json=captureSource,proto3" json:"capture_source,omitempty"`
+	PriceAmountDecimal         *string                `protobuf:"bytes,13,opt,name=price_amount_decimal,json=priceAmountDecimal,proto3,oneof" json:"price_amount_decimal,omitempty"`
+	PriceCurrencyCode          *string                `protobuf:"bytes,14,opt,name=price_currency_code,json=priceCurrencyCode,proto3,oneof" json:"price_currency_code,omitempty"`
+	OriginalPriceAmountDecimal *string                `protobuf:"bytes,15,opt,name=original_price_amount_decimal,json=originalPriceAmountDecimal,proto3,oneof" json:"original_price_amount_decimal,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ShoppingListing) Reset() {
@@ -759,6 +762,27 @@ func (x *ShoppingListing) GetObservedAtUnix() int64 {
 func (x *ShoppingListing) GetCaptureSource() string {
 	if x != nil {
 		return x.CaptureSource
+	}
+	return ""
+}
+
+func (x *ShoppingListing) GetPriceAmountDecimal() string {
+	if x != nil && x.PriceAmountDecimal != nil {
+		return *x.PriceAmountDecimal
+	}
+	return ""
+}
+
+func (x *ShoppingListing) GetPriceCurrencyCode() string {
+	if x != nil && x.PriceCurrencyCode != nil {
+		return *x.PriceCurrencyCode
+	}
+	return ""
+}
+
+func (x *ShoppingListing) GetOriginalPriceAmountDecimal() string {
+	if x != nil && x.OriginalPriceAmountDecimal != nil {
+		return *x.OriginalPriceAmountDecimal
 	}
 	return ""
 }
@@ -1636,7 +1660,7 @@ const file_openmarket_api_v1_shopping_service_proto_rawDesc = "" +
 	"\vdoor_pickup\x18\x03 \x01(\bR\n" +
 	"doorPickup\x12!\n" +
 	"\fdoor_dropoff\x18\x04 \x01(\bR\vdoorDropoff\x12#\n" +
-	"\rpublic_meetup\x18\x05 \x01(\bR\fpublicMeetup\"\xab\x05\n" +
+	"\rpublic_meetup\x18\x05 \x01(\bR\fpublicMeetup\"\xb2\a\n" +
 	"\x0fShoppingListing\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12\"\n" +
@@ -1652,7 +1676,11 @@ const file_openmarket_api_v1_shopping_service_proto_rawDesc = "" +
 	"\x06detail\x18\n" +
 	" \x01(\v2!.openmarket.api.v1.ShoppingDetailH\bR\x06detail\x88\x01\x01\x12(\n" +
 	"\x10observed_at_unix\x18\v \x01(\x03R\x0eobservedAtUnix\x12%\n" +
-	"\x0ecapture_source\x18\f \x01(\tR\rcaptureSourceB\b\n" +
+	"\x0ecapture_source\x18\f \x01(\tR\rcaptureSource\x125\n" +
+	"\x14price_amount_decimal\x18\r \x01(\tH\tR\x12priceAmountDecimal\x88\x01\x01\x123\n" +
+	"\x13price_currency_code\x18\x0e \x01(\tH\n" +
+	"R\x11priceCurrencyCode\x88\x01\x01\x12F\n" +
+	"\x1doriginal_price_amount_decimal\x18\x0f \x01(\tH\vR\x1aoriginalPriceAmountDecimal\x88\x01\x01B\b\n" +
 	"\x06_titleB\r\n" +
 	"\v_price_textB\x16\n" +
 	"\x14_original_price_textB\x10\n" +
@@ -1661,7 +1689,10 @@ const file_openmarket_api_v1_shopping_service_proto_rawDesc = "" +
 	"\x0e_thumbnail_urlB\r\n" +
 	"\v_badge_textB\x0e\n" +
 	"\f_fulfillmentB\t\n" +
-	"\a_detail\"\xbc\x02\n" +
+	"\a_detailB\x17\n" +
+	"\x15_price_amount_decimalB\x16\n" +
+	"\x14_price_currency_codeB \n" +
+	"\x1e_original_price_amount_decimal\"\xbc\x02\n" +
 	"\x12ShoppingToolResult\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\tR\x06callId\x12>\n" +
 	"\blistings\x18\x02 \x03(\v2\".openmarket.api.v1.ShoppingListingR\blistings\x12\x14\n" +

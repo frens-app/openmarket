@@ -14,8 +14,17 @@ extension Logger {
 struct Listing: Identifiable, Codable, Equatable, Hashable {
     var id: String
     var title: String?
-    var priceText: String?      // kept as displayed: "Free", "$1,200", ranges
-    var originalPriceText: String?
+    var priceText: String? { // Source text, retained independently of display.
+        didSet {
+            if priceText != oldValue {
+                priceAmountDecimal = nil
+                priceCurrencyCode = nil
+            }
+        }
+    }
+    var originalPriceText: String? {
+        didSet { if originalPriceText != oldValue { originalPriceAmountDecimal = nil } }
+    }
     var locationText: String?   // from the card's aria-label; detail fills gaps
     var conditionText: String?  // "Used - Good" — the card label carries it
     /// How the item changes hands, when the surface said. Card-level because
@@ -34,6 +43,26 @@ struct Listing: Identifiable, Codable, Equatable, Hashable {
     var availabilityObservedAt: Date? = nil
     var observedSold: Bool? = nil
     var observedPending: Bool? = nil
+    var priceAmountDecimal: String? = nil
+    var priceCurrencyCode: String? = nil
+    var originalPriceAmountDecimal: String? = nil
+
+    var exactPriceAmount: String? {
+        MarketplacePrice.canonicalAmount(priceAmountDecimal) ?? MarketplacePrice.exactAmount(priceText)
+    }
+    var exactOriginalPriceAmount: String? {
+        MarketplacePrice.canonicalAmount(originalPriceAmountDecimal) ?? MarketplacePrice.exactAmount(originalPriceText)
+    }
+    var currencyCode: String? {
+        if let priceCurrencyCode, priceCurrencyCode.range(of: #"\A[A-Z]{3}\z"#, options: .regularExpression) != nil {
+            return priceCurrencyCode
+        }
+        guard let symbol = MarketplacePrice.parse(priceText)?.symbol else { return nil }
+        return MarketCurrency.unambiguousCurrency(symbol: symbol)?.code
+    }
+
+    var displayPrice: String? { MarketplacePrice.display(priceText) }
+    var displayOriginalPrice: String? { MarketplacePrice.display(originalPriceText) }
 
     var isResolved: Bool { itemURL != nil }
 }

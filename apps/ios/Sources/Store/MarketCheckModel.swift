@@ -130,7 +130,8 @@ final class MarketCheckModel: ObservableObject {
                                     price: price,
                                     comps: comps,
                                     sold: sold,
-                                    marketName: prefs.locationName ?? "your area")
+                                    marketName: prefs.locationName ?? "your area",
+                                    currencySymbol: PriceGuide.currencySymbol(in: listing.priceText))
             set(listing.id, .done(check))
 
             var completed: [String: Any] = [

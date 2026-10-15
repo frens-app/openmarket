@@ -3,6 +3,17 @@ import XCTest
 @testable import OpenMarket
 
 final class AnonymousFeedDecoderTests: XCTestCase {
+    func testGraphQLPriceIdentityAndPrecisionReachSavedSnapshot() throws {
+        let raw = #"{"id":"123456789","marketplace_listing_title":"Desk","listing_price":{"amount":"1234567.89","currency":"CAD","formatted_amount":"$1.23M"},"strikethrough_price":{"amount":"1500000.99","formatted_amount":"$1.5M"}}"#
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
+        let snapshot = try GraphQLFeedDecoder.payload(object).makeListing(cardIndex: 0).savedSnapshot
+        XCTAssertEqual(snapshot.priceCurrencyCode, "CAD")
+        XCTAssertEqual(snapshot.priceAmountDecimal, "1234567.89")
+        XCTAssertEqual(snapshot.originalPriceAmountDecimal, "1500000.99")
+        XCTAssertEqual(snapshot.priceText, "$1.23M")
+        XCTAssertEqual(snapshot.listing.currencyCode, "CAD")
+    }
+
     func testBrowseTopPicksUseTheirSeparateFormattedPriceField() throws {
         let raw = #"{"data":{"marketplace_home_feed":{"edges":[{"node":{"marketplace_listings":[{"id":"101","marketplace_listing_title":"Plant","listing_price":{"amount":"20"},"formatted_price":{"text":"$20"}}]}}],"page_info":{"has_next_page":false}}}}"#
         let page = try GraphQLFeedDecoder.decode(Data(raw.utf8), kind: .browse)
@@ -58,12 +69,15 @@ final class AnonymousFeedDecoderTests: XCTestCase {
     }
 
     func testNewMarketCurrenciesDecodeMinorUnits() throws {
-        for currency in ["EUR", "DKK", "TWD"] {
+        for currency in MarketCurrency.all.map(\.code) {
             let raw = #"{"data":{"marketplace_home_feed":{"edges":[{"node":{"__typename":"MarketplaceFeedGeneralListingObject","data":{"title":"Chair","price":{"currency":"\#(currency)","amount_with_offset":"12345"}},"listing":{"id":"202"}}}],"page_info":{"has_next_page":false}}}}"#
             let page = try GraphQLFeedDecoder.decode(Data(raw.utf8), kind: .browse)
             let listing = try XCTUnwrap(page.listings.first)
-            XCTAssertEqual(listing.priceAmount, "123.45", currency)
+            XCTAssertEqual(listing.priceAmount, ["TWD", "IDR", "COP", "VND"].contains(currency) ? "12345" : "123.45", currency)
             XCTAssertFalse(try XCTUnwrap(listing.priceFormatted).isEmpty, currency)
+            let snapshot = listing.makeListing(cardIndex: 0).savedSnapshot
+            XCTAssertEqual(snapshot.priceCurrencyCode, currency)
+            XCTAssertEqual(snapshot.priceAmountDecimal, listing.priceAmount)
             XCTAssertThrowsError(try GraphQLFeedDecoder.decode(
                 Data(raw.replacingOccurrences(of: currency, with: "JPY").utf8), kind: .browse
             ))

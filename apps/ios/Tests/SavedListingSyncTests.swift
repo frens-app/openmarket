@@ -23,6 +23,59 @@ final class SavedListingSyncTests: XCTestCase {
     }
     private func settled(_ store: SavedListings) async throws { try await waitUntil { !store.isSyncing } }
 
+    func testStructuredPricesSurviveWireStorageAndShoppingRoundTrips() throws {
+        for currency in MarketCurrency.all {
+            var item = listing()
+            item.priceText = currency.sourcePrice(Decimal(string: "1234.56")!)
+            item.originalPriceText = currency.sourcePrice(Decimal(string: "1500.99")!)
+            item.priceAmountDecimal = "1234.56"
+            item.priceCurrencyCode = currency.code
+            item.originalPriceAmountDecimal = "1500.99"
+            let local = try JSONDecoder().decode(Listing.self, from: JSONEncoder().encode(item))
+            let mutation = try SavedListingMutation(listing: local, saved: true, savedAt: Date())
+            let wire = try SavedListingChange(serializedBytes: mutation.data)
+            let json = try wire.snapshot.jsonUTF8Data()
+            let restored = try SavedListingSnapshot(jsonUTF8Data: json).listing
+            XCTAssertEqual(restored.exactPriceAmount, "1234.56", currency.code)
+            XCTAssertEqual(restored.currencyCode, currency.code)
+            XCTAssertEqual(restored.exactOriginalPriceAmount, "1500.99")
+            XCTAssertEqual(restored.priceText, item.priceText)
+            XCTAssertEqual(ShoppingListing(restored, source: "test").parsed.currencyCode, currency.code)
+            XCTAssertEqual(ShoppingListing(restored, source: "test").parsed.exactPriceAmount, "1234.56")
+        }
+    }
+
+    func testLegacyAndAmbiguousPricesDoNotInventCurrencyOrExactRangeAmounts() throws {
+        for (text, amount, code) in [("CA$1,234.56", "1234.56", "CAD"),
+                                      ("1.234,56 €", "1234.56", "EUR"),
+                                      ("$10.50", "10.5", nil), ("Free", "0", nil),
+                                      ("$10 - $20", nil, nil), ("unknown", nil, nil)] {
+            var item = listing()
+            item.priceText = text
+            let snapshot = item.savedSnapshot
+            XCTAssertEqual(snapshot.hasPriceAmountDecimal ? snapshot.priceAmountDecimal : nil, amount)
+            XCTAssertEqual(snapshot.hasPriceCurrencyCode ? snapshot.priceCurrencyCode : nil, code)
+        }
+        let old = try SavedListingSnapshot(jsonString: #"{"facebookListingId":"123","priceText":"$10.50"}"#).listing
+        XCTAssertNil(old.currencyCode)
+        XCTAssertEqual(old.exactPriceAmount, "10.5")
+    }
+
+    func testSourceUpdatesInvalidateStructuredAmounts() {
+        var item = listing()
+        item.priceText = "$10"
+        item.priceAmountDecimal = "10.00"
+        item.priceCurrencyCode = "CAD"
+        item.priceText = "$12"
+        XCTAssertNil(item.priceAmountDecimal)
+        XCTAssertNil(item.priceCurrencyCode)
+        XCTAssertEqual(item.savedSnapshot.priceAmountDecimal, "12")
+        XCTAssertFalse(item.savedSnapshot.hasPriceCurrencyCode)
+        XCTAssertNil(MarketplacePrice.canonicalAmount("12\n"))
+        item.priceCurrencyCode = "CAD\n"
+        XCTAssertNil(item.currencyCode)
+    }
+
     func testLegacyImportResolvesURLsDeduplicatesAndClaimsOnce() async throws {
         let defaults = try defaults()
         defaults.set(["p:photo", "fb:123", "p:unresolved"], forKey: "savedListingIDs")

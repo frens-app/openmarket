@@ -16,18 +16,20 @@ final class MarketRegionTests: XCTestCase {
 
     func testCurrenciesOutsideSupportedMarketsAreNotAcceptedAsPrices() {
         XCTAssertFalse(PriceRun.isPrice("¥25"))
-        XCTAssertFalse(PriceRun.isPrice("₹25"))
+        XCTAssertTrue(PriceRun.isPrice("₹25"))
         XCTAssertFalse(PriceRun.isPrice("₩25"))
     }
 
     func testOnlyVerifiedCountriesCanBrowseMarketplace() {
         XCTAssertEqual(
             MarketRegion.verifiedMarketplaceCountryCodes,
-            ["US", "CA", "GB", "IE", "AU", "NZ", "ES", "DK", "NL", "TW"]
+            ["US", "CA", "GB", "IE", "AU", "NZ", "ES", "DK", "NL", "TW",
+             "FR", "IT", "DE", "MX", "PH", "BR", "IN", "ID", "VN", "BD", "PK",
+             "EG", "TH", "NG", "CO", "TR", "AR", "ZA", "DZ"]
         )
         XCTAssertTrue(MarketRegion.region(countryCode: "ca")?.marketplaceVerified == true)
         XCTAssertTrue(MarketRegion.region(countryCode: "GB")?.marketplaceVerified == true)
-        XCTAssertFalse(MarketRegion.region(countryCode: "IT")?.marketplaceVerified == true)
+        XCTAssertTrue(MarketRegion.region(countryCode: "IT")?.marketplaceVerified == true)
         XCTAssertNil(MarketRegion.region(countryCode: "JP"))
     }
 
@@ -53,11 +55,11 @@ final class MarketRegionTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let place = ResolvedPlace(
-            name: "Rome",
-            segment: "rome",
-            coordinate: CLLocationCoordinate2D(latitude: 41.9028, longitude: 12.4964),
+            name: "Tokyo",
+            segment: "tokyo",
+            coordinate: CLLocationCoordinate2D(latitude: 35.6762, longitude: 139.6503),
             origin: .searchedCity,
-            countryCode: "IT"
+            countryCode: "JP"
         )
         defaults.set(try JSONEncoder().encode(place), forKey: "resolvedPlace")
 
@@ -68,7 +70,7 @@ final class MarketRegionTests: XCTestCase {
     }
 
     func testPreferencesAcceptEveryNewlyVerifiedMarketplace() throws {
-        for countryCode in ["GB", "IE", "AU", "NZ", "ES", "DK", "NL", "TW"] {
+        for countryCode in MarketRegion.verifiedMarketplaceCountryCodes {
             let suite = "MarketRegionTests.verified.\(countryCode).\(UUID().uuidString)"
             let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }

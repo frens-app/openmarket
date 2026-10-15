@@ -117,6 +117,8 @@ enum DesktopScripts {
             title: field(block, 'marketplace_listing_title'),
             creationTime: parseFloat(field(block, 'creation_time')) || null,
             priceAmount: nested(block, 'listing_price', 'amount'),
+            currencyCode: nested(block, 'listing_price', 'currency'),
+            originalPriceAmount: nested(block, 'strikethrough_price', 'amount'),
             priceFormatted: nested(block, 'listing_price', 'formatted_amount'),
             strikethroughFormatted: nested(block, 'strikethrough_price', 'formatted_amount'),
             photoURL: photo,

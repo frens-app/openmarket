@@ -54,8 +54,13 @@ type SavedListingSnapshot struct {
 	PriceObservedAt        *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=price_observed_at,json=priceObservedAt,proto3" json:"price_observed_at,omitempty"`
 	DetailObservedAt       *timestamppb.Timestamp `protobuf:"bytes,24,opt,name=detail_observed_at,json=detailObservedAt,proto3" json:"detail_observed_at,omitempty"`
 	AvailabilityObservedAt *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=availability_observed_at,json=availabilityObservedAt,proto3" json:"availability_observed_at,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Exact major-unit decimal strings, independent of Facebook offsets and ISO
+	// minor units. Currency is absent when the source symbol is ambiguous.
+	PriceAmountDecimal         *string `protobuf:"bytes,26,opt,name=price_amount_decimal,json=priceAmountDecimal,proto3,oneof" json:"price_amount_decimal,omitempty"`
+	PriceCurrencyCode          *string `protobuf:"bytes,27,opt,name=price_currency_code,json=priceCurrencyCode,proto3,oneof" json:"price_currency_code,omitempty"`
+	OriginalPriceAmountDecimal *string `protobuf:"bytes,28,opt,name=original_price_amount_decimal,json=originalPriceAmountDecimal,proto3,oneof" json:"original_price_amount_decimal,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *SavedListingSnapshot) Reset() {
@@ -261,6 +266,27 @@ func (x *SavedListingSnapshot) GetAvailabilityObservedAt() *timestamppb.Timestam
 		return x.AvailabilityObservedAt
 	}
 	return nil
+}
+
+func (x *SavedListingSnapshot) GetPriceAmountDecimal() string {
+	if x != nil && x.PriceAmountDecimal != nil {
+		return *x.PriceAmountDecimal
+	}
+	return ""
+}
+
+func (x *SavedListingSnapshot) GetPriceCurrencyCode() string {
+	if x != nil && x.PriceCurrencyCode != nil {
+		return *x.PriceCurrencyCode
+	}
+	return ""
+}
+
+func (x *SavedListingSnapshot) GetOriginalPriceAmountDecimal() string {
+	if x != nil && x.OriginalPriceAmountDecimal != nil {
+		return *x.OriginalPriceAmountDecimal
+	}
+	return ""
 }
 
 type SavedListingChange struct {
@@ -643,7 +669,7 @@ var File_openmarket_api_v1_saved_listing_service_proto protoreflect.FileDescript
 
 const file_openmarket_api_v1_saved_listing_service_proto_rawDesc = "" +
 	"\n" +
-	"-openmarket/api/v1/saved_listing_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&openmarket/api/v1/seller_service.proto\"\xca\f\n" +
+	"-openmarket/api/v1/saved_listing_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&openmarket/api/v1/seller_service.proto\"\xc0\x0f\n" +
 	"\x14SavedListingSnapshot\x12D\n" +
 	"\x13facebook_listing_id\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f2\r^[0-9]{1,64}$R\x11facebookListingId\x12C\n" +
 	"\x10cover_photo_fbid\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f2\r^[0-9]{1,64}$H\x00R\x0ecoverPhotoFbid\x88\x01\x01\x12#\n" +
@@ -675,7 +701,11 @@ const file_openmarket_api_v1_saved_listing_service_proto_rawDesc = "" +
 	"\x10card_observed_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x0ecardObservedAt\x12F\n" +
 	"\x11price_observed_at\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampR\x0fpriceObservedAt\x12H\n" +
 	"\x12detail_observed_at\x18\x18 \x01(\v2\x1a.google.protobuf.TimestampR\x10detailObservedAt\x12T\n" +
-	"\x18availability_observed_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\x16availabilityObservedAtB\x13\n" +
+	"\x18availability_observed_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\x16availabilityObservedAt\x12c\n" +
+	"\x14price_amount_decimal\x18\x1a \x01(\tB,\xbaH)r'2%^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,2})?$H\x12R\x12priceAmountDecimal\x88\x01\x01\x12F\n" +
+	"\x13price_currency_code\x18\x1b \x01(\tB\x11\xbaH\x0er\f2\n" +
+	"^[A-Z]{3}$H\x13R\x11priceCurrencyCode\x88\x01\x01\x12t\n" +
+	"\x1doriginal_price_amount_decimal\x18\x1c \x01(\tB,\xbaH)r'2%^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,2})?$H\x14R\x1aoriginalPriceAmountDecimal\x88\x01\x01B\x13\n" +
 	"\x11_cover_photo_fbidB\b\n" +
 	"\x06_titleB\r\n" +
 	"\v_price_textB\x16\n" +
@@ -696,7 +726,10 @@ const file_openmarket_api_v1_saved_listing_service_proto_rawDesc = "" +
 	"_in_personB\x0e\n" +
 	"\f_door_pickupB\x0f\n" +
 	"\r_door_dropoffB\x10\n" +
-	"\x0e_public_meetup\"\xa6\x02\n" +
+	"\x0e_public_meetupB\x17\n" +
+	"\x15_price_amount_decimalB\x16\n" +
+	"\x14_price_currency_codeB \n" +
+	"\x1e_original_price_amount_decimal\"\xa6\x02\n" +
 	"\x12SavedListingChange\x12)\n" +
 	"\vmutation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
 	"mutationId\x12D\n" +

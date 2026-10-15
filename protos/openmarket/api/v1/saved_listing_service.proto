@@ -36,6 +36,11 @@ message SavedListingSnapshot {
   google.protobuf.Timestamp price_observed_at = 23;
   google.protobuf.Timestamp detail_observed_at = 24;
   google.protobuf.Timestamp availability_observed_at = 25;
+  // Exact major-unit decimal strings, independent of Facebook offsets and ISO
+  // minor units. Currency is absent when the source symbol is ambiguous.
+  optional string price_amount_decimal = 26 [(buf.validate.field).string.pattern = "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,2})?$"];
+  optional string price_currency_code = 27 [(buf.validate.field).string.pattern = "^[A-Z]{3}$"];
+  optional string original_price_amount_decimal = 28 [(buf.validate.field).string.pattern = "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,2})?$"];
 }
 
 message SavedListingChange {

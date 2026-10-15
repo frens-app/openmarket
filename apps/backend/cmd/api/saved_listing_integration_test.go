@@ -252,4 +252,44 @@ func TestSavedListingIntegration(t *testing.T) {
 	if _, err := apply(tokenA, makeSave("999")); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatal("deleted account can write", err)
 	}
+	t.Run("regional prices round trip through PostgreSQL", func(t *testing.T) {
+		for i, sample := range []struct{ code, amount, formatted string }{
+			{"CAD", "1234.56", "CA$1,234.56"}, {"EUR", "1234.56", "1.234,56 €"},
+			{"INR", "123456.78", "₹1,23,456.78"}, {"IDR", "550000000", "IDR550M"},
+			{"VND", "9007199254740993", "VND9,007,199,254,740,993"}, {"COP", "0", "Free"},
+		} {
+			change := makeSave(fmt.Sprintf("88880000%d", i))
+			change.Snapshot.PriceText = proto.String(sample.formatted)
+			change.Snapshot.PriceAmountDecimal = proto.String(sample.amount)
+			change.Snapshot.PriceCurrencyCode = proto.String(sample.code)
+			change.Snapshot.OriginalPriceText = proto.String(sample.formatted)
+			change.Snapshot.OriginalPriceAmountDecimal = proto.String(sample.amount)
+			assertApply(tokenB, change)
+			row, err := q.LockListing(ctx, change.FacebookListingId)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var amount, code string
+			if err := pool.QueryRow(ctx, "SELECT snapshot->>'priceAmountDecimal', snapshot->>'priceCurrencyCode' FROM listings WHERE id=$1", row.ID).Scan(&amount, &code); err != nil {
+				t.Fatal(err)
+			}
+			if amount != sample.amount || code != sample.code {
+				t.Fatalf("database changed price: %s %s", code, amount)
+			}
+			found := false
+			for _, saved := range list(tokenB, "").Listings {
+				if saved.Snapshot.FacebookListingId != change.FacebookListingId {
+					continue
+				}
+				found = true
+				if saved.Snapshot.GetPriceAmountDecimal() != sample.amount || saved.Snapshot.GetPriceCurrencyCode() != sample.code || saved.Snapshot.GetPriceText() != sample.formatted || saved.Snapshot.GetOriginalPriceAmountDecimal() != sample.amount {
+					t.Fatal(saved)
+				}
+			}
+			if !found {
+				t.Fatal("saved price missing from API response")
+			}
+		}
+	})
+
 }

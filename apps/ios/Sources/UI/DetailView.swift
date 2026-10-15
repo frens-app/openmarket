@@ -260,14 +260,14 @@ struct DetailView: View {
     private var priceBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(current.priceText ?? "—")
+                Text(current.displayPrice ?? "—")
                     .font(.title2.weight(.semibold))
                     // A struck-through price says "not for sale at this price"
                     // in the one place nobody can miss it, and it is the same
                     // language the was-price beside it already speaks.
                     .strikethrough(availability == .sold)
                     .foregroundStyle(availability == .sold ? .secondary : .primary)
-                if let original = current.originalPriceText {
+                if let original = current.displayOriginalPrice {
                     Text(original).font(.subheadline).foregroundStyle(.secondary).strikethrough()
                 }
                 if availability.isGone {

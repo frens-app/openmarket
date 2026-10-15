@@ -246,6 +246,35 @@ public nonisolated struct Openmarket_Api_V1_SavedListingSnapshot: @unchecked Sen
   /// Clears the value of `availabilityObservedAt`. Subsequent reads from it will return its default value.
   public mutating func clearAvailabilityObservedAt() {_uniqueStorage()._availabilityObservedAt = nil}
 
+  /// Exact major-unit decimal strings, independent of Facebook offsets and ISO
+  /// minor units. Currency is absent when the source symbol is ambiguous.
+  public var priceAmountDecimal: String {
+    get {_storage._priceAmountDecimal ?? String()}
+    set {_uniqueStorage()._priceAmountDecimal = newValue}
+  }
+  /// Returns true if `priceAmountDecimal` has been explicitly set.
+  public var hasPriceAmountDecimal: Bool {_storage._priceAmountDecimal != nil}
+  /// Clears the value of `priceAmountDecimal`. Subsequent reads from it will return its default value.
+  public mutating func clearPriceAmountDecimal() {_uniqueStorage()._priceAmountDecimal = nil}
+
+  public var priceCurrencyCode: String {
+    get {_storage._priceCurrencyCode ?? String()}
+    set {_uniqueStorage()._priceCurrencyCode = newValue}
+  }
+  /// Returns true if `priceCurrencyCode` has been explicitly set.
+  public var hasPriceCurrencyCode: Bool {_storage._priceCurrencyCode != nil}
+  /// Clears the value of `priceCurrencyCode`. Subsequent reads from it will return its default value.
+  public mutating func clearPriceCurrencyCode() {_uniqueStorage()._priceCurrencyCode = nil}
+
+  public var originalPriceAmountDecimal: String {
+    get {_storage._originalPriceAmountDecimal ?? String()}
+    set {_uniqueStorage()._originalPriceAmountDecimal = newValue}
+  }
+  /// Returns true if `originalPriceAmountDecimal` has been explicitly set.
+  public var hasOriginalPriceAmountDecimal: Bool {_storage._originalPriceAmountDecimal != nil}
+  /// Clears the value of `originalPriceAmountDecimal`. Subsequent reads from it will return its default value.
+  public mutating func clearOriginalPriceAmountDecimal() {_uniqueStorage()._originalPriceAmountDecimal = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -405,7 +434,7 @@ fileprivate nonisolated let _protobuf_package = "openmarket.api.v1"
 
 nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SavedListingSnapshot"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}facebook_listing_id\0\u{3}cover_photo_fbid\0\u{1}title\0\u{3}price_text\0\u{3}original_price_text\0\u{3}location_text\0\u{3}condition_text\0\u{3}thumbnail_url\0\u{1}description\0\u{3}posted_text\0\u{3}photo_urls\0\u{1}sold\0\u{1}pending\0\u{1}latitude\0\u{1}longitude\0\u{1}seller\0\u{1}ships\0\u{3}in_person\0\u{3}door_pickup\0\u{3}door_dropoff\0\u{3}public_meetup\0\u{3}card_observed_at\0\u{3}price_observed_at\0\u{3}detail_observed_at\0\u{3}availability_observed_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}facebook_listing_id\0\u{3}cover_photo_fbid\0\u{1}title\0\u{3}price_text\0\u{3}original_price_text\0\u{3}location_text\0\u{3}condition_text\0\u{3}thumbnail_url\0\u{1}description\0\u{3}posted_text\0\u{3}photo_urls\0\u{1}sold\0\u{1}pending\0\u{1}latitude\0\u{1}longitude\0\u{1}seller\0\u{1}ships\0\u{3}in_person\0\u{3}door_pickup\0\u{3}door_dropoff\0\u{3}public_meetup\0\u{3}card_observed_at\0\u{3}price_observed_at\0\u{3}detail_observed_at\0\u{3}availability_observed_at\0\u{3}price_amount_decimal\0\u{3}price_currency_code\0\u{3}original_price_amount_decimal\0")
 
   fileprivate class _StorageClass {
     var _facebookListingID: String = String()
@@ -433,6 +462,9 @@ nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Mess
     var _priceObservedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _detailObservedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _availabilityObservedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _priceAmountDecimal: String? = nil
+    var _priceCurrencyCode: String? = nil
+    var _originalPriceAmountDecimal: String? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -468,6 +500,9 @@ nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Mess
       _priceObservedAt = source._priceObservedAt
       _detailObservedAt = source._detailObservedAt
       _availabilityObservedAt = source._availabilityObservedAt
+      _priceAmountDecimal = source._priceAmountDecimal
+      _priceCurrencyCode = source._priceCurrencyCode
+      _originalPriceAmountDecimal = source._originalPriceAmountDecimal
     }
   }
 
@@ -511,6 +546,9 @@ nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Mess
         case 23: try { try decoder.decodeSingularMessageField(value: &_storage._priceObservedAt) }()
         case 24: try { try decoder.decodeSingularMessageField(value: &_storage._detailObservedAt) }()
         case 25: try { try decoder.decodeSingularMessageField(value: &_storage._availabilityObservedAt) }()
+        case 26: try { try decoder.decodeSingularStringField(value: &_storage._priceAmountDecimal) }()
+        case 27: try { try decoder.decodeSingularStringField(value: &_storage._priceCurrencyCode) }()
+        case 28: try { try decoder.decodeSingularStringField(value: &_storage._originalPriceAmountDecimal) }()
         default: break
         }
       }
@@ -598,6 +636,15 @@ nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Mess
       try { if let v = _storage._availabilityObservedAt {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 25)
       } }()
+      try { if let v = _storage._priceAmountDecimal {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 26)
+      } }()
+      try { if let v = _storage._priceCurrencyCode {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 27)
+      } }()
+      try { if let v = _storage._originalPriceAmountDecimal {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 28)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -632,6 +679,9 @@ nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Mess
         if _storage._priceObservedAt != rhs_storage._priceObservedAt {return false}
         if _storage._detailObservedAt != rhs_storage._detailObservedAt {return false}
         if _storage._availabilityObservedAt != rhs_storage._availabilityObservedAt {return false}
+        if _storage._priceAmountDecimal != rhs_storage._priceAmountDecimal {return false}
+        if _storage._priceCurrencyCode != rhs_storage._priceCurrencyCode {return false}
+        if _storage._originalPriceAmountDecimal != rhs_storage._originalPriceAmountDecimal {return false}
         return true
       }
       if !storagesAreEqual {return false}

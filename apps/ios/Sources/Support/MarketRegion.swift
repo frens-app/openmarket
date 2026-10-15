@@ -18,60 +18,43 @@ struct MarketRegion: Equatable, Identifiable {
         self.marketplaceVerified = marketplaceVerified
     }
 
-    static let unitedStates = MarketRegion(
-        "US", pricePrefixes: ["US$", "$"], marketplaceVerified: true
-    )
+    static let unitedStates = MarketRegion("US", currencyCode: "USD")
+    static let canada = MarketRegion("CA", currencyCode: "CAD")
 
-    static let canada = MarketRegion(
-        "CA", pricePrefixes: ["CA$", "C$"], marketplaceVerified: true
-    )
+    private init(_ countryCode: String, currencyCode: String) {
+        self.init(countryCode, pricePrefixes: MarketCurrency.currency(code: currencyCode)!.symbols,
+                  marketplaceVerified: true)
+    }
 
     static let all: [MarketRegion] = [
-        unitedStates,
-        canada,
-        MarketRegion(
-            "GB",
-            pricePrefixes: ["£"],
-            marketplaceVerified: true
-        ),
-        MarketRegion(
-            "IE",
-            pricePrefixes: ["€"],
-            marketplaceVerified: true
-        ),
-        MarketRegion(
-            "AU",
-            pricePrefixes: ["AU$", "A$"],
-            marketplaceVerified: true
-        ),
-        MarketRegion(
-            "NZ",
-            pricePrefixes: ["NZ$"],
-            marketplaceVerified: true
-        ),
-
-        MarketRegion(
-            "ES", pricePrefixes: ["€"],
-            marketplaceVerified: true
-        ),
-        MarketRegion(
-            "DK", pricePrefixes: ["DKK", "kr.", "kr"],
-            marketplaceVerified: true
-        ),
-        MarketRegion(
-            "NL", pricePrefixes: ["€"],
-            marketplaceVerified: true
-        ),
-        MarketRegion(
-            "TW", pricePrefixes: ["NT$", "TWD"],
-            marketplaceVerified: true
-        ),
-
-        MarketRegion(
-            "IT",
-            pricePrefixes: ["€"],
-            marketplaceVerified: false
-        ),
+        unitedStates, canada,
+        MarketRegion("GB", currencyCode: "GBP"),
+        MarketRegion("IE", currencyCode: "EUR"),
+        MarketRegion("AU", currencyCode: "AUD"),
+        MarketRegion("NZ", currencyCode: "NZD"),
+        MarketRegion("ES", currencyCode: "EUR"),
+        MarketRegion("DK", currencyCode: "DKK"),
+        MarketRegion("NL", currencyCode: "EUR"),
+        MarketRegion("TW", currencyCode: "TWD"),
+        MarketRegion("FR", currencyCode: "EUR"),
+        MarketRegion("IT", currencyCode: "EUR"),
+        MarketRegion("DE", currencyCode: "EUR"),
+        MarketRegion("MX", currencyCode: "MXN"),
+        MarketRegion("PH", currencyCode: "PHP"),
+        MarketRegion("BR", currencyCode: "BRL"),
+        MarketRegion("IN", currencyCode: "INR"),
+        MarketRegion("ID", currencyCode: "IDR"),
+        MarketRegion("VN", currencyCode: "VND"),
+        MarketRegion("BD", currencyCode: "BDT"),
+        MarketRegion("PK", currencyCode: "PKR"),
+        MarketRegion("EG", currencyCode: "EGP"),
+        MarketRegion("TH", currencyCode: "THB"),
+        MarketRegion("NG", currencyCode: "NGN"),
+        MarketRegion("CO", currencyCode: "COP"),
+        MarketRegion("TR", currencyCode: "TRY"),
+        MarketRegion("AR", currencyCode: "ARS"),
+        MarketRegion("ZA", currencyCode: "ZAR"),
+        MarketRegion("DZ", currencyCode: "DZD"),
     ]
 
     static func region(countryCode: String?) -> MarketRegion? {

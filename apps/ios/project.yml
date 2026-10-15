@@ -186,6 +186,7 @@ targets:
     sources:
       - path: Tests
         type: syncedFolder
+      - path: TestResources
     dependencies:
       - target: OpenMarket
     settings:

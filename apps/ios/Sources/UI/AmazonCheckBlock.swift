@@ -98,7 +98,7 @@ struct AmazonCheckBlock: View {
                                         Text(product.listing.title ?? "Amazon product")
                                             .font(.subheadline.weight(.medium))
                                             .lineLimit(3, reservesSpace: true)
-                                        Text(product.listing.priceText ?? "Price unavailable")
+                                        Text(product.listing.displayPrice ?? "Price unavailable")
                                             .font(.subheadline.bold())
                                         Text("View on Amazon ↗")
                                             .font(.caption2).foregroundStyle(.secondary)

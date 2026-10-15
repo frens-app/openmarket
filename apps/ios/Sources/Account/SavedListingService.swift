@@ -91,6 +91,11 @@ extension Listing {
         if let title { s.title = title }
         if let priceText { s.priceText = priceText }
         if let originalPriceText { s.originalPriceText = originalPriceText }
+        if priceText != nil {
+            if let amount = exactPriceAmount { s.priceAmountDecimal = amount }
+            if let code = currencyCode { s.priceCurrencyCode = code }
+        }
+        if originalPriceText != nil, let amount = exactOriginalPriceAmount { s.originalPriceAmountDecimal = amount }
         if let value = locationText ?? detail?.locationText { s.locationText = value }
         if let value = conditionText ?? detail?.conditionText { s.conditionText = value }
         // A card can borrow static fields from cached detail. Do not advertise
@@ -140,6 +145,9 @@ extension SavedListingSnapshot {
                             badgeText: hasSold && sold ? "Sold" : (hasPending && pending ? "Pending" : nil),
                             cardIndex: 0, capturedAt: cardObservedAt.date)
         value.priceObservedAt = hasPriceObservedAt ? priceObservedAt.date : nil
+        value.priceAmountDecimal = hasPriceAmountDecimal ? priceAmountDecimal : nil
+        value.priceCurrencyCode = hasPriceCurrencyCode ? priceCurrencyCode : nil
+        value.originalPriceAmountDecimal = hasOriginalPriceAmountDecimal ? originalPriceAmountDecimal : nil
         if hasShips || hasInPerson || hasDoorPickup || hasDoorDropoff || hasPublicMeetup {
             value.fulfillment = Fulfillment(tokens: [ships ? "SHIPPING" : nil, inPerson ? "IN_PERSON" : nil,
                 doorPickup ? "DOOR_PICKUP" : nil, doorDropoff ? "DOOR_DROPOFF" : nil,

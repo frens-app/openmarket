@@ -50,7 +50,7 @@ enum CardLabel {
         guard text.count > 12,
               text.range(of: " for sale", options: .caseInsensitive) != nil else { return nil }
 
-        if let g = match(text, pricedPattern), g.count == 5 {
+        if let g = match(text, pricedPattern), g.count == 5, PriceRun.isPrice(g[3]) {
             return Parsed(title: trimmed(g[1]),
                           conditionText: canonicalCondition(g[2]),
                           priceText: trimmed(g[3]),
@@ -87,14 +87,8 @@ enum CardLabel {
 
     private static let tail = "\\s+in\\s+(.{1,100})\\s*$"
 
-    private static var pricePrefixAlternation: String {
-        MarketRegion.supportedPricePrefixes
-            .map(NSRegularExpression.escapedPattern(for:))
-            .joined(separator: "|")
-    }
-
     private static var pricedPattern: String {
-        "^(.*) for sale\(dash)(\(conditionAlternation))\(dash)((?:\(pricePrefixAlternation))\\s*[\\d,]+(?:\\.\\d{2})?)\(tail)"
+        "^(.*) for sale\(dash)(\(conditionAlternation))\(dash)(.+?)\(tail)"
     }
 
     private static var freePattern: String {

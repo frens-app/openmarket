@@ -56,7 +56,7 @@ struct PastPriceCheck: Identifiable, Hashable {
     }
 
     var priceText: String? {
-        price.map { "\(currency)\($0)" }
+        price.map { "\(MarketCurrency.localSymbol(for: currency))\($0)" }
     }
 
     /// "2 days ago", and nothing at all for a run with no timestamp.

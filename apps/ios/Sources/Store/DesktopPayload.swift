@@ -19,6 +19,8 @@ struct PayloadListing: Decodable, Equatable {
     let isLive: Bool?
     let categoryID: String?
     let createdWithSellerApp: Bool?
+    var currencyCode: String? = nil
+    var originalPriceAmount: String? = nil
 
     /// Exact posting time, which is the field nothing else provides. Facebook's
     /// own UI rounds this to "2 weeks ago" where the payload is precise to the
@@ -30,7 +32,7 @@ struct PayloadListing: Decodable, Equatable {
 
     var price: Decimal? {
         guard let priceAmount else { return nil }
-        return Decimal(string: priceAmount)
+        return Decimal(string: priceAmount, locale: Locale(identifier: "en_US_POSIX"))
     }
 
     /// `SHIPPING_ONSITE` marked 24 of 24 cards on a shipping-filtered page and
@@ -92,7 +94,10 @@ extension PayloadListing {
             detail: nil,
             capturedAt: Date(),
             availabilityObservedAt: (isSold != nil) ? Date() : nil,
-            observedSold: isSold
+            observedSold: isSold,
+            priceAmountDecimal: MarketplacePrice.canonicalAmount(priceAmount),
+            priceCurrencyCode: currencyCode,
+            originalPriceAmountDecimal: MarketplacePrice.canonicalAmount(originalPriceAmount)
         )
     }
 
@@ -103,8 +108,15 @@ extension PayloadListing {
     /// record be upgraded in place once the user signs in.
     func apply(to listing: inout Listing) {
         if let title, !title.isEmpty { listing.title = title }
-        if let priceFormatted { listing.priceText = priceFormatted }
-        if let strikethroughFormatted { listing.originalPriceText = strikethroughFormatted }
+        if let priceFormatted {
+            listing.priceText = priceFormatted
+            listing.priceAmountDecimal = MarketplacePrice.canonicalAmount(priceAmount)
+            listing.priceCurrencyCode = currencyCode
+        }
+        if let strikethroughFormatted {
+            listing.originalPriceText = strikethroughFormatted
+            listing.originalPriceAmountDecimal = MarketplacePrice.canonicalAmount(originalPriceAmount)
+        }
         if let locationText { listing.locationText = locationText }
         if let fulfillment { listing.fulfillment = fulfillment }
         if listing.itemURL == nil {

@@ -118,7 +118,9 @@ enum GraphQLFeedDecoder {
             deliveryTypes: object["delivery_types"] as? [String] ?? [],
             isSold: object["is_sold"] as? Bool, isLive: object["is_live"] as? Bool,
             categoryID: object["marketplace_listing_category_id"] as? String,
-            createdWithSellerApp: object["created_with_seller_app"] as? Bool
+            createdWithSellerApp: object["created_with_seller_app"] as? Bool,
+            currencyCode: price["currency"] as? String,
+            originalPriceAmount: previous?["amount"] as? String
         )
     }
 
@@ -127,22 +129,17 @@ enum GraphQLFeedDecoder {
               let content = node["data"] as? Object,
               let price = content["price"] as? Object,
               let currency = price["currency"] as? String,
-              ["USD", "CAD", "GBP", "EUR", "AUD", "NZD", "DKK", "TWD"].contains(currency),
+              let marketCurrency = MarketCurrency.currency(code: currency),
               let raw = price["amount_with_offset"] as? String,
-              let amount = Decimal(string: raw, locale: Locale(identifier: "en_US_POSIX")) else {
+              let amount = marketCurrency.amount(fromFacebookOffset: raw) else {
             throw GraphQLFeedError.invalidResponse
         }
-        // Supported currencies all use two decimal places for minor units.
-        // Unknown currencies fall back instead of assuming their minor units.
-        let number = NSDecimalNumber(decimal: amount / 100)
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currency
+        let number = NSDecimalNumber(decimal: amount)
         let entity = node["entity"] as? Object ?? [:]
         let photo = node["photo"] as? Object ?? [:]
         listing["marketplace_listing_title"] = content["title"]
-        listing["listing_price"] = ["amount": number.stringValue,
-                                     "formatted_amount": formatter.string(from: number) ?? "\(currency) \(number)"]
+        listing["listing_price"] = ["amount": number.stringValue, "currency": currency,
+                                     "formatted_amount": marketCurrency.sourcePrice(number.decimalValue)]
         listing["location"] = entity["location"]
         listing["created_with_seller_app"] = entity["created_with_seller_app"]
         listing["primary_listing_photo"] = ["id": photo["id"] ?? NSNull(),

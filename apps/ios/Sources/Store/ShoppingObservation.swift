@@ -25,6 +25,9 @@ extension ShoppingListing {
         if let value = listing.title { title = value }
         if let value = listing.priceText { priceText = value }
         if let value = listing.originalPriceText { originalPriceText = value }
+        if let value = listing.exactPriceAmount { priceAmountDecimal = value }
+        if let value = listing.currencyCode { priceCurrencyCode = value }
+        if let value = listing.exactOriginalPriceAmount { originalPriceAmountDecimal = value }
         if let value = listing.locationText { locationText = value }
         if let value = listing.conditionText { conditionText = value }
         if let value = listing.thumbnailURL { thumbnailURL = value.absoluteString }
@@ -64,6 +67,9 @@ extension ShoppingListing {
                             itemURL: URL(string: "https://www.facebook.com/marketplace/item/\(id.replacingOccurrences(of: "fb:", with: ""))/"),
                             badgeText: hasBadgeText ? badgeText : nil, cardIndex: 0,
                             capturedAt: Date(timeIntervalSince1970: Double(observedAtUnix)))
+        value.priceAmountDecimal = hasPriceAmountDecimal ? priceAmountDecimal : nil
+        value.priceCurrencyCode = hasPriceCurrencyCode ? priceCurrencyCode : nil
+        value.originalPriceAmountDecimal = hasOriginalPriceAmountDecimal ? originalPriceAmountDecimal : nil
         if hasDetail {
             let d = detail
             var parsed = ListingDetail()

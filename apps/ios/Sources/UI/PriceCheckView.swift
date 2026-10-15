@@ -657,7 +657,7 @@ struct CompCard: View {
                 .overlay(alignment: .topLeading) {
                     if comp.isSold { soldTag }
                 }
-            Text(comp.listing.priceText ?? "—")
+            Text(comp.listing.displayPrice ?? "—")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(comp.isSold || !comp.isComparable ? .secondary : .primary)
             if let title = comp.listing.title {
