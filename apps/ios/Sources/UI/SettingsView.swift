@@ -76,17 +76,6 @@ struct SettingsView: View {
                 // together in the location sheet, because they read as one fact
                 // ("San Francisco · 10 mi").
 
-                // The only place these are set. All they drive is the search
-                // field's suggestions, and they are optional — with none picked
-                // it falls back to `Preferences.chosenInterests`.
-                Section("Interests") {
-                    NavigationLink {
-                        InterestSettingsView()
-                    } label: {
-                        LabeledContent("Interests", value: interestSummary)
-                    }
-                }
-
                 Section("History") {
                     Toggle("Include searches in history", isOn: $prefs.recordSearchHistory)
                     Button("Clear search history") { prefs.recentSearches = [] }
@@ -200,14 +189,5 @@ struct SettingsView: View {
         case "phone": return "Phone number"
         default: return viewer.phoneNumber.isEmpty ? "Unavailable" : "Phone number"
         }
-    }
-
-    /// The first couple by name, then a count. Naming all eighteen would wrap
-    /// to three lines in a row that is meant to be glanced at.
-    private var interestSummary: String {
-        let chosen = prefs.chosenInterests
-        let named = chosen.prefix(2).map(\.label).joined(separator: ", ")
-        let rest = chosen.count - min(2, chosen.count)
-        return rest > 0 ? "\(named) +\(rest)" : named
     }
 }

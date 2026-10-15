@@ -212,12 +212,11 @@ enum Analytics {
         case accountGate = "account_gate"
     }
 
-    /// Where a search term came from. Inferred by matching the recents and
-    /// interests, because a tapped completion and a typed word are the same
+    /// Where a search term came from. Inferred by matching recent searches,
+    /// because a tapped completion and a typed word are the same
     /// string by the time `onSubmit` sees them.
     enum SearchSource: String {
         case typed
         case recent
-        case interest
     }
 }

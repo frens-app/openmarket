@@ -11,7 +11,6 @@ final class Preferences: ObservableObject {
         static let recentSearches = "recentSearches"
         static let recordSearchHistory = "recordSearchHistory"
         static let radiusKM = "radiusKM"
-        static let interests = "interests"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let lastAccountID = "lastAccountID"
         static let locationName = "locationName"
@@ -34,10 +33,6 @@ final class Preferences: ObservableObject {
     /// anything — existing history stays until cleared explicitly.
     @Published var recordSearchHistory: Bool { didSet { defaults.set(recordSearchHistory, forKey: Key.recordSearchHistory) } }
     @Published var radiusKM: Int { didSet { defaults.set(radiusKM, forKey: Key.radiusKM) } }
-
-    /// The categories the user said they shop for, as `Interest` ids, in the
-    /// order they were picked.
-    @Published var interests: [String] { didSet { defaults.set(interests, forKey: Key.interests) } }
 
     /// Whether this install considers onboarding done.
     ///
@@ -135,14 +130,6 @@ final class Preferences: ObservableObject {
     /// 10 miles. Far enough to find things, close enough to collect them.
     static let defaultRadiusKM = 16
 
-    /// The chosen interests, as things with labels and search terms. Usually
-    /// empty — onboarding no longer asks — so `Interest.defaults` is the normal
-    /// path, and the user's own history takes over once they search.
-    var chosenInterests: [Interest] {
-        let resolved = Interest.resolve(interests)
-        return resolved.isEmpty ? Interest.defaults : resolved
-    }
-
     /// Whether onboarding still has something to do.
     ///
     /// The place is re-checked every launch rather than trusted to the flag,
@@ -184,6 +171,8 @@ final class Preferences: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        // Retire the selections saved by older versions of the app.
+        defaults.removeObject(forKey: "interests")
         recentSearches = defaults.stringArray(forKey: Key.recentSearches) ?? []
         // `object(forKey:)`, not `bool(forKey:)`: the latter returns false for a
         // key that was never written, silently shipping history recording off
@@ -194,7 +183,6 @@ final class Preferences: ObservableObject {
         // whatever is set — silently moving somebody's radius is worse than
         // showing a number the picker didn't offer.
         radiusKM = defaults.object(forKey: Key.radiusKM) as? Int ?? Self.defaultRadiusKM
-        interests = defaults.stringArray(forKey: Key.interests) ?? []
         hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
         lastAccountID = defaults.string(forKey: Key.lastAccountID)
         locationName = defaults.string(forKey: Key.locationName)

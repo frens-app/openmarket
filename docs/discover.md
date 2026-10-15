@@ -716,24 +716,14 @@ now", the more it needs to state its own age rather than imply freshness.
 
 **Discover's only inputs are now the place, the radius, and the session.**
 Interests and search history were the other two, and both have been cut loose.
-They are documented here because the app still collects both, and what they are
-*for* changed without their storage or their settings changing at all.
+Search history still supplies search suggestions; interests have been removed.
 
 ### 6.1 Interests
 
-Picked during onboarding, required, three minimum, stored as `Interest` ids in
-`Preferences.interests` (`docs/onboarding.md`). They were what Discover was made
-of before there was any history, and that was their whole reason to exist.
-
-What is left is the search field's "Try" list: the completion inserted is the
-*term*, not the label, because searching for "Home & garden" finds nothing. That
-is a real job and a much smaller one than a required first-run gate is priced
-for — see 4.7.
-
-Ids rather than labels or terms, so a category can be re-worded or its search
-term improved without emptying anybody's saved choices — and `Interest.resolve`
-drops ids this build no longer knows, so a retired category can't sit in the
-count as a ghost.
+Interests previously seeded Discover and later supplied the search field's
+"Try" list. The app no longer collects, displays, or uses them. The settings
+picker and catalogue are removed, and `Preferences` deletes the legacy
+`interests` UserDefaults value on launch.
 
 ### 6.2 Search history
 

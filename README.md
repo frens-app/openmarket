@@ -372,15 +372,9 @@ happened to live in San Francisco and happened to want furniture.
   selected coordinate for GraphQL targeting and uses the picker only as a
   fallback. Distance is the app's organising idea and it is applied on
   this device, so without a place there is nothing to measure from.
-- **Three interests**, stored long-term as an array of ids and offered by the
-  search field as a starting point until there's search history. Three because
-  they used to be Discover's seeds, one search each — a number that has outlived
-  its reason and is worth revisiting now that Discover is Facebook's own feed.
 
-No skip link on either. A skip buys thirty seconds and costs the app any idea of
-what to show, and the screen it skips to is the one that then can't do its job.
-The explaining is folded into the first screen, where it costs one tap instead
-of three. Interests stay editable afterwards in Settings → Interests.
+The place is required so the app knows where to browse. Interests are no longer
+collected or shown; search suggestions come from recent searches.
 
 - **A Facebook account**, on the last screen, with the three things it changes
   named on it: seller identity, results that keep loading, and a home feed that
@@ -392,11 +386,11 @@ of three. Interests stay editable afterwards in Settings → Interests.
   updates the store's session immediately, since the scene-phase re-check that
   normally notices a session won't fire for an app that never backgrounded.
 
-Both requirements are re-checked on every launch rather than trusted to a
-one-time flag, so an install that ends up without a place, or with its interests
-emptied, gets asked again instead of landing on a home screen with nothing
-behind it. Existing installs are asked once: the old "seen the first run" flag
-is deliberately not read, because seeing those cards told the app nothing.
+The place is re-checked on every launch rather than trusted to a one-time flag,
+so an install that ends up without a place gets asked again instead of landing
+on a home screen with nothing behind it. Existing installs are asked once: the
+old "seen the first run" flag is deliberately not read, because seeing those
+cards told the app nothing.
 
 ---
 

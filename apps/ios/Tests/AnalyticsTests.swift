@@ -18,7 +18,7 @@ final class AnalyticsTests: XCTestCase {
     }
 
     func testEverySearchSourceValueFollowsTheConvention() {
-        for source in [Analytics.SearchSource.typed, .recent, .interest] {
+        for source in [Analytics.SearchSource.typed, .recent] {
             assertSnakeCase(source.rawValue, what: "search source")
         }
     }

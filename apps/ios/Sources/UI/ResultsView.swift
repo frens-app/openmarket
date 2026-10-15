@@ -776,13 +776,12 @@ struct ResultsView: View {
     }
 
     /// A guess: a tapped completion and a typed word reach `onSubmit`
-    /// identically, so this matches against the two lists the field offers.
+    /// identically, so this matches against the recent searches the field offers.
     private func searchSource(for term: String) -> Analytics.SearchSource {
         let matches = { (candidate: String) in
             candidate.caseInsensitiveCompare(term) == .orderedSame
         }
         if prefs.recentSearches.contains(where: matches) { return .recent }
-        if prefs.chosenInterests.map(\.term).contains(where: matches) { return .interest }
         return .typed
     }
 
@@ -939,14 +938,6 @@ private struct SearchSuggestions: View {
                             Label(term, systemImage: "clock.arrow.circlepath")
                                 .foregroundStyle(.primary)
                         }
-                    }
-                }
-            }
-            Section(prefs.recentSearches.isEmpty ? "Try" : "Your interests") {
-                ForEach(prefs.chosenInterests) { interest in
-                    Button { onSelect(interest.term) } label: {
-                        Label(interest.label, systemImage: "square.grid.2x2")
-                            .foregroundStyle(.primary)
                     }
                 }
             }

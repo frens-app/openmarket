@@ -223,7 +223,7 @@ emit them.
 
 `source` on a search is a guess and says so: `.searchCompletion` puts the term in
 the field and submits it, so by `onSubmit` a tapped suggestion and a typed word
-are the same string. Matching against the recents and the interests errs towards
+are the same string. Matching against recent searches errs towards
 crediting the suggestions, which is the right direction for the question being
 asked — whether that list earns its place.
 
