@@ -177,7 +177,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			return nil, err
 		}
 		var count int
-		if err = tx.QueryRow(ctx, `SELECT count(*) FROM price_alerts WHERE user_id=$1`, userID).Scan(&count); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM user_price_alerts WHERE user_id=$1`, userID).Scan(&count); err != nil {
 			return nil, err
 		}
 		if count >= 3 {
@@ -194,7 +194,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		schedule := now.UTC().Round(time.Hour)
 		location, _ := json.Marshal(in.Location)
 		var id string
-		err = tx.QueryRow(ctx, `INSERT INTO price_alerts(user_id,device_id,query,location,created_at,alert_hour,next_check_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`, userID, device, in.Query, location, now, schedule.Hour(), schedule).Scan(&id)
+		err = tx.QueryRow(ctx, `INSERT INTO user_price_alerts(user_id,device_id,query,location,created_at,alert_hour,next_check_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`, userID, device, in.Query, location, now, schedule.Hour(), schedule).Scan(&id)
 		if err != nil {
 			return nil, err
 		}
@@ -210,13 +210,13 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		}
 		defer tx.Rollback(ctx)
 		var owner uuid.UUID
-		if err = tx.QueryRow(ctx, `SELECT user_id FROM price_alerts WHERE id=$1 AND user_id=$2 FOR UPDATE`, id, userID).Scan(&owner); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT user_id FROM user_price_alerts WHERE id=$1 AND user_id=$2 FOR UPDATE`, id, userID).Scan(&owner); err != nil {
 			return nil, alertNotFound(err)
 		}
 		if action == "delete" {
-			_, err = tx.Exec(ctx, `DELETE FROM price_alerts WHERE id=$1`, id)
+			_, err = tx.Exec(ctx, `DELETE FROM user_price_alerts WHERE id=$1`, id)
 		} else if in.Paused {
-			_, err = tx.Exec(ctx, `UPDATE price_alerts SET paused=true WHERE id=$1`, id)
+			_, err = tx.Exec(ctx, `UPDATE user_price_alerts SET paused=true WHERE id=$1`, id)
 		} else {
 			device, e := s.eligibleDevice(ctx, tx, sessionID)
 			if e != nil {
@@ -225,7 +225,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			// A resumed alert binds to the current install; old device cursors cannot travel.
 			_, err = tx.Exec(ctx, `UPDATE price_alert_checks SET cursor=NULL,facebook_actor=NULL,page_number=page_number+1,next_push_at=now(),push_attempts=0 WHERE alert_id=$1 AND completed_at IS NULL AND NOT scan_complete`, id)
 			if err == nil {
-				_, err = tx.Exec(ctx, `UPDATE price_alerts SET paused=false,device_id=$2 WHERE id=$1`, id, device)
+				_, err = tx.Exec(ctx, `UPDATE user_price_alerts SET paused=false,device_id=$2 WHERE id=$1`, id, device)
 			}
 		}
 		if err != nil {
@@ -237,7 +237,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		if err != nil {
 			return nil, err
 		}
-		rows, err := s.pool.Query(ctx, `SELECT c.id,a.id,a.query,a.location,c.cursor,c.facebook_actor,c.page_number FROM price_alert_checks c JOIN price_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete ORDER BY c.created_at LIMIT 3`, userID, device)
+		rows, err := s.pool.Query(ctx, `SELECT c.id,a.id,a.query,a.location,c.cursor,c.facebook_actor,c.page_number FROM price_alert_checks c JOIN user_price_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete ORDER BY c.created_at LIMIT 3`, userID, device)
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +262,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		if err != nil {
 			return nil, alertError(connect.CodeInvalidArgument, "Invalid alert ID.")
 		}
-		rows, err := s.pool.Query(ctx, `SELECT l.listing,l.matched_at,l.viewed_at FROM price_alert_listings l JOIN price_alerts a ON a.id=l.alert_id WHERE a.id=$1 AND a.user_id=$2 AND l.matched AND ($3::timestamptz IS NULL OR (l.matched_at,l.listing_id)<($3,$4)) ORDER BY l.matched_at DESC,l.listing_id DESC LIMIT 100`, id, userID, in.Before, in.BeforeID)
+		rows, err := s.pool.Query(ctx, `SELECT l.listing,l.matched_at,l.viewed_at FROM price_alert_listings l JOIN user_price_alerts a ON a.id=l.alert_id WHERE a.id=$1 AND a.user_id=$2 AND l.matched AND ($3::timestamptz IS NULL OR (l.matched_at,l.listing_id)<($3,$4)) ORDER BY l.matched_at DESC,l.listing_id DESC LIMIT 100`, id, userID, in.Before, in.BeforeID)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +286,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		if err != nil {
 			return nil, alertError(connect.CodeInvalidArgument, "Invalid alert ID.")
 		}
-		_, err = s.pool.Exec(ctx, `UPDATE price_alert_listings l SET viewed_at=COALESCE(l.viewed_at,now()) FROM price_alerts a WHERE a.id=l.alert_id AND a.user_id=$1 AND a.id=$2 AND l.matched AND l.listing_id=ANY($3)`, userID, id, in.ListingIDs)
+		_, err = s.pool.Exec(ctx, `UPDATE price_alert_listings l SET viewed_at=COALESCE(l.viewed_at,now()) FROM user_price_alerts a WHERE a.id=l.alert_id AND a.user_id=$1 AND a.id=$2 AND l.matched AND l.listing_id=ANY($3)`, userID, id, in.ListingIDs)
 		return nil, err
 	default:
 		return nil, alertError(connect.CodeNotFound, "Unknown action.")
@@ -323,7 +323,7 @@ func validateAlert(in alertRequest) error {
 	return nil
 }
 func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
-	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.location,a.created_at,a.alert_hour,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM price_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM price_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM price_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
+	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.location,a.created_at,a.alert_hour,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM price_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM price_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM user_price_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +369,7 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 	var page int
 	var actor, cursor *string
 	var done bool
-	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM price_alert_checks c JOIN price_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused AND c.completed_at IS NULL FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
+	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM price_alert_checks c JOIN user_price_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused AND c.completed_at IS NULL FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
 	if err != nil {
 		return alertNotFound(err)
 	}

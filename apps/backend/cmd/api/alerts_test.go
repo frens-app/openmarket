@@ -178,13 +178,13 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		var created, next time.Time
 		var hour int
-		if err := pool.QueryRow(ctx, `SELECT created_at,next_check_at,alert_hour FROM price_alerts WHERE user_id=$1 LIMIT 1`, user).Scan(&created, &next, &hour); err != nil {
+		if err := pool.QueryRow(ctx, `SELECT created_at,next_check_at,alert_hour FROM user_price_alerts WHERE user_id=$1 LIMIT 1`, user).Scan(&created, &next, &hour); err != nil {
 			t.Fatal(err)
 		}
 		if !created.UTC().Round(time.Hour).Equal(next) || hour != next.UTC().Hour() {
 			t.Fatal("schedule is not rounded creation time")
 		}
-		exec(t, `UPDATE price_alerts SET paused=true WHERE user_id=$1`, user)
+		exec(t, `UPDATE user_price_alerts SET paused=true WHERE user_id=$1`, user)
 		_, err := s.handle(c, "create", alertRequest{Query: "Fourth alert", Location: alertLocation{CitySlug: "sf", RadiusKM: 16}})
 		if connect.CodeOf(err) != connect.CodeResourceExhausted {
 			t.Fatalf("paused alerts escaped limit: %v", err)
@@ -194,8 +194,8 @@ func TestAlertsIntegration(t *testing.T) {
 		s, c, _, _, p, _ := fixture(t)
 		oldest := create(t, s, c)
 		newest := create(t, s, c)
-		exec(t, `UPDATE price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=ANY($1::uuid[])`, []string{oldest, newest})
-		exec(t, `UPDATE price_alerts SET created_at=created_at-interval '1 day' WHERE id=$1`, oldest)
+		exec(t, `UPDATE user_price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=ANY($1::uuid[])`, []string{oldest, newest})
+		exec(t, `UPDATE user_price_alerts SET created_at=created_at-interval '1 day' WHERE id=$1`, oldest)
 		exec(t, `UPDATE price_alert_worker_clock SET next_dispatch_at=now()-interval '1 minute'`)
 		var wg sync.WaitGroup
 		for range 6 {
@@ -227,7 +227,7 @@ func TestAlertsIntegration(t *testing.T) {
 		if connect.CodeOf(err) != connect.CodeNotFound {
 			t.Fatalf("cross-account deletion: %v", err)
 		}
-		exec(t, `UPDATE price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		exec(t, `UPDATE user_price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		var count int
 		_ = pool.QueryRow(ctx, `SELECT count(*) FROM price_alert_checks WHERE alert_id=$1`, id).Scan(&count)
@@ -238,7 +238,7 @@ func TestAlertsIntegration(t *testing.T) {
 	t.Run("dedup matches viewed retries and daily checks", func(t *testing.T) {
 		s, c, user, _, p, e := fixture(t)
 		id := create(t, s, c)
-		exec(t, `UPDATE price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		exec(t, `UPDATE user_price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		work := getWork(t, s, c)
 		if len(work) != 1 || len(p.sent) != 1 {
@@ -287,12 +287,12 @@ func TestAlertsIntegration(t *testing.T) {
 		if viewed == nil {
 			t.Fatal("view not persisted")
 		}
-		exec(t, `UPDATE price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		exec(t, `UPDATE user_price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		if len(getWork(t, s, c)) != 0 {
 			t.Fatal("checked twice in 24 hours")
 		}
-		exec(t, `UPDATE price_alerts SET last_checked_at=now()-interval '25 hours' WHERE id=$1`, id)
+		exec(t, `UPDATE user_price_alerts SET last_checked_at=now()-interval '25 hours' WHERE id=$1`, id)
 		dispatch(t, s)
 		work = getWork(t, s, c)
 		if len(work) != 1 {
@@ -309,7 +309,7 @@ func TestAlertsIntegration(t *testing.T) {
 		if len(e.inputs) != 2 || len(e.inputs[1].Candidates) != 1 || e.inputs[1].Candidates[0].ID != "102" {
 			t.Fatal("reevaluated old matched/rejected listings")
 		}
-		exec(t, `DELETE FROM price_alerts WHERE user_id=$1`, user)
+		exec(t, `DELETE FROM user_price_alerts WHERE user_id=$1`, user)
 		var remaining int
 		_ = pool.QueryRow(ctx, `SELECT count(*) FROM price_alert_listings WHERE alert_id=$1`, id).Scan(&remaining)
 		if remaining != 0 {
@@ -319,7 +319,7 @@ func TestAlertsIntegration(t *testing.T) {
 	t.Run("cursor resume stale uploads pause and evaluation failures", func(t *testing.T) {
 		s, c, _, _, _, e := fixture(t)
 		id := create(t, s, c)
-		exec(t, `UPDATE price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		exec(t, `UPDATE user_price_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		w := getWork(t, s, c)[0]
 		cursor := "page-2"
@@ -477,14 +477,14 @@ func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
 	}
 	assertMainData()
 	var alertTable *string
-	if err = pool.QueryRow(ctx, `SELECT to_regclass('price_alerts')::text`).Scan(&alertTable); err != nil || alertTable == nil {
+	if err = pool.QueryRow(ctx, `SELECT to_regclass('user_price_alerts')::text`).Scan(&alertTable); err != nil || alertTable == nil {
 		t.Fatalf("missing alerts table: %v", err)
 	}
 	if err = goose.DownTo(sqlDB, migrations, 21); err != nil {
 		t.Fatal(err)
 	}
 	assertMainData()
-	if err = pool.QueryRow(ctx, `SELECT to_regclass('price_alerts')::text`).Scan(&alertTable); err != nil || alertTable != nil {
+	if err = pool.QueryRow(ctx, `SELECT to_regclass('user_price_alerts')::text`).Scan(&alertTable); err != nil || alertTable != nil {
 		t.Fatalf("alerts rollback failed: %v", err)
 	}
 	if err = goose.Up(sqlDB, migrations); err != nil {

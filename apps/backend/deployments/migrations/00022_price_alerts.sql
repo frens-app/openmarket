@@ -1,5 +1,5 @@
 -- +goose Up
-CREATE TABLE price_alerts (
+CREATE TABLE user_price_alerts (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_id uuid NOT NULL REFERENCES user_devices(id) ON DELETE CASCADE,
@@ -11,12 +11,12 @@ CREATE TABLE price_alerts (
     last_checked_at timestamptz,
     paused boolean NOT NULL DEFAULT false
 );
-CREATE INDEX price_alerts_due ON price_alerts(next_check_at, created_at) WHERE NOT paused;
-CREATE INDEX price_alerts_user ON price_alerts(user_id);
+CREATE INDEX user_price_alerts_due ON user_price_alerts(next_check_at, created_at) WHERE NOT paused;
+CREATE INDEX user_price_alerts_user ON user_price_alerts(user_id);
 
 CREATE TABLE price_alert_checks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    alert_id uuid NOT NULL REFERENCES price_alerts(id) ON DELETE CASCADE,
+    alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
     created_at timestamptz NOT NULL DEFAULT now(),
     cursor text,
     facebook_actor text,
@@ -33,7 +33,7 @@ CREATE INDEX price_alert_checks_evaluation ON price_alert_checks(evaluation_afte
 CREATE UNIQUE INDEX price_alert_checks_active ON price_alert_checks(alert_id) WHERE completed_at IS NULL;
 
 CREATE TABLE price_alert_listings (
-    alert_id uuid NOT NULL REFERENCES price_alerts(id) ON DELETE CASCADE,
+    alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
     listing_id text NOT NULL,
     check_id uuid NOT NULL REFERENCES price_alert_checks(id) ON DELETE CASCADE,
     listing jsonb NOT NULL,
@@ -50,7 +50,7 @@ CREATE INDEX price_alert_listings_matches ON price_alert_listings(alert_id, matc
 
 CREATE TABLE price_alert_notifications (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    alert_id uuid NOT NULL REFERENCES price_alerts(id) ON DELETE CASCADE,
+    alert_id uuid NOT NULL REFERENCES user_price_alerts(id) ON DELETE CASCADE,
     check_id uuid NOT NULL UNIQUE REFERENCES price_alert_checks(id) ON DELETE CASCADE,
     listing_ids text[] NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -69,4 +69,4 @@ DROP TABLE price_alert_worker_clock;
 DROP TABLE price_alert_notifications;
 DROP TABLE price_alert_listings;
 DROP TABLE price_alert_checks;
-DROP TABLE price_alerts;
+DROP TABLE user_price_alerts;
