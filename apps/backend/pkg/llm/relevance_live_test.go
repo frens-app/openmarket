@@ -85,3 +85,47 @@ func TestJevLiveSwitch(t *testing.T) {
 		}
 	}
 }
+
+func TestJevLiveAlertRequirements(t *testing.T) {
+	key := os.Getenv("JEV_LIVE_API_KEY")
+	if key == "" {
+		t.Skip("set JEV_LIVE_API_KEY to run the gateway regression test")
+	}
+	cases := []struct {
+		query      string
+		candidates []Candidate
+		accepted   map[string]bool
+	}{
+		{"Anthurium", []Candidate{
+			{ID: "hybrid", Item: ComparisonItem{Title: "Variegated Anthurium (Crystallium x Aos) x (SKG Pink Lemonade x RC)", Description: "Price: $80"}},
+			{ID: "other", Item: ComparisonItem{Title: "Monstera adansonii"}},
+			{ID: "accessory", Item: ComparisonItem{Title: "Empty plant pot for Anthurium"}},
+			{ID: "vague", Item: ComparisonItem{Title: "Plant"}},
+		}, map[string]bool{"hybrid": true}},
+		{"Nintendo Switch OLED under $200", []Candidate{
+			{ID: "match", Item: ComparisonItem{Title: "Nintendo Switch OLED", Description: "Price: $150"}},
+			{ID: "over", Item: ComparisonItem{Title: "Nintendo Switch OLED", Description: "Price: $300"}},
+			{ID: "wrong", Item: ComparisonItem{Title: "Nintendo Switch Lite", Description: "Price: $100"}},
+		}, map[string]bool{"match": true}},
+		{"Anthurium, non-seedlings only", []Candidate{
+			{ID: "match", Item: ComparisonItem{Title: "Mature Anthurium crystallinum plant"}},
+			{ID: "seedling", Item: ComparisonItem{Title: "Anthurium crystallinum seedling"}},
+		}, map[string]bool{"match": true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			decisions, _, err := NewJevEvaluator(key).Evaluate(ctx, EvaluationInput{Requirements: true, Target: ComparisonItem{Title: tc.query}, Candidates: tc.candidates})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, d := range decisions {
+				t.Logf("%s %.3f matched=%t", d.ID, d.Probability, d.UseInComparison)
+				if d.UseInComparison != tc.accepted[d.ID] {
+					t.Errorf("incorrect classification: %s", d.ID)
+				}
+			}
+		})
+	}
+}

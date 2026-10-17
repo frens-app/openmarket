@@ -230,7 +230,7 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 
-	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New listing alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String()})
+	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New listing alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String(), "notification_id": notificationID.String()})
 	s.invalidateToken(ctx, deviceID, token, err)
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()

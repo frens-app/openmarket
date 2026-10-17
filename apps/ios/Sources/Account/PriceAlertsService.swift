@@ -123,6 +123,10 @@ final class PriceAlertsService {
         var alertHour: Int?
         var alertMinute: Int?
         var timeZone: String?
+        var interactionID: String?
+        var notificationID: String?
+        var source: String?
+        var listingID: String?
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}

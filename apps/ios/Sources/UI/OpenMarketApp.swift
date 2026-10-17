@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         if info["kind"] as? String == "price_alert_match", let id = info["alert_id"] as? String {
-            Task { @MainActor in PriceAlertCoordinator.shared.open(id) }
+            Task { @MainActor in PriceAlertCoordinator.shared.open(id, notificationID: info["notification_id"] as? String) }
         }
         completionHandler()
     }

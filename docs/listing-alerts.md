@@ -4,6 +4,7 @@ The `user_listing_alerts` table stores each user’s alert and its schedule.
 `listing_alert_check_runs` stores each search run and its upload/evaluation progress.
 `listing_alert_background_fetch_attempts` traces silent pings and foreground recovery.
 `listing_alert_notification_outbox` stores grouped match notifications and their single-send outcome.
+`listing_alert_interactions` records alert and listing opens, their entry source, and the originating notification when applicable.
 An account can hold three alerts, including paused alerts. Each alert saves the
 buyer's text, a fallback search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
@@ -60,7 +61,9 @@ point both Debug and Release installs at one alerts-enabled backend.
 model-call rate cap. It still uses `LLM_MAX_ATTEMPTS` for failed-call retries,
 the existing 0.8 Jev acceptance threshold, and records usage in `llm_runs`.
 Alert matching respects explicit product requirements and price limits in the
-buyer's text; the more permissive Price Check comparable rules remain separate.
+buyer's text; broad queries accept varieties within the requested product category.
+Explicit mandatory requirements remain strict; wording such as ‘preferably’ is a
+preference. The more permissive Price Check comparable rules remain separate.
 
 The existing `DATABASE_URL`, authentication, and other required backend settings
 still apply. Migrations `00024_listing_alerts.sql`,
@@ -194,16 +197,15 @@ WebKit suspension can defer a Facebook search until the app is foregrounded. Thi
 architecture cannot guarantee a daily search at an exact time with only a phone's
 Facebook session. No environment variable removes that platform constraint.
 
-Notification delivery is at least once: stable APNs collapse identifiers reduce
-duplicate retries, but a process/network failure after APNs accepts a visible
-push and before the database records success can still produce a repeated push.
-Persisted listing matches and evaluation records remain unique in that case.
+Visible notifications receive one send attempt. A process failure after claiming
+a notification can leave its delivery outcome unknown; it is not sent again.
 
 ## API and verification
 
 The authenticated JSON endpoints are `POST /v1/price-alerts/{action}`. They reuse
 the existing access-token and active-session authentication. Actions are `list`,
-`create`, `state` (pause/resume), `delete`, `work`, `page`, `matches`, and `viewed`.
+`create`, `state` (pause/resume), `delete`, `work`, `fetch-event`, `page`, `matches`,
+`interaction`, and the legacy `viewed` action.
 The Go request/response types live in `cmd/api/alerts.go`; iOS wire types are in
 `PriceAlertsService.swift`. Responses use RFC3339 timestamps. Match pagination
 uses the exact `matchedCursor` string and listing ID as a pair so equal timestamps
@@ -222,10 +224,10 @@ ALERTS_TEST_DATABASE_URL='postgres://…' go test ./cmd/api -run 'TestAlertsInte
 These tests apply migrations, create isolated accounts, and clean up those
 accounts. They cover concurrent limits, scheduling, permissions, cross-account
 access, upload retries, cursor recovery, matched/rejected deduplication,
-notification retries, pagination, and viewed state. A separate migration test
+single-send notification behavior, pagination, interaction attribution, and viewed state. A separate migration test
 applies main through version 23, seeds existing account, listing price,
-saved-listing/view, and sign-in linking data, then upgrades to version 24 and
-rolls back/reapplies it, checking that the existing data remains intact. The APNs tests verify signed
+saved-listing/view, and sign-in linking data, then upgrades through version 27 and
+rolls back/reapplies the alert migrations, checking that the existing data remains intact. The APNs tests verify signed
 provider tokens and push headers against a local HTTP server. No unit/integration
 test sends real pushes or bills Jev.
 
@@ -306,3 +308,32 @@ Old apps remain compatible but cannot supply per-fetch receipts or upload
 correlation. Deploy the backend before installing the new client. No new
 environment variables are required. Deleting an alert/account cascades its fetch
 history and uploaded snapshots along with its existing alert data.
+
+## Click history
+
+Visible pushes carry `notification_id`. Opening an alert records `alert_opened`;
+opening a listing records `listing_opened` and preserves the listing's first
+`viewed_at`. Sources distinguish `notification`, `alerts_tab`, and `creation`.
+Notification entry carries its outbox ID through subsequent listing opens, so
+clicks join back to the notification, check, and background fetch. Opening an
+alert does not mark all of its listings viewed.
+
+The authenticated `interaction` action accepts a client-generated `interactionID`
+for idempotency, alert `id`, `event`, `source`, optional `notificationID`, and
+`listingID` for listing opens. The server validates ownership, notification
+membership, and matched-listing membership. Refreshing a screen reuses its event
+ID; opening it again creates another event. These are server-received events;
+failed network requests are not durably queued on the phone.
+
+```sql
+SELECT i.created_at, i.kind, i.source, i.listing_id,
+       i.notification_id, n.check_id
+FROM listing_alert_interactions i
+LEFT JOIN listing_alert_notification_outbox n ON n.id=i.notification_id
+WHERE i.alert_id='00000000-0000-0000-0000-000000000000'
+ORDER BY i.created_at;
+```
+
+Receipt events are best effort. A missing `acknowledged_at` does not mean the
+phone failed to respond: `work_requested_at`, `search_started_at`, and
+`upload_received_at` independently prove progress for the same fetch ID.

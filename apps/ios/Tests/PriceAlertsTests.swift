@@ -3,6 +3,17 @@ import XCTest
 
 @MainActor
 final class PriceAlertsTests: XCTestCase {
+    func testNotificationNavigationKeepsNotificationID() {
+        let coordinator = PriceAlertCoordinator.shared
+        coordinator.open("alert", notificationID: "notification")
+        XCTAssertEqual(coordinator.openAlertID, "alert")
+        XCTAssertEqual(coordinator.openNotificationID, "notification")
+        XCTAssertEqual(coordinator.selectedTab, 3)
+        coordinator.open("legacy-alert")
+        XCTAssertNil(coordinator.openNotificationID)
+        coordinator.openAlertID = nil
+    }
+
     func testWorkUsesNewestAvailableSearchAndSavedLocation() throws {
         let data = Data(#"{"work":[{"id":"check","alertID":"alert","query":"Switch OLED","location":{"citySlug":"sanfrancisco","name":"San Francisco","radiusKM":16,"latitude":37.77,"longitude":-122.42},"cursor":"next-page","actor":"123","pageNumber":2}]}"#.utf8)
         let work = try PriceAlertsService.decoder().decode(PriceAlertsService.WorkList.self, from: data).work[0]

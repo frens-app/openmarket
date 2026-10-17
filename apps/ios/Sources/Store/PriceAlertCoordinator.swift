@@ -7,11 +7,13 @@ final class PriceAlertCoordinator: ObservableObject {
     static let shared = PriceAlertCoordinator()
     @Published var selectedTab = 0
     @Published var openAlertID: String?
+    private(set) var openNotificationID: String?
     @Published private(set) var webView: WKWebView?
     private var running: Task<Bool, Never>?
     private let service = PriceAlertsService()
 
-    func open(_ id: String) {
+    func open(_ id: String, notificationID: String? = nil) {
+        openNotificationID = notificationID
         selectedTab = 3
         openAlertID = id
     }

@@ -69,6 +69,10 @@ type alertListing struct {
 	Condition    string `json:"condition"`
 }
 type alertRequest struct {
+	InteractionID  string         `json:"interactionID"`
+	NotificationID string         `json:"notificationID"`
+	Source         string         `json:"source"`
+	ListingID      string         `json:"listingID"`
 	AlertHour      *int           `json:"alertHour"`
 	AlertMinute    *int           `json:"alertMinute"`
 	TimeZone       string         `json:"timeZone"`
@@ -171,6 +175,8 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 	userID, _ := auth.UserID(ctx)
 	sessionID, _ := auth.SessionID(ctx)
 	switch action {
+	case "interaction":
+		return nil, s.recordInteraction(ctx, userID, in)
 	case "list":
 		return s.list(ctx, userID)
 	case "create":

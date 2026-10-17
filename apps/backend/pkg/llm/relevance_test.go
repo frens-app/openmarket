@@ -154,7 +154,7 @@ func TestJevAlertRequirementsDoNotUseComparableRelaxations(t *testing.T) {
 			return
 		}
 		question := req.Questions["candidate_0"]
-		if !strings.Contains(question.Criteria["true"], "price limits") || !strings.Contains(question.Instructions, "explicit requirements") || strings.Contains(question.Criteria["true"], "Ignore price") {
+		if !strings.Contains(question.Criteria["true"], "price") || !strings.Contains(question.Criteria["false"], "mandatory requirement") || strings.Contains(question.Criteria["true"], "Ignore price") {
 			t.Errorf("wrong alert criteria: %+v", question)
 		}
 		_, _ = w.Write([]byte(`{"answers":{"candidate_0":{"type":"boolean","probability":0.9}}}`))

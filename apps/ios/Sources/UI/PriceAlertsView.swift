@@ -1,6 +1,13 @@
 import SwiftUI
 import UIKit
 
+private struct AlertRoute: Hashable {
+    let alertID: String
+    var source = "alerts_tab"
+    var notificationID: String?
+    let interactionID = UUID().uuidString
+}
+
 struct PriceAlertsView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
@@ -8,7 +15,7 @@ struct PriceAlertsView: View {
     @ObservedObject private var push = PushRegistrar.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var alerts: [PriceAlert] = []
-    @State private var path: [String] = []
+    @State private var path: [AlertRoute] = []
     @State private var query = ""
     @State private var alertTime = AlertSchedule.defaultTime()
     @State private var error: String?
@@ -44,7 +51,7 @@ struct PriceAlertsView: View {
                     ContentUnavailableView("No listing alerts yet", systemImage: "bell", description: Text("Create an alert for a product you want to find."))
                 }
                 ForEach(alerts) { alert in
-                    NavigationLink(value: alert.id) {
+                    NavigationLink(value: AlertRoute(alertID: alert.id)) {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(alert.query).font(.headline)
@@ -76,8 +83,8 @@ struct PriceAlertsView: View {
                         .disabled(!account.isSignedIn || !connected || !push.isEnabled || busy)
                 }
             }
-            .navigationDestination(for: String.self) { id in
-                AlertMatchesView(alertID: id, alert: alerts.first { $0.id == id }, changed: { Task { await refresh() } })
+            .navigationDestination(for: AlertRoute.self) { route in
+                AlertMatchesView(route: route, alert: alerts.first { $0.id == route.alertID }, changed: { Task { await refresh() } })
             }
             .refreshable { await refresh() }
             .task { await refresh(); navigateToPush() }
@@ -144,7 +151,7 @@ struct PriceAlertsView: View {
                 alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone), as: PriceAlertsService.Created.self)
             showCreate = false
             await refresh()
-            path = [created.id]
+            path = [AlertRoute(alertID: created.id, source: "creation")]
         } catch { self.error = error.localizedDescription }
     }
 
@@ -173,13 +180,14 @@ struct PriceAlertsView: View {
 
     private func navigateToPush() {
         guard let id = coordinator.openAlertID else { return }
-        path = [id]
+        path = [AlertRoute(alertID: id, source: "notification", notificationID: coordinator.openNotificationID)]
         coordinator.openAlertID = nil
     }
 }
 
 private struct AlertMatchesView: View {
-    let alertID: String
+    let route: AlertRoute
+    private var alertID: String { route.alertID }
     let alert: PriceAlert?
     let changed: () -> Void
     @State private var matches: [AlertMatch] = []
@@ -187,6 +195,7 @@ private struct AlertMatchesView: View {
     @State private var more = false
     @State private var loading = false
     @State private var selected: AlertMatch?
+    @State private var listingInteractionID = UUID().uuidString
     @State private var paused = false
     @State private var confirmDelete = false
     @Environment(\.dismiss) private var dismiss
@@ -200,7 +209,7 @@ private struct AlertMatchesView: View {
                 ContentUnavailableView("No matches yet", systemImage: "bell", description: Text("Matching listings will appear here after a check completes."))
             }
             ForEach(matches) { match in
-                Button { selected = match } label: {
+                Button { listingInteractionID = UUID().uuidString; selected = match } label: {
                     HStack(spacing: 12) {
                         AsyncImage(url: URL(string: match.listing.thumbnailURL)) { image in image.resizable().scaledToFill() } placeholder: { Color(.secondarySystemBackground) }
                             .frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 10))
@@ -246,7 +255,8 @@ private struct AlertMatchesView: View {
             }
             .task {
                 do {
-                    let _: PriceAlertsService.Empty = try await service.call("viewed", .init(id: alertID, listingIDs: [match.id]), as: PriceAlertsService.Empty.self)
+                    let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "listing_opened",
+                        interactionID: listingInteractionID, notificationID: route.notificationID, source: route.source, listingID: match.id), as: PriceAlertsService.Empty.self)
                     if let index = matches.firstIndex(where: { $0.id == match.id }) { matches[index].viewedAt = Date() }
                     changed()
                 } catch { self.error = error.localizedDescription }
@@ -258,6 +268,8 @@ private struct AlertMatchesView: View {
         guard !loading else { return }
         loading = true; defer { loading = false }
         do {
+            let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
+                interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: PriceAlertsService.Empty.self)
             let last = reset ? nil : matches.last
             let loaded = try await service.call("matches", .init(id: alertID, beforeID: last?.id, before: last?.matchedCursor), as: PriceAlertsService.MatchList.self).matches
             if reset { matches = loaded } else { matches += loaded.filter { item in !matches.contains { $0.id == item.id } } }

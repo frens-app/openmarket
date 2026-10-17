@@ -169,6 +169,76 @@ func TestAlertsIntegration(t *testing.T) {
 		return v.(map[string]any)["work"].([]alertWork)
 	}
 
+	t.Run("interaction attribution ownership and idempotence", func(t *testing.T) {
+		s, c, _, _, push, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		work := getWork(t, s, c)[0]
+		if _, err := s.handle(c, "page", alertRequest{CheckID: work.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "123", Title: "Nintendo Switch"}, {ID: "456", Title: "wrong product"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.evaluateBatch(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.notifyMatches(ctx); err != nil {
+			t.Fatal(err)
+		}
+		notification := push.sent[len(push.sent)-1]["notification_id"].(string)
+		request := alertRequest{ID: id, InteractionID: uuid.NewString(), NotificationID: notification, Source: "notification", Event: "alert_opened"}
+		_, other, _, _, _, _ := fixture(t)
+		if _, err := s.handle(other, "interaction", request); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("cross account: %v", err)
+		}
+		for range 2 {
+			if _, err := s.handle(c, "interaction", request); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_interactions WHERE alert_id=$1`, id).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("duplicate event: %d %v", count, err)
+		}
+		request.InteractionID = uuid.NewString()
+		request.Event = "listing_opened"
+		request.ListingID = "123"
+		if _, err := s.handle(c, "interaction", request); err != nil {
+			t.Fatal(err)
+		}
+		var first time.Time
+		if err := pool.QueryRow(ctx, `SELECT viewed_at FROM listing_alert_listings WHERE alert_id=$1 AND listing_id='123'`, id).Scan(&first); err != nil {
+			t.Fatal(err)
+		}
+		request.InteractionID = uuid.NewString()
+		request.Source = "alerts_tab"
+		request.NotificationID = ""
+		if _, err := s.handle(c, "interaction", request); err != nil {
+			t.Fatal(err)
+		}
+		var last time.Time
+		if err := pool.QueryRow(ctx, `SELECT viewed_at FROM listing_alert_listings WHERE alert_id=$1 AND listing_id='123'`, id).Scan(&last); err != nil || !last.Equal(first) {
+			t.Fatalf("first view changed: %v", err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_interactions WHERE alert_id=$1`, id).Scan(&count); err != nil || count != 3 {
+			t.Fatalf("missing clicks: %d %v", count, err)
+		}
+		request.ListingID = "456"
+		request.InteractionID = uuid.NewString()
+		if _, err := s.handle(c, "interaction", request); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("rejected listing click: %v", err)
+		}
+		request.ListingID = "123"
+		request.Source = "notification"
+		request.NotificationID = uuid.NewString()
+		if _, err := s.handle(c, "interaction", request); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("unrelated notification: %v", err)
+		}
+		request.Source = "bogus"
+		if _, err := s.handle(c, "interaction", request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("invalid source: %v", err)
+		}
+	})
+
 	t.Run("concurrent limit and exact schedule", func(t *testing.T) {
 		s, c, user, _, _, _ := fixture(t)
 		var wg sync.WaitGroup
@@ -823,7 +893,7 @@ func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT alert_hour=0 AND alert_minute=0 AND time_zone='UTC' FROM user_listing_alerts WHERE id=$1`, legacyAlert).Scan(&preserved); err != nil || !preserved {
 		t.Fatal("legacy schedule changed", err)
 	}
-	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 26 {
+	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 27 {
 		t.Fatalf("migration version = %d, error = %v", version, err)
 	}
 	assertMainData()
