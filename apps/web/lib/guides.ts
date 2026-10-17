@@ -173,6 +173,7 @@ export const GUIDES: Guide[] = [
 -->
 
 <h2>How to reduce it</h2>
+<p>For step-by-step help, start with our guide to <a href="/guides/facebook-marketplace-distance-filter-not-working">checking your location pin, choosing local pickup, and setting a custom distance</a>.</p>
 <p><strong>Set an explicit radius.</strong> Filter icon → <strong>Distance</strong> → anything other than "Suggested".</p>
 
 <figure>
@@ -207,6 +208,125 @@ export const GUIDES: Guide[] = [
 
 <hr />
 
+<p class="fine-print">Openmarket is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Facebook Marketplace are trademarks of Meta Platforms, Inc., used here for identification and commentary only.</p>
+`,
+  },
+  {
+    slug: "facebook-marketplace-distance-filter-not-working",
+    title: "Facebook Marketplace Distance Filter Not Working? Try This",
+    description:
+      "Check your location pin, choose local pickup, and set a custom distance. Step-by-step tips for fewer far-away listings, plus why ads can still appear.",
+    date: "2026-10-15",
+    lastVerified: "2026-08-18",
+    author: "Brian Li",
+    readingMinutes: 4,
+    howTo: [
+      {
+        name: "Check your location pin",
+        text: "From Marketplace search results, tap the location beside the pin icon. Search for the neighborhood or postal code where you want to shop, check the point on the map, and tap Apply. Reopen Location to check the selection.",
+      },
+      {
+        name: "Choose local pickup",
+        text: "Open the search filters, choose Delivery, select Local rather than Shipped or All Marketplace, and tap See items. Check for the Local chip above the results.",
+      },
+      {
+        name: "Set a custom distance",
+        text: "Open Distance, select Custom distance rather than Suggested, and move the slider to your preferred radius. Return to the results, then reopen Distance to check that Custom distance and the intended mileage are selected.",
+      },
+    ],
+    faq: [
+      {
+        q: "What should I check first if the Facebook Marketplace distance filter is not working?",
+        a: "Start with the location pin and the Delivery filter. Set the location to the area where you want to shop, choose Local for pickup listings, then select a custom distance instead of Suggested. These are settings to check, not a guarantee that the feed will contain only nearby listings.",
+      },
+      {
+        q: "Where is the local pickup filter on Facebook Marketplace?",
+        a: "In our August 2026 iPhone screenshots, it is under Delivery and labeled Local. Select Local instead of Shipped or All Marketplace, then tap See items. Labels and available controls may differ by account, region, or app version.",
+      },
+      {
+        q: "Will local pickup and a smaller radius remove sponsored posts?",
+        a: "Do not expect these settings to remove ads or sponsored posts. You may still see advertising for products or businesses outside your area. Look for the Ad label before treating a card as a local seller's listing.",
+      },
+      {
+        q: "What if ordinary local listings are still outside my radius?",
+        a: "Reopen Location, Delivery, and Distance to check the selected values, then compare an ordinary listing's location with your chosen area. If the mismatch remains, save screenshots of the filters and listing when reporting the problem to Facebook. Our archived testing does not establish a universal fix for that case.",
+      },
+    ],
+    html: `
+<aside class="tldr">
+  <p class="tldr-label">Try these settings first</p>
+  <p>Check your location pin and choose local pickup first, then set a custom distance. You may still see ads and sponsored posts for products or businesses outside your area; these settings are not an ad blocker.</p>
+</aside>
+
+<p class="dek">Steps and screenshots from the Facebook iOS app v574.0.0, tested in San Francisco on August 18, 2026. Published October 15, 2026 using those archived captures; controls may differ in your app.</p>
+
+<div class="table-scroll">
+<table>
+<thead><tr><th>Check</th><th>What to choose</th><th>What to look for afterward</th></tr></thead>
+<tbody>
+<tr><td>Location</td><td>Your intended pickup area</td><td>The correct location in the picker</td></tr>
+<tr><td>Delivery</td><td>Local</td><td>A Local chip above the results</td></tr>
+<tr><td>Distance</td><td>Custom distance</td><td>Your chosen mileage in the distance sheet</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>1. Is your location pin in the right place?</h2>
+<p>Check the search location before shrinking the radius. If you want to shop near your neighborhood, start there instead of accepting a city-wide location.</p>
+<ol>
+  <li>Search for an item in Marketplace. Beside the results heading, tap the location next to the pin icon.</li>
+  <li>Search for the neighborhood or postal code where you want to shop, then check the point shown on the map.</li>
+  <li>Tap <strong>Apply</strong> to return to the results.</li>
+  <li>Reopen <strong>Location</strong> and check the selection before judging the distances on listings.</li>
+</ol>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/set-location.jpg" alt="Facebook Marketplace Location picker with a San Francisco search field, map, and Apply button" loading="lazy" /></div>
+  <figcaption>Location picker, August 18, 2026. Check the area on the map, then tap Apply.</figcaption>
+</figure>
+
+<h2>2. How do you choose local pickup?</h2>
+<p>If you want to collect an item in person, check delivery separately from distance. In the version we tested, the pickup option was called <strong>Local</strong> under <strong>Delivery</strong>.</p>
+<ol>
+  <li>Open the filters from your Marketplace search results and choose <strong>Delivery</strong>.</li>
+  <li>Select <strong>Local</strong> instead of <strong>Shipped</strong> or <strong>All Marketplace</strong>.</li>
+  <li>Tap <strong>See items</strong>, then check for the <strong>Local</strong> chip above the results.</li>
+</ol>
+<p>Use this to narrow your search to pickup listings. It is a separate check from whether the seller is close enough: inspect the listing's location before arranging a pickup.</p>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/set-delivery.jpg" alt="Marketplace Delivery filter with Local selected, Shipped and All Marketplace unselected, and a See items button" loading="lazy" /></div>
+  <figcaption>Delivery filter, August 18, 2026. The option is labeled Local, and the confirmation button is See items.</figcaption>
+</figure>
+
+<h2>3. Have you set a custom distance?</h2>
+<p>Once the location and delivery method are right, open <strong>Distance</strong>. In our archived test, <strong>Suggested</strong> was selected by default; a search using that setting included a result 86 miles from San Francisco.</p>
+<ol>
+  <li>Open <strong>Distance</strong> from the search results.</li>
+  <li>Select <strong>Custom distance</strong> and move the slider to the radius you want.</li>
+  <li>Return to the results, then reopen <strong>Distance</strong> to check that Custom distance and your intended mileage are selected.</li>
+</ol>
+<figure>
+  <div class="device"><img src="/guides/distance-filter/set-distance.jpg" alt="Marketplace Distance filter with Custom distance selected and the slider set to 7 miles" loading="lazy" /></div>
+  <figcaption>Custom distance selected at 7 miles, August 18, 2026. Reopen this sheet to check the setting.</figcaption>
+</figure>
+
+<h2>Why do ads still appear outside your area?</h2>
+<p><strong>You may still see ads and sponsored posts for products or businesses outside your area.</strong> Do not expect local pickup and distance settings to remove advertising from the feed.</p>
+<p>In our August captures, ads appeared both as a full row and as individual cards mixed between seller listings. The cards were marked <strong>Ad</strong> and did not carry the mileage labels shown on neighboring local listings. An ad in the grid is not a useful test of whether your pickup radius is set correctly.</p>
+<p>For examples of ads, shipped items, and partner listings, see <a href="/guides/facebook-marketplace-items-outside-distance-filter">why Facebook Marketplace shows items outside your distance filter</a>. That guide explains what you are seeing in the feed.</p>
+
+<h2>What if local listings are still too far away?</h2>
+<p>Pick an ordinary seller listing with a location label, rather than an ad, and compare it with the area you selected. Recheck Location, Delivery, and Distance in the same search. If the settings are right and the listing is still outside your radius, save screenshots of both the filters and the listing when reporting the issue to Facebook.</p>
+<p>These steps help you check the settings you control. Our archived testing does not establish a universal fix for ordinary listings that still fall outside an explicitly selected radius.</p>
+
+<aside class="method">
+  <p class="method-label">Sources and testing</p>
+  <p>This guide uses our August 18, 2026 captures from Facebook iOS v574.0.0 in San Francisco. The three settings screenshots come from one session searching for “firbit air” with Custom distance set to 7 miles. The Suggested example comes from a separate “anthurium” search; the ad examples come from a “fitbit air” search. These are three sessions from the five-session archive behind our linked explainer.</p>
+  <p>We reviewed the archived controls for this guide, rather than running a new October test. The captures show filter selections and examples of results, not a measured before-and-after success rate. They do not establish the geographic targeting of the ads. Availability and labels may differ by market, account, and app version.</p>
+</aside>
+
+<h2>Updates and corrections</h2>
+<p class="fine-print">October 15, 2026: Published using the August 18 testing archive. No corrections recorded.</p>
+<hr />
 <p class="fine-print">Openmarket is not affiliated with, endorsed by, or sponsored by Meta Platforms, Inc. Facebook and Facebook Marketplace are trademarks of Meta Platforms, Inc., used here for identification and commentary only.</p>
 `,
   },

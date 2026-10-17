@@ -26,7 +26,7 @@ export async function generateMetadata({
       title: guide.title,
       description: guide.description,
       publishedTime: guide.date,
-      modifiedTime: guide.lastVerified,
+      modifiedTime: guide.lastVerified > guide.date ? guide.lastVerified : guide.date,
       authors: [guide.author],
     },
     // Set explicitly: without these the card inherits the site-wide title and
@@ -57,7 +57,7 @@ export default async function GuidePage({
           headline: guide.title,
           description: guide.description,
           datePublished: guide.date,
-          dateModified: guide.lastVerified,
+          dateModified: guide.lastVerified > guide.date ? guide.lastVerified : guide.date,
           author: authorSchema(guide.author),
           publisher: { "@type": "Organization", name: SITE.name, url: SITE.url },
           mainEntityOfPage: `${SITE.url}/guides/${guide.slug}`,

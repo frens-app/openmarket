@@ -24,4 +24,5 @@ Website: https://openmarket.io
 
 ## Guides
 
+- [Facebook Marketplace distance filter not working? Try this](https://openmarket.io/guides/facebook-marketplace-distance-filter-not-working): step-by-step checks for the location pin, Local pickup, and Custom distance, with screenshots from August 2026; ads and sponsored posts may still appear outside your area
 - [Why Facebook Marketplace shows items outside your distance filter](https://openmarket.io/guides/facebook-marketplace-items-outside-distance-filter): the default distance is "Suggested", not a mileage — one San Francisco search under it returned a listing 86 miles out; plus shipped listings and ad rows that carry no distance at all
