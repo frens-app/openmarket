@@ -51,6 +51,7 @@ func (s *alertsServer) feed(ctx context.Context, user uuid.UUID, in alertRequest
 }
 
 type alertNotificationGroup struct {
+	SeenAt        *time.Time      `json:"seenAt"`
 	ID            string          `json:"id"`
 	AlertID       string          `json:"alertID"`
 	Query         string          `json:"query"`
@@ -71,6 +72,7 @@ func (s *alertsServer) notificationFeed(ctx context.Context, user uuid.UUID, in 
 		}
 	}
 	rows, err := s.pool.Query(ctx, `SELECT n.id,a.id,a.query,n.created_at,
+ (SELECT min(i.created_at) FROM listing_alert_interactions i WHERE i.notification_id=n.id),
  (SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.listing_id=ANY(n.listing_ids)),
  (SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL AND l.listing_id=ANY(n.listing_ids)),
  (SELECT coalesce(jsonb_agg(p.listing ORDER BY p.matched_at DESC,p.listing_id DESC),'[]'::jsonb) FROM (
@@ -86,7 +88,7 @@ func (s *alertsServer) notificationFeed(ctx context.Context, user uuid.UUID, in 
 	groups := []alertNotificationGroup{}
 	for rows.Next() {
 		var group alertNotificationGroup
-		if err = rows.Scan(&group.ID, &group.AlertID, &group.Query, &group.CreatedAt, &group.MatchCount, &group.UnreadCount, &group.Previews); err != nil {
+		if err = rows.Scan(&group.ID, &group.AlertID, &group.Query, &group.CreatedAt, &group.SeenAt, &group.MatchCount, &group.UnreadCount, &group.Previews); err != nil {
 			return nil, err
 		}
 		group.CreatedCursor = group.CreatedAt.UTC().Format(time.RFC3339Nano)

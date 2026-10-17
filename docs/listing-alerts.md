@@ -23,9 +23,9 @@ hour when the form opens and accepts a chosen hour and minute. There is no
 separate location field. The tab is titled Alerts and shows one row per completed
 notification batch. Each row says “Listings matching [query]”, displays up to four
 photos (with an overflow count), and a calendar-day label such as Today, Yesterday,
-or 2 days ago. A single match gets one photo. A New badge remains while any listing
-in that batch is unopened. Viewing the feed or opening a group does not mark its
-listings read.
+or 2 days ago. A single match gets one photo. A New badge remains until that notification group is opened. Viewing the feed
+alone does not mark a group seen. Opening a group clears its badge without marking
+any individual listing viewed. Each later notification starts unseen.
 
 Tapping a feed row or a push opens only the listing IDs saved in that notification,
 not the alert's entire history. Each listing opens the existing detail screen and
@@ -355,3 +355,29 @@ ORDER BY i.created_at;
 Receipt events are best effort. A missing `acknowledged_at` does not mean the
 phone failed to respond: `work_requested_at`, `search_started_at`, and
 `upload_received_at` independently prove progress for the same fetch ID.
+
+## Notification seen status versus listing engagement
+
+The notification feed exposes `seenAt`: the earliest server-recorded interaction
+for that notification ID. Opening its row or tapping its push records
+`alert_opened`, which makes the group seen. A recorded listing open also proves
+the group was seen if the group-open request was missed. This uses the existing
+interaction history; no additional migration or backfill is required, and repeats
+do not change the first seen time. Interactions for other notifications under the
+same alert do not mark a new batch seen.
+
+Individual listing `viewed_at` and `listing_opened` events stay independent.
+Notification groups can therefore be seen with zero listing clicks. Preserve the
+entry `source` when comparing push and in-app engagement. Clicks measure engagement
+and are a signal for relevance; they are not ground-truth judgments of match quality.
+
+```sql
+SELECT n.id, n.alert_id, n.created_at, cardinality(n.listing_ids) AS match_count,
+       min(i.created_at) AS seen_at,
+       count(*) FILTER (WHERE i.kind='listing_opened') AS listing_open_count,
+       count(DISTINCT i.listing_id) FILTER (WHERE i.kind='listing_opened') AS distinct_listings_opened
+FROM listing_alert_notification_outbox n
+LEFT JOIN listing_alert_interactions i ON i.notification_id=n.id
+GROUP BY n.id
+ORDER BY n.created_at DESC;
+```

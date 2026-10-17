@@ -185,6 +185,22 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		notification := push.sent[len(push.sent)-1]["notification_id"].(string)
+		getGroup := func() alertNotificationGroup {
+			t.Helper()
+			result, err := s.handle(c, "notification-feed", alertRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			groups := result.(map[string]any)["groups"].([]alertNotificationGroup)
+			if len(groups) != 1 {
+				t.Fatalf("expected one group, got %d", len(groups))
+			}
+			return groups[0]
+		}
+		if getGroup().SeenAt != nil {
+			t.Fatal("unopened group was marked seen")
+		}
+
 		request := alertRequest{ID: id, InteractionID: uuid.NewString(), NotificationID: notification, Source: "notification", Event: "alert_opened"}
 		_, other, _, _, _, _ := fixture(t)
 		if _, err := s.handle(other, "interaction", request); connect.CodeOf(err) != connect.CodeNotFound {
@@ -198,6 +214,14 @@ func TestAlertsIntegration(t *testing.T) {
 		var count int
 		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_interactions WHERE alert_id=$1`, id).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("duplicate event: %d %v", count, err)
+		}
+		seenGroup := getGroup()
+		if seenGroup.SeenAt == nil || seenGroup.UnreadCount != 1 {
+			t.Fatal("group open must mark group seen without marking listings viewed")
+		}
+		var viewedCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_listings WHERE alert_id=$1 AND viewed_at IS NOT NULL`, id).Scan(&viewedCount); err != nil || viewedCount != 0 {
+			t.Fatalf("group open changed listing views: %d %v", viewedCount, err)
 		}
 		request.InteractionID = uuid.NewString()
 		request.Event = "listing_opened"
@@ -221,6 +245,10 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_interactions WHERE alert_id=$1`, id).Scan(&count); err != nil || count != 3 {
 			t.Fatalf("missing clicks: %d %v", count, err)
+		}
+		afterClick := getGroup()
+		if afterClick.SeenAt == nil || !afterClick.SeenAt.Equal(*seenGroup.SeenAt) || afterClick.UnreadCount != 0 {
+			t.Fatal("listing click must preserve first group-seen time and mark only its listing viewed")
 		}
 		request.ListingID = "456"
 		request.InteractionID = uuid.NewString()
@@ -783,6 +811,9 @@ func TestAlertsIntegration(t *testing.T) {
 				t.Fatalf("page %d groups=%d", page, len(groups))
 			}
 			for _, group := range groups {
+				if group.SeenAt != nil {
+					t.Fatal("new batch inherited another batch's seen status")
+				}
 				if seen[group.ID] {
 					t.Fatal("duplicate notification")
 				}

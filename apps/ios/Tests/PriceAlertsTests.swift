@@ -21,6 +21,11 @@ final class PriceAlertsTests: XCTestCase {
         XCTAssertEqual(group.id, "notification-a")
         XCTAssertEqual(group.matchCount, 13)
         XCTAssertEqual(group.unreadCount, 12)
+        XCTAssertNil(group.seenAt)
+        let seenJSON = json.replacingOccurrences(of: "\"unreadCount\":12", with: "\"unreadCount\":12,\"seenAt\":\"2026-10-17T12:35:00Z\"")
+        let seen = try PriceAlertsService.decoder().decode(PriceAlertsService.NotificationFeed.self, from: Data(seenJSON.utf8)).groups[0]
+        XCTAssertNotNil(seen.seenAt)
+        XCTAssertEqual(seen.unreadCount, 12)
         XCTAssertEqual(group.previews.count, 1)
         let request = PriceAlertsService.Request(id: group.alertID, notificationID: group.id)
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
@@ -37,7 +42,7 @@ final class PriceAlertsTests: XCTestCase {
         let content = VStack(spacing: 16) {
             AlertNotificationRow(group: .init(id: "multiple", alertID: "alert", query: "Anthurium", createdAt: Date(), createdCursor: "", matchCount: 13, unreadCount: 13, previews: previews))
                 .padding(16).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-            AlertNotificationRow(group: .init(id: "single", alertID: "alert", query: "Anthurium", createdAt: Date().addingTimeInterval(-172800), createdCursor: "", matchCount: 1, unreadCount: 0, previews: Array(previews.prefix(1))))
+            AlertNotificationRow(group: .init(id: "single", alertID: "alert", query: "Anthurium", createdAt: Date().addingTimeInterval(-172800), createdCursor: "", matchCount: 1, unreadCount: 1, seenAt: Date(), previews: Array(previews.prefix(1))))
                 .padding(16).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         }.padding(16).frame(width: 390).background(Color(.systemGroupedBackground))
         for scheme in [ColorScheme.light, .dark] {

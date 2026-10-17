@@ -89,7 +89,12 @@ struct PriceAlertsView: View {
                 }
             }
             .navigationDestination(for: AlertRoute.self) { route in
-                AlertMatchesView(route: route, alert: alerts.first { $0.id == route.alertID }, changed: { Task { await refresh() } })
+                AlertMatchesView(route: route, alert: alerts.first { $0.id == route.alertID }, changed: {
+                    if let index = feed.firstIndex(where: { $0.id == route.notificationID }), feed[index].seenAt == nil {
+                        feed[index].seenAt = Date()
+                    }
+                    Task { await refresh() }
+                })
             }
             .refreshable { await refresh() }
             .task { await refresh(); navigateToPush() }
@@ -296,6 +301,7 @@ private struct AlertMatchesView: View {
         do {
             let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
                 interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: PriceAlertsService.Empty.self)
+            if route.notificationID != nil { changed() }
             let last = reset ? nil : matches.last
             let loaded = try await service.call("matches", .init(id: alertID, beforeID: last?.id, before: last?.matchedCursor,
                 notificationID: route.notificationID), as: PriceAlertsService.MatchList.self)
@@ -360,7 +366,7 @@ struct AlertNotificationRow: View {
                 Text("Listings matching \(group.query)")
                     .font(.headline).lineLimit(2).multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
-                if group.unreadCount > 0 {
+                if group.seenAt == nil {
                     Text("New").font(.caption.bold()).foregroundStyle(.blue)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.blue.opacity(0.1), in: Capsule())

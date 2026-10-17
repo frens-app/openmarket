@@ -56,6 +56,7 @@ struct AlertNotificationGroup: Decodable, Identifiable {
     let createdCursor: String
     let matchCount: Int
     let unreadCount: Int
+    var seenAt: Date? = nil
     let previews: [AlertListing]
 }
 
