@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"frens.lol/openmarket/backend/pkg/auth"
+	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
 	"frens.lol/openmarket/backend/pkg/llm"
 	"github.com/google/uuid"
@@ -28,12 +29,13 @@ type alertEvaluator interface {
 	Evaluate(context.Context, llm.Subject, llm.EvaluationInput) ([]llm.Decision, error)
 }
 type alertsServer struct {
-	pool      *pgxpool.Pool
-	queries   *db.Queries
-	jwtSecret string
-	evaluator alertEvaluator
-	push      alertPushSender
-	logger    *zap.Logger
+	searchOptions config.AlertSearchOptions
+	pool          *pgxpool.Pool
+	queries       *db.Queries
+	jwtSecret     string
+	evaluator     alertEvaluator
+	push          alertPushSender
+	logger        *zap.Logger
 }
 type alertLocation struct {
 	CitySlug  string  `json:"citySlug"`
@@ -79,13 +81,14 @@ type alertRequest struct {
 	Before     *time.Time     `json:"before"`
 }
 type alertWork struct {
-	ID         string        `json:"id"`
-	AlertID    string        `json:"alertID"`
-	Query      string        `json:"query"`
-	Location   alertLocation `json:"location"`
-	Cursor     *string       `json:"cursor"`
-	Actor      *string       `json:"actor"`
-	PageNumber int           `json:"pageNumber"`
+	SearchOptions config.AlertSearchOptions `json:"searchOptions"`
+	ID            string                    `json:"id"`
+	AlertID       string                    `json:"alertID"`
+	Query         string                    `json:"query"`
+	Location      alertLocation             `json:"location"`
+	Cursor        *string                   `json:"cursor"`
+	Actor         *string                   `json:"actor"`
+	PageNumber    int                       `json:"pageNumber"`
 }
 
 func alertError(code connect.Code, message string) error {
@@ -252,6 +255,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			if err = json.Unmarshal(location, &v.Location); err != nil {
 				return nil, err
 			}
+			v.SearchOptions = s.searchOptions
 			work = append(work, v)
 		}
 		return map[string]any{"work": work}, rows.Err()

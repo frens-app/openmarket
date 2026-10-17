@@ -57,6 +57,7 @@ func init() {
 	// One deployment serves one APNs topic and environment.
 	pflag.String("apns_bundle_id", "", "APNs topic (apns-topic header) used when sending pushes")
 
+	pflag.String("listing_alert_search_options", "", "JSON search options for listing alerts; empty uses newest available results")
 	pflag.Bool("price_alerts_enabled", false, "enable price alerts and the recurring worker")
 	pflag.Duration("price_alerts_interval", 30*time.Second, "minimum time between staggered alert dispatches")
 	pflag.String("apns_key_id", "", "Apple APNs signing key ID")
@@ -119,13 +120,15 @@ type ServiceConfig struct {
 	VerificationSendWindow     time.Duration `mapstructure:"verification_send_window"`
 	VerificationResendCooldown time.Duration `mapstructure:"verification_resend_cooldown"`
 
-	PriceAlertsEnabled  bool          `mapstructure:"price_alerts_enabled"`
-	PriceAlertsInterval time.Duration `mapstructure:"price_alerts_interval"`
-	APNSKeyID           string        `mapstructure:"apns_key_id"`
-	APNSTeamID          string        `mapstructure:"apns_team_id"`
-	APNSPrivateKey      string        `mapstructure:"apns_private_key"`
-	APNSEnvironment     string        `mapstructure:"apns_environment"`
-	APNSBundleID        string        `mapstructure:"apns_bundle_id"`
+	ListingAlertSearchOptionsJSON string             `mapstructure:"listing_alert_search_options"`
+	ListingAlertSearchOptions     AlertSearchOptions `mapstructure:"-"`
+	PriceAlertsEnabled            bool               `mapstructure:"price_alerts_enabled"`
+	PriceAlertsInterval           time.Duration      `mapstructure:"price_alerts_interval"`
+	APNSKeyID                     string             `mapstructure:"apns_key_id"`
+	APNSTeamID                    string             `mapstructure:"apns_team_id"`
+	APNSPrivateKey                string             `mapstructure:"apns_private_key"`
+	APNSEnvironment               string             `mapstructure:"apns_environment"`
+	APNSBundleID                  string             `mapstructure:"apns_bundle_id"`
 
 	AIGatewayAPIKey    string        `mapstructure:"ai_gateway_api_key"`
 	JEVAPIKey          string        `mapstructure:"jev_api_key"`
@@ -187,6 +190,11 @@ func LoadAPI() ServiceConfig {
 	if err := v.Unmarshal(&cfg); err != nil {
 		panic(err)
 	}
+	options, err := ParseAlertSearchOptions(cfg.ListingAlertSearchOptionsJSON)
+	if err != nil {
+		panic(fmt.Errorf("listing_alert_search_options: %w", err))
+	}
+	cfg.ListingAlertSearchOptions = options
 	requireAPIValues(cfg)
 	return cfg
 }

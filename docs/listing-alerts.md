@@ -74,6 +74,47 @@ refresh their provisioning profiles. Create/download an APNs token signing key
 new `remote-notification` background mode. The app registers the notification
 center delegate and background-fetch callback at launch.
 
+## Server-controlled search options
+
+The silent push is a wake-up signal containing alert/check IDs. The app fetches
+`/v1/price-alerts/work` with authentication and uses each check's `searchOptions`.
+Settings are read when work is fetched, so even a previously sent push can use
+updated server settings. Foreground recovery uses the same path.
+
+`LISTING_ALERT_SEARCH_OPTIONS` is one optional JSON object, applied to all alerts
+on that backend. Leave it unset to retain newest-first, available listings with
+no price, age, delivery, or condition restriction. For example:
+
+```dotenv
+LISTING_ALERT_SEARCH_OPTIONS={"sort":"creation_time_descend","daysSinceListed":1,"delivery":"local_pick_up"}
+```
+
+Supported fields:
+
+| Field | Values | Default |
+| --- | --- | --- |
+| `sort` | `best_match`, `creation_time_descend`, `distance_ascend`, `price_ascend`, `price_descend` | `creation_time_descend` |
+| `minPrice`, `maxPrice` | Whole units of the searched marketplace's currency, 0–2147483647 | No bound |
+| `daysSinceListed` | `0`, `1`, `7`, `30` | `0` (any age) |
+| `delivery` | `""`, `local_pick_up`, `shipping` | `""` (any) |
+| `conditions` | Array containing `new`, `used_like_new`, `used_good`, `used_fair` | `[]` (any) |
+
+Update configuration and restart/redeploy the backend to apply it; no iOS build
+is needed after the app version supporting `searchOptions` is installed. Invalid
+values and unknown configuration keys prevent startup. Bounds are global, so a
+price range will narrow every alert on that deployment. The buyer's text and
+saved location remain authoritative, and Jev still checks the buyer's criteria.
+Availability stays available-only, and each check stays limited to one page.
+Changing these settings affects future searches, not previously checked listings.
+
+Older apps ignore `searchOptions` and continue using their built-in search
+settings. Updated apps also accept a server that omits `searchOptions`, retaining
+the newest-first defaults. Unknown fields in a work response are ignored; unknown
+values for supported options fail the search rather than silently dropping a
+constraint. Entirely new search capabilities or Facebook protocol changes can
+still require an app release. Jev matching logic runs on the server and can be
+changed independently of the app.
+
 ## Scheduling and recovery
 
 `created_at` is the database's exact wall-clock timestamp. `alert_hour` is the UTC
@@ -90,8 +131,8 @@ check: only a fully uploaded and evaluated search updates `last_checked_at`.
 
 A background APNs message contains `kind=price_alert_check`, `alert_id`, and
 `check_id`. The authenticated work API supplies the saved search. The
-phone uses its signed-in Facebook transport, newest-first sorting, and the
-available-products filter. Each check fetches only the first page and uploads it
+phone uses its signed-in Facebook transport, server-supplied search options,
+and the available-products filter. Each check fetches only the first page and uploads it
 as a complete search, even if Facebook offers more pages. Upload sequence numbers
 make retries idempotent. Facebook listing IDs, including rejected
 candidates, are unique per alert, so subsequent checks never reevaluate or

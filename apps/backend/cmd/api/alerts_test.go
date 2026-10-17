@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"frens.lol/openmarket/backend/pkg/auth"
+	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
 	"frens.lol/openmarket/backend/pkg/llm"
 	"github.com/google/uuid"
@@ -118,7 +119,11 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		p := &fakeAlertPush{}
 		e := &fakeAlertEvaluator{}
-		s := &alertsServer{pool: pool, queries: db.New(pool), push: p, evaluator: e, logger: zap.NewNop()}
+		options, err := config.ParseAlertSearchOptions("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := &alertsServer{searchOptions: options, pool: pool, queries: db.New(pool), push: p, evaluator: e, logger: zap.NewNop()}
 		return s, auth.WithSessionID(auth.WithUserID(ctx, user), session), user, device, p, e
 	}
 	create := func(t *testing.T, s *alertsServer, ctx context.Context) string {
@@ -211,6 +216,30 @@ func TestAlertsIntegration(t *testing.T) {
 		work := getWork(t, s, c)
 		if len(work) != 1 || work[0].AlertID != oldest || len(p.sent) != 1 {
 			t.Fatalf("wrong staggered dispatch: %+v / %d pushes", work, len(p.sent))
+		}
+	})
+
+	t.Run("work fetch uses current server search options", func(t *testing.T) {
+		s, c, _, _, p, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 minute' WHERE id=$1`, id)
+		dispatch(t, s)
+		initial := getWork(t, s, c)
+		if len(initial) != 1 || initial[0].SearchOptions.Sort != "creation_time_descend" {
+			t.Fatalf("default work: %+v", initial)
+		}
+		options, err := config.ParseAlertSearchOptions(`{"sort":"price_ascend","minPrice":10,"maxPrice":100,"daysSinceListed":1}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.searchOptions = options
+		updated := getWork(t, s, c)
+		if len(updated) != 1 || updated[0].ID != initial[0].ID || updated[0].SearchOptions.Sort != "price_ascend" || updated[0].SearchOptions.MaxPrice == nil || *updated[0].SearchOptions.MaxPrice != 100 || len(p.sent) != 1 {
+			t.Fatalf("settings did not update for existing check: %+v", updated)
+		}
+		encoded, err := json.Marshal(updated[0])
+		if err != nil || !strings.Contains(string(encoded), `"searchOptions":{"sort":"price_ascend"`) {
+			t.Fatalf("work API omitted options: %s, %v", encoded, err)
 		}
 	})
 

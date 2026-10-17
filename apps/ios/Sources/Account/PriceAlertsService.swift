@@ -48,6 +48,36 @@ struct AlertMatch: Decodable, Identifiable {
     var id: String { listing.id }
 }
 
+struct AlertSearchOptions: Decodable {
+    var sort: SearchQuery.Sort = .newest
+    var delivery: SearchQuery.Delivery = .any
+    var daysSinceListed: SearchQuery.Age = .any
+    var conditions: [SearchQuery.Condition] = []
+    var minPrice: Int?
+    var maxPrice: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case sort, delivery, daysSinceListed, conditions, minPrice, maxPrice
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        sort = try values.decodeIfPresent(SearchQuery.Sort.self, forKey: .sort) ?? .newest
+        delivery = try values.decodeIfPresent(SearchQuery.Delivery.self, forKey: .delivery) ?? .any
+        daysSinceListed = try values.decodeIfPresent(SearchQuery.Age.self, forKey: .daysSinceListed) ?? .any
+        conditions = try values.decodeIfPresent([SearchQuery.Condition].self, forKey: .conditions) ?? []
+        minPrice = try values.decodeIfPresent(Int.self, forKey: .minPrice)
+        maxPrice = try values.decodeIfPresent(Int.self, forKey: .maxPrice)
+        guard minPrice.map({ (0...2_147_483_647).contains($0) }) ?? true,
+              maxPrice.map({ (0...2_147_483_647).contains($0) }) ?? true,
+              minPrice == nil || maxPrice == nil || minPrice! <= maxPrice! else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Invalid alert price bounds"))
+        }
+    }
+}
+
 struct AlertWork: Decodable {
     var id: String
     var alertID: String
@@ -56,11 +86,15 @@ struct AlertWork: Decodable {
     var cursor: String?
     var actor: String?
     var pageNumber: Int
+    var searchOptions: AlertSearchOptions?
 
     var searchQuery: SearchQuery {
-        SearchQuery(kind: .search(query), radiusKM: location.radiusKM, citySlug: location.citySlug,
+        let options = searchOptions ?? AlertSearchOptions()
+        return SearchQuery(kind: .search(query), radiusKM: location.radiusKM, citySlug: location.citySlug,
                     coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude),
-                    sort: .newest, availability: .available)
+                    sort: options.sort, delivery: options.delivery, age: options.daysSinceListed,
+                    availability: .available, conditions: options.conditions,
+                    minPrice: options.minPrice, maxPrice: options.maxPrice)
     }
 }
 

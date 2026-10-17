@@ -19,6 +19,47 @@ final class PriceAlertsTests: XCTestCase {
         XCTAssertTrue(variables.contains("commerce_search_and_rp_available"))
     }
 
+    func testServerSearchOptionsReachFacebookRequest() async throws {
+        let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"pageNumber":0,"searchOptions":{"sort":"price_ascend","delivery":"local_pick_up","daysSinceListed":1,"conditions":["used_good"],"minPrice":10,"maxPrice":100}}"#.utf8)
+        let work = try PriceAlertsService.decoder().decode(AlertWork.self, from: data)
+        let client = MorePagesClient()
+        let upload = try await PriceAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
+        let query = try XCTUnwrap(client.query)
+        XCTAssertEqual(query.sort, .priceLowest)
+        XCTAssertEqual(query.availability, .available)
+        XCTAssertEqual(query.delivery, .localPickup)
+        XCTAssertEqual(query.age, .day)
+        XCTAssertEqual(query.conditions, [.usedGood])
+        XCTAssertEqual(query.minPrice, 10)
+        XCTAssertEqual(query.maxPrice, 100)
+        XCTAssertEqual(client.calls, 1)
+        XCTAssertNil(client.requestedCursor)
+        XCTAssertEqual(upload.complete, true)
+        let request = try AnonymousFeedClient.request(for: query, cursor: nil, now: Date(timeIntervalSince1970: 86_400 * 20_000))
+        let form = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        let variables = try XCTUnwrap(URLComponents(string: "?" + form)?.queryItems?.first(where: { $0.name == "variables" })?.value)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(variables.utf8)) as? [String: Any])
+        let params = try XCTUnwrap(json["params"] as? [String: Any])
+        let browse = try XCTUnwrap(params["browse_request_params"] as? [String: Any])
+        XCTAssertEqual(browse["commerce_search_sort_by"] as? String, "PRICE_ASCEND")
+        XCTAssertEqual(browse["filter_price_lower_bound"] as? Int, 1000)
+        XCTAssertEqual(browse["filter_price_upper_bound"] as? Int, 10000)
+        XCTAssertEqual(browse["commerce_enable_shipping"] as? Bool, false)
+        XCTAssertEqual(browse["commerce_search_and_rp_available"] as? Bool, true)
+        XCTAssertEqual(browse["commerce_search_and_rp_condition"] as? String, "used_good")
+        XCTAssertEqual(browse["commerce_search_and_rp_ctime_days"] as? String, "20000;19999")
+    }
+
+    func testSearchOptionsDefaultMissingFieldsAndRejectInvalidConstraints() throws {
+        let options = try PriceAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(#"{"maxPrice":50,"futureField":true}"#.utf8))
+        XCTAssertEqual(options.sort, .newest)
+        XCTAssertEqual(options.maxPrice, 50)
+        XCTAssertNil(options.minPrice)
+        for json in [#"{"sort":"unsupported"}"#, #"{"daysSinceListed":2}"#, #"{"minPrice":-1}"#, #"{"maxPrice":2147483648}"#, #"{"minPrice":100,"maxPrice":50}"#] {
+            XCTAssertThrowsError(try PriceAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(json.utf8)))
+        }
+    }
+
     func testDailyCheckCompletesAfterFirstPageEvenWhenFacebookHasMore() async throws {
         let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"cursor":"stale-cursor","actor":"123","pageNumber":2}"#.utf8)
         let work = try PriceAlertsService.decoder().decode(AlertWork.self, from: data)
