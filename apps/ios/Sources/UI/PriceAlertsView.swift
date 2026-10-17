@@ -14,6 +14,7 @@ struct PriceAlertsView: View {
     @State private var busy = false
     @State private var connected = false
     @State private var showCreate = false
+    @State private var showLimit = false
     @State private var showAccount = false
     @State private var deleteID: String?
     private let service = PriceAlertsService()
@@ -21,16 +22,9 @@ struct PriceAlertsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
-                Section {
-                    Text("Describe what you're looking for. We'll check daily around the time you create your alert and notify you about matching listings.")
-                        .foregroundStyle(.secondary)
-                    Text("\(alerts.count) of 3 alerts · Paused alerts count toward the limit")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
                 if !account.isSignedIn || !connected {
                     Section {
                         Button("Sign in and connect Facebook") { showAccount = true }
-                        Text("Alerts search using Facebook on this device.").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if !push.isEnabled {
@@ -61,28 +55,24 @@ struct PriceAlertsView: View {
                                 .font(.subheadline).foregroundStyle(.secondary)
                             Text("\(alert.location.name) · \(alert.matchCount) matches")
                                 .font(.caption).foregroundStyle(.secondary)
-                            if let checked = alert.lastCheckedAt {
-                                Text("Last checked \(checked.formatted(date: .abbreviated, time: .shortened))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            } else {
-                                Text("Waiting for this device to complete a search").font(.caption).foregroundStyle(.secondary)
-                            }
                         }
                         .contextMenu { options(alert) }
                     }
                     .swipeActions { Button("Delete", role: .destructive) { deleteID = alert.id } }
                 }
-                Section {
-                    Text("Background checks depend on iOS and a connected Facebook session. Open the app to continue a delayed check. Search location is saved when you create the alert; Facebook may include nearby areas.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
             }
             .navigationTitle("Listing alerts")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { query = ""; showCreate = true } label: { Image(systemName: "plus") }
+                    Button {
+                        if alerts.count >= 3 {
+                            showLimit = true
+                        } else {
+                            query = ""; error = nil; showCreate = true
+                        }
+                    } label: { Image(systemName: "plus") }
                         .accessibilityLabel("Create listing alert")
-                        .disabled(alerts.count >= 3 || !account.isSignedIn || !connected || !push.isEnabled || busy)
+                        .disabled(!account.isSignedIn || !connected || !push.isEnabled || busy)
                 }
             }
             .navigationDestination(for: String.self) { id in
@@ -100,6 +90,11 @@ struct PriceAlertsView: View {
                 AccountGateView(feature: .priceAlerts, done: { showAccount = false })
             }
             .sheet(isPresented: $showCreate) { createSheet }
+            .alert("Alert limit reached", isPresented: $showLimit) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("You can have up to 3 alerts, including paused alerts. Delete an alert to create another.")
+            }
             .confirmationDialog("Delete this alert and its saved matches?", isPresented: Binding(get: { deleteID != nil }, set: { if !$0 { deleteID = nil } })) {
                 Button("Delete alert", role: .destructive) {
                     if let id = deleteID { Task { await mutate("delete", .init(id: id)) } }
@@ -110,7 +105,7 @@ struct PriceAlertsView: View {
     }
 
     @ViewBuilder private func options(_ alert: PriceAlert) -> some View {
-        Button(alert.paused ? "Resume on this device" : "Pause alert", systemImage: alert.paused ? "play" : "pause") {
+        Button(alert.paused ? "Resume alert" : "Pause alert", systemImage: alert.paused ? "play" : "pause") {
             Task { await mutate("state", .init(id: alert.id, paused: !alert.paused)) }
         }
         Button("Delete alert", systemImage: "trash", role: .destructive) { deleteID = alert.id }
@@ -222,7 +217,7 @@ private struct AlertMatchesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Menu {
-                Button(paused ? "Resume on this device" : "Pause alert", systemImage: paused ? "play" : "pause") {
+                Button(paused ? "Resume alert" : "Pause alert", systemImage: paused ? "play" : "pause") {
                     Task { await setPaused() }
                 }
                 Button("Delete alert", systemImage: "trash", role: .destructive) { confirmDelete = true }
