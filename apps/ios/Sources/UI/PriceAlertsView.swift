@@ -81,7 +81,7 @@ struct PriceAlertsView: View {
                         } label: {
                             AlertListingRow(match: item.match, showNew: false)
                         }.buttonStyle(.plain)
-                        Text(item.match.matchedAt, style: .relative)
+                        Text(alertDayLabel(item.match.matchedAt))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 6)
@@ -366,5 +366,16 @@ private struct AlertListingRow: View {
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+}
+
+private func alertDayLabel(_ date: Date) -> String {
+    let calendar = Calendar.current
+    let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                       to: calendar.startOfDay(for: Date())).day ?? 0
+    switch days {
+    case ...0: return "Today"
+    case 1: return "Yesterday"
+    default: return "\(days) days ago"
     }
 }
