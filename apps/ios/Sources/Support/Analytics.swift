@@ -121,6 +121,23 @@ enum Analytics {
         PostHogSDK.shared.flush()
     }
 
+    static func listingOpenProperties(_ listing: Listing, surface: Surface, position: Int,
+                                      isSaved: Bool, isSeen: Bool) -> [String: Any] {
+        var properties: [String: Any] = [
+            "surface": surface.rawValue,
+            "position": position,
+            "listing_id": listing.id,
+            "has_price": listing.priceText != nil,
+            "is_saved": isSaved,
+            "is_seen": isSeen
+        ]
+        properties["title"] = text(listing.title)
+        properties["price_text"] = text(listing.priceText)
+        properties["place"] = text(listing.locationText)
+        if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
+        return properties
+    }
+
     // MARK: - Events
 
     /// `object_action`, snake_case, past tense — PostHog groups on the prefix.
@@ -147,6 +164,9 @@ enum Analytics {
         case searchSubmitted = "search_submitted"
         case discoverLoaded = "discover_loaded"
         case listingOpened = "listing_opened"
+        case listingAlertCreated = "listing_alert_created"
+        case listingAlertStateChanged = "listing_alert_state_changed"
+        case listingAlertGroupOpened = "listing_alert_group_opened"
         case listingSaved = "listing_saved"
         case listingUnsaved = "listing_unsaved"
         case sellerFollowed = "seller_followed"
@@ -196,7 +216,7 @@ enum Analytics {
         case discover
         case search
         case aiSearch = "ai_search"
-        case priceAlerts = "price_alerts"
+        case listingAlerts = "listing_alerts"
         case recentlyViewed = "recently_viewed"
         case saved
         case priceCheckEvidence = "price_check_evidence"

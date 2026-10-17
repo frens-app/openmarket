@@ -57,7 +57,9 @@ func (s *alertsServer) tick(ctx context.Context, interval time.Duration) error {
 	return s.notifyMatches(ctx)
 }
 
-const eligibleAlertDevice = `d.facebook_connected AND d.notification_permission_status='ENABLED' AND d.push_token IS NOT NULL AND EXISTS (SELECT 1 FROM user_sessions us WHERE us.device_id=d.id AND us.revoked_at IS NULL AND us.refresh_token_expires_at>now())`
+const eligibleListingAlertUser = `EXISTS(SELECT 1 FROM user_auth_methods m WHERE m.user_id=a.user_id AND m.auth_service IN ('GOOGLE','APPLE'))`
+
+const eligibleAlertDevice = eligibleListingAlertUser + ` AND d.facebook_connected AND d.notification_permission_status='ENABLED' AND d.push_token IS NOT NULL AND EXISTS (SELECT 1 FROM user_sessions us WHERE us.device_id=d.id AND us.revoked_at IS NULL AND us.refresh_token_expires_at>now())`
 
 func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) error {
 	tx, err := s.pool.Begin(ctx)
@@ -107,7 +109,7 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 	if err = tx.Commit(ctx); err != nil {
 		return err
 	}
-	err = s.push.Send(ctx, token, "check-"+alertID.String(), true, map[string]any{"aps": map[string]any{"content-available": 1}, "kind": "price_alert_check", "alert_id": alertID.String(), "check_id": checkID.String(), "fetch_attempt_id": fetchAttemptID.String()})
+	err = s.push.Send(ctx, token, "check-"+alertID.String(), true, map[string]any{"aps": map[string]any{"content-available": 1}, "kind": "listing_alert_check", "alert_id": alertID.String(), "check_id": checkID.String(), "fetch_attempt_id": fetchAttemptID.String()})
 	s.invalidateToken(ctx, deviceID, token, err)
 	if recordErr := s.recordBackgroundPushResult(ctx, fetchAttemptID, err); recordErr != nil {
 		return recordErr
@@ -121,7 +123,7 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	var checkID, alertID, userID uuid.UUID
 	var query string
-	err := s.pool.QueryRow(ctx, `SELECT c.id,a.id,a.user_id,a.query FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id JOIN users u ON u.id=a.user_id WHERE NOT a.paused AND u.deleted_at IS NULL AND c.completed_at IS NULL AND c.evaluation_after<=now() AND (c.scan_complete OR EXISTS(SELECT 1 FROM listing_alert_listings l WHERE l.check_id=c.id AND l.checked_at IS NULL)) ORDER BY c.evaluation_after,c.created_at LIMIT 1`).Scan(&checkID, &alertID, &userID, &query)
+	err := s.pool.QueryRow(ctx, `SELECT c.id,a.id,a.user_id,a.query FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id JOIN users u ON u.id=a.user_id WHERE NOT a.paused AND u.deleted_at IS NULL AND `+eligibleListingAlertUser+` AND c.completed_at IS NULL AND c.evaluation_after<=now() AND (c.scan_complete OR EXISTS(SELECT 1 FROM listing_alert_listings l WHERE l.check_id=c.id AND l.checked_at IS NULL)) ORDER BY c.evaluation_after,c.created_at LIMIT 1`).Scan(&checkID, &alertID, &userID, &query)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -230,7 +232,7 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 
-	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New listing alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String(), "notification_id": notificationID.String()})
+	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New listing alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "listing_alert_match", "alert_id": alertID.String(), "notification_id": notificationID.String()})
 	s.invalidateToken(ctx, deviceID, token, err)
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()

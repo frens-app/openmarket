@@ -3,9 +3,9 @@ import SwiftUI
 @testable import OpenMarket
 
 @MainActor
-final class PriceAlertsTests: XCTestCase {
+final class ListingAlertsTests: XCTestCase {
     func testNotificationNavigationKeepsNotificationID() {
-        let coordinator = PriceAlertCoordinator.shared
+        let coordinator = ListingAlertCoordinator.shared
         coordinator.open("alert", notificationID: "notification")
         XCTAssertEqual(coordinator.openAlertID, "alert")
         XCTAssertEqual(coordinator.openNotificationID, "notification")
@@ -17,21 +17,21 @@ final class PriceAlertsTests: XCTestCase {
 
     func testNotificationFeedKeepsBatchIdentityAndCursor() throws {
         let json = #"{"groups":[{"id":"notification-a","alertID":"alert-a","query":"Anthurium","createdAt":"2026-10-17T12:34:56.123456Z","createdCursor":"2026-10-17T12:34:56.123456Z","matchCount":13,"unreadCount":12,"previews":[{"id":"123","title":"Anthurium","priceText":"$50","locationText":"Toronto","thumbnailURL":"","description":"","condition":""}]}]}"#
-        let group = try PriceAlertsService.decoder().decode(PriceAlertsService.NotificationFeed.self, from: Data(json.utf8)).groups[0]
+        let group = try ListingAlertsService.decoder().decode(ListingAlertsService.NotificationFeed.self, from: Data(json.utf8)).groups[0]
         XCTAssertEqual(group.id, "notification-a")
         XCTAssertEqual(group.matchCount, 13)
         XCTAssertEqual(group.unreadCount, 12)
         XCTAssertNil(group.seenAt)
         let seenJSON = json.replacingOccurrences(of: "\"unreadCount\":12", with: "\"unreadCount\":12,\"seenAt\":\"2026-10-17T12:35:00Z\"")
-        let seen = try PriceAlertsService.decoder().decode(PriceAlertsService.NotificationFeed.self, from: Data(seenJSON.utf8)).groups[0]
+        let seen = try ListingAlertsService.decoder().decode(ListingAlertsService.NotificationFeed.self, from: Data(seenJSON.utf8)).groups[0]
         XCTAssertNotNil(seen.seenAt)
         XCTAssertEqual(seen.unreadCount, 12)
         XCTAssertEqual(group.previews.count, 1)
-        let request = PriceAlertsService.Request(id: group.alertID, notificationID: group.id)
+        let request = ListingAlertsService.Request(id: group.alertID, notificationID: group.id)
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
         XCTAssertEqual(body["id"] as? String, "alert-a")
         XCTAssertEqual(body["notificationID"] as? String, "notification-a")
-        let cursor = PriceAlertsService.Request(beforeID: group.id, before: group.createdCursor)
+        let cursor = ListingAlertsService.Request(beforeID: group.id, before: group.createdCursor)
         let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(cursor)) as? [String: Any])
         XCTAssertEqual(encoded["before"] as? String, "2026-10-17T12:34:56.123456Z")
         XCTAssertEqual(encoded["beforeID"] as? String, "notification-a")
@@ -57,7 +57,7 @@ final class PriceAlertsTests: XCTestCase {
 
     func testWorkUsesSuggestedAvailableSearchAndSavedLocation() throws {
         let data = Data(#"{"work":[{"id":"check","alertID":"alert","query":"Switch OLED","location":{"citySlug":"sanfrancisco","name":"San Francisco","radiusKM":16,"latitude":37.77,"longitude":-122.42},"cursor":"next-page","actor":"123","pageNumber":2}]}"#.utf8)
-        let work = try PriceAlertsService.decoder().decode(PriceAlertsService.WorkList.self, from: data).work[0]
+        let work = try ListingAlertsService.decoder().decode(ListingAlertsService.WorkList.self, from: data).work[0]
         XCTAssertEqual(work.searchQuery.sort, .bestMatch)
         XCTAssertEqual(work.searchQuery.availability, .available)
         XCTAssertEqual(work.searchQuery.citySlug, "sanfrancisco")
@@ -73,9 +73,9 @@ final class PriceAlertsTests: XCTestCase {
 
     func testServerSearchOptionsReachFacebookRequest() async throws {
         let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"pageNumber":0,"fetchAttemptID":"fetch-123","searchOptions":{"sort":"price_ascend","delivery":"local_pick_up","daysSinceListed":1,"conditions":["used_good"],"minPrice":10,"maxPrice":100}}"#.utf8)
-        let work = try PriceAlertsService.decoder().decode(AlertWork.self, from: data)
+        let work = try ListingAlertsService.decoder().decode(AlertWork.self, from: data)
         let client = MorePagesClient()
-        let upload = try await PriceAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
+        let upload = try await ListingAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
         let query = try XCTUnwrap(client.query)
         XCTAssertEqual(query.sort, .priceLowest)
         XCTAssertEqual(query.availability, .available)
@@ -106,20 +106,20 @@ final class PriceAlertsTests: XCTestCase {
     }
 
     func testSearchOptionsDefaultMissingFieldsAndRejectInvalidConstraints() throws {
-        let options = try PriceAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(#"{"maxPrice":50,"futureField":true}"#.utf8))
+        let options = try ListingAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(#"{"maxPrice":50,"futureField":true}"#.utf8))
         XCTAssertEqual(options.sort, .bestMatch)
         XCTAssertEqual(options.maxPrice, 50)
         XCTAssertNil(options.minPrice)
         for json in [#"{"sort":"unsupported"}"#, #"{"daysSinceListed":2}"#, #"{"minPrice":-1}"#, #"{"maxPrice":2147483648}"#, #"{"minPrice":100,"maxPrice":50}"#] {
-            XCTAssertThrowsError(try PriceAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(json.utf8)))
+            XCTAssertThrowsError(try ListingAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(json.utf8)))
         }
     }
 
     func testDailyCheckCompletesAfterFirstPageEvenWhenFacebookHasMore() async throws {
         let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"cursor":"stale-cursor","actor":"123","pageNumber":2}"#.utf8)
-        let work = try PriceAlertsService.decoder().decode(AlertWork.self, from: data)
+        let work = try ListingAlertsService.decoder().decode(AlertWork.self, from: data)
         let client = MorePagesClient()
-        let request = try await PriceAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
+        let request = try await ListingAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
         XCTAssertEqual(client.calls, 1)
         XCTAssertNil(client.requestedCursor)
         XCTAssertEqual(client.query?.sort, .bestMatch)
@@ -133,12 +133,12 @@ final class PriceAlertsTests: XCTestCase {
 
     func testMatchesKeepExactPaginationTimestampAndCanonicalListingID() throws {
         let data = Data(#"{"matches":[{"listing":{"id":"123456789","title":"Switch OLED","priceText":"$150","locationText":"San Francisco","thumbnailURL":"","description":"","condition":""},"matchedAt":"2026-10-01T12:34:56.123456Z","matchedCursor":"2026-10-01T12:34:56.123456Z","viewedAt":null}]}"#.utf8)
-        let match = try PriceAlertsService.decoder().decode(PriceAlertsService.MatchList.self, from: data).matches[0]
+        let match = try ListingAlertsService.decoder().decode(ListingAlertsService.MatchList.self, from: data).matches[0]
         XCTAssertEqual(match.matchedCursor, "2026-10-01T12:34:56.123456Z")
         XCTAssertNil(match.viewedAt)
         XCTAssertEqual(match.listing.listing.itemURL?.absoluteString, "https://www.facebook.com/marketplace/item/123456789/")
         XCTAssertEqual(match.listing.listing.id, "fb:123456789")
-        let request = PriceAlertsService.Request(id: "alert", beforeID: match.id, before: match.matchedCursor)
+        let request = ListingAlertsService.Request(id: "alert", beforeID: match.id, before: match.matchedCursor)
         let encoded = try JSONEncoder().encode(request)
         XCTAssertTrue(String(decoding: encoded, as: UTF8.self).contains("2026-10-01T12:34:56.123456Z"))
     }
@@ -157,7 +157,7 @@ final class PriceAlertsTests: XCTestCase {
         }
         let selection = try XCTUnwrap(formatter.date(from: "2026-10-18T00:15:00Z"))
         let schedule = AlertSchedule(date: selection, calendar: calendar)
-        let request = PriceAlertsService.Request(query: "Anthurium", alertHour: schedule.hour,
+        let request = ListingAlertsService.Request(query: "Anthurium", alertHour: schedule.hour,
             alertMinute: schedule.minute, timeZone: schedule.timeZone)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
         XCTAssertEqual(json["alertHour"] as? Int, 20)
@@ -166,7 +166,7 @@ final class PriceAlertsTests: XCTestCase {
     }
 
     func testNotificationRouteSelectsAlertsAndSpecificAlert() {
-        let coordinator = PriceAlertCoordinator.shared
+        let coordinator = ListingAlertCoordinator.shared
         defer { coordinator.openAlertID = nil; coordinator.selectedTab = 0 }
         coordinator.open("test-alert")
         XCTAssertEqual(coordinator.selectedTab, 3)

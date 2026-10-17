@@ -1,5 +1,13 @@
 # Listing alerts
 
+Alerts require an account linked to Google or Apple, Facebook connected on the
+device, and enabled notifications with a registered push token. Phone-only
+accounts see an OK-only linking message when they tap Create. The backend also
+checks the linked provider for creation, resume, work fetching, uploads,
+evaluation, and notification dispatch. Existing history, pause, and deletion
+remain accessible. Linking uses the existing account upgrade flow; no new
+configuration or database migration is required.
+
 The `user_listing_alerts` table stores each user’s alert and its schedule.
 `listing_alert_check_runs` stores each search run and its upload/evaluation progress.
 `listing_alert_background_fetch_attempts` traces silent pings and foreground recovery.
@@ -10,8 +18,9 @@ buyer's text, a fallback search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
 queue. Account deletion also removes all alert data.
 
-Creation and resume require an active OpenMarket session, Facebook connected on
-that same install, notification permission enabled, and a registered APNs token.
+Creation and resume require an active OpenMarket session with Google or Apple
+linked, Facebook connected on that same install, notification permission enabled,
+and a registered APNs token.
 Resuming binds an alert to the current device. Facebook cookies and request
 tokens remain in the phone's WebKit store; the backend never receives them.
 
@@ -44,7 +53,7 @@ session; creating and resuming alerts still require it.
 Add these to the backend deployment (or `apps/backend/.env.local` for development):
 
 ```dotenv
-PRICE_ALERTS_ENABLED=true
+LISTING_ALERTS_ENABLED=true
 AI_GATEWAY_API_KEY=<Vercel AI Gateway key with access to typesafe-ai/jev>
 APNS_KEY_ID=<Apple APNs signing key ID>
 APNS_TEAM_ID=<Apple Developer team ID>
@@ -53,7 +62,7 @@ APNS_BUNDLE_ID=lol.frens.openmarket
 APNS_ENVIRONMENT=production
 ```
 
-`PRICE_ALERTS_INTERVAL` is optional and defaults to `30s`. Keep it configurable
+`LISTING_ALERTS_INTERVAL` is optional and defaults to `10m`. Keep it configurable
 for faster development polling (`10s`) versus production pacing. The enable flag
 lets development run without push credentials. Credentials, signing configuration,
 and these environment-specific controls stay in configuration; the three-alert
@@ -86,7 +95,7 @@ There is no external cron service: the API hosts the recurring worker. Keep at
 least one instance running continuously. A PostgreSQL advisory lock serializes
 worker activity across replicas, and a shared dispatch deadline preserves the
 configured staggering interval. The minimum accepted interval is 10 seconds.
-`PRICE_ALERTS_ENABLED` defaults to false; creation remains unavailable until the
+`LISTING_ALERTS_ENABLED` defaults to false; creation remains unavailable until the
 worker and credentials are enabled. Existing alerts can still be read/deleted.
 
 In Apple Developer, enable Push Notifications for both App IDs you use and
@@ -99,7 +108,7 @@ center delegate and background-fetch callback at launch.
 ## Server-controlled search options
 
 The silent push is a wake-up signal containing alert/check IDs. The app fetches
-`/v1/price-alerts/work` with authentication and uses each check's `searchOptions`.
+`/v1/listing-alerts/work` with authentication and uses each check's `searchOptions`.
 Settings are read when work is fetched, so even a previously sent push can use
 updated server settings. Foreground recovery uses the same path.
 
@@ -162,7 +171,7 @@ missed days are not replayed in a burst. One unfinished check per alert prevents
 overlapping daily searches. Only a fully uploaded and evaluated search updates
 `last_checked_at`.
 
-A background APNs message contains `kind=price_alert_check`, `alert_id`, and
+A background APNs message contains `kind=listing_alert_check`, `alert_id`, and
 `check_id`, plus a unique `fetch_attempt_id`. The authenticated work API supplies the saved search. The
 phone uses its signed-in Facebook transport, server-supplied search options,
 and the available-products filter. Each check fetches only the first page and uploads it
@@ -215,17 +224,22 @@ a notification can leave its delivery outcome unknown; it is not sent again.
 
 ## API and verification
 
-The authenticated JSON endpoints are `POST /v1/price-alerts/{action}`. They reuse
+The authenticated JSON endpoints are `POST /v1/listing-alerts/{action}`. They reuse
 the existing access-token and active-session authentication. Actions are `list`,
 `create`, `state` (pause/resume), `delete`, `work`, `fetch-event`, `page`, `matches`,
 `notification-feed`, `interaction`, and the legacy `feed` and `viewed` actions.
 `matches` accepts an optional `notificationID` to scope results to that batch;
 the server validates that it belongs to both the requested alert and account.
 The Go request/response types live in `cmd/api/alerts.go`; iOS wire types are in
-`PriceAlertsService.swift`. Responses use RFC3339 timestamps. Match pagination
+`ListingAlertsService.swift`. Responses use RFC3339 timestamps. Match pagination
 uses the exact `matchedCursor` string and listing ID as a pair so equal timestamps
 and fractional seconds never drop rows. Requests are capped at 512 KiB and 100
-listings per page. `viewed` accepts only explicit listing IDs belonging to the
+listings per upload. Each check accepts one completed upload and at most 100
+stored candidates in total, including any candidates from a partial scan.
+`complete` must be true and `cursor` must be absent, with or without a
+`fetchAttemptID`. The check lock serializes uploads; retries cannot append more
+candidates. `pageNumber` also acts as a work revision after pause/resume, so it
+can be nonzero without allowing another page. `viewed` accepts only explicit listing IDs belonging to the
 signed-in user's alert.
 
 Run the normal Go build, vet and test commands. For database coverage, set
@@ -233,7 +247,7 @@ Run the normal Go build, vet and test commands. For database coverage, set
 
 ```sh
 cd apps/backend
-ALERTS_TEST_DATABASE_URL='postgres://…' go test ./cmd/api -run 'TestAlertsIntegration|TestPriceAlertMigrationUpgradesMain' -count=1 -v
+ALERTS_TEST_DATABASE_URL='postgres://…' go test ./cmd/api -run 'TestAlertsIntegration|TestListingAlertMigrationUpgradesMain' -count=1 -v
 ```
 
 These tests apply migrations, create isolated accounts, and clean up those

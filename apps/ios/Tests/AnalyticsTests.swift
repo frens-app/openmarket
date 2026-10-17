@@ -51,6 +51,23 @@ final class AnalyticsTests: XCTestCase {
         }
     }
 
+    func testListingOpensKeepCanonicalIdentityAcrossSurfaces() throws {
+        let listing = AlertListing(id: "123456789", title: "  Anthurium  ", priceText: "$25",
+            locationText: "Toronto", thumbnailURL: "", description: "", condition: "").listing
+        for surface in [Analytics.Surface.discover, .search, .aiSearch, .listingAlerts] {
+            let properties = Analytics.listingOpenProperties(listing, surface: surface, position: 2,
+                isSaved: false, isSeen: true)
+            XCTAssertEqual(properties["listing_id"] as? String, "fb:123456789")
+            XCTAssertEqual(properties["surface"] as? String, surface.rawValue)
+            XCTAssertEqual(properties["position"] as? Int, 2)
+            XCTAssertEqual(properties["title"] as? String, "Anthurium")
+            XCTAssertEqual(properties["is_saved"] as? Bool, false)
+            XCTAssertEqual(properties["is_seen"] as? Bool, true)
+            XCTAssertNil(properties["notification_id"])
+            XCTAssertNil(properties["alert_id"])
+        }
+    }
+
     // MARK: - Configuration
 
     /// Tests run under Debug, which ships `POSTHOG_CAPTURE_EVENTS = NO`.

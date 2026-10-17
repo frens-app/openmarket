@@ -171,18 +171,8 @@ struct ShoppingView: View {
         }
     }
     private func open(_ listing: Listing, at position: Int) {
-        var properties: [String: Any] = [
-            "surface": Analytics.Surface.aiSearch.rawValue,
-            "position": position,
-            "listing_id": listing.id,
-            "has_price": listing.priceText != nil,
-            "is_saved": saved.contains(listing),
-            "is_seen": viewed.contains(listing.id)
-        ]
-        properties["title"] = Analytics.text(listing.title)
-        properties["price_text"] = Analytics.text(listing.priceText)
-        properties["place"] = Analytics.text(listing.locationText)
-        if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
+        let properties = Analytics.listingOpenProperties(listing, surface: Analytics.Surface.aiSearch, position: position,
+            isSaved: saved.contains(listing), isSeen: viewed.contains(listing.id))
         Analytics.capture(.listingOpened, properties)
         selected = listing
     }

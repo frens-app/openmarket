@@ -205,13 +205,37 @@ nobody signed in, a session was confirmed. And opening the sign-in sheet on a
 session that already exists is not a connection: `openedWithSession` is what
 keeps every visit to Settings out of the conversion numerator.
 
+### Listing alerts
+
+| Event | Fired at | Properties |
+| --- | --- | --- |
+| `listing_alert_created` | After the server confirms creation | `alert_id`, `alert_hour`, `alert_minute`, `time_zone` |
+| `listing_alert_state_changed` | After the server confirms pause, resume, or deletion | `alert_id`, `action`: `paused`, `resumed`, or `deleted` |
+| `listing_alert_group_opened` | Once when navigating to a notification group | `alert_id`, `notification_id`, `surface=listing_alerts`, `entry_point`: `notification` or `alerts_tab`, `interaction_id` |
+| `listing_opened` | Each tap on a listing inside an alert | Shared listing properties below, plus `alert_id`, optional `notification_id`, `entry_point`, `interaction_id`; `surface=listing_alerts` |
+
+Listing opens reuse the same canonical `listing_id` (`fb:<Facebook ID>`) as
+Discover and Search. Two opens of the same listing on different surfaces are two
+interactions; count distinct listing IDs when measuring unique listings. The
+shared property builder keeps Discover, Search, AI Search, and Alerts consistent.
+Alert history opened from Manage has no `notification_id` and does not emit a
+group-open event. Refreshing or paginating an open group does not emit another
+open; leaving and opening it again does. `interaction_id` joins these events to
+the server's interaction records, whose IDs stay the same across request retries.
+The event records the navigation even if that server request fails.
+
+Group opens mark the notification seen separately from individual listing clicks.
+PostHog receives no background fetch, matching, or push send events; those remain
+in the backend's database and logs. These events use the existing iOS PostHog
+configuration and account identity. Debug capture remains disabled by default.
+
 ### Browsing
 
 | Event | Fired at | Properties |
 | --- | --- | --- |
 | `search_submitted` | `ResultsView.search`, before `recordSearch` | `term`, `source`, `term_length`, `word_count`, `has_active_filters`, `sort`, `radius_km` |
 | `discover_loaded` | `DiscoverFeed.loadIfNeeded` | `count`, `duration_ms`, `is_anonymous`, `reached_end`, `is_refresh`, `radius_km` |
-| `listing_opened` | `ResultsView.open`, comparables under a price check, and `ShoppingView.open` for AI Search cards | `surface`, `position`, `listing_id`, `title`, `price`, `price_text`, `place`, `has_price`, `is_saved`, `is_seen`; `distance_km` on browse surfaces; `is_sold` and `search_term` on a comparable |
+| `listing_opened` | `ResultsView.open`, comparables under a price check, `ShoppingView.open` for AI Search cards, and `AlertMatchesView.open` for alert matches | `surface`, `position`, `listing_id`, `title`, `price`, `price_text`, `place`, `has_price`, `is_saved`, `is_seen`; `distance_km` on browse surfaces; `is_sold` and `search_term` on a comparable |
 | `listing_saved` / `listing_unsaved` | the detail screen's bookmark | `surface`, `referrer`, `listing_id`, `title`, `price`, `place`, `has_price`, `is_enriched` |
 | `listing_opened_on_facebook` | `Handoff`, via `Metrics` | `kind`; `referrer` and `listing_id` when opened from a listing detail page |
 | `login_wall_hit` | `Metrics.loginWallHit` | `surface`, `session_count` |
@@ -257,6 +281,7 @@ listing from another screen gets that screen's source.
 | Search | `search` |
 | Saved listings | `saved` |
 | AI Search | `ai_search` |
+| Listing alerts | `listing_alerts` |
 | Seller Price Check comparisons | `price_check_evidence` |
 | Buyer listing price check comparisons | `listing_price_check` |
 | Seller profile inventory | `seller_profile` |

@@ -188,7 +188,7 @@ func main() {
 		}
 	}()
 	alertsSvc := &alertsServer{searchOptions: cfg.ListingAlertSearchOptions, pool: pool, queries: queries, jwtSecret: cfg.JWTSecret, logger: logger.Named("alerts")}
-	if cfg.PriceAlertsEnabled {
+	if cfg.ListingAlertsEnabled {
 		alertsSvc.evaluator = llm.NewEvaluationRunner(llm.NewJevEvaluator(gatewayKey), queries, logger.Named("alert-matching"), llm.Config{
 			MaxAttempts: cfg.LLMMaxAttempts,
 			Timeout:     10 * time.Second,
@@ -197,11 +197,11 @@ func main() {
 		if err != nil {
 			logger.Fatal("configure APNs", zap.Error(err))
 		}
-		go alertsSvc.run(ctx, cfg.PriceAlertsInterval)
+		go alertsSvc.run(ctx, cfg.ListingAlertsInterval)
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/v1/price-alerts/", alertsSvc)
+	mux.Handle("/v1/listing-alerts/", alertsSvc)
 	mux.Handle(apiv1connect.NewAuthServiceHandler(authSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewUserServiceHandler(userSvc, handlerOptions...))
 	mux.Handle(apiv1connect.NewSellerServiceHandler(&sellerServer{queries: queries, pool: pool}, handlerOptions...))

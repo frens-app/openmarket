@@ -24,15 +24,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        guard userInfo["kind"] as? String == "price_alert_check" else { completionHandler(.noData); return }
+        // APNs may deliver queued notifications with the earlier payload names.
+        guard ["listing_alert_check", "price_alert_check"].contains(userInfo["kind"] as? String ?? "") else { completionHandler(.noData); return }
         Task { @MainActor in
             var finished = false
             let fetchAttemptID = userInfo["fetch_attempt_id"] as? String
-            let work = Task { await PriceAlertCoordinator.shared.perform(fetchAttemptID: fetchAttemptID) }
+            let work = Task { await ListingAlertCoordinator.shared.perform(fetchAttemptID: fetchAttemptID) }
             let deadline = Task { @MainActor in
                 do { try await Task.sleep(for: .seconds(23)) } catch { return }
                 work.cancel()
-                Task { await PriceAlertCoordinator.shared.reportFetchEvent(fetchAttemptID, event: "failed", stage: "background", code: "deadline_exceeded") }
+                Task { await ListingAlertCoordinator.shared.reportFetchEvent(fetchAttemptID, event: "failed", stage: "background", code: "deadline_exceeded") }
                 try? await Task.sleep(for: .seconds(2))
                 if !finished { finished = true; completionHandler(.failed) }
             }
@@ -46,8 +47,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
-        if info["kind"] as? String == "price_alert_match", let id = info["alert_id"] as? String {
-            Task { @MainActor in PriceAlertCoordinator.shared.open(id, notificationID: info["notification_id"] as? String) }
+        if ["listing_alert_match", "price_alert_match"].contains(info["kind"] as? String ?? ""), let id = info["alert_id"] as? String {
+            Task { @MainActor in ListingAlertCoordinator.shared.open(id, notificationID: info["notification_id"] as? String) }
         }
         completionHandler()
     }
@@ -55,8 +56,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        if notification.request.content.userInfo["kind"] as? String == "price_alert_match" {
-            Task { @MainActor in PriceAlertCoordinator.shared.matchRevision += 1 }
+        if ["listing_alert_match", "price_alert_match"].contains(notification.request.content.userInfo["kind"] as? String ?? "") {
+            Task { @MainActor in ListingAlertCoordinator.shared.matchRevision += 1 }
         }
         completionHandler([.banner, .sound, .list])
     }
@@ -289,7 +290,7 @@ private struct LaunchView: View {
 
 /// App navigation and the webviews backing its tools.
 struct AppView: View {
-    @ObservedObject private var alerts = PriceAlertCoordinator.shared
+    @ObservedObject private var alerts = ListingAlertCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
@@ -309,7 +310,7 @@ struct AppView: View {
                     .tabItem { Label("AI Search", systemImage: "sparkle.magnifyingglass") }.tag(1)
                 ToolsView()
                     .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(2)
-                PriceAlertsView()
+                ListingAlertsView()
                     .tabItem { Label("Alerts", systemImage: "bell") }.tag(3)
             }
 

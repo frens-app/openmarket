@@ -2,13 +2,13 @@ import SwiftUI
 
 struct AccountGateView: View {
     enum Feature {
-        case priceCheck, shopping, priceAlerts
+        case priceCheck, shopping, listingAlerts
 
         var title: String {
             switch self {
             case .priceCheck: return "Price Check"
             case .shopping: return "AI Search"
-            case .priceAlerts: return "Listing alerts"
+            case .listingAlerts: return "Listing alerts"
             }
         }
     }

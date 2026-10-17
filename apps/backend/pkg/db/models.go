@@ -261,6 +261,85 @@ type Listing struct {
 	OriginalPriceAmount pgtype.Numeric
 }
 
+type ListingAlertBackgroundFetchAttempt struct {
+	ID               uuid.UUID
+	CheckID          uuid.UUID
+	DeviceID         uuid.UUID
+	Trigger          string
+	CreatedAt        pgtype.Timestamptz
+	SendStartedAt    pgtype.Timestamptz
+	SendFinishedAt   pgtype.Timestamptz
+	ApnsAcceptedAt   pgtype.Timestamptz
+	SendError        *string
+	AcknowledgedAt   pgtype.Timestamptz
+	WorkRequestedAt  pgtype.Timestamptz
+	SearchStartedAt  pgtype.Timestamptz
+	SearchRequest    []byte
+	UploadReceivedAt pgtype.Timestamptz
+	ReturnedListings []byte
+	FailureAt        pgtype.Timestamptz
+	FailureStage     *string
+	FailureCode      *string
+}
+
+type ListingAlertCheckRun struct {
+	ID                  uuid.UUID
+	AlertID             uuid.UUID
+	CreatedAt           pgtype.Timestamptz
+	Cursor              *string
+	FacebookActor       *string
+	PageNumber          int32
+	ScanComplete        bool
+	CompletedAt         pgtype.Timestamptz
+	NextPushAt          pgtype.Timestamptz
+	LastPushAt          pgtype.Timestamptz
+	PushAttempts        int32
+	EvaluationAfter     pgtype.Timestamptz
+	EvaluationStartedAt pgtype.Timestamptz
+	EvaluationErrorAt   pgtype.Timestamptz
+	EvaluationErrorCode *string
+}
+
+type ListingAlertInteraction struct {
+	ID             uuid.UUID
+	AlertID        uuid.UUID
+	NotificationID *uuid.UUID
+	ListingID      *string
+	Kind           string
+	Source         string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type ListingAlertListing struct {
+	AlertID            uuid.UUID
+	ListingID          string
+	CheckID            uuid.UUID
+	Listing            []byte
+	CheckedAt          pgtype.Timestamptz
+	Matched            *bool
+	Probability        *float64
+	MatchedAt          pgtype.Timestamptz
+	ViewedAt           pgtype.Timestamptz
+	NotificationSentAt pgtype.Timestamptz
+}
+
+type ListingAlertNotificationOutbox struct {
+	ID             uuid.UUID
+	AlertID        uuid.UUID
+	CheckID        uuid.UUID
+	ListingIds     []string
+	CreatedAt      pgtype.Timestamptz
+	SentAt         pgtype.Timestamptz
+	SendStartedAt  pgtype.Timestamptz
+	SendFinishedAt pgtype.Timestamptz
+	SendError      *string
+}
+
+type ListingAlertWorkerClock struct {
+	ID             int32
+	NextDispatchAt pgtype.Timestamptz
+}
+
 type LlmRun struct {
 	ID                uuid.UUID
 	PriceCheckID      *uuid.UUID
@@ -376,6 +455,21 @@ type UserDevice struct {
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
 	LastSeenAt                   pgtype.Timestamptz
+}
+
+type UserListingAlert struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	DeviceID      uuid.UUID
+	Query         string
+	Location      []byte
+	CreatedAt     pgtype.Timestamptz
+	AlertHour     int16
+	NextCheckAt   pgtype.Timestamptz
+	LastCheckedAt pgtype.Timestamptz
+	Paused        bool
+	AlertMinute   int16
+	TimeZone      string
 }
 
 type UserSession struct {

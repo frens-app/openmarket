@@ -155,7 +155,10 @@ func (q *Queries) GetAuthMethod(ctx context.Context, arg GetAuthMethodParams) (U
 }
 
 const getAuthMethodForUser = `-- name: GetAuthMethodForUser :one
-SELECT user_id, auth_service, subject, created_at, last_used_at FROM user_auth_methods WHERE user_id = $1 ORDER BY created_at, auth_service LIMIT 1
+SELECT user_id, auth_service, subject, created_at, last_used_at FROM user_auth_methods WHERE user_id = $1
+ORDER BY CASE WHEN auth_service IN ('APPLE', 'GOOGLE') THEN 0 ELSE 1 END,
+         created_at, auth_service
+LIMIT 1
 `
 
 func (q *Queries) GetAuthMethodForUser(ctx context.Context, userID uuid.UUID) (UserAuthMethod, error) {

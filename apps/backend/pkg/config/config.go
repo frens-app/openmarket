@@ -57,9 +57,9 @@ func init() {
 	// One deployment serves one APNs topic and environment.
 	pflag.String("apns_bundle_id", "", "APNs topic (apns-topic header) used when sending pushes")
 
-	pflag.String("listing_alert_search_options", "", "JSON search options for listing alerts; empty uses newest available results")
-	pflag.Bool("price_alerts_enabled", false, "enable price alerts and the recurring worker")
-	pflag.Duration("price_alerts_interval", 30*time.Second, "minimum time between staggered alert dispatches")
+	pflag.String("listing_alert_search_options", "", "JSON search options for listing alerts; empty uses suggested available results")
+	pflag.Bool("listing_alerts_enabled", false, "enable listing alerts and the recurring worker")
+	pflag.Duration("listing_alerts_interval", 10*time.Minute, "minimum time between staggered alert dispatches")
 	pflag.String("apns_key_id", "", "Apple APNs signing key ID")
 	pflag.String("apns_team_id", "", "Apple developer team ID")
 	pflag.String("apns_private_key", "", "APNs .p8 key contents (PEM)")
@@ -122,8 +122,8 @@ type ServiceConfig struct {
 
 	ListingAlertSearchOptionsJSON string             `mapstructure:"listing_alert_search_options"`
 	ListingAlertSearchOptions     AlertSearchOptions `mapstructure:"-"`
-	PriceAlertsEnabled            bool               `mapstructure:"price_alerts_enabled"`
-	PriceAlertsInterval           time.Duration      `mapstructure:"price_alerts_interval"`
+	ListingAlertsEnabled          bool               `mapstructure:"listing_alerts_enabled"`
+	ListingAlertsInterval         time.Duration      `mapstructure:"listing_alerts_interval"`
 	APNSKeyID                     string             `mapstructure:"apns_key_id"`
 	APNSTeamID                    string             `mapstructure:"apns_team_id"`
 	APNSPrivateKey                string             `mapstructure:"apns_private_key"`
@@ -257,15 +257,15 @@ func requireAPIValues(cfg ServiceConfig) {
 	if cfg.LLMCallWindow <= 0 {
 		panic("llm_call_window must be positive")
 	}
-	if cfg.PriceAlertsEnabled {
-		if cfg.PriceAlertsInterval < 10*time.Second {
-			panic("price_alerts_interval must be at least 10s")
+	if cfg.ListingAlertsEnabled {
+		if cfg.ListingAlertsInterval < 10*time.Second {
+			panic("listing_alerts_interval must be at least 10s")
 		}
 		if cfg.APNSKeyID == "" || cfg.APNSTeamID == "" || cfg.APNSPrivateKey == "" || cfg.APNSBundleID == "" {
-			panic("price alerts require APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY, APNS_BUNDLE_ID")
+			panic("listing alerts require APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY, APNS_BUNDLE_ID")
 		}
 		if cfg.AIGatewayAPIKey == "" && !(cfg.LLMProvider == LLMProviderVercel && cfg.LLMAPIKey != "") {
-			panic("price alerts require AI_GATEWAY_API_KEY (or LLM_API_KEY with LLM_PROVIDER=vercel)")
+			panic("listing alerts require AI_GATEWAY_API_KEY (or LLM_API_KEY with LLM_PROVIDER=vercel)")
 		}
 	}
 	if cfg.JWTSecret == cfg.RefreshTokenHMACKey {

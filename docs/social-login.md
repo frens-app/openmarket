@@ -161,7 +161,7 @@ Linking challenges cannot be used for ordinary sign-in or account deletion, and
 sign-in challenges cannot be used for linking. ID tokens get the same signature,
 audience, issuer, expiry, and nonce validation as ordinary sign-in.
 
-One transaction attaches the provider identity to the current user ID and removes
+One transaction attaches the provider identity to the current user ID and retains
 the phone auth method. The provider identity lock is shared with ordinary sign-in;
 account/session locks serialize linking with deletion, logout, and competing
 link requests. An identity belonging to another account is rejected without
@@ -179,7 +179,9 @@ Migration `00023_link_sign_in.sql` only adds a nullable session binding to the
 challenge table; it does not purge users or invalidate sessions. Phone sign-in
 remains retired: `GetSignInOptions` returns no countries, and the verification
 RPCs return an error without sending SMS or issuing sessions, even for old apps.
-The phone method is removed from each account only after linking succeeds.
+The phone method remains stored after linking; it does not enable phone sign-in.
+When reading the account's sign-in provider, Apple or Google takes precedence over
+the retained phone record, including session restoration and Apple account deletion.
 
 Deploy the backend migration before the iOS build. Verify Apple/Google production
 configuration and real authorization on a device. Keep `JWT_SECRET` and

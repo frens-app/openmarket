@@ -90,7 +90,7 @@ func TestAlertValidation(t *testing.T) {
 func TestAlertsHTTPRequiresAuthentication(t *testing.T) {
 	s := &alertsServer{logger: zap.NewNop()}
 	w := httptest.NewRecorder()
-	s.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/price-alerts/list", strings.NewReader(`{}`)))
+	s.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/listing-alerts/list", strings.NewReader(`{}`)))
 	if w.Code != 401 {
 		t.Fatalf("got %d", w.Code)
 	}
@@ -124,6 +124,9 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _, _ = pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, user) })
+		if _, err := pool.Exec(ctx, `INSERT INTO user_auth_methods(user_id,auth_service,subject) VALUES($1,'GOOGLE',$2)`, user, uuid.NewString()); err != nil {
+			t.Fatal(err)
+		}
 		if err := pool.QueryRow(ctx, `INSERT INTO user_devices(user_id,install_id,platform,facebook_connected,push_token,notification_permission_status) VALUES($1,$2,'IOS',true,$3,'ENABLED') RETURNING id`, user, uuid.NewString(), uuid.NewString()).Scan(&device); err != nil {
 			t.Fatal(err)
 		}
@@ -167,6 +170,71 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		return v.(map[string]any)["work"].([]alertWork)
+	}
+
+	for _, provider := range []string{"GOOGLE", "APPLE"} {
+		t.Run("alerts require linked "+provider, func(t *testing.T) {
+			s, c, user, _, push, evaluator := fixture(t)
+			exec(t, `DELETE FROM user_auth_methods WHERE user_id=$1`, user)
+			exec(t, `INSERT INTO user_auth_methods(user_id,auth_service,subject) VALUES($1,'PHONE',$2)`, user, uuid.NewString())
+			request := alertRequest{Query: "Switch OLED", Location: alertLocation{CitySlug: "toronto", RadiusKM: 16, Latitude: 43, Longitude: -79}}
+			if _, err := s.handle(c, "create", request); connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "Google or Apple") {
+				t.Fatalf("phone-only creation not blocked clearly: %v", err)
+			}
+			link := func() {
+				exec(t, `INSERT INTO user_auth_methods(user_id,auth_service,subject) VALUES($1,$2,$3)`, user, provider, uuid.NewString())
+			}
+			unlink := func() {
+				exec(t, `DELETE FROM user_auth_methods WHERE user_id=$1 AND auth_service IN ('GOOGLE','APPLE')`, user)
+			}
+			link()
+			id := create(t, s, c)
+			exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+			unlink()
+			dispatch(t, s)
+			if len(push.sent) != 0 {
+				t.Fatal("sent background push to phone-only account")
+			}
+			link()
+			dispatch(t, s)
+			work := getWork(t, s, c)[0]
+			upload := alertRequest{CheckID: work.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "123", Title: "Switch OLED"}}}
+			unlink()
+			for _, action := range []string{"work", "page", "state"} {
+				in := upload
+				in.ID = id
+				if _, err := s.handle(c, action, in); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+					t.Fatalf("phone-only %s allowed: %v", action, err)
+				}
+			}
+			link()
+			if _, err := s.handle(c, "page", upload); err != nil {
+				t.Fatal(err)
+			}
+			unlink()
+			if err := s.evaluateBatch(ctx); err != nil || len(evaluator.inputs) != 0 {
+				t.Fatal("evaluated phone-only alert", err)
+			}
+			link()
+			if err := s.evaluateBatch(ctx); err != nil || len(evaluator.inputs) != 1 {
+				t.Fatal("linked alert not evaluated", err)
+			}
+			unlink()
+			if err := s.notifyMatches(ctx); err != nil || len(push.sent) != 1 {
+				t.Fatal("sent match notification to phone-only account", err)
+			}
+			link()
+			if err := s.notifyMatches(ctx); err != nil || len(push.sent) != 2 {
+				t.Fatal("linked alert notification not sent", err)
+			}
+			unlink()
+			if _, err := s.handle(c, "state", alertRequest{ID: id, Paused: true}); err != nil {
+				t.Fatal("phone-only account cannot pause an alert", err)
+			}
+			if _, err := s.handle(c, "delete", alertRequest{ID: id}); err != nil {
+				t.Fatal("phone-only account cannot delete an alert", err)
+			}
+		})
 	}
 
 	t.Run("interaction attribution ownership and idempotence", func(t *testing.T) {
@@ -351,7 +419,7 @@ func TestAlertsIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		a := listed.(map[string]any)["alerts"].([]priceAlert)[0]
+		a := listed.(map[string]any)["alerts"].([]listingAlert)[0]
 		if a.AlertHour != 20 || a.AlertMinute != 15 || a.TimeZone != zone {
 			t.Fatal("list omitted chosen time")
 		}
@@ -726,25 +794,160 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal("delete did not cascade")
 		}
 	})
-	t.Run("cursor resume stale uploads pause and evaluation failures", func(t *testing.T) {
+	for _, traced := range []bool{false, true} {
+		t.Run(fmt.Sprintf("one page candidate budget traced=%t", traced), func(t *testing.T) {
+			s, c, _, _, _, evaluator := fixture(t)
+			id := create(t, s, c)
+			exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+			dispatch(t, s)
+			work := getWork(t, s, c)[0]
+			if traced {
+				result, err := s.handle(c, "work", alertRequest{Trigger: "foreground"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				work = result.(map[string]any)["work"].([]alertWork)[0]
+			}
+			upload := alertRequest{CheckID: work.ID, Actor: "123", Complete: true}
+			if traced {
+				if work.FetchAttemptID == "" {
+					t.Fatal("missing fetch trace")
+				}
+				upload.FetchAttemptID = work.FetchAttemptID
+			}
+			for i := 0; i < 100; i++ {
+				upload.Listings = append(upload.Listings, alertListing{ID: fmt.Sprint(1000 + i), Title: "Switch OLED"})
+			}
+			cursor := "another-page"
+			for _, change := range []func(*alertRequest){
+				func(r *alertRequest) { r.Complete = false; r.Cursor = &cursor },
+				func(r *alertRequest) { r.Complete = false },
+				func(r *alertRequest) { r.Cursor = &cursor },
+				func(r *alertRequest) { r.Listings = append(r.Listings, alertListing{ID: "9999", Title: "Switch OLED"}) },
+			} {
+				invalid := upload
+				change(&invalid)
+				if _, err := s.handle(c, "page", invalid); connect.CodeOf(err) != connect.CodeInvalidArgument {
+					t.Fatalf("accepted invalid upload: %v", err)
+				}
+			}
+			var untouched bool
+			if err := pool.QueryRow(ctx, `SELECT page_number=0 AND NOT scan_complete AND NOT EXISTS(SELECT 1 FROM listing_alert_listings WHERE check_id=$1) FROM listing_alert_check_runs WHERE id=$1`, work.ID).Scan(&untouched); err != nil || !untouched {
+				t.Fatal("rejected uploads changed check", err)
+			}
+			if _, err := s.handle(c, "page", upload); err != nil {
+				t.Fatal(err)
+			}
+			// Replaying page zero with fresh IDs must not append candidates.
+			upload.Listings = []alertListing{{ID: "9999", Title: "Switch OLED"}}
+			if _, err := s.handle(c, "page", upload); err != nil {
+				t.Fatal("upload retry failed", err)
+			}
+			upload.PageNumber = 1
+			if _, err := s.handle(c, "page", upload); connect.CodeOf(err) != connect.CodeAborted {
+				t.Fatalf("accepted second page: %v", err)
+			}
+			var bounded bool
+			if err := pool.QueryRow(ctx, `SELECT scan_complete AND cursor IS NULL AND page_number=1 AND (SELECT count(*) FROM listing_alert_listings WHERE check_id=$1)=100 AND NOT EXISTS(SELECT 1 FROM listing_alert_listings WHERE check_id=$1 AND listing_id='9999') FROM listing_alert_check_runs WHERE id=$1`, work.ID).Scan(&bounded); err != nil || !bounded {
+				t.Fatal("candidate limit bypassed", err)
+			}
+			for i := 0; i < 6; i++ {
+				if err := s.evaluateBatch(ctx); err != nil {
+					t.Fatal(err)
+				}
+			}
+			candidates := 0
+			for _, input := range evaluator.inputs {
+				candidates += len(input.Candidates)
+			}
+			if len(evaluator.inputs) != 4 || candidates != 100 {
+				t.Fatalf("unbounded evaluation: calls=%d candidates=%d", len(evaluator.inputs), candidates)
+			}
+		})
+	}
+
+	t.Run("concurrent untraced uploads share one page budget", func(t *testing.T) {
+		s, c, _, _, _, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		work := getWork(t, s, c)[0]
+		start := make(chan struct{})
+		results := make(chan error, 2)
+		for batch := 0; batch < 2; batch++ {
+			upload := alertRequest{CheckID: work.ID, Actor: "123", Complete: true}
+			for i := 0; i < 100; i++ {
+				upload.Listings = append(upload.Listings, alertListing{ID: fmt.Sprint(1000 + batch*100 + i), Title: "Switch OLED"})
+			}
+			go func() {
+				<-start
+				_, err := s.handle(c, "page", upload)
+				results <- err
+			}()
+		}
+		close(start)
+		for i := 0; i < 2; i++ {
+			if err := <-results; err != nil {
+				t.Fatal(err)
+			}
+		}
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_listings WHERE check_id=$1`, work.ID).Scan(&count); err != nil || count != 100 {
+			t.Fatalf("concurrent uploads stored %d candidates: %v", count, err)
+		}
+	})
+
+	t.Run("candidate budget includes previously stored partial scan", func(t *testing.T) {
+		s, c, _, _, _, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		work := getWork(t, s, c)[0]
+		exec(t, `UPDATE listing_alert_check_runs SET page_number=1,cursor='legacy-cursor' WHERE id=$1`, work.ID)
+		exec(t, `INSERT INTO listing_alert_listings(alert_id,check_id,listing_id,listing) VALUES($1,$2,'9999','{"id":"9999","title":"Switch OLED"}')`, id, work.ID)
+		upload := alertRequest{CheckID: work.ID, PageNumber: 1, Actor: "123", Complete: true}
+		for i := 0; i < 100; i++ {
+			upload.Listings = append(upload.Listings, alertListing{ID: fmt.Sprint(1000 + i), Title: "Switch OLED"})
+		}
+		if _, err := s.handle(c, "page", upload); connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Fatalf("ignored stored candidates: %v", err)
+		}
+		upload.Listings = upload.Listings[:99]
+		if _, err := s.handle(c, "page", upload); err != nil {
+			t.Fatal(err)
+		}
+		var bounded bool
+		if err := pool.QueryRow(ctx, `SELECT scan_complete AND cursor IS NULL AND (SELECT count(*) FROM listing_alert_listings WHERE check_id=$1)=100 FROM listing_alert_check_runs WHERE id=$1`, work.ID).Scan(&bounded); err != nil || !bounded {
+			t.Fatal("partial scan exceeded budget or remained open", err)
+		}
+	})
+	t.Run("resume invalidates stale uploads and preserves evaluation failures", func(t *testing.T) {
 		s, c, _, _, _, e := fixture(t)
 		id := create(t, s, c)
 		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		w := getWork(t, s, c)[0]
-		cursor := "page-2"
-		in := alertRequest{CheckID: w.ID, Actor: "123", Cursor: &cursor, Listings: []alertListing{{ID: "200", Title: "Switch OLED"}}}
-		if _, err := s.handle(c, "page", in); err != nil {
+		in := alertRequest{CheckID: w.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "200", Title: "Switch OLED"}}}
+		if _, err := s.handle(c, "state", alertRequest{ID: id, Paused: true}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.handle(c, "state", alertRequest{ID: id, Paused: false}); err != nil {
 			t.Fatal(err)
 		}
 		w = getWork(t, s, c)[0]
-		if w.PageNumber != 1 || *w.Cursor != cursor || *w.Actor != "123" {
-			t.Fatal("cursor lost")
+		if w.PageNumber != 1 || w.Cursor != nil || w.Actor != nil {
+			t.Fatal("resume did not invalidate previous work")
 		}
-		in.PageNumber = 1
-		in.Actor = "456"
-		if _, err := s.handle(c, "page", in); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-			t.Fatal("accepted different Facebook account")
+		if _, err := s.handle(c, "page", in); err != nil {
+			t.Fatal(err)
+		}
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_listings WHERE check_id=$1`, w.ID).Scan(&count); err != nil || count != 0 {
+			t.Fatal("stale upload stored candidates", err)
+		}
+		in.PageNumber = w.PageNumber
+		if _, err := s.handle(c, "page", in); err != nil {
+			t.Fatal(err)
 		}
 		e.fail = true
 		if err := s.evaluateBatch(ctx); err == nil {
@@ -764,9 +967,8 @@ func TestAlertsIntegration(t *testing.T) {
 		if _, err := s.handle(c, "state", alertRequest{ID: id, Paused: false}); err != nil {
 			t.Fatal(err)
 		}
-		w = getWork(t, s, c)[0]
-		if w.Cursor != nil || w.Actor != nil {
-			t.Fatal("resume did not reset device cursor")
+		if len(getWork(t, s, c)) != 0 {
+			t.Fatal("resume reopened a completed scan")
 		}
 	})
 	t.Run("notification groups and exact batch navigation", func(t *testing.T) {
@@ -1003,7 +1205,7 @@ func TestAlertsIntegration(t *testing.T) {
 	})
 }
 
-func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
+func TestListingAlertMigrationUpgradesMain(t *testing.T) {
 	dsn := os.Getenv("ALERTS_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("set ALERTS_TEST_DATABASE_URL to a disposable Postgres 18 database")

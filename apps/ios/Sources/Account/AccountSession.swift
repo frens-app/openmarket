@@ -47,6 +47,10 @@ final class AccountSession: ObservableObject {
             }
         }
 
+        var hasSocialSignIn: Bool {
+            isSignedIn && ["google", "apple"].contains(viewer?.signInProvider ?? "")
+        }
+
         /// Keeps the policy independently testable: only an authoritative
         /// rejection ends a stored session. A transport/server failure merely
         /// makes the session temporarily unverified.

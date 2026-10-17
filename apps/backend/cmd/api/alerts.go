@@ -45,7 +45,7 @@ type alertLocation struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 }
-type priceAlert struct {
+type listingAlert struct {
 	ID            string        `json:"id"`
 	Query         string        `json:"query"`
 	Location      alertLocation `json:"location"`
@@ -130,7 +130,7 @@ func (s *alertsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if decodeErr = decoder.Decode(&struct{}{}); decodeErr != io.EOF {
 			err = alertError(connect.CodeInvalidArgument, "Invalid alert request.")
 		} else {
-			result, err = s.handle(ctx, strings.TrimPrefix(r.URL.Path, "/v1/price-alerts/"), in)
+			result, err = s.handle(ctx, strings.TrimPrefix(r.URL.Path, "/v1/listing-alerts/"), in)
 		}
 	}
 	if err != nil {
@@ -327,9 +327,13 @@ type alertQuerier interface {
 
 func (s *alertsServer) eligibleDevice(ctx context.Context, q alertQuerier, session uuid.UUID) (uuid.UUID, error) {
 	var device uuid.UUID
-	err := q.QueryRow(ctx, `SELECT d.id FROM user_devices d JOIN user_sessions s ON s.device_id=d.id WHERE s.id=$1 AND s.revoked_at IS NULL AND s.refresh_token_expires_at>now() AND d.facebook_connected AND d.notification_permission_status='ENABLED' AND d.push_token IS NOT NULL`, session).Scan(&device)
+	var socialSignIn bool
+	err := q.QueryRow(ctx, `SELECT d.id,EXISTS(SELECT 1 FROM user_auth_methods m WHERE m.user_id=d.user_id AND m.auth_service IN ('GOOGLE','APPLE')) FROM user_devices d JOIN user_sessions s ON s.device_id=d.id WHERE s.id=$1 AND s.revoked_at IS NULL AND s.refresh_token_expires_at>now() AND d.facebook_connected AND d.notification_permission_status='ENABLED' AND d.push_token IS NOT NULL`, session).Scan(&device, &socialSignIn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return device, alertError(connect.CodeFailedPrecondition, "Sign in, connect Facebook, and enable notifications on this device first.")
+	}
+	if err == nil && !socialSignIn {
+		return device, alertError(connect.CodeFailedPrecondition, "Link your account to Google or Apple to create listing alerts.")
 	}
 	return device, err
 }
@@ -339,6 +343,8 @@ func alertNotFound(err error) error {
 	}
 	return err
 }
+
+const maxListingAlertCandidates = 100
 
 var alertCity = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
 var alertListingID = regexp.MustCompile(`^[0-9]{1,40}$`)
@@ -370,9 +376,9 @@ func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	alerts := []priceAlert{}
+	alerts := []listingAlert{}
 	for rows.Next() {
-		var a priceAlert
+		var a listingAlert
 		var location []byte
 		if err = rows.Scan(&a.ID, &a.Query, &location, &a.CreatedAt, &a.AlertHour, &a.AlertMinute, &a.TimeZone, &a.NextCheckAt, &a.LastCheckedAt, &a.Paused, &a.MatchCount, &a.UnreadCount); err != nil {
 			return nil, err
@@ -390,7 +396,7 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 	if err != nil {
 		return alertError(connect.CodeInvalidArgument, "Invalid check ID.")
 	}
-	if len(in.Listings) > 100 || in.PageNumber < 0 || !alertListingID.MatchString(in.Actor) || (in.Cursor != nil && len(*in.Cursor) > 10000) || (!in.Complete && (in.Cursor == nil || *in.Cursor == "")) {
+	if len(in.Listings) > maxListingAlertCandidates || in.PageNumber < 0 || !alertListingID.MatchString(in.Actor) || !in.Complete || in.Cursor != nil {
 		return alertError(connect.CodeInvalidArgument, "Invalid search page.")
 	}
 	for _, l := range in.Listings {
@@ -409,9 +415,9 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 	}
 	var alertID uuid.UUID
 	var page int
-	var actor, cursor *string
+	var actor *string
 	var done bool
-	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
+	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.scan_complete FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &done)
 	if err != nil {
 		return alertNotFound(err)
 	}
@@ -429,7 +435,7 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 		if in.PageNumber < page && !uploaded {
 			return alertError(connect.CodeAborted, "Another fetch already completed this page.")
 		}
-		if attemptPage != in.PageNumber || !in.Complete || in.Cursor != nil {
+		if attemptPage != in.PageNumber {
 			return alertError(connect.CodeAborted, "Fetch attempt does not match this upload.")
 		}
 	}
@@ -442,8 +448,14 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 	if actor != nil && *actor != in.Actor {
 		return alertError(connect.CodeFailedPrecondition, "Facebook account changed. Pause and resume this alert to restart its search.")
 	}
-	if !in.Complete && cursor != nil && in.Cursor != nil && *cursor == *in.Cursor {
-		return alertError(connect.CodeInvalidArgument, "Search cursor did not advance.")
+	// Page numbers also invalidate work on resume; the scan flag and candidate
+	// budget enforce the one-page limit independently of fetch tracing metadata.
+	var storedCandidates int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM listing_alert_listings WHERE check_id=$1`, id).Scan(&storedCandidates); err != nil {
+		return err
+	}
+	if storedCandidates+len(in.Listings) > maxListingAlertCandidates {
+		return alertError(connect.CodeResourceExhausted, "Too many candidates for this check.")
 	}
 	for _, l := range in.Listings {
 		raw, _ := json.Marshal(l)
@@ -461,7 +473,7 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET cursor=$2,facebook_actor=$3,page_number=page_number+1,scan_complete=$4 WHERE id=$1`, id, in.Cursor, in.Actor, in.Complete)
+	_, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET cursor=NULL,facebook_actor=$2,page_number=page_number+1,scan_complete=true WHERE id=$1`, id, in.Actor)
 	if err != nil {
 		return err
 	}

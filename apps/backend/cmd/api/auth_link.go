@@ -40,7 +40,7 @@ func (s *authServer) BeginLinkSignIn(ctx context.Context, req *connect.Request[v
 	return connect.NewResponse(&v1.BeginLinkSignInResponse{Nonce: nonce}), nil
 }
 
-// LinkSignIn replaces a phone login without changing the user ID or sessions.
+// LinkSignIn adds social sign-in without changing the user ID or sessions.
 // Keeping the same ID preserves history and analytics identity. It does not
 // merge accounts or support switching between social providers.
 func (s *authServer) LinkSignIn(ctx context.Context, req *connect.Request[v1.LinkSignInRequest]) (*connect.Response[v1.LinkSignInResponse], error) {
@@ -117,11 +117,6 @@ func (s *authServer) LinkSignIn(ctx context.Context, req *connect.Request[v1.Lin
 		}
 	case err != nil:
 		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	if current.AuthService == db.AuthServicePHONE {
-		if err := qtx.DeleteAuthMethodBySubject(ctx, db.DeleteAuthMethodBySubjectParams{AuthService: db.AuthServicePHONE, Subject: current.Subject}); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
 	}
 	user, err := qtx.FillMissingUserNames(ctx, db.FillMissingUserNamesParams{ID: userID, FirstName: firstName, LastName: lastName, DisplayName: displayName})
 	if err != nil {

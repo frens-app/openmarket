@@ -9,7 +9,7 @@ struct AlertLocation: Codable {
     var longitude: Double
 }
 
-struct PriceAlert: Decodable, Identifiable {
+struct ListingAlert: Decodable, Identifiable {
     var id: String
     var query: String
     var location: AlertLocation
@@ -119,7 +119,7 @@ struct AlertWork: Decodable {
 }
 
 @MainActor
-final class PriceAlertsService {
+final class ListingAlertsService {
     struct Request: Encodable {
         var id: String?
         var query: String?
@@ -150,7 +150,7 @@ final class PriceAlertsService {
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
-    struct AlertList: Decodable { var alerts: [PriceAlert] }
+    struct AlertList: Decodable { var alerts: [ListingAlert] }
     struct NotificationFeed: Decodable { var groups: [AlertNotificationGroup] }
     struct MatchList: Decodable { var matches: [AlertMatch]; var notification: AlertNotificationDetails? }
     struct WorkList: Decodable { var work: [AlertWork] }
@@ -173,7 +173,7 @@ final class PriceAlertsService {
     }
 
     func call<T: Decodable>(_ action: String, _ body: Request = Request(), as type: T.Type, timeout: TimeInterval = 15) async throws -> T {
-        var request = URLRequest(url: URL(string: API.baseURL + "/v1/price-alerts/" + action)!)
+        var request = URLRequest(url: URL(string: API.baseURL + "/v1/listing-alerts/" + action)!)
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -93,7 +93,10 @@ WHERE auth_service = $1
   AND subject = $2;
 
 -- name: GetAuthMethodForUser :one
-SELECT * FROM user_auth_methods WHERE user_id = $1 ORDER BY created_at, auth_service LIMIT 1;
+SELECT * FROM user_auth_methods WHERE user_id = $1
+ORDER BY CASE WHEN auth_service IN ('APPLE', 'GOOGLE') THEN 0 ELSE 1 END,
+         created_at, auth_service
+LIMIT 1;
 
 -- name: LockUser :one
 SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;

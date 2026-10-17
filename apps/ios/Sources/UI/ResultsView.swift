@@ -720,20 +720,8 @@ struct ResultsView: View {
 
     /// The Saved sheet owns its navigation, but shares the same tap analytics.
     private func recordListingOpen(_ listing: Listing, from surface: Analytics.Surface, at position: Int) {
-        var properties: [String: Any] = [
-            "surface": surface.rawValue,
-            "position": position,
-            "listing_id": listing.id,
-            "has_price": listing.priceText != nil,
-            "is_saved": saved.contains(listing),
-            "is_seen": viewed.contains(listing.id)
-        ]
-        properties["title"] = Analytics.text(listing.title)
-        properties["price_text"] = Analytics.text(listing.priceText)
-        properties["place"] = Analytics.text(listing.locationText)
-        // `priceText` is what Facebook rendered — "Free", "C$40", "$20 - $40" —
-        // so a sortable number needs the app's own reading of it.
-        if let price = PriceGuide.parse(listing.priceText) { properties["price"] = price }
+        var properties = Analytics.listingOpenProperties(listing, surface: surface, position: position,
+            isSaved: saved.contains(listing), isSeen: viewed.contains(listing.id))
         // Same precedence the card's label uses, and absent rather than zero
         // when the geocode hasn't landed.
         if let km = distances.distanceKM(for: listing.locationText,

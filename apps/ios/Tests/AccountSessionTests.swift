@@ -8,6 +8,19 @@ import XCTest
 
 @MainActor
 final class AccountSessionTests: XCTestCase {
+    func testListingAlertsRequireGoogleOrAppleAccount() {
+        XCTAssertFalse(AccountSession.State.unknown.hasSocialSignIn)
+        XCTAssertFalse(AccountSession.State.signedOut.hasSocialSignIn)
+        XCTAssertFalse(AccountSession.State.signedInOffline(nil).hasSocialSignIn)
+        for provider in ["phone", "", "unknown", "google", "apple"] {
+            var viewer = Viewer()
+            viewer.signInProvider = provider
+            let eligible = provider == "google" || provider == "apple"
+            XCTAssertEqual(AccountSession.State.signedIn(viewer).hasSocialSignIn, eligible)
+            XCTAssertEqual(AccountSession.State.signedInOffline(viewer).hasSocialSignIn, eligible)
+        }
+    }
+
     private func preserveSessionKeys() {
         let keys = ["access_token", "refresh_token", "access_token_expiry", "viewer",
                     "social_apple_user_id", "install_id"]

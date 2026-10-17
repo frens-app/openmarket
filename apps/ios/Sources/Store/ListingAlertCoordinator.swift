@@ -3,15 +3,15 @@ import WebKit
 import UserNotifications
 
 @MainActor
-final class PriceAlertCoordinator: ObservableObject {
-    static let shared = PriceAlertCoordinator()
+final class ListingAlertCoordinator: ObservableObject {
+    static let shared = ListingAlertCoordinator()
     @Published var selectedTab = 0
     @Published var matchRevision = 0
     @Published var openAlertID: String?
     private(set) var openNotificationID: String?
     @Published private(set) var webView: WKWebView?
     private var running: Task<Bool, Never>?
-    private let service = PriceAlertsService()
+    private let service = ListingAlertsService()
 
     func open(_ id: String, notificationID: String? = nil) {
         openNotificationID = notificationID
@@ -37,7 +37,7 @@ final class PriceAlertCoordinator: ObservableObject {
         }
     }
 
-    static func searchFirstPage(_ check: AlertWork, actor: String, client: any GraphQLFeedLoading) async throws -> PriceAlertsService.Request {
+    static func searchFirstPage(_ check: AlertWork, actor: String, client: any GraphQLFeedLoading) async throws -> ListingAlertsService.Request {
         let page = try await client.page(for: check.searchQuery, cursor: nil)
         try Task.checkCancellation()
         let listings = page.listings.compactMap { item -> AlertListing? in
@@ -54,9 +54,9 @@ final class PriceAlertCoordinator: ObservableObject {
         guard let attemptID else { return }
         // An independent task can report cancellation while the background callback has time left.
         await Task { @MainActor in
-            let _: PriceAlertsService.Empty? = try? await service.call("fetch-event", .init(
+            let _: ListingAlertsService.Empty? = try? await service.call("fetch-event", .init(
                 fetchAttemptID: attemptID, event: event, failureStage: stage, failureCode: code),
-                as: PriceAlertsService.Empty.self, timeout: 2)
+                as: ListingAlertsService.Empty.self, timeout: 2)
         }.value
     }
 
@@ -99,7 +99,7 @@ final class PriceAlertCoordinator: ObservableObject {
                               latitude: $0.latitude, longitude: $0.longitude)
             }
             let work = try await service.call("work", .init(location: location, fetchAttemptID: fetchAttemptID,
-                trigger: fetchAttemptID == nil ? "foreground" : "background_push"), as: PriceAlertsService.WorkList.self).work
+                trigger: fetchAttemptID == nil ? "foreground" : "background_push"), as: ListingAlertsService.WorkList.self).work
             if work.isEmpty {
                 await reportFetchEvent(activeAttemptID, event: "failed", stage: stage, code: "no_pending_work")
             }
@@ -120,14 +120,14 @@ final class PriceAlertCoordinator: ObservableObject {
                 try Task.checkCancellation()
                 let request = try await Self.searchFirstPage(check, actor: actor, client: client)
                 stage = "upload"
-                let _: PriceAlertsService.Empty = try await service.call("page", request, as: PriceAlertsService.Empty.self)
+                let _: ListingAlertsService.Empty = try await service.call("page", request, as: ListingAlertsService.Empty.self)
                 browser.stopLoading()
             }
             return !work.isEmpty
         } catch {
             await reportFetchEvent(activeAttemptID, event: "failed", stage: stage,
                                    code: Task.isCancelled ? "cancelled" : Self.failureCode(for: error))
-            if !Task.isCancelled { print("[price-alerts] Search deferred: \(error.localizedDescription)") }
+            if !Task.isCancelled { print("[listing-alerts] Search deferred: \(error.localizedDescription)") }
             return false
         }
     }

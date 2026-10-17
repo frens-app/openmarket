@@ -182,7 +182,6 @@ struct DetailView: View {
                 "surface": Analytics.Surface.listingDetail.rawValue,
                 "referrer": referrer.rawValue,
                 "listing_id": current.id,
-                // No price means no price alert can ever fire for it.
                 "has_price": current.priceText != nil,
                 // Saved off the thumbnail, or after the item page landed.
                 "is_enriched": current.detail != nil

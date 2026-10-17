@@ -8,13 +8,13 @@ private struct AlertRoute: Hashable {
     let interactionID = UUID().uuidString
 }
 
-struct PriceAlertsView: View {
+struct ListingAlertsView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
-    @ObservedObject private var coordinator = PriceAlertCoordinator.shared
+    @ObservedObject private var coordinator = ListingAlertCoordinator.shared
     @ObservedObject private var push = PushRegistrar.shared
     @Environment(\.scenePhase) private var scenePhase
-    @State private var alerts: [PriceAlert] = []
+    @State private var alerts: [ListingAlert] = []
     @State private var feed: [AlertNotificationGroup] = []
     @State private var feedMore = false
     @State private var feedLoading = false
@@ -29,8 +29,9 @@ struct PriceAlertsView: View {
     @State private var connected = false
     @State private var showCreate = false
     @State private var showLimit = false
+    @State private var showLinkRequired = false
     @State private var showAccount = false
-    private let service = PriceAlertsService()
+    private let service = ListingAlertsService()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -78,7 +79,9 @@ struct PriceAlertsView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        if alerts.count >= 3 {
+                        if !account.state.hasSocialSignIn {
+                            showLinkRequired = true
+                        } else if alerts.count >= 3 {
                             showLimit = true
                         } else {
                             query = ""; alertTime = AlertSchedule.defaultTime(); error = nil; showCreate = true
@@ -106,10 +109,15 @@ struct PriceAlertsView: View {
                 Task { await refresh() }
             }
             .sheet(isPresented: $showAccount, onDismiss: { Task { await refresh() } }) {
-                AccountGateView(feature: .priceAlerts, done: { showAccount = false })
+                AccountGateView(feature: .listingAlerts, done: { showAccount = false })
             }
             .sheet(isPresented: $showCreate) { createSheet }
             .sheet(isPresented: $showManage) { manageSheet }
+            .alert("Link your account", isPresented: $showLinkRequired) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Link your account to Google or Apple to create listing alerts. A phone number alone isn’t enough.")
+            }
             .alert("Alert limit reached", isPresented: $showLimit) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -158,14 +166,23 @@ struct PriceAlertsView: View {
     }
 
     private func create() async {
-        guard let place = prefs.resolvedPlace else { return }
+        guard account.state.hasSocialSignIn else {
+            showCreate = false
+            showLinkRequired = true
+            return
+        }
+        guard !busy, let place = prefs.resolvedPlace else { return }
         busy = true; error = nil
         defer { busy = false }
         do {
             let location = AlertLocation(citySlug: place.segment, name: place.name, radiusKM: prefs.radiusKM, latitude: place.latitude, longitude: place.longitude)
             let schedule = AlertSchedule(date: alertTime)
             let created = try await service.call("create", .init(query: query, location: location,
-                alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone), as: PriceAlertsService.Created.self)
+                alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone), as: ListingAlertsService.Created.self)
+            Analytics.capture(.listingAlertCreated, [
+                "alert_id": created.id, "alert_hour": schedule.hour,
+                "alert_minute": schedule.minute, "time_zone": schedule.timeZone
+            ])
             showCreate = false
             await refresh()
             path = [AlertRoute(alertID: created.id, source: "creation")]
@@ -184,8 +201,8 @@ struct PriceAlertsView: View {
         await account.reportFacebookConnection(connected)
         guard account.isSignedIn else { alerts = []; feed = []; return }
         do {
-            async let loadedAlerts = service.call("list", as: PriceAlertsService.AlertList.self)
-            async let loadedFeed = service.call("notification-feed", as: PriceAlertsService.NotificationFeed.self)
+            async let loadedAlerts = service.call("list", as: ListingAlertsService.AlertList.self)
+            async let loadedFeed = service.call("notification-feed", as: ListingAlertsService.NotificationFeed.self)
             let (alertList, recent) = try await (loadedAlerts, loadedFeed)
             guard owner == account.state.viewer?.id else { return }
             alerts = alertList.alerts
@@ -199,7 +216,7 @@ struct PriceAlertsView: View {
         defer { feedLoading = false }
         let generation = feedGeneration
         do {
-            let loaded = try await service.call("notification-feed", .init(beforeID: last.id, before: last.createdCursor), as: PriceAlertsService.NotificationFeed.self)
+            let loaded = try await service.call("notification-feed", .init(beforeID: last.id, before: last.createdCursor), as: ListingAlertsService.NotificationFeed.self)
             guard generation == feedGeneration else { return }
             feed += loaded.groups.filter { item in !feed.contains { $0.id == item.id } }
             feedMore = loaded.groups.count == 50; error = nil
@@ -216,7 +233,7 @@ struct PriceAlertsView: View {
 private struct AlertMatchesView: View {
     let route: AlertRoute
     private var alertID: String { route.alertID }
-    let alert: PriceAlert?
+    let alert: ListingAlert?
     let changed: () -> Void
     @State private var matches: [AlertMatch] = []
     @State private var notification: AlertNotificationDetails?
@@ -227,9 +244,11 @@ private struct AlertMatchesView: View {
     @State private var listingInteractionID = UUID().uuidString
     @State private var paused = false
     @State private var confirmDelete = false
+    @State private var changingState = false
+    @State private var trackedGroupInteractionID: String?
     @Environment(\.dismiss) private var dismiss
     @Namespace private var listingNamespace
-    private let service = PriceAlertsService()
+    private let service = ListingAlertsService()
 
     var body: some View {
         List {
@@ -249,7 +268,7 @@ private struct AlertMatchesView: View {
                 ContentUnavailableView("No matches yet", systemImage: "bell", description: Text("Matching listings will appear here after a check completes."))
             }
             ForEach(matches) { match in
-                Button { listingInteractionID = UUID().uuidString; selected = match } label: {
+                Button { open(match) } label: {
                     AlertListingRow(match: match)
                 }
             }
@@ -265,29 +284,43 @@ private struct AlertMatchesView: View {
                 }
                 Button("Delete alert", systemImage: "trash", role: .destructive) { confirmDelete = true }
             } label: { Image(systemName: "ellipsis.circle") }
+            .disabled(changingState)
         }
         .confirmationDialog("Delete this alert and its saved matches?", isPresented: $confirmDelete) {
             Button("Delete alert", role: .destructive) {
                 Task {
+                    guard !changingState else { return }
+                    changingState = true
+                    defer { changingState = false }
                     do {
-                        let _: PriceAlertsService.Empty = try await service.call("delete", .init(id: alertID), as: PriceAlertsService.Empty.self)
+                        let _: ListingAlertsService.Empty = try await service.call("delete", .init(id: alertID), as: ListingAlertsService.Empty.self)
+                        Analytics.capture(.listingAlertStateChanged, ["alert_id": alertID, "action": "deleted"])
                         changed(); dismiss()
                     } catch { self.error = error.localizedDescription }
                 }
             }
         }
-        .task { paused = alert?.paused ?? false; await load(reset: true) }
+        .task(id: route.interactionID) {
+            paused = alert?.paused ?? false
+            if route.notificationID != nil, trackedGroupInteractionID != route.interactionID {
+                trackedGroupInteractionID = route.interactionID
+                var properties = interactionProperties
+                properties["interaction_id"] = route.interactionID
+                Analytics.capture(.listingAlertGroupOpened, properties)
+            }
+            await load(reset: true)
+        }
         .onChange(of: alert?.paused) { _, value in if let value { paused = value } }
         .refreshable { await load(reset: true) }
         .sheet(item: $selected) { match in
             NavigationStack {
-                DetailView(listing: match.listing.listing, namespace: listingNamespace, referrer: .priceAlerts)
+                DetailView(listing: match.listing.listing, namespace: listingNamespace, referrer: .listingAlerts)
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { selected = nil } } }
             }
             .task {
                 do {
-                    let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "listing_opened",
-                        interactionID: listingInteractionID, notificationID: route.notificationID, source: route.source, listingID: match.id), as: PriceAlertsService.Empty.self)
+                    let _: ListingAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "listing_opened",
+                        interactionID: listingInteractionID, notificationID: route.notificationID, source: route.source, listingID: match.id), as: ListingAlertsService.Empty.self)
                     if let index = matches.firstIndex(where: { $0.id == match.id }) { matches[index].viewedAt = Date() }
                     changed()
                 } catch { self.error = error.localizedDescription }
@@ -295,16 +328,38 @@ private struct AlertMatchesView: View {
         }
     }
 
+    private var interactionProperties: [String: Any] {
+        var properties: [String: Any] = [
+            "alert_id": alertID,
+            "surface": Analytics.Surface.listingAlerts.rawValue,
+            "entry_point": route.source
+        ]
+        properties["notification_id"] = route.notificationID
+        return properties
+    }
+
+    private func open(_ match: AlertMatch) {
+        listingInteractionID = UUID().uuidString
+        let listing = match.listing.listing
+        var properties = Analytics.listingOpenProperties(listing, surface: .listingAlerts,
+            position: matches.firstIndex(where: { $0.id == match.id }) ?? 0,
+            isSaved: SavedListings.shared.contains(listing), isSeen: ViewedListings.shared.contains(listing.id))
+        properties.merge(interactionProperties) { _, value in value }
+        properties["interaction_id"] = listingInteractionID
+        Analytics.capture(.listingOpened, properties)
+        selected = match
+    }
+
     private func load(reset: Bool) async {
         guard !loading else { return }
         loading = true; defer { loading = false }
         do {
-            let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
-                interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: PriceAlertsService.Empty.self)
+            let _: ListingAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
+                interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: ListingAlertsService.Empty.self)
             if route.notificationID != nil { changed() }
             let last = reset ? nil : matches.last
             let loaded = try await service.call("matches", .init(id: alertID, beforeID: last?.id, before: last?.matchedCursor,
-                notificationID: route.notificationID), as: PriceAlertsService.MatchList.self)
+                notificationID: route.notificationID), as: ListingAlertsService.MatchList.self)
             notification = loaded.notification
             if reset { matches = loaded.matches } else { matches += loaded.matches.filter { item in !matches.contains { $0.id == item.id } } }
             more = loaded.matches.count == 100; error = nil
@@ -312,9 +367,15 @@ private struct AlertMatchesView: View {
     }
 
     private func setPaused() async {
+        guard !changingState else { return }
+        changingState = true
+        defer { changingState = false }
+        let nextPaused = !paused
         do {
-            let _: PriceAlertsService.Empty = try await service.call("state", .init(id: alertID, paused: !paused), as: PriceAlertsService.Empty.self)
-            paused.toggle(); changed()
+            let _: ListingAlertsService.Empty = try await service.call("state", .init(id: alertID, paused: nextPaused), as: ListingAlertsService.Empty.self)
+            paused = nextPaused
+            Analytics.capture(.listingAlertStateChanged, ["alert_id": alertID, "action": paused ? "paused" : "resumed"])
+            changed()
         } catch { self.error = error.localizedDescription }
     }
 }
