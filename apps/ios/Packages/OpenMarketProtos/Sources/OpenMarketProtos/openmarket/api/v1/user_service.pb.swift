@@ -327,7 +327,7 @@ public nonisolated struct Openmarket_Api_V1_RegisterDeviceTokenRequest: Sendable
   /// Empty when the user declined, or when the permission was granted but APNs
   /// has not answered yet. That is a real report rather than a no-op call: the
   /// server needs to tell an install that said no from one that was never asked,
-  /// because that is what decides whether a price alert has any way to reach the
+  /// because that is what decides whether a listing alert has any way to reach the
   /// person. An empty token is stored as NULL — the unique index on the column
   /// would otherwise collide the moment a second device declined.
   ///

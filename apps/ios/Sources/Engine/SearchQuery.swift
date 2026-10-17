@@ -36,7 +36,7 @@ struct SearchQuery: Equatable {
     /// Verified against result sets, not just parameter survival.
     /// `creation_time_descend` is genuinely newest-first — the first and last of
     /// 24 results were listed one and nine hours ago.
-    enum Sort: String, Equatable, CaseIterable {
+    enum Sort: String, Decodable, Equatable, CaseIterable {
         case bestMatch = "best_match"
         case newest = "creation_time_descend"
         case nearest = "distance_ascend"
@@ -57,7 +57,7 @@ struct SearchQuery: Equatable {
     /// `SHIPPING_ONSITE` marked 24 of 24 cards on a shipping-filtered page and
     /// none on a local one, so this is a real server-side split rather than a
     /// relabelling.
-    enum Delivery: String, Equatable {
+    enum Delivery: String, Decodable, Equatable {
         case any = ""
         case localPickup = "local_pick_up"
         case shipping = "shipping"
@@ -69,7 +69,7 @@ struct SearchQuery: Equatable {
     /// kept 10 of 15 results in the requested city, where
     /// `sortBy=creation_time_descend` returned a fresher but far-flung set
     /// (Stockton, Davis, Sacramento). Freshness without losing locality.
-    enum Age: Int, Equatable, CaseIterable {
+    enum Age: Int, Decodable, Equatable, CaseIterable {
         case any = 0
         case day = 1
         case week = 7
@@ -100,7 +100,7 @@ struct SearchQuery: Equatable {
         case unavailable = "out of stock"
     }
 
-    enum Condition: String, Equatable, CaseIterable {
+    enum Condition: String, Decodable, Equatable, CaseIterable {
         case new
         case usedLikeNew = "used_like_new"
         case usedGood = "used_good"

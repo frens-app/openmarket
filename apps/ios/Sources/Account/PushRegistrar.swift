@@ -16,7 +16,7 @@ import UserNotifications
 ///
 /// A denied prompt still reports upward. The server wants to know that this
 /// install has notifications off, not merely that it never heard about one —
-/// the difference decides whether a price alert has any way to reach somebody.
+/// the difference decides whether a listing alert has any way to reach somebody.
 @MainActor
 final class PushRegistrar: ObservableObject {
     static let shared = PushRegistrar()
@@ -53,8 +53,11 @@ final class PushRegistrar: ObservableObject {
         return granted
     }
 
+    var isEnabled: Bool { status == .authorized || status == .provisional || status == .ephemeral }
+
     func refreshStatus() async {
         status = await center.notificationSettings().authorizationStatus
+        if !isEnabled { await AccountSession.shared.registerPushToken(nil, granted: false) }
     }
 
     func registerIfAuthorized() {

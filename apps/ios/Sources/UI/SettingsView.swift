@@ -49,7 +49,7 @@ struct SettingsView: View {
                         Button("Delete account", role: .destructive) { confirmingDelete = true }
                     } else {
                         LabeledContent("Sign-in", value: "Not signed in")
-                        Button("Create an account") { showAccountLogin = true }
+                        Button("Sign In") { showAccountLogin = true }
                         Text("An account is required for Price Check and saves your past checks across devices.")
                             .font(.caption)
                             .foregroundStyle(.secondary)

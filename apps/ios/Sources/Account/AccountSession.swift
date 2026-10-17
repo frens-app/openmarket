@@ -47,6 +47,10 @@ final class AccountSession: ObservableObject {
             }
         }
 
+        var hasSocialSignIn: Bool {
+            isSignedIn && ["google", "apple"].contains(viewer?.signInProvider ?? "")
+        }
+
         /// Keeps the policy independently testable: only an authoritative
         /// rejection ends a stored session. A transport/server failure merely
         /// makes the session temporarily unverified.
@@ -354,7 +358,7 @@ final class AccountSession: ObservableObject {
     ///
     /// A nil token with `granted: false` is a real report, not a no-op: the
     /// server needs to distinguish an install that declined from one that was
-    /// never asked, because that is what decides whether a price alert has any
+    /// never asked, because that is what decides whether a listing alert has any
     /// way to reach the person. The proto requires a non-empty token, so a
     /// refusal is recorded as the permission status against the empty string —
     /// there is nothing to address, which is precisely the fact being sent.

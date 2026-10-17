@@ -1,14 +1,9 @@
 import SwiftUI
 import GoogleSignIn
 import WebKit
+import UserNotifications
 
-/// Exists for one callback: APNs hands the device token to the app delegate and
-/// nowhere else, so a SwiftUI-only app has no way to receive it.
-///
-/// Everything it does is forwarded to `PushRegistrar`, which owns the permission
-/// and the reporting. Nothing else should accumulate here — an app delegate is a
-/// grab bag by nature, and this one has a single reason to exist.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Says which backend this build is talking to, once, at launch.
     ///
     /// Two builds now install side by side with near-identical UI, so "which
@@ -21,8 +16,50 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         print("[openmarket] \(Bundle.main.bundleIdentifier ?? "?") → \(API.baseURL)")
         // Not a `.task`: `$application_opened` has to be captured for the
         // launch that is happening, and a SwiftUI task runs after it.
+        UNUserNotificationCenter.current().delegate = self
         Analytics.start()
         return true
+    }
+
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        // APNs may deliver queued notifications with the earlier payload names.
+        guard ["listing_alert_check", "price_alert_check"].contains(userInfo["kind"] as? String ?? "") else { completionHandler(.noData); return }
+        Task { @MainActor in
+            var finished = false
+            let fetchAttemptID = userInfo["fetch_attempt_id"] as? String
+            let work = Task { await ListingAlertCoordinator.shared.perform(fetchAttemptID: fetchAttemptID) }
+            let deadline = Task { @MainActor in
+                do { try await Task.sleep(for: .seconds(23)) } catch { return }
+                work.cancel()
+                Task { await ListingAlertCoordinator.shared.reportFetchEvent(fetchAttemptID, event: "failed", stage: "background", code: "deadline_exceeded") }
+                try? await Task.sleep(for: .seconds(2))
+                if !finished { finished = true; completionHandler(.failed) }
+            }
+            let updated = await work.value
+            deadline.cancel()
+            if !finished { finished = true; completionHandler(updated ? .newData : .noData) }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let info = response.notification.request.content.userInfo
+        if ["listing_alert_match", "price_alert_match"].contains(info["kind"] as? String ?? ""), let id = info["alert_id"] as? String {
+            Task { @MainActor in ListingAlertCoordinator.shared.open(id, notificationID: info["notification_id"] as? String) }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        if ["listing_alert_match", "price_alert_match"].contains(notification.request.content.userInfo["kind"] as? String ?? "") {
+            Task { @MainActor in ListingAlertCoordinator.shared.matchRevision += 1 }
+        }
+        completionHandler([.banner, .sound, .list])
     }
 
     func application(_ application: UIApplication,
@@ -113,6 +150,8 @@ struct OpenMarketApp: App {
                     // `reportFacebookConnection` dedupes, so the usual
                     // foreground costs nothing.
                     await account.reportFacebookConnection(connected)
+                    await PushRegistrar.shared.refreshStatus()
+                    PushRegistrar.shared.registerIfAuthorized()
                 }
             } else {
                 Task { await ListingCache.shared.writeToDisk() }
@@ -251,6 +290,8 @@ private struct LaunchView: View {
 
 /// App navigation and the webviews backing its tools.
 struct AppView: View {
+    @ObservedObject private var alerts = ListingAlertCoordinator.shared
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var seller: SellerToolsModel
@@ -262,13 +303,15 @@ struct AppView: View {
 
     var body: some View {
         ZStack {
-            TabView {
+            TabView(selection: $alerts.selectedTab) {
                 ResultsView()
-                    .tabItem { Label("Browse", systemImage: "magnifyingglass") }
+                    .tabItem { Label("Browse", systemImage: "magnifyingglass") }.tag(0)
                 ShoppingView()
-                    .tabItem { Label("AI Search", systemImage: "sparkle.magnifyingglass") }
+                    .tabItem { Label("AI Search", systemImage: "sparkle.magnifyingglass") }.tag(1)
                 ToolsView()
-                    .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
+                    .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(2)
+                ListingAlertsView()
+                    .tabItem { Label("Alerts", systemImage: "bell") }.tag(3)
             }
 
             // The engines' webviews must be in the hierarchy or WebKit
@@ -282,6 +325,9 @@ struct AppView: View {
             // same reason. A tab that isn't selected is torn down, and Price
             // Check's search would then be running in a webview SwiftUI had
             // just removed from the hierarchy.
+            if let webView = alerts.webView {
+                HiddenWebViewHost(webView: webView).offset(x: 3000)
+            }
             HiddenWebViewHost(webView: store.desktop.webView)
                 .offset(x: 3000)
             HiddenWebViewHost(webView: store.feed.webView)
@@ -306,7 +352,17 @@ struct AppView: View {
                     .offset(x: 3000)
             }
         }
-        .onChange(of: account.state.viewer?.id) { _, _ in shopping.accountChanged() }
+        .onChange(of: account.state.viewer?.id) { _, _ in
+            shopping.accountChanged()
+            alerts.cancel()
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                if account.isSignedIn { _ = await alerts.perform() }
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
+            }
+        }
         .onChange(of: prefs.locationSlug) { _, _ in shopping.locationChanged() }
         .onChange(of: prefs.radiusKM) { _, _ in shopping.locationChanged() }
         .onChange(of: prefs.resolvedPlace) { _, _ in shopping.locationChanged() }

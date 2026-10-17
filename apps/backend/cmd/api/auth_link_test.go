@@ -72,6 +72,17 @@ func testPhoneAccountLinking(t *testing.T, server *authServer, users *userServer
 		}
 		return res.Msg.Viewer
 	}
+	assertRetainedPhone := func(t *testing.T, userID uuid.UUID, subject string) {
+		t.Helper()
+		method, err := queries.GetAuthMethod(ctx, db.GetAuthMethodParams{AuthService: db.AuthServicePHONE, Subject: subject})
+		if err != nil || method.UserID != userID {
+			t.Fatalf("phone identity not retained on original account: %v", err)
+		}
+		var methods int
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM user_auth_methods WHERE user_id=$1", userID).Scan(&methods); err != nil || methods != 2 {
+			t.Fatalf("expected phone plus one social identity: %d %v", methods, err)
+		}
+	}
 	newPhone := func(t *testing.T) (uuid.UUID, string, string) {
 		t.Helper()
 		user, err := queries.CreateUser(ctx, nil)
@@ -172,12 +183,13 @@ func testPhoneAccountLinking(t *testing.T, server *authServer, users *userServer
 		if _, err := link(oldAccess, apple, begin(t, oldAccess, apple), "new-apple"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 			t.Fatalf("second provider replacement allowed: %v", err)
 		}
-		for _, table := range []string{"saved_listings", "seller_follows", "price_checks", "user_devices", "user_auth_methods", "user_sessions", "llm_runs"} {
+		for _, table := range []string{"saved_listings", "seller_follows", "price_checks", "user_devices", "user_sessions", "llm_runs"} {
 			var count int
 			if err := pool.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE user_id=$1", oldUserID).Scan(&count); err != nil || count != 1 {
 				t.Fatalf("history/session changed in %s: %d %v", table, count, err)
 			}
 		}
+		assertRetainedPhone(t, oldUserID, "+15005550100")
 		var viewOwner uuid.UUID
 		if err := pool.QueryRow(ctx, "SELECT last_viewed_by FROM listings WHERE id=$1", listingID).Scan(&viewOwner); err != nil || viewOwner != oldUserID {
 			t.Fatalf("view history changed: %v", err)
@@ -215,6 +227,7 @@ func testPhoneAccountLinking(t *testing.T, server *authServer, users *userServer
 		if v := res.Msg.Viewer; v.GetFirstName() != "Alex" || v.GetLastName() != "Rivera" || v.GetDisplayName() != "Alex R." {
 			t.Fatalf("Apple link did not return separate names: %v", v)
 		}
+		assertRetainedPhone(t, id, "fixture-phone-"+id.String())
 		refreshed, err := client.RefreshToken(ctx, connect.NewRequest(&v1.RefreshTokenRequest{RefreshToken: refresh}))
 		if err != nil || viewer(t, refreshed.Msg.AccessToken).Id != id.String() {
 			t.Fatalf("refresh changed account: %v", err)
@@ -236,7 +249,7 @@ func testPhoneAccountLinking(t *testing.T, server *authServer, users *userServer
 			t.Fatal("failed deletion removed account")
 		}
 	})
-	t.Run("competing requests can only replace the phone method once", func(t *testing.T) {
+	t.Run("competing requests attach one social identity and retain phone", func(t *testing.T) {
 		id, access, _ := newPhone(t)
 		nonces := []string{begin(t, access, google), begin(t, access, apple)}
 		providers := []v1.SignInProvider{google, apple}
@@ -258,9 +271,9 @@ func testPhoneAccountLinking(t *testing.T, server *authServer, users *userServer
 				t.Fatal(err)
 			}
 		}
-		var methods int
-		if err := pool.QueryRow(ctx, "SELECT count(*) FROM user_auth_methods WHERE user_id=$1", id).Scan(&methods); err != nil || methods != 1 || successes != 1 {
-			t.Fatalf("multiple identities attached: methods=%d successes=%d error=%v", methods, successes, err)
+		assertRetainedPhone(t, id, "fixture-phone-"+id.String())
+		if successes != 1 {
+			t.Fatalf("expected one social link to succeed: %d", successes)
 		}
 	})
 	t.Run("logout rejects a pending link", func(t *testing.T) {
