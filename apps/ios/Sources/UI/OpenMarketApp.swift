@@ -27,10 +27,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         guard userInfo["kind"] as? String == "price_alert_check" else { completionHandler(.noData); return }
         Task { @MainActor in
             var finished = false
-            let work = Task { await PriceAlertCoordinator.shared.perform() }
+            let fetchAttemptID = userInfo["fetch_attempt_id"] as? String
+            let work = Task { await PriceAlertCoordinator.shared.perform(fetchAttemptID: fetchAttemptID) }
             let deadline = Task { @MainActor in
-                do { try await Task.sleep(for: .seconds(25)) } catch { return }
+                do { try await Task.sleep(for: .seconds(23)) } catch { return }
                 work.cancel()
+                Task { await PriceAlertCoordinator.shared.reportFetchEvent(fetchAttemptID, event: "failed", stage: "background", code: "deadline_exceeded") }
+                try? await Task.sleep(for: .seconds(2))
                 if !finished { finished = true; completionHandler(.failed) }
             }
             let updated = await work.value

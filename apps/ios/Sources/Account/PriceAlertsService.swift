@@ -87,6 +87,7 @@ struct AlertWork: Decodable {
     var actor: String?
     var pageNumber: Int
     var searchOptions: AlertSearchOptions?
+    var fetchAttemptID: String?
 
     var searchQuery: SearchQuery {
         let options = searchOptions ?? AlertSearchOptions()
@@ -114,6 +115,11 @@ final class PriceAlertsService {
         var listingIDs: [String]?
         var beforeID: String?
         var before: String?
+        var fetchAttemptID: String?
+        var trigger: String?
+        var event: String?
+        var failureStage: String?
+        var failureCode: String?
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
@@ -138,10 +144,10 @@ final class PriceAlertsService {
         return decoder
     }
 
-    func call<T: Decodable>(_ action: String, _ body: Request = Request(), as type: T.Type) async throws -> T {
+    func call<T: Decodable>(_ action: String, _ body: Request = Request(), as type: T.Type, timeout: TimeInterval = 15) async throws -> T {
         var request = URLRequest(url: URL(string: API.baseURL + "/v1/price-alerts/" + action)!)
         request.httpMethod = "POST"
-        request.timeoutInterval = 15
+        request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (name, values) in try await AccountSession.shared.authorizedHeaders() {
             request.setValue(values.joined(separator: ","), forHTTPHeaderField: name)

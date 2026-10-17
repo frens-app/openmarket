@@ -100,12 +100,23 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 	if err != nil {
 		return err
 	}
+	var fetchAttemptID uuid.UUID
+	err = tx.QueryRow(ctx, `INSERT INTO listing_alert_background_fetch_attempts(check_id,device_id,trigger,send_started_at) VALUES($1,$2,'background_push',clock_timestamp()) RETURNING id`, checkID, deviceID).Scan(&fetchAttemptID)
+	if err != nil {
+		return err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return err
 	}
-	err = s.push.Send(ctx, token, "check-"+alertID.String(), true, map[string]any{"aps": map[string]any{"content-available": 1}, "kind": "price_alert_check", "alert_id": alertID.String(), "check_id": checkID.String()})
+	err = s.push.Send(ctx, token, "check-"+alertID.String(), true, map[string]any{"aps": map[string]any{"content-available": 1}, "kind": "price_alert_check", "alert_id": alertID.String(), "check_id": checkID.String(), "fetch_attempt_id": fetchAttemptID.String()})
 	s.invalidateToken(ctx, deviceID, token, err)
-	return err
+	if recordErr := s.recordBackgroundPushResult(ctx, fetchAttemptID, err); recordErr != nil {
+		return recordErr
+	}
+	if err != nil {
+		return errors.New(alertPushError(err))
+	}
+	return nil
 }
 
 func (s *alertsServer) evaluateBatch(ctx context.Context) error {
@@ -143,9 +154,15 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	}
 	var decisions []llm.Decision
 	if len(in.Candidates) > 0 {
+		if _, err = s.pool.Exec(ctx, `UPDATE listing_alert_check_runs SET evaluation_started_at=COALESCE(evaluation_started_at,clock_timestamp()) WHERE id=$1`, checkID); err != nil {
+			return err
+		}
 		decisions, err = s.evaluator.Evaluate(ctx, llm.Subject{UserID: userID}, in)
 		if err != nil {
-			_, updateErr := s.pool.Exec(ctx, `UPDATE listing_alert_check_runs SET evaluation_after=now()+interval '1 hour' WHERE id=$1`, checkID)
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			_, updateErr := s.pool.Exec(cleanup, `UPDATE listing_alert_check_runs SET evaluation_after=now()+interval '1 hour',evaluation_error_at=clock_timestamp(),evaluation_error_code='evaluator_failed' WHERE id=$1`, checkID)
+			cancel()
+			s.logger.Warn("listing alert evaluation failed", zap.String("check_id", checkID.String()), zap.Error(err))
 			if updateErr != nil {
 				return updateErr
 			}
@@ -200,34 +217,40 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 	var notificationID, alertID, deviceID uuid.UUID
 	var token, query string
 	var ids []string
-	err := s.pool.QueryRow(ctx, `SELECT n.id,a.id,d.id,d.push_token,a.query,n.listing_ids FROM listing_alert_notification_outbox n JOIN user_listing_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id WHERE n.sent_at IS NULL AND n.next_attempt_at<=now() AND NOT a.paused AND `+eligibleAlertDevice+` ORDER BY n.created_at LIMIT 1`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
+	err := s.pool.QueryRow(ctx, `WITH next AS (
+        SELECT n.id,a.id AS alert_id,d.id AS device_id,d.push_token,a.query,n.listing_ids
+        FROM listing_alert_notification_outbox n JOIN user_listing_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id
+        WHERE n.send_started_at IS NULL AND NOT a.paused AND `+eligibleAlertDevice+`
+        ORDER BY n.created_at LIMIT 1 FOR UPDATE OF n SKIP LOCKED
+    ) UPDATE listing_alert_notification_outbox n SET send_started_at=clock_timestamp()
+      FROM next WHERE n.id=next.id RETURNING n.id,next.alert_id,next.device_id,next.push_token,next.query,next.listing_ids`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	// Record a retry deadline before the network call so a crash cannot hot-loop APNs.
-	if _, err = s.pool.Exec(ctx, `UPDATE listing_alert_notification_outbox SET attempts=attempts+1,next_attempt_at=now()+interval '15 minutes' WHERE id=$1`, notificationID); err != nil {
-		return err
-	}
+
 	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": "New listing alert matches", "body": "We found listings for “" + query + "”."}, "sound": "default", "thread-id": alertID.String()}, "kind": "price_alert_match", "alert_id": alertID.String()})
+	s.invalidateToken(ctx, deviceID, token, err)
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	ctx = cleanup
+	var code *string
 	if err != nil {
-		s.invalidateToken(ctx, deviceID, token, err)
-		return err
+		value := alertPushError(err)
+		code = &value
 	}
-	tx, err := s.pool.Begin(ctx)
+	if _, recordErr := s.pool.Exec(ctx, `UPDATE listing_alert_notification_outbox SET send_finished_at=clock_timestamp(),send_error=$2,sent_at=CASE WHEN $2::text IS NULL THEN clock_timestamp() ELSE sent_at END WHERE id=$1`, notificationID, code); recordErr != nil {
+		return recordErr
+	}
+	s.logger.Info("listing alert match notification", zap.String("notification_id", notificationID.String()), zap.String("alert_id", alertID.String()), zap.Bool("apns_accepted", err == nil), zap.Any("send_error", code))
 	if err != nil {
-		return err
+		return errors.New(*code)
 	}
-	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `UPDATE listing_alert_notification_outbox SET sent_at=now() WHERE id=$1`, notificationID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(ctx, `UPDATE listing_alert_listings SET notification_sent_at=COALESCE(notification_sent_at,now()) WHERE alert_id=$1 AND listing_id=ANY($2)`, alertID, ids); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+
+	_, err = s.pool.Exec(ctx, `UPDATE listing_alert_listings SET notification_sent_at=COALESCE(notification_sent_at,now()) WHERE alert_id=$1 AND listing_id=ANY($2)`, alertID, ids)
+	return err
 }
 
 func (s *alertsServer) invalidateToken(ctx context.Context, device uuid.UUID, token string, err error) {

@@ -243,6 +243,195 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("background fetch traces receipts uploads and duplicate listings", func(t *testing.T) {
+		s, c, _, device, p, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		attempt := p.sent[0]["fetch_attempt_id"].(string)
+		check := p.sent[0]["check_id"].(string)
+		_, other, _, _, _, _ := fixture(t)
+		receipt := alertRequest{FetchAttemptID: attempt, Event: "acknowledged"}
+		if _, err := s.handle(other, "fetch-event", receipt); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("cross-account receipt: %v", err)
+		}
+		if _, err := s.handle(other, "work", alertRequest{FetchAttemptID: attempt, Trigger: "background_push"}); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("cross-account work: %v", err)
+		}
+		exec(t, `UPDATE listing_alert_background_fetch_attempts SET send_started_at=clock_timestamp()-interval '10 seconds' WHERE id=$1`, attempt)
+		if _, err := s.handle(c, "fetch-event", receipt); err != nil {
+			t.Fatal(err)
+		}
+		var acknowledged time.Time
+		if err := pool.QueryRow(ctx, `SELECT acknowledged_at FROM listing_alert_background_fetch_attempts WHERE id=$1`, attempt).Scan(&acknowledged); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.handle(c, "fetch-event", receipt); err != nil {
+			t.Fatal(err)
+		}
+		request := alertRequest{FetchAttemptID: attempt, Trigger: "background_push"}
+		v, err := s.handle(c, "work", request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		work := v.(map[string]any)["work"].([]alertWork)
+		if len(work) != 1 || work[0].ID != check || work[0].FetchAttemptID != attempt {
+			t.Fatalf("wrong traced work: %+v", work)
+		}
+		s.searchOptions.Sort = "price_ascend"
+		v, err = s.handle(c, "work", request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.(map[string]any)["work"].([]alertWork)[0].SearchOptions.Sort != "creation_time_descend" {
+			t.Fatal("retry changed snapshotted search")
+		}
+		if _, err = s.handle(c, "fetch-event", alertRequest{FetchAttemptID: attempt, Event: "search_started"}); err != nil {
+			t.Fatal(err)
+		}
+		upload := alertRequest{CheckID: check, FetchAttemptID: uuid.NewString(), Actor: "123", Complete: true, Listings: []alertListing{{ID: "201", Title: "Switch OLED"}, {ID: "202", Title: "wrong product"}}}
+		if _, err = s.handle(c, "page", upload); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("unknown attempt upload: %v", err)
+		}
+		upload.FetchAttemptID = attempt
+		if _, err = s.handle(c, "page", upload); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.evaluateBatch(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.handle(c, "page", upload); err != nil {
+			t.Fatal("retry after check completion", err)
+		}
+		if _, err = s.handle(c, "fetch-event", alertRequest{FetchAttemptID: attempt, Event: "failed", FailureStage: "upload", FailureCode: "request_failed"}); err != nil {
+			t.Fatal(err)
+		}
+		var sameReceipt, traced bool
+		var seconds float64
+		err = pool.QueryRow(ctx, `SELECT acknowledged_at=$2, apns_accepted_at IS NOT NULL AND work_requested_at IS NOT NULL AND search_started_at IS NOT NULL AND upload_received_at IS NOT NULL AND failure_at IS NULL AND jsonb_array_length(returned_listings)=2 AND search_request->>'query'='Switch OLED', extract(epoch FROM upload_received_at-send_started_at)::float8 FROM listing_alert_background_fetch_attempts WHERE id=$1`, attempt, acknowledged).Scan(&sameReceipt, &traced, &seconds)
+		if err != nil || !sameReceipt || !traced || seconds < 10 {
+			t.Fatalf("missing trace/timing: %v %v %v %f", err, sameReceipt, traced, seconds)
+		}
+		exec(t, `UPDATE user_listing_alerts SET last_checked_at=now()-interval '25 hours',next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		v, err = s.handle(c, "work", alertRequest{Trigger: "foreground"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recovered := v.(map[string]any)["work"].([]alertWork)[0]
+		upload.CheckID, upload.FetchAttemptID = recovered.ID, recovered.FetchAttemptID
+		if _, err = s.handle(c, "page", upload); err != nil {
+			t.Fatal(err)
+		}
+		var duplicateTrace bool
+		err = pool.QueryRow(ctx, `SELECT trigger='foreground' AND send_started_at IS NULL AND acknowledged_at IS NULL AND jsonb_array_length(returned_listings)=2 AND NOT EXISTS(SELECT 1 FROM listing_alert_listings WHERE check_id=$2) FROM listing_alert_background_fetch_attempts WHERE id=$1`, upload.FetchAttemptID, upload.CheckID).Scan(&duplicateTrace)
+		if err != nil || !duplicateTrace {
+			t.Fatalf("foreground/duplicate trace missing: %v", err)
+		}
+		exec(t, `UPDATE user_devices SET facebook_connected=false WHERE id=$1`, device)
+		if _, err = s.handle(c, "fetch-event", receipt); err != nil {
+			t.Fatal("receipt incorrectly requires Facebook", err)
+		}
+		exec(t, `DELETE FROM user_listing_alerts WHERE id=$1`, id)
+		var count int
+		if err = pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_background_fetch_attempts WHERE id=$1`, attempt).Scan(&count); err != nil || count != 0 {
+			t.Fatal("trace did not cascade", err)
+		}
+	})
+
+	t.Run("foreground completion cannot be credited to a late background upload", func(t *testing.T) {
+		s, c, _, _, p, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		attempt := p.sent[0]["fetch_attempt_id"].(string)
+		background, err := s.handle(c, "work", alertRequest{FetchAttemptID: attempt, Trigger: "background_push"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		foreground, err := s.handle(c, "work", alertRequest{Trigger: "foreground"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bg := background.(map[string]any)["work"].([]alertWork)[0]
+		fg := foreground.(map[string]any)["work"].([]alertWork)[0]
+		upload := alertRequest{CheckID: fg.ID, FetchAttemptID: fg.FetchAttemptID, Actor: "123", Complete: true}
+		if _, err = s.handle(c, "page", upload); err != nil {
+			t.Fatal(err)
+		}
+		upload.FetchAttemptID = bg.FetchAttemptID
+		if _, err = s.handle(c, "page", upload); connect.CodeOf(err) != connect.CodeAborted {
+			t.Fatalf("accepted competing upload: %v", err)
+		}
+		var uncredited, emptyUpload bool
+		if err = pool.QueryRow(ctx, `SELECT upload_received_at IS NULL FROM listing_alert_background_fetch_attempts WHERE id=$1`, bg.FetchAttemptID).Scan(&uncredited); err != nil || !uncredited {
+			t.Fatal("misattributed background response", err)
+		}
+		if err = pool.QueryRow(ctx, `SELECT upload_received_at IS NOT NULL AND returned_listings='[]'::jsonb FROM listing_alert_background_fetch_attempts WHERE id=$1`, fg.FetchAttemptID).Scan(&emptyUpload); err != nil || !emptyUpload {
+			t.Fatal("empty upload not recorded", err)
+		}
+	})
+
+	t.Run("background retries retain each send and device failure", func(t *testing.T) {
+		s, c, _, device, p, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		first := p.sent[0]["fetch_attempt_id"].(string)
+		check := p.sent[0]["check_id"].(string)
+		exec(t, `UPDATE listing_alert_check_runs SET last_push_at=now()-interval '31 minutes',next_push_at=now() WHERE id=$1`, check)
+		exec(t, `UPDATE listing_alert_worker_clock SET next_dispatch_at=now() WHERE id=1`)
+		p.fail = true
+		if err := s.dispatch(ctx, 30*time.Second); err == nil {
+			t.Fatal("expected send failure")
+		}
+		var count, accepted, failed int
+		err := pool.QueryRow(ctx, `SELECT count(*),count(apns_accepted_at),count(*) FILTER(WHERE send_error='transport_error' AND send_finished_at IS NOT NULL) FROM listing_alert_background_fetch_attempts WHERE check_id=$1`, check).Scan(&count, &accepted, &failed)
+		if err != nil || count != 2 || accepted != 1 || failed != 1 {
+			t.Fatalf("attempt history lost: %d %d %d %v", count, accepted, failed, err)
+		}
+		exec(t, `UPDATE user_devices SET facebook_connected=false WHERE id=$1`, device)
+		if _, err = s.handle(c, "fetch-event", alertRequest{FetchAttemptID: first, Event: "failed", FailureStage: "eligibility", FailureCode: "facebook_disconnected"}); err != nil {
+			t.Fatal(err)
+		}
+		var recorded bool
+		if err = pool.QueryRow(ctx, `SELECT failure_at IS NOT NULL AND failure_stage='eligibility' AND failure_code='facebook_disconnected' FROM listing_alert_background_fetch_attempts WHERE id=$1`, first).Scan(&recorded); err != nil || !recorded {
+			t.Fatal("missing device failure", err)
+		}
+	})
+
+	t.Run("visible notification is claimed once across workers", func(t *testing.T) {
+		s, c, _, _, p, _ := fixture(t)
+		id := create(t, s, c)
+		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
+		dispatch(t, s)
+		w := getWork(t, s, c)[0]
+		if _, err := s.handle(c, "page", alertRequest{CheckID: w.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "301", Title: "Switch OLED"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.evaluateBatch(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := s.notifyMatches(ctx); err != nil {
+					t.Error(err)
+				}
+			}()
+		}
+		wg.Wait()
+		if len(p.sent) != 2 {
+			t.Fatalf("visible push count: %d", len(p.sent)-1)
+		}
+		var recorded bool
+		if err := pool.QueryRow(ctx, `SELECT send_started_at IS NOT NULL AND send_finished_at IS NOT NULL AND sent_at IS NOT NULL AND send_error IS NULL FROM listing_alert_notification_outbox WHERE check_id=$1`, w.ID).Scan(&recorded); err != nil || !recorded {
+			t.Fatal("accepted notification outcome missing", err)
+		}
+	})
+
 	t.Run("eligibility ownership and session binding", func(t *testing.T) {
 		s, c, _, device, _, _ := fixture(t)
 		id := create(t, s, c)
@@ -286,12 +475,6 @@ func TestAlertsIntegration(t *testing.T) {
 		if len(e.inputs) != 1 || len(e.inputs[0].Candidates) != 2 || !e.inputs[0].Requirements {
 			t.Fatal("wrong Jev input")
 		}
-		p.fail = true
-		if err := s.notifyMatches(ctx); err == nil {
-			t.Fatal("expected APNs error")
-		}
-		p.fail = false
-		exec(t, `UPDATE listing_alert_notification_outbox SET next_attempt_at=now() WHERE alert_id=$1`, id)
 		if err := s.notifyMatches(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -337,6 +520,21 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		if len(e.inputs) != 2 || len(e.inputs[1].Candidates) != 1 || e.inputs[1].Candidates[0].ID != "102" {
 			t.Fatal("reevaluated old matched/rejected listings")
+		}
+		p.fail = true
+		if err := s.notifyMatches(ctx); err == nil {
+			t.Fatal("expected APNs failure")
+		}
+		p.fail = false
+		if err := s.notifyMatches(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if len(p.sent) != 2 {
+			t.Fatal("retried a visible notification")
+		}
+		var recorded bool
+		if err := pool.QueryRow(ctx, `SELECT send_started_at IS NOT NULL AND send_finished_at IS NOT NULL AND send_error='transport_error' AND sent_at IS NULL FROM listing_alert_notification_outbox WHERE check_id=$1`, in.CheckID).Scan(&recorded); err != nil || !recorded {
+			t.Fatalf("failed notification outcome missing: %v", err)
 		}
 		exec(t, `DELETE FROM user_listing_alerts WHERE user_id=$1`, user)
 		var remaining int
@@ -511,10 +709,32 @@ func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
 			t.Fatal("main's sign-in linking data changed")
 		}
 	}
+	if err = goose.UpTo(sqlDB, migrations, 24); err != nil {
+		t.Fatal(err)
+	}
+	var legacyAlert uuid.UUID
+	err = pool.QueryRow(ctx, `WITH device AS (INSERT INTO user_devices(user_id,install_id,platform) VALUES($1,'migration-device','IOS') RETURNING id)
+        INSERT INTO user_listing_alerts(user_id,device_id,query,location,alert_hour,next_check_at) SELECT $1,id,'Legacy alert','{}',0,now() FROM device RETURNING id`, user).Scan(&legacyAlert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		_, err = pool.Exec(ctx, `WITH run AS (INSERT INTO listing_alert_check_runs(alert_id,completed_at) VALUES($1,now()) RETURNING id)
+            INSERT INTO listing_alert_notification_outbox(alert_id,check_id,listing_ids,attempts,sent_at)
+            SELECT $1,id,ARRAY['123'],CASE WHEN $2::int=0 THEN 0 ELSE 1 END,CASE WHEN $2::int=2 THEN now() END FROM run`, legacyAlert, i)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err = goose.Up(sqlDB, migrations); err != nil {
 		t.Fatal(err)
 	}
-	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 24 {
+	var pending, succeeded, unknown int
+	err = pool.QueryRow(ctx, `SELECT count(*) FILTER(WHERE send_started_at IS NULL),count(sent_at),count(*) FILTER(WHERE send_error='legacy_outcome_unknown' AND send_started_at IS NOT NULL) FROM listing_alert_notification_outbox WHERE alert_id=$1`, legacyAlert).Scan(&pending, &succeeded, &unknown)
+	if err != nil || pending != 1 || succeeded != 1 || unknown != 1 {
+		t.Fatalf("legacy notification migration: %d/%d/%d %v", pending, succeeded, unknown, err)
+	}
+	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 25 {
 		t.Fatalf("migration version = %d, error = %v", version, err)
 	}
 	assertMainData()

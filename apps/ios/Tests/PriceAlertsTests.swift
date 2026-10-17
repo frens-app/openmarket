@@ -20,7 +20,7 @@ final class PriceAlertsTests: XCTestCase {
     }
 
     func testServerSearchOptionsReachFacebookRequest() async throws {
-        let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"pageNumber":0,"searchOptions":{"sort":"price_ascend","delivery":"local_pick_up","daysSinceListed":1,"conditions":["used_good"],"minPrice":10,"maxPrice":100}}"#.utf8)
+        let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"pageNumber":0,"fetchAttemptID":"fetch-123","searchOptions":{"sort":"price_ascend","delivery":"local_pick_up","daysSinceListed":1,"conditions":["used_good"],"minPrice":10,"maxPrice":100}}"#.utf8)
         let work = try PriceAlertsService.decoder().decode(AlertWork.self, from: data)
         let client = MorePagesClient()
         let upload = try await PriceAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
@@ -35,6 +35,9 @@ final class PriceAlertsTests: XCTestCase {
         XCTAssertEqual(client.calls, 1)
         XCTAssertNil(client.requestedCursor)
         XCTAssertEqual(upload.complete, true)
+        XCTAssertEqual(upload.fetchAttemptID, "fetch-123")
+        let encodedUpload = try JSONSerialization.jsonObject(with: JSONEncoder().encode(upload)) as? [String: Any]
+        XCTAssertEqual(encodedUpload?["fetchAttemptID"] as? String, "fetch-123")
         let request = try AnonymousFeedClient.request(for: query, cursor: nil, now: Date(timeIntervalSince1970: 86_400 * 20_000))
         let form = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         let variables = try XCTUnwrap(URLComponents(string: "?" + form)?.queryItems?.first(where: { $0.name == "variables" })?.value)

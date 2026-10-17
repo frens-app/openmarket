@@ -18,11 +18,13 @@ final class PriceAlertCoordinator: ObservableObject {
 
     func cancel() { running?.cancel() }
 
-    func perform() async -> Bool {
+    func perform(fetchAttemptID: String? = nil) async -> Bool {
+        await reportFetchEvent(fetchAttemptID, event: "acknowledged")
         if let running {
-            return await withTaskCancellationHandler { await running.value } onCancel: { running.cancel() }
+            await reportFetchEvent(fetchAttemptID, event: "failed", stage: "background", code: "already_running")
+            return await running.value
         }
-        let task = Task { await searchPending() }
+        let task = Task { await searchPending(fetchAttemptID: fetchAttemptID) }
         running = task
         defer { running = nil; webView?.stopLoading(); webView = nil }
         return await withTaskCancellationHandler {
@@ -42,32 +44,81 @@ final class PriceAlertCoordinator: ObservableObject {
                                 description: "", condition: "")
         }
         return .init(checkID: check.id, pageNumber: check.pageNumber,
-                     actor: actor, complete: true, listings: listings)
+                     actor: actor, complete: true, listings: listings, fetchAttemptID: check.fetchAttemptID)
     }
 
-    private func searchPending() async -> Bool {
+    func reportFetchEvent(_ attemptID: String?, event: String, stage: String? = nil, code: String? = nil) async {
+        guard let attemptID else { return }
+        // An independent task can report cancellation while the background callback has time left.
+        await Task { @MainActor in
+            let _: PriceAlertsService.Empty? = try? await service.call("fetch-event", .init(
+                fetchAttemptID: attemptID, event: event, failureStage: stage, failureCode: code),
+                as: PriceAlertsService.Empty.self, timeout: 2)
+        }.value
+    }
+
+    static func failureCode(for error: Error) -> String {
+        if let error = error as? GraphQLFeedError {
+            switch error {
+            case .unsupportedQuery: return "unsupported_search"
+            case .invalidResponse: return "invalid_facebook_response"
+            case .blocked: return "facebook_blocked"
+            case .paused: return "search_paused"
+            case .sessionChanged: return "facebook_changed"
+            }
+        }
+        if let error = error as? URLError {
+            return error.code == .timedOut ? "network_timeout" : "network_error"
+        }
+        if error is DecodingError { return "invalid_server_response" }
+        return "request_failed"
+    }
+
+    private func searchPending(fetchAttemptID: String?) async -> Bool {
+        var activeAttemptID = fetchAttemptID
+        var stage = "eligibility"
         do {
             try Task.checkCancellation()
             guard await SessionState.isSignedIn() else {
+                await reportFetchEvent(activeAttemptID, event: "failed", stage: stage, code: "facebook_disconnected")
                 await AccountSession.shared.reportFacebookConnection(false)
                 return false
             }
             await PushRegistrar.shared.refreshStatus()
-            guard PushRegistrar.shared.isEnabled else { return false }
-            let work = try await service.call("work", as: PriceAlertsService.WorkList.self).work
+            guard PushRegistrar.shared.isEnabled else {
+                await reportFetchEvent(activeAttemptID, event: "failed", stage: stage, code: "notifications_disabled")
+                return false
+            }
+            stage = "work"
+            let work = try await service.call("work", .init(fetchAttemptID: fetchAttemptID,
+                trigger: fetchAttemptID == nil ? "foreground" : "background_push"), as: PriceAlertsService.WorkList.self).work
+            if work.isEmpty {
+                await reportFetchEvent(activeAttemptID, event: "failed", stage: stage, code: "no_pending_work")
+            }
             for check in work {
                 try Task.checkCancellation()
-                guard let actor = await SessionState.facebookActor(), check.actor == nil || check.actor == actor else { continue }
+                activeAttemptID = check.fetchAttemptID
+                stage = "eligibility"
+                guard let actor = await SessionState.facebookActor(), check.actor == nil || check.actor == actor else {
+                    await reportFetchEvent(activeAttemptID, event: "failed", stage: stage, code: "facebook_changed")
+                    continue
+                }
                 let browser = WKWebView(frame: .zero, configuration: .make())
                 browser.customUserAgent = Surface.desktop.userAgent
                 webView = browser
                 let client = AuthenticatedFeedClient(webView: browser, cursorActor: actor)
+                stage = "search"
+                await reportFetchEvent(activeAttemptID, event: "search_started")
+                try Task.checkCancellation()
                 let request = try await Self.searchFirstPage(check, actor: actor, client: client)
+                stage = "upload"
                 let _: PriceAlertsService.Empty = try await service.call("page", request, as: PriceAlertsService.Empty.self)
                 browser.stopLoading()
             }
             return !work.isEmpty
         } catch {
+            await reportFetchEvent(activeAttemptID, event: "failed", stage: stage,
+                                   code: Task.isCancelled ? "cancelled" : Self.failureCode(for: error))
             if !Task.isCancelled { print("[price-alerts] Search deferred: \(error.localizedDescription)") }
             return false
         }

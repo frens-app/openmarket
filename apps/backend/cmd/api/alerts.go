@@ -66,29 +66,35 @@ type alertListing struct {
 	Condition    string `json:"condition"`
 }
 type alertRequest struct {
-	ID         string         `json:"id"`
-	Query      string         `json:"query"`
-	Location   alertLocation  `json:"location"`
-	Paused     bool           `json:"paused"`
-	CheckID    string         `json:"checkID"`
-	PageNumber int            `json:"pageNumber"`
-	Cursor     *string        `json:"cursor"`
-	Actor      string         `json:"actor"`
-	Complete   bool           `json:"complete"`
-	Listings   []alertListing `json:"listings"`
-	ListingIDs []string       `json:"listingIDs"`
-	BeforeID   string         `json:"beforeID"`
-	Before     *time.Time     `json:"before"`
+	FetchAttemptID string         `json:"fetchAttemptID"`
+	Trigger        string         `json:"trigger"`
+	Event          string         `json:"event"`
+	FailureStage   string         `json:"failureStage"`
+	FailureCode    string         `json:"failureCode"`
+	ID             string         `json:"id"`
+	Query          string         `json:"query"`
+	Location       alertLocation  `json:"location"`
+	Paused         bool           `json:"paused"`
+	CheckID        string         `json:"checkID"`
+	PageNumber     int            `json:"pageNumber"`
+	Cursor         *string        `json:"cursor"`
+	Actor          string         `json:"actor"`
+	Complete       bool           `json:"complete"`
+	Listings       []alertListing `json:"listings"`
+	ListingIDs     []string       `json:"listingIDs"`
+	BeforeID       string         `json:"beforeID"`
+	Before         *time.Time     `json:"before"`
 }
 type alertWork struct {
-	SearchOptions config.AlertSearchOptions `json:"searchOptions"`
-	ID            string                    `json:"id"`
-	AlertID       string                    `json:"alertID"`
-	Query         string                    `json:"query"`
-	Location      alertLocation             `json:"location"`
-	Cursor        *string                   `json:"cursor"`
-	Actor         *string                   `json:"actor"`
-	PageNumber    int                       `json:"pageNumber"`
+	FetchAttemptID string                    `json:"fetchAttemptID,omitempty"`
+	SearchOptions  config.AlertSearchOptions `json:"searchOptions"`
+	ID             string                    `json:"id"`
+	AlertID        string                    `json:"alertID"`
+	Query          string                    `json:"query"`
+	Location       alertLocation             `json:"location"`
+	Cursor         *string                   `json:"cursor"`
+	Actor          *string                   `json:"actor"`
+	PageNumber     int                       `json:"pageNumber"`
 }
 
 func alertError(code connect.Code, message string) error {
@@ -236,29 +242,9 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		}
 		return nil, tx.Commit(ctx)
 	case "work":
-		device, err := s.eligibleDevice(ctx, s.pool, sessionID)
-		if err != nil {
-			return nil, err
-		}
-		rows, err := s.pool.Query(ctx, `SELECT c.id,a.id,a.query,a.location,c.cursor,c.facebook_actor,c.page_number FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete ORDER BY c.created_at LIMIT 3`, userID, device)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-		work := []alertWork{}
-		for rows.Next() {
-			var v alertWork
-			var location []byte
-			if err = rows.Scan(&v.ID, &v.AlertID, &v.Query, &location, &v.Cursor, &v.Actor, &v.PageNumber); err != nil {
-				return nil, err
-			}
-			if err = json.Unmarshal(location, &v.Location); err != nil {
-				return nil, err
-			}
-			v.SearchOptions = s.searchOptions
-			work = append(work, v)
-		}
-		return map[string]any{"work": work}, rows.Err()
+		return s.fetchWork(ctx, userID, sessionID, in)
+	case "fetch-event":
+		return nil, s.recordFetchEvent(ctx, userID, sessionID, in)
 	case "page":
 		return nil, s.submitPage(ctx, userID, sessionID, in)
 	case "matches":
@@ -373,9 +359,27 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 	var page int
 	var actor, cursor *string
 	var done bool
-	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused AND c.completed_at IS NULL FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
+	err = tx.QueryRow(ctx, `SELECT a.id,c.page_number,c.facebook_actor,c.cursor,c.scan_complete FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE c.id=$1 AND a.user_id=$2 AND a.device_id=$3 AND NOT a.paused FOR UPDATE OF a,c`, id, user, device).Scan(&alertID, &page, &actor, &cursor, &done)
 	if err != nil {
 		return alertNotFound(err)
+	}
+	if in.FetchAttemptID != "" {
+		attemptID, e := uuid.Parse(in.FetchAttemptID)
+		if e != nil {
+			return alertError(connect.CodeInvalidArgument, "Invalid fetch attempt.")
+		}
+		var attemptPage int
+		var uploaded bool
+		e = tx.QueryRow(ctx, `SELECT (search_request->>'pageNumber')::int,upload_received_at IS NOT NULL FROM listing_alert_background_fetch_attempts WHERE id=$1 AND check_id=$2 AND device_id=$3 AND search_request IS NOT NULL FOR UPDATE`, attemptID, id, device).Scan(&attemptPage, &uploaded)
+		if e != nil {
+			return alertNotFound(e)
+		}
+		if in.PageNumber < page && !uploaded {
+			return alertError(connect.CodeAborted, "Another fetch already completed this page.")
+		}
+		if attemptPage != in.PageNumber || !in.Complete || in.Cursor != nil {
+			return alertError(connect.CodeAborted, "Fetch attempt does not match this upload.")
+		}
 	}
 	if in.PageNumber < page {
 		return nil
@@ -395,9 +399,23 @@ func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, 
 			return err
 		}
 	}
+	if in.FetchAttemptID != "" {
+		listings := in.Listings
+		if listings == nil {
+			listings = []alertListing{}
+		}
+		raw, _ := json.Marshal(listings)
+		if _, err = tx.Exec(ctx, `UPDATE listing_alert_background_fetch_attempts SET upload_received_at=clock_timestamp(),returned_listings=$2 WHERE id=$1 AND upload_received_at IS NULL`, in.FetchAttemptID, raw); err != nil {
+			return err
+		}
+	}
 	_, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET cursor=$2,facebook_actor=$3,page_number=page_number+1,scan_complete=$4 WHERE id=$1`, id, in.Cursor, in.Actor, in.Complete)
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	s.logger.Info("listing alert fetch upload", zap.String("check_id", id.String()), zap.String("fetch_attempt_id", in.FetchAttemptID), zap.Int("listing_count", len(in.Listings)))
+	return nil
 }

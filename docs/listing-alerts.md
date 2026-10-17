@@ -2,7 +2,8 @@
 
 The `user_listing_alerts` table stores each user’s alert and its schedule.
 `listing_alert_check_runs` stores each search run and its upload/evaluation progress.
-`listing_alert_notification_outbox` stores grouped match notifications and their delivery/retry state.
+`listing_alert_background_fetch_attempts` traces silent pings and foreground recovery.
+`listing_alert_notification_outbox` stores grouped match notifications and their single-send outcome.
 An account can hold three alerts, including paused alerts. Each alert saves the
 buyer's text, the current search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
@@ -58,8 +59,9 @@ Alert matching respects explicit product requirements and price limits in the
 buyer's text; the more permissive Price Check comparable rules remain separate.
 
 The existing `DATABASE_URL`, authentication, and other required backend settings
-still apply. Migration `00024_listing_alerts.sql` runs automatically at API
-startup, after main's existing migrations through `00023_link_sign_in.sql`.
+still apply. Migrations `00024_listing_alerts.sql` and
+`00025_listing_alert_fetch_tracking.sql` run automatically at API startup, after
+main's existing migrations through `00023_link_sign_in.sql`.
 There is no external cron service: the API hosts the recurring worker. Keep at
 least one instance running continuously. A PostgreSQL advisory lock serializes
 worker activity across replicas, and a shared dispatch deadline preserves the
@@ -130,7 +132,7 @@ check per alert prevents overlapping daily searches. A dispatch is not a complet
 check: only a fully uploaded and evaluated search updates `last_checked_at`.
 
 A background APNs message contains `kind=price_alert_check`, `alert_id`, and
-`check_id`. The authenticated work API supplies the saved search. The
+`check_id`, plus a unique `fetch_attempt_id`. The authenticated work API supplies the saved search. The
 phone uses its signed-in Facebook transport, server-supplied search options,
 and the available-products filter. Each check fetches only the first page and uploads it
 as a complete search, even if Facebook offers more pages. Upload sequence numbers
@@ -142,7 +144,8 @@ a new alert to change the requested product.
 Jev evaluation runs on the backend in batches of 30. Failed evaluations remain
 pending and retry after an hour; they never become negative matches. All matched
 listings are stored before a durable notification outbox creates one summary per
-completed check. Visible pushes retry every 15 minutes. Invalid APNs device tokens
+completed check. Each visible notification is claimed atomically before one send;
+failures and unknown outcomes are not retried. Invalid APNs device tokens
 are cleared and can be registered again on the next launch. APNs acceptance and
 notification timestamps don't prove that a person saw a notification. Listing
 `viewed_at` records the first actual opening of that listing in the Alerts UI.
@@ -150,7 +153,8 @@ notification timestamps don't prove that a person saw a notification. Listing
 Silent pushes are spaced at least 30 minutes apart on each device. An unfinished
 check gets at most three attempts per 24-hour retry cycle. The app also polls for
 pending work every minute while foregrounded. Its background callback completes
-within 25 seconds and cancels outstanding work. If the upload did not finish,
+within 25 seconds, cancelling outstanding work at 23 seconds to leave time for
+a best-effort failure report. If the upload did not finish,
 a later wake or foreground session retries the first page. Facebook account
 changes may require pausing and resuming the alert; already uploaded/evaluated
 listings remain deduplicated.
@@ -211,3 +215,74 @@ one page and finishes, open the resulting notification, open a match and verify 
 viewed state, then pause and delete the alert. Also test a missed wake followed by
 foreground recovery. Real Facebook, APNs delivery, and billed Jev matching require
 this device smoke test; simulator/unit tests do not establish their reliability.
+## Tracing a check
+
+Every silent ping creates a `listing_alert_background_fetch_attempts` row before
+sending. The payload ID follows the device acknowledgment, work request, search
+start, and upload. Each retry has a different ID under the same `check_id`.
+Foreground recovery creates its own row with `trigger='foreground'`, no send or
+acknowledgment timestamp, and never gets credited as a response to a silent ping.
+A push arriving while another search runs is acknowledged and records
+`already_running`; it does not borrow that search's results.
+
+The row stores server-observed timestamps, APNs acceptance/error, the exact work
+response in `search_request`, all uploaded candidate snapshots in
+`returned_listings`, and the first reported failure stage/code. A retried work
+request uses its original snapshot. `upload_received_at` is written in the same
+transaction as the listings and scan completion. Repeated uploads preserve the
+original timestamp and data. Empty successful uploads store `[]`, distinct from
+no upload. A stale competing fetch cannot claim another attempt's upload.
+
+Candidate snapshots include listings deduplicated out of matching. Canonical
+alert matches remain in `listing_alert_listings`; its `check_id` identifies the
+check that first discovered that listing. The fetch snapshot preserves what each
+search actually uploaded, including previously seen candidates. Explicitly sold
+or untitled cards discarded by the phone are not uploaded.
+
+Example timeline query for one check (substitute its UUID):
+
+```sql
+SELECT f.id AS fetch_attempt_id, f.trigger, f.device_id,
+       f.send_started_at, f.apns_accepted_at, f.send_error,
+       f.acknowledged_at, f.work_requested_at, f.search_started_at,
+       f.upload_received_at,
+       extract(epoch FROM f.acknowledged_at-f.send_started_at) AS acknowledgment_seconds,
+       extract(epoch FROM f.upload_received_at-f.send_started_at) AS response_seconds,
+       jsonb_array_length(f.returned_listings) AS uploaded_candidates,
+       f.failure_at, f.failure_stage, f.failure_code,
+       c.evaluation_started_at, c.evaluation_error_at, c.evaluation_error_code,
+       c.completed_at, n.send_started_at AS notification_send_started_at,
+       n.sent_at AS notification_apns_accepted_at, n.send_error AS notification_error
+FROM listing_alert_background_fetch_attempts f
+JOIN listing_alert_check_runs c ON c.id=f.check_id
+LEFT JOIN listing_alert_notification_outbox n ON n.check_id=c.id
+WHERE c.id='00000000-0000-0000-0000-000000000000'
+ORDER BY f.created_at;
+```
+
+Read `search_request` and `returned_listings` from a fetch row to inspect the
+search settings and candidate IDs/content. Use `listing_alert_listings` joined
+by the check/alert and listing ID to inspect match decisions and viewed state.
+Structured backend logs include fetch/check/notification IDs at their respective
+stages. Client failures use bounded codes (for example `facebook_disconnected`,
+`invalid_facebook_response`, or `network_timeout`), not raw errors or cookies.
+Evaluation errors remain on the check as historical diagnostics after recovery.
+
+A missing acknowledgment means no response was observed. It does not identify
+whether iOS delivered the push, the app ran, or its report could reach the API.
+Event reporting is best effort; authentication or connectivity failures can
+prevent it. Durations include network latency and use the server clock, avoiding
+phone clock skew. Upload completion remains authoritative even if a late failure
+report arrives. APNs acceptance never proves visible notification delivery.
+
+The visible outbox keeps `send_started_at`, `send_finished_at`, `send_error`, and
+`sent_at` (APNs accepted). If the process crashes after claiming a send, it stays
+claimed with an unknown outcome instead of risking a second notification. The
+migration marks previously attempted notifications as already claimed, preserving
+successful sends and labelling failed/unknown historical sends
+`legacy_outcome_unknown`.
+
+Old apps remain compatible but cannot supply per-fetch receipts or upload
+correlation. Deploy the backend before installing the new client. No new
+environment variables are required. Deleting an alert/account cascades its fetch
+history and uploaded snapshots along with its existing alert data.
