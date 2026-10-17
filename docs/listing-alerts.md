@@ -89,10 +89,11 @@ check per alert prevents overlapping daily searches. A dispatch is not a complet
 check: only a fully uploaded and evaluated search updates `last_checked_at`.
 
 A background APNs message contains `kind=price_alert_check`, `alert_id`, and
-`check_id`. The authenticated work API supplies the saved search and cursor. The
+`check_id`. The authenticated work API supplies the saved search. The
 phone uses its signed-in Facebook transport, newest-first sorting, and the
-available-products filter. Search pages upload independently, with page sequence
-numbers making retries idempotent. Facebook listing IDs, including rejected
+available-products filter. Each check fetches only the first page and uploads it
+as a complete search, even if Facebook offers more pages. Upload sequence numbers
+make retries idempotent. Facebook listing IDs, including rejected
 candidates, are unique per alert, so subsequent checks never reevaluate or
 renotify a previously checked listing. Saved text/location are immutable; create
 a new alert to change the requested product.
@@ -108,10 +109,10 @@ notification timestamps don't prove that a person saw a notification. Listing
 Silent pushes are spaced at least 30 minutes apart on each device. An unfinished
 check gets at most three attempts per 24-hour retry cycle. The app also polls for
 pending work every minute while foregrounded. Its background callback completes
-within 25 seconds, cancels outstanding work, and leaves the last acknowledged
-cursor available for another wake or foreground session. Facebook account changes
-or expired cursors may require pausing and resuming the alert to restart paging;
-already uploaded/evaluated listings remain deduplicated.
+within 25 seconds and cancels outstanding work. If the upload did not finish,
+a later wake or foreground session retries the first page. Facebook account
+changes may require pausing and resuming the alert; already uploaded/evaluated
+listings remain deduplicated.
 
 The available filter is sent to Facebook and explicitly sold cards are discarded.
 Location is a saved Facebook search location; this flow does not fetch detail
@@ -165,7 +166,7 @@ test sends real pushes or bills Jev.
 
 Before production rollout, test on a signed physical iPhone with the deployment's
 APNs environment: create an alert, background the app, confirm a check uploads
-pages and finishes, open the resulting notification, open a match and verify its
+one page and finishes, open the resulting notification, open a match and verify its
 viewed state, then pause and delete the alert. Also test a missed wake followed by
 foreground recovery. Real Facebook, APNs delivery, and billed Jev matching require
 this device smoke test; simulator/unit tests do not establish their reliability.

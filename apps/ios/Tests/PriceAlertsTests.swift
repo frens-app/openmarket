@@ -12,11 +12,27 @@ final class PriceAlertsTests: XCTestCase {
         XCTAssertEqual(work.searchQuery.coordinate?.latitude, 37.77)
         XCTAssertEqual(work.cursor, "next-page")
         XCTAssertEqual(work.pageNumber, 2)
-        let request = try AnonymousFeedClient.request(for: work.searchQuery, cursor: work.cursor)
+        let request = try AnonymousFeedClient.request(for: work.searchQuery, cursor: nil)
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         let variables = try XCTUnwrap(URLComponents(string: "?" + body)?.queryItems?.first(where: { $0.name == "variables" })?.value)
         XCTAssertTrue(variables.contains("CREATION_TIME_DESCEND"))
         XCTAssertTrue(variables.contains("commerce_search_and_rp_available"))
+    }
+
+    func testDailyCheckCompletesAfterFirstPageEvenWhenFacebookHasMore() async throws {
+        let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43.65,"longitude":-79.38},"cursor":"stale-cursor","actor":"123","pageNumber":2}"#.utf8)
+        let work = try PriceAlertsService.decoder().decode(AlertWork.self, from: data)
+        let client = MorePagesClient()
+        let request = try await PriceAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
+        XCTAssertEqual(client.calls, 1)
+        XCTAssertNil(client.requestedCursor)
+        XCTAssertEqual(client.query?.sort, .newest)
+        XCTAssertEqual(client.query?.availability, .available)
+        XCTAssertEqual(request.checkID, "check")
+        XCTAssertEqual(request.pageNumber, 2)
+        XCTAssertEqual(request.complete, true)
+        XCTAssertNil(request.cursor)
+        XCTAssertEqual(request.listings?.count, 0)
     }
 
     func testMatchesKeepExactPaginationTimestampAndCanonicalListingID() throws {
@@ -37,5 +53,19 @@ final class PriceAlertsTests: XCTestCase {
         coordinator.open("test-alert")
         XCTAssertEqual(coordinator.selectedTab, 3)
         XCTAssertEqual(coordinator.openAlertID, "test-alert")
+    }
+}
+
+@MainActor
+private final class MorePagesClient: GraphQLFeedLoading {
+    var calls = 0
+    var requestedCursor: String?
+    var query: SearchQuery?
+
+    func page(for query: SearchQuery, cursor: String?) async throws -> GraphQLFeedPage {
+        calls += 1
+        requestedCursor = cursor
+        self.query = query
+        return GraphQLFeedPage(listings: [], endCursor: "next-page", hasNextPage: true)
     }
 }

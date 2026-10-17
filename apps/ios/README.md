@@ -180,7 +180,7 @@ SMS configuration is covered in [docs/phone-login.md](../../docs/phone-login.md)
 ## Listing alerts
 
 The Alerts tab requires an OpenMarket account, a Facebook session on this device,
-and notifications enabled. Background pushes resume paginated searches, while
+and notifications enabled. Background pushes trigger a single page of newest available search results, while
 Jev matching and visible notifications run on the backend. See
 [`docs/listing-alerts.md`](../../docs/listing-alerts.md) for deployment setup and iOS
 background-delivery limits.
