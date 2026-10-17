@@ -10,6 +10,7 @@ struct PriceAlertsView: View {
     @State private var alerts: [PriceAlert] = []
     @State private var path: [String] = []
     @State private var query = ""
+    @State private var alertTime = AlertSchedule.defaultTime()
     @State private var error: String?
     @State private var busy = false
     @State private var connected = false
@@ -68,7 +69,7 @@ struct PriceAlertsView: View {
                         if alerts.count >= 3 {
                             showLimit = true
                         } else {
-                            query = ""; error = nil; showCreate = true
+                            query = ""; alertTime = AlertSchedule.defaultTime(); error = nil; showCreate = true
                         }
                     } label: { Image(systemName: "plus") }
                         .accessibilityLabel("Create listing alert")
@@ -118,6 +119,7 @@ struct PriceAlertsView: View {
                     TextField("e.g. Nintendo Switch OLED", text: $query, axis: .vertical).lineLimit(3...6)
                     Text("Include the model and any requirements that matter to you.").font(.caption).foregroundStyle(.secondary)
                 }
+                DatePicker("Daily around", selection: $alertTime, displayedComponents: .hourAndMinute)
                 if let error { Text(error).foregroundStyle(.red) }
             }
             .navigationTitle("New listing alert")
@@ -137,7 +139,9 @@ struct PriceAlertsView: View {
         defer { busy = false }
         do {
             let location = AlertLocation(citySlug: place.segment, name: place.name, radiusKM: prefs.radiusKM, latitude: place.latitude, longitude: place.longitude)
-            let created = try await service.call("create", .init(query: query, location: location), as: PriceAlertsService.Created.self)
+            let schedule = AlertSchedule(date: alertTime)
+            let created = try await service.call("create", .init(query: query, location: location,
+                alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone), as: PriceAlertsService.Created.self)
             showCreate = false
             await refresh()
             path = [created.id]

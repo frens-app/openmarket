@@ -17,7 +17,9 @@ tokens remain in the phone's WebKit store; the backend never receives them.
 ## Alerts tab
 
 Use the plus button to create an alert with one text field for the product and
-any preferences or requirements. There is no separate location field. The tab
+any preferences or requirements. A daily time picker defaults to the nearest
+hour when the form opens and accepts a chosen hour and minute. There is no
+separate location field. The tab
 lists active and paused alerts
 with match and unread counts. Open an alert to see its matching listings, or use
 its options menu to pause, resume, or delete it. Opening a push notification takes
@@ -61,8 +63,9 @@ Alert matching respects explicit product requirements and price limits in the
 buyer's text; the more permissive Price Check comparable rules remain separate.
 
 The existing `DATABASE_URL`, authentication, and other required backend settings
-still apply. Migrations `00024_listing_alerts.sql` and
-`00025_listing_alert_fetch_tracking.sql` run automatically at API startup, after
+still apply. Migrations `00024_listing_alerts.sql`,
+`00025_listing_alert_fetch_tracking.sql`, and `00026_listing_alert_schedule.sql`
+run automatically at API startup, after
 main's existing migrations through `00023_link_sign_in.sql`.
 There is no external cron service: the API hosts the recurring worker. Keep at
 least one instance running continuously. A PostgreSQL advisory lock serializes
@@ -121,17 +124,27 @@ changed independently of the app.
 
 ## Scheduling and recovery
 
-`created_at` is the database's exact wall-clock timestamp. `alert_hour` is the UTC
-hour from rounding creation to the nearest hour, with half-hours rounded upward;
-`next_check_at` holds the corresponding timestamp. An alert rounded into the past
-is eligible immediately. The daily hour stays fixed in UTC and is displayed in
-the device's local time, so travel and daylight-saving changes can change that
-local display.
+`created_at` is the database's exact wall-clock timestamp. New clients send
+`alertHour`, `alertMinute`, and an IANA `timeZone` when creating an alert. The
+server stores the chosen local time and schedules its next occurrence in
+`next_check_at`. If today's chosen time has passed, the first check is tomorrow.
+The picker pre-fills the nearest hour (half-hours round upward); the user can
+choose any minute. Delivery remains approximate because checks are staggered
+and device background execution can be delayed.
 
-Each worker interval chooses one oldest due alert that hasn't completed a check
-in 24 hours. Overdue checks stay eligible after their hour passes. A unique active
-check per alert prevents overlapping daily searches. A dispatch is not a completed
-check: only a fully uploaded and evaluated search updates `last_checked_at`.
+The creation time zone remains fixed, preserving the chosen wall-clock time
+across daylight-saving changes. A skipped local time runs after the spring gap;
+a repeated local time uses its later occurrence, so it runs once. Travel does
+not change the saved time zone; the Alerts list displays the next check in the
+device's current time zone. Older alerts retain their UTC hour and minute zero;
+clients omitting the new fields retain the rounded-creation-time behavior.
+
+`next_check_at` is the scheduling authority. A fixed 24-hour eligibility gate
+would incorrectly delay an 8 p.m. check after a 23-hour daylight-saving day.
+A completed check advances to the next local occurrence after completion, so
+missed days are not replayed in a burst. One unfinished check per alert prevents
+overlapping daily searches. Only a fully uploaded and evaluated search updates
+`last_checked_at`.
 
 A background APNs message contains `kind=price_alert_check`, `alert_id`, and
 `check_id`, plus a unique `fetch_attempt_id`. The authenticated work API supplies the saved search. The

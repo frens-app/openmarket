@@ -67,6 +67,19 @@ func TestAlertValidation(t *testing.T) {
 			t.Fatal("accepted invalid alert")
 		}
 	}
+	hour, minute, badHour, badMinute := 20, 15, 24, 60
+	for _, schedule := range []alertRequest{
+		{AlertHour: &hour}, {AlertMinute: &minute}, {TimeZone: "America/Toronto"},
+		{AlertHour: &badHour, AlertMinute: &minute, TimeZone: "UTC"},
+		{AlertHour: &hour, AlertMinute: &badMinute, TimeZone: "UTC"},
+		{AlertHour: &hour, AlertMinute: &minute, TimeZone: "Not/AZone"},
+		{AlertHour: &hour, AlertMinute: &minute, TimeZone: "Local"},
+	} {
+		schedule.Query, schedule.Location = valid.Query, valid.Location
+		if validateAlert(schedule) == nil {
+			t.Fatal("accepted invalid daily schedule")
+		}
+	}
 	for _, tc := range []struct{ timestamp, want string }{{"2026-10-01T19:29:59Z", "2026-10-01T19:00:00Z"}, {"2026-10-01T19:30:00Z", "2026-10-01T20:00:00Z"}, {"2026-10-01T23:45:00Z", "2026-10-02T00:00:00Z"}} {
 		value, _ := time.Parse(time.RFC3339, tc.timestamp)
 		if got := value.Round(time.Hour).Format(time.RFC3339); got != tc.want {
@@ -195,6 +208,62 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatalf("paused alerts escaped limit: %v", err)
 		}
 	})
+	t.Run("chosen daily time and daylight saving schedule", func(t *testing.T) {
+		for _, tc := range []struct {
+			after        string
+			hour, minute int
+			zone, want   string
+		}{
+			{"2026-10-17T12:00:00Z", 20, 15, "America/Toronto", "2026-10-18T00:15:00Z"},
+			{"2026-10-18T00:16:00Z", 20, 15, "America/Toronto", "2026-10-19T00:15:00Z"},
+			{"2026-03-08T01:00:00Z", 20, 0, "America/Toronto", "2026-03-09T00:00:00Z"},
+			{"2026-11-01T00:00:00Z", 20, 0, "America/Toronto", "2026-11-02T01:00:00Z"},
+			{"2026-03-08T06:00:00Z", 2, 30, "America/Toronto", "2026-03-08T07:30:00Z"},
+			{"2026-11-01T04:00:00Z", 1, 30, "America/Toronto", "2026-11-01T06:30:00Z"},
+			{"2026-11-01T06:30:00Z", 1, 30, "America/Toronto", "2026-11-02T06:30:00Z"},
+			{"2026-10-17T12:00:00Z", 20, 15, "Asia/Kathmandu", "2026-10-17T14:30:00Z"},
+		} {
+			after, _ := time.Parse(time.RFC3339, tc.after)
+			var got time.Time
+			if err := pool.QueryRow(ctx, `SELECT next_listing_alert_check_time($1,$2,$3,$4)`, after, tc.hour, tc.minute, tc.zone).Scan(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got.UTC().Format(time.RFC3339) != tc.want {
+				t.Fatalf("%s %s %d:%d = %s, want %s", tc.after, tc.zone, tc.hour, tc.minute, got, tc.want)
+			}
+		}
+		s, c, _, _, _, _ := fixture(t)
+		hour, minute := 20, 15
+		out, err := s.handle(c, "create", alertRequest{Query: "Anthurium", Location: alertLocation{CitySlug: "toronto", RadiusKM: 16}, AlertHour: &hour, AlertMinute: &minute, TimeZone: "America/Toronto"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := out.(map[string]string)["id"]
+		var created, next time.Time
+		var storedHour, storedMinute int
+		var zone string
+		if err = pool.QueryRow(ctx, `SELECT created_at,next_check_at,alert_hour,alert_minute,time_zone FROM user_listing_alerts WHERE id=$1`, id).Scan(&created, &next, &storedHour, &storedMinute, &zone); err != nil {
+			t.Fatal(err)
+		}
+		loc, _ := time.LoadLocation("America/Toronto")
+		if storedHour != 20 || storedMinute != 15 || zone != "America/Toronto" || next.In(loc).Hour() != 20 || next.In(loc).Minute() != 15 || !next.After(created) {
+			t.Fatal("chosen time not persisted/scheduled")
+		}
+		listed, err := s.handle(c, "list", alertRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := listed.(map[string]any)["alerts"].([]priceAlert)[0]
+		if a.AlertHour != 20 || a.AlertMinute != 15 || a.TimeZone != zone {
+			t.Fatal("list omitted chosen time")
+		}
+		exec(t, `UPDATE user_listing_alerts SET last_checked_at=now()-interval '23 hours',next_check_at=now()-interval '1 minute' WHERE id=$1`, id)
+		dispatch(t, s)
+		if len(getWork(t, s, c)) != 1 {
+			t.Fatal("24-hour gate blocked a due local daily schedule")
+		}
+	})
+
 	t.Run("replicas stagger oldest due work", func(t *testing.T) {
 		s, c, _, _, p, _ := fixture(t)
 		oldest := create(t, s, c)
@@ -516,12 +585,11 @@ func TestAlertsIntegration(t *testing.T) {
 		if viewed == nil {
 			t.Fatal("view not persisted")
 		}
-		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		if len(getWork(t, s, c)) != 0 {
-			t.Fatal("checked twice in 24 hours")
+			t.Fatal("checked before the next daily schedule")
 		}
-		exec(t, `UPDATE user_listing_alerts SET last_checked_at=now()-interval '25 hours' WHERE id=$1`, id)
+		exec(t, `UPDATE user_listing_alerts SET last_checked_at=now()-interval '25 hours',next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		work = getWork(t, s, c)
 		if len(work) != 1 {
@@ -751,7 +819,11 @@ func TestPriceAlertMigrationUpgradesMain(t *testing.T) {
 	if err != nil || pending != 1 || succeeded != 1 || unknown != 1 {
 		t.Fatalf("legacy notification migration: %d/%d/%d %v", pending, succeeded, unknown, err)
 	}
-	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 25 {
+	var preserved bool
+	if err = pool.QueryRow(ctx, `SELECT alert_hour=0 AND alert_minute=0 AND time_zone='UTC' FROM user_listing_alerts WHERE id=$1`, legacyAlert).Scan(&preserved); err != nil || !preserved {
+		t.Fatal("legacy schedule changed", err)
+	}
+	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 26 {
 		t.Fatalf("migration version = %d, error = %v", version, err)
 	}
 	assertMainData()

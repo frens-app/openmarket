@@ -91,6 +91,28 @@ final class PriceAlertsTests: XCTestCase {
         XCTAssertTrue(String(decoding: encoded, as: UTF8.self).contains("2026-10-01T12:34:56.123456Z"))
     }
 
+    func testDailyTimeDefaultsAndSelectedTimeEncoding() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Toronto"))
+        let formatter = ISO8601DateFormatter()
+        for (input, expected) in [
+            ("2026-10-17T23:29:59Z", "2026-10-17T23:00:00Z"),
+            ("2026-10-17T23:30:00Z", "2026-10-18T00:00:00Z"),
+            ("2026-10-18T03:45:00Z", "2026-10-18T04:00:00Z")
+        ] {
+            let now = try XCTUnwrap(formatter.date(from: input))
+            XCTAssertEqual(formatter.string(from: AlertSchedule.defaultTime(now: now, calendar: calendar)), expected)
+        }
+        let selection = try XCTUnwrap(formatter.date(from: "2026-10-18T00:15:00Z"))
+        let schedule = AlertSchedule(date: selection, calendar: calendar)
+        let request = PriceAlertsService.Request(query: "Anthurium", alertHour: schedule.hour,
+            alertMinute: schedule.minute, timeZone: schedule.timeZone)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(json["alertHour"] as? Int, 20)
+        XCTAssertEqual(json["alertMinute"] as? Int, 15)
+        XCTAssertEqual(json["timeZone"] as? String, "America/Toronto")
+    }
+
     func testNotificationRouteSelectsAlertsAndSpecificAlert() {
         let coordinator = PriceAlertCoordinator.shared
         defer { coordinator.openAlertID = nil; coordinator.selectedTab = 0 }

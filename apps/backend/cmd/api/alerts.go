@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"connectrpc.com/connect"
 	"frens.lol/openmarket/backend/pkg/auth"
@@ -50,6 +51,8 @@ type priceAlert struct {
 	Location      alertLocation `json:"location"`
 	CreatedAt     time.Time     `json:"createdAt"`
 	AlertHour     int           `json:"alertHour"`
+	AlertMinute   int           `json:"alertMinute"`
+	TimeZone      string        `json:"timeZone"`
 	NextCheckAt   time.Time     `json:"nextCheckAt"`
 	LastCheckedAt *time.Time    `json:"lastCheckedAt"`
 	Paused        bool          `json:"paused"`
@@ -66,6 +69,9 @@ type alertListing struct {
 	Condition    string `json:"condition"`
 }
 type alertRequest struct {
+	AlertHour      *int           `json:"alertHour"`
+	AlertMinute    *int           `json:"alertMinute"`
+	TimeZone       string         `json:"timeZone"`
 	FetchAttemptID string         `json:"fetchAttemptID"`
 	Trigger        string         `json:"trigger"`
 	Event          string         `json:"event"`
@@ -201,9 +207,16 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			return nil, err
 		}
 		schedule := now.UTC().Round(time.Hour)
+		hour, minute, zone := schedule.Hour(), 0, "UTC"
+		if in.AlertHour != nil {
+			hour, minute, zone = *in.AlertHour, *in.AlertMinute, in.TimeZone
+			if err = tx.QueryRow(ctx, `SELECT next_listing_alert_check_time($1,$2,$3,$4)`, now, hour, minute, zone).Scan(&schedule); err != nil {
+				return nil, err
+			}
+		}
 		location, _ := json.Marshal(in.Location)
 		var id string
-		err = tx.QueryRow(ctx, `INSERT INTO user_listing_alerts(user_id,device_id,query,location,created_at,alert_hour,next_check_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`, userID, device, in.Query, location, now, schedule.Hour(), schedule).Scan(&id)
+		err = tx.QueryRow(ctx, `INSERT INTO user_listing_alerts(user_id,device_id,query,location,created_at,alert_hour,alert_minute,time_zone,next_check_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, userID, device, in.Query, location, now, hour, minute, zone, schedule).Scan(&id)
 		if err != nil {
 			return nil, err
 		}
@@ -306,6 +319,14 @@ var alertCity = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
 var alertListingID = regexp.MustCompile(`^[0-9]{1,40}$`)
 
 func validateAlert(in alertRequest) error {
+	if in.AlertHour != nil || in.AlertMinute != nil || in.TimeZone != "" {
+		if in.AlertHour == nil || in.AlertMinute == nil || *in.AlertHour < 0 || *in.AlertHour > 23 || *in.AlertMinute < 0 || *in.AlertMinute > 59 || in.TimeZone == "" || in.TimeZone == "Local" || len(in.TimeZone) > 100 {
+			return alertError(connect.CodeInvalidArgument, "Choose a valid daily time and time zone.")
+		}
+		if _, err := time.LoadLocation(in.TimeZone); err != nil {
+			return alertError(connect.CodeInvalidArgument, "Choose a valid time zone.")
+		}
+	}
 	if len([]rune(strings.TrimSpace(in.Query))) < 2 || len([]rune(in.Query)) > 300 {
 		return alertError(connect.CodeInvalidArgument, "Enter a search of 2–300 characters.")
 	}
@@ -319,7 +340,7 @@ func validateAlertLocation(l alertLocation) error {
 	return nil
 }
 func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
-	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.location,a.created_at,a.alert_hour,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM user_listing_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
+	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.location,a.created_at,a.alert_hour,a.alert_minute,a.time_zone,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM user_listing_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +349,7 @@ func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
 	for rows.Next() {
 		var a priceAlert
 		var location []byte
-		if err = rows.Scan(&a.ID, &a.Query, &location, &a.CreatedAt, &a.AlertHour, &a.NextCheckAt, &a.LastCheckedAt, &a.Paused, &a.MatchCount, &a.UnreadCount); err != nil {
+		if err = rows.Scan(&a.ID, &a.Query, &location, &a.CreatedAt, &a.AlertHour, &a.AlertMinute, &a.TimeZone, &a.NextCheckAt, &a.LastCheckedAt, &a.Paused, &a.MatchCount, &a.UnreadCount); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal(location, &a.Location); err != nil {

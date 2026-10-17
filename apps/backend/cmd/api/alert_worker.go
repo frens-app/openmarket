@@ -76,7 +76,6 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 	_, err = tx.Exec(ctx, `INSERT INTO listing_alert_check_runs(alert_id)
  SELECT a.id FROM user_listing_alerts a JOIN user_devices d ON d.id=a.device_id JOIN users u ON u.id=a.user_id
  WHERE NOT a.paused AND u.deleted_at IS NULL AND a.next_check_at<=now()
- AND (a.last_checked_at IS NULL OR a.last_checked_at<=now()-interval '24 hours')
  AND `+eligibleAlertDevice+`
  AND NOT EXISTS(SELECT 1 FROM listing_alert_check_runs c WHERE c.alert_id=a.id AND c.completed_at IS NULL)
  ORDER BY a.next_check_at,a.last_checked_at NULLS FIRST,a.created_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED
@@ -203,7 +202,7 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 		if _, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET completed_at=now() WHERE id=$1`, checkID); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE user_listing_alerts SET last_checked_at=now(),next_check_at=(date_trunc('day',now() AT TIME ZONE 'UTC')+alert_hour*interval '1 hour'+interval '1 day') AT TIME ZONE 'UTC' WHERE id=$1`, alertID)
+		_, err = tx.Exec(ctx, `UPDATE user_listing_alerts SET last_checked_at=now(),next_check_at=next_listing_alert_check_time(now(),alert_hour::integer,alert_minute::integer,time_zone) WHERE id=$1`, alertID)
 	} else {
 		_, err = tx.Exec(ctx, `UPDATE listing_alert_check_runs SET evaluation_after=now() WHERE id=$1`, checkID)
 	}

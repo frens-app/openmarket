@@ -120,6 +120,9 @@ final class PriceAlertsService {
         var event: String?
         var failureStage: String?
         var failureCode: String?
+        var alertHour: Int?
+        var alertMinute: Int?
+        var timeZone: String?
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
@@ -167,5 +170,22 @@ final class PriceAlertsService {
             throw APIError.message((try? JSONDecoder().decode(Failure.self, from: data).error) ?? "Couldn't load listing alerts.")
         }
         return try Self.decoder().decode(type, from: data)
+    }
+}
+
+struct AlertSchedule {
+    var hour: Int
+    var minute: Int
+    var timeZone: String
+
+    init(date: Date, calendar: Calendar = .current) {
+        hour = calendar.component(.hour, from: date)
+        minute = calendar.component(.minute, from: date)
+        timeZone = calendar.timeZone.identifier
+    }
+
+    static func defaultTime(now: Date = Date(), calendar: Calendar = .current) -> Date {
+        guard let hour = calendar.dateInterval(of: .hour, for: now) else { return now }
+        return now.timeIntervalSince(hour.start) < hour.duration / 2 ? hour.start : hour.end
     }
 }
