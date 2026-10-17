@@ -224,7 +224,13 @@ func TestAlertsIntegration(t *testing.T) {
 		id := create(t, s, c)
 		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 minute' WHERE id=$1`, id)
 		dispatch(t, s)
+		if _, err := s.handle(c, "work", alertRequest{Trigger: "foreground", Location: alertLocation{CitySlug: "toronto", RadiusKM: 16, Latitude: 100}}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("invalid device location accepted: %v", err)
+		}
 		initial := getWork(t, s, c)
+		if len(initial) != 1 || initial[0].Location.CitySlug != "sanfrancisco" {
+			t.Fatal("missing device location did not fall back to saved alert")
+		}
 		if len(initial) != 1 || initial[0].SearchOptions.Sort != "creation_time_descend" {
 			t.Fatalf("default work: %+v", initial)
 		}
@@ -269,7 +275,8 @@ func TestAlertsIntegration(t *testing.T) {
 		if _, err := s.handle(c, "fetch-event", receipt); err != nil {
 			t.Fatal(err)
 		}
-		request := alertRequest{FetchAttemptID: attempt, Trigger: "background_push"}
+		deviceLocation := alertLocation{CitySlug: "toronto", Name: "Toronto", RadiusKM: 32, Latitude: 43.65, Longitude: -79.38}
+		request := alertRequest{FetchAttemptID: attempt, Trigger: "background_push", Location: deviceLocation}
 		v, err := s.handle(c, "work", request)
 		if err != nil {
 			t.Fatal(err)
@@ -278,10 +285,17 @@ func TestAlertsIntegration(t *testing.T) {
 		if len(work) != 1 || work[0].ID != check || work[0].FetchAttemptID != attempt {
 			t.Fatalf("wrong traced work: %+v", work)
 		}
+		if work[0].Location != deviceLocation {
+			t.Fatal("work ignored latest device location")
+		}
 		s.searchOptions.Sort = "price_ascend"
+		request.Location = alertLocation{CitySlug: "vancouver", Name: "Vancouver", RadiusKM: 16, Latitude: 49.28, Longitude: -123.12}
 		v, err = s.handle(c, "work", request)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if v.(map[string]any)["work"].([]alertWork)[0].Location != deviceLocation {
+			t.Fatal("retry changed snapshotted location")
 		}
 		if v.(map[string]any)["work"].([]alertWork)[0].SearchOptions.Sort != "creation_time_descend" {
 			t.Fatal("retry changed snapshotted search")
@@ -314,11 +328,14 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		exec(t, `UPDATE user_listing_alerts SET last_checked_at=now()-interval '25 hours',next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
-		v, err = s.handle(c, "work", alertRequest{Trigger: "foreground"})
+		v, err = s.handle(c, "work", alertRequest{Trigger: "foreground", Location: request.Location})
 		if err != nil {
 			t.Fatal(err)
 		}
 		recovered := v.(map[string]any)["work"].([]alertWork)[0]
+		if recovered.Location != request.Location {
+			t.Fatal("new fetch retained creation location")
+		}
 		upload.CheckID, upload.FetchAttemptID = recovered.ID, recovered.FetchAttemptID
 		if _, err = s.handle(c, "page", upload); err != nil {
 			t.Fatal(err)

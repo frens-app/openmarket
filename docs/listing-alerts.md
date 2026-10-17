@@ -5,7 +5,7 @@ The `user_listing_alerts` table stores each user’s alert and its schedule.
 `listing_alert_background_fetch_attempts` traces silent pings and foreground recovery.
 `listing_alert_notification_outbox` stores grouped match notifications and their single-send outcome.
 An account can hold three alerts, including paused alerts. Each alert saves the
-buyer's text, the current search location, and the current device. Deleting an
+buyer's text, a fallback search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
 queue. Account deletion also removes all alert data.
 
@@ -16,7 +16,9 @@ tokens remain in the phone's WebKit store; the backend never receives them.
 
 ## Alerts tab
 
-Use the plus button to create an alert. The tab lists active and paused alerts
+Use the plus button to create an alert with one text field for the product and
+any preferences or requirements. There is no separate location field. The tab
+lists active and paused alerts
 with match and unread counts. Open an alert to see its matching listings, or use
 its options menu to pause, resume, or delete it. Opening a push notification takes
 you to that alert. Matches have individual viewed status; there is no separate
@@ -104,8 +106,8 @@ Supported fields:
 Update configuration and restart/redeploy the backend to apply it; no iOS build
 is needed after the app version supporting `searchOptions` is installed. Invalid
 values and unknown configuration keys prevent startup. Bounds are global, so a
-price range will narrow every alert on that deployment. The buyer's text and
-saved location remain authoritative, and Jev still checks the buyer's criteria.
+price range will narrow every alert on that deployment. The buyer's text remains
+authoritative, and Jev still checks the buyer's criteria.
 Availability stays available-only, and each check stays limited to one page.
 Changing these settings affects future searches, not previously checked listings.
 
@@ -138,8 +140,13 @@ and the available-products filter. Each check fetches only the first page and up
 as a complete search, even if Facebook offers more pages. Upload sequence numbers
 make retries idempotent. Facebook listing IDs, including rejected
 candidates, are unique per alert, so subsequent checks never reevaluate or
-renotify a previously checked listing. Saved text/location are immutable; create
-a new alert to change the requested product.
+renotify a previously checked listing. The buyer's text is immutable; create a new
+alert to change the requested product.
+Each work request includes the app's current saved search location and radius,
+so future checks follow location changes on that device. If the device has no
+saved location, the server falls back to the location stored when the alert was
+created. Each fetch snapshots the actual location used; a retry keeps that
+snapshot. Alerts do not request a new GPS fix during a background wake.
 
 Jev evaluation runs on the backend in batches of 30. Failed evaluations remain
 pending and retry after an hour; they never become negative matches. All matched

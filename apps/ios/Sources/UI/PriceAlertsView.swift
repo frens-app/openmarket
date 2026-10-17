@@ -53,7 +53,7 @@ struct PriceAlertsView: View {
                             }
                             Text(alert.paused ? "Paused" : "Daily around \(alert.nextCheckAt.formatted(date: .omitted, time: .shortened))")
                                 .font(.subheadline).foregroundStyle(.secondary)
-                            Text("\(alert.location.name) · \(alert.matchCount) matches")
+                            Text("\(alert.matchCount) matches")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         .contextMenu { options(alert) }
@@ -118,7 +118,6 @@ struct PriceAlertsView: View {
                     TextField("e.g. Nintendo Switch OLED", text: $query, axis: .vertical).lineLimit(3...6)
                     Text("Include the model and any requirements that matter to you.").font(.caption).foregroundStyle(.secondary)
                 }
-                Section("Search location") { Text(prefs.locationName ?? "Choose a location in Browse first") }
                 if let error { Text(error).foregroundStyle(.red) }
             }
             .navigationTitle("New listing alert")

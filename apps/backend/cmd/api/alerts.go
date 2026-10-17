@@ -306,9 +306,15 @@ var alertCity = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
 var alertListingID = regexp.MustCompile(`^[0-9]{1,40}$`)
 
 func validateAlert(in alertRequest) error {
-	l := in.Location
-	if len([]rune(strings.TrimSpace(in.Query))) < 2 || len([]rune(in.Query)) > 300 || !alertCity.MatchString(l.CitySlug) || len(l.Name) > 200 || l.RadiusKM < 1 || l.RadiusKM > 500 || math.IsNaN(l.Latitude) || math.IsNaN(l.Longitude) || math.Abs(l.Latitude) > 90 || math.Abs(l.Longitude) > 180 {
-		return alertError(connect.CodeInvalidArgument, "Enter a search of 2–300 characters and choose a valid location.")
+	if len([]rune(strings.TrimSpace(in.Query))) < 2 || len([]rune(in.Query)) > 300 {
+		return alertError(connect.CodeInvalidArgument, "Enter a search of 2–300 characters.")
+	}
+	return validateAlertLocation(in.Location)
+}
+
+func validateAlertLocation(l alertLocation) error {
+	if !alertCity.MatchString(l.CitySlug) || len(l.Name) > 200 || l.RadiusKM < 1 || l.RadiusKM > 500 || math.IsNaN(l.Latitude) || math.IsNaN(l.Longitude) || math.Abs(l.Latitude) > 90 || math.Abs(l.Longitude) > 180 {
+		return alertError(connect.CodeInvalidArgument, "The device's search location is invalid.")
 	}
 	return nil
 }

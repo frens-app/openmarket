@@ -90,7 +90,12 @@ final class PriceAlertCoordinator: ObservableObject {
                 return false
             }
             stage = "work"
-            let work = try await service.call("work", .init(fetchAttemptID: fetchAttemptID,
+            let prefs = Preferences.shared
+            let location = prefs.resolvedPlace.map {
+                AlertLocation(citySlug: $0.segment, name: $0.name, radiusKM: prefs.radiusKM,
+                              latitude: $0.latitude, longitude: $0.longitude)
+            }
+            let work = try await service.call("work", .init(location: location, fetchAttemptID: fetchAttemptID,
                 trigger: fetchAttemptID == nil ? "foreground" : "background_push"), as: PriceAlertsService.WorkList.self).work
             if work.isEmpty {
                 await reportFetchEvent(activeAttemptID, event: "failed", stage: stage, code: "no_pending_work")

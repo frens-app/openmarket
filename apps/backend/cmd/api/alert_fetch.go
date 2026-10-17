@@ -19,6 +19,12 @@ func (s *alertsServer) fetchWork(ctx context.Context, user, session uuid.UUID, i
 		(in.Trigger == "background_push") != (in.FetchAttemptID != "") {
 		return nil, alertError(connect.CodeInvalidArgument, "Invalid fetch trigger.")
 	}
+	hasDeviceLocation := in.Location != (alertLocation{})
+	if hasDeviceLocation {
+		if err := validateAlertLocation(in.Location); err != nil {
+			return nil, err
+		}
+	}
 	var attemptID *uuid.UUID
 	if in.FetchAttemptID != "" {
 		id, err := uuid.Parse(in.FetchAttemptID)
@@ -60,6 +66,9 @@ func (s *alertsServer) fetchWork(ctx context.Context, user, session uuid.UUID, i
 		if err = json.Unmarshal(location, &v.Location); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if hasDeviceLocation {
+			v.Location = in.Location
 		}
 		v.SearchOptions = s.searchOptions
 		work = append(work, v)
