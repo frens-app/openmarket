@@ -23,6 +23,38 @@ final class SavedListingSyncTests: XCTestCase {
     }
     private func settled(_ store: SavedListings) async throws { try await waitUntil { !store.isSyncing } }
 
+    func testAlertSaveAttributionPersistsLocallyAndRetriesWithTheSave() async throws {
+        let service = FakeSavedListingService(), defaults = try defaults()
+        let store = SavedListings(defaults: defaults, service: service)
+        store.setAccount("A"); try await settled(store)
+        service.loseResponse = true
+        let context = AlertSaveContext(alertID: UUID().uuidString, notificationID: UUID().uuidString, source: "notification")
+        store.toggle(listing(), alertContext: context)
+        XCTAssertTrue(store.contains(listing()))
+        try await settled(store)
+        XCTAssertTrue(store.syncFailed)
+        let first = try XCTUnwrap(service.calls.first)
+        store.setAccount(nil)
+        let restored = SavedListings(defaults: defaults, service: service, cachedListing: { _ in nil })
+        restored.setAccount("A")
+        XCTAssertTrue(restored.contains(listing()))
+        try await settled(restored)
+        XCTAssertEqual(service.calls.count, 2)
+        XCTAssertEqual(service.calls[1], first)
+        let wire = try SavedListingChange(serializedBytes: first.data)
+        XCTAssertEqual(wire.alertSource.alertID, context.alertID)
+        XCTAssertEqual(wire.alertSource.notificationID, context.notificationID)
+        XCTAssertEqual(wire.alertSource.source, "notification")
+        XCTAssertTrue(wire.saved)
+        XCTAssertEqual(restored.entries.first?.listing.title, "Desk")
+        restored.toggle(listing(), alertContext: context)
+        try await settled(restored)
+        let removed = try SavedListingChange(serializedBytes: XCTUnwrap(service.calls.last).data)
+        XCTAssertFalse(removed.saved)
+        XCTAssertFalse(removed.hasAlertSource)
+        restored.setAccount(nil)
+    }
+
     func testStructuredPricesSurviveWireStorageAndShoppingRoundTrips() throws {
         for currency in MarketCurrency.all {
             var item = listing()

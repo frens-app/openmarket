@@ -74,6 +74,38 @@ func TestListingChangeValidation(t *testing.T) {
 	}
 }
 
+func TestAlertSaveSourceValidation(t *testing.T) {
+	now := time.Now()
+	valid := func() *v1.SavedListingChange {
+		return &v1.SavedListingChange{MutationId: uuid.NewString(), FacebookListingId: "123", Saved: proto.Bool(true), SavedAt: timestamppb.New(now),
+			Snapshot:    &v1.SavedListingSnapshot{FacebookListingId: "123", Title: proto.String("Desk"), CardObservedAt: timestamppb.New(now)},
+			AlertSource: &v1.ListingAlertSaveSource{AlertId: uuid.NewString(), NotificationId: proto.String(uuid.NewString()), Source: "alerts_tab"}}
+	}
+	if err := validateListingChange(valid(), now); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*v1.SavedListingChange){
+		func(c *v1.SavedListingChange) { c.AlertSource.AlertId = "invalid" },
+		func(c *v1.SavedListingChange) { c.AlertSource.NotificationId = proto.String("invalid") },
+		func(c *v1.SavedListingChange) { c.AlertSource.Source = "unknown" },
+		func(c *v1.SavedListingChange) { c.AlertSource.Source = "creation" },
+		func(c *v1.SavedListingChange) { c.Saved = nil },
+		func(c *v1.SavedListingChange) { c.Saved = proto.Bool(false); c.Snapshot = nil },
+	} {
+		c := valid()
+		mutate(c)
+		if validateListingChange(c, now) == nil {
+			t.Fatal("accepted invalid save attribution")
+		}
+	}
+	c := valid()
+	c.AlertSource.Source = "creation"
+	c.AlertSource.NotificationId = nil
+	if err := validateListingChange(c, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStructuredListingPriceValidation(t *testing.T) {
 	now := time.Now()
 	valid := func() *v1.SavedListingChange {

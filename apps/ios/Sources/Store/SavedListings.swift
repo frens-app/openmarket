@@ -101,7 +101,7 @@ final class SavedListings: ObservableObject {
         publish(); persist(); synchronize()
     }
 
-    func toggle(_ listing: Listing) {
+    func toggle(_ listing: Listing, alertContext: AlertSaveContext? = nil) {
         let value = listing.canonicalized
         let saving = !contains(listing)
         guard !saving || value.hasSaveMetadata else { return }
@@ -110,7 +110,7 @@ final class SavedListings: ObservableObject {
         if saving { entries.insert(SavedListingEntry(listing: value, savedAt: now), at: 0) }
         rejected.remove(value.id)
         failedSaves.remove(value.id)
-        enqueue(value, saved: saving, savedAt: saving ? now : nil)
+        enqueue(value, saved: saving, savedAt: saving ? now : nil, alertContext: alertContext)
         publish(); persist(); synchronize()
     }
 
@@ -128,10 +128,10 @@ final class SavedListings: ObservableObject {
         publish(); persist(); synchronize()
     }
 
-    private func enqueue(_ listing: Listing, saved: Bool?, savedAt: Date?) {
+    private func enqueue(_ listing: Listing, saved: Bool?, savedAt: Date?, alertContext: AlertSaveContext? = nil) {
         guard userID != nil, listing.facebookListingID != nil else { return }
         guard saved == false || listing.hasSaveMetadata else { return }
-        if let change = try? SavedListingMutation(listing: listing, saved: saved, savedAt: savedAt) { pending.append(change) }
+        if let change = try? SavedListingMutation(listing: listing, saved: saved, savedAt: savedAt, alertContext: alertContext) { pending.append(change) }
     }
 
     private func publish() {

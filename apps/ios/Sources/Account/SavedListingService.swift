@@ -8,6 +8,12 @@ struct SavedListingEntry: Codable, Equatable {
     var savedAt: Date
 }
 
+struct AlertSaveContext {
+    let alertID: String
+    var notificationID: String?
+    var source = "alerts_tab"
+}
+
 /// Frozen wire payloads make retries equivalent across relaunches.
 struct SavedListingMutation: Codable, Equatable {
     let id: String
@@ -17,7 +23,7 @@ struct SavedListingMutation: Codable, Equatable {
     var savesListing: Bool { (try? SavedListingChange(serializedBytes: data))?.saved == true }
     var changesSavedState: Bool { (try? SavedListingChange(serializedBytes: data))?.hasSaved == true }
 
-    init(listing: Listing, saved: Bool?, savedAt: Date?) throws {
+    init(listing: Listing, saved: Bool?, savedAt: Date?, alertContext: AlertSaveContext? = nil) throws {
         guard let facebookID = listing.facebookListingID else { throw APIError.network }
         id = UUID().uuidString.lowercased()
         listingID = "fb:\(facebookID)"
@@ -27,6 +33,13 @@ struct SavedListingMutation: Codable, Equatable {
         if let saved { change.saved = saved }
         if saved != false { change.snapshot = listing.savedSnapshot }
         if let savedAt { change.savedAt = Google_Protobuf_Timestamp(date: savedAt) }
+        if saved == true, let alertContext {
+            var source = ListingAlertSaveSource()
+            source.alertID = alertContext.alertID
+            source.source = alertContext.source
+            if let notificationID = alertContext.notificationID { source.notificationID = notificationID }
+            change.alertSource = source
+        }
         data = try change.serializedData()
     }
 }

@@ -11,11 +11,18 @@ private struct AlertRoute: Hashable {
 struct ListingAlertsView: View {
     @EnvironmentObject private var account: AccountSession
     @EnvironmentObject private var prefs: Preferences
+    @EnvironmentObject private var saved: SavedListings
+    @EnvironmentObject private var store: ListingStore
     @ObservedObject private var coordinator = ListingAlertCoordinator.shared
     @ObservedObject private var push = PushRegistrar.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var alerts: [ListingAlert] = []
-    @State private var feed: [AlertNotificationGroup] = []
+    @State private var feed: [AlertInboxItem] = []
+    @State private var feedCursor: AlertInboxItem?
+    @State private var filter: AlertInboxFilter = .all
+    @State private var selected: AlertInboxItem?
+    @State private var listingInteractionID = UUID().uuidString
+    @Namespace private var listingNamespace
     @State private var feedMore = false
     @State private var feedLoading = false
     @State private var refreshing = false
@@ -23,6 +30,8 @@ struct ListingAlertsView: View {
     @State private var showManage = false
     @State private var path: [AlertRoute] = []
     @State private var query = ""
+    @State private var priceInput = AlertPriceInput()
+    @State private var showPrices = false
     @State private var alertTime = AlertSchedule.defaultTime()
     @State private var error: String?
     @State private var busy = false
@@ -36,6 +45,9 @@ struct ListingAlertsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                AlertInboxFilters(selection: $filter)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 14, trailing: 20))
                 if !account.isSignedIn || !connected {
                     Section {
                         Button("Sign in and connect Facebook") { showAccount = true }
@@ -53,63 +65,70 @@ struct ListingAlertsView: View {
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
-                if feed.isEmpty && account.isSignedIn && !refreshing {
-                    ContentUnavailableView(alerts.isEmpty ? "No alerts yet" : "No matches yet", systemImage: "bell",
-                        description: Text(alerts.isEmpty ? "Create an alert for something you’re looking for." : "New finds from your alerts will appear here."))
+                if visibleFeed.isEmpty && account.isSignedIn && !refreshing {
+                    ContentUnavailableView(emptyTitle, systemImage: filter == .saved ? "bookmark" : "bell",
+                        description: Text(emptyDescription))
+                        .listRowSeparator(.hidden)
                 }
-                ForEach(feed) { group in
-                    Button {
-                        path.append(AlertRoute(alertID: group.alertID, notificationID: group.id))
-                    } label: {
-                        AlertNotificationRow(group: group)
+                ForEach(inboxDays, id: \.self) { day in
+                    Section {
+                        ForEach(visibleFeed.filter { Calendar.current.startOfDay(for: $0.createdAt) == day }) { item in
+                            AlertInboxRow(item: item, isSaved: saved.contains(item.displayedListing),
+                                open: { open(item) }, save: { toggleSave(item) })
+                                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 12))
+                                .alignmentGuide(.listRowSeparatorLeading) { _ in 96 }
+                        }
+                    } header: {
+                        Text(alertDayLabel(day)).font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary).textCase(nil)
                     }
-                    .buttonStyle(.plain)
-                    .listRowBackground(Color(.secondarySystemGroupedBackground))
                 }
                 if feedMore {
                     Button("Load earlier matches") { Task { await loadMore() } }.disabled(feedLoading || refreshing)
                 }
                 if feedLoading || (refreshing && feed.isEmpty) { ProgressView().frame(maxWidth: .infinity) }
             }
+            .listStyle(.plain)
             .navigationTitle("Alerts")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Manage", systemImage: "slider.horizontal.3") { showManage = true }
-                        .disabled(alerts.isEmpty)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        if !account.state.hasSocialSignIn {
-                            showLinkRequired = true
-                        } else if alerts.count >= 3 {
-                            showLimit = true
-                        } else {
-                            query = ""; alertTime = AlertSchedule.defaultTime(); error = nil; showCreate = true
-                        }
-                    } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("Create alert")
-                        .disabled(!account.isSignedIn || !connected || !push.isEnabled || busy)
+                    Menu {
+                        Button("Create alert", systemImage: "plus") { beginCreate() }
+                            .disabled(!account.isSignedIn || !connected || !push.isEnabled || busy)
+                        Button("Manage alerts", systemImage: "slider.horizontal.3") { showManage = true }
+                            .disabled(alerts.isEmpty)
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Alert options")
                 }
             }
             .navigationDestination(for: AlertRoute.self) { route in
                 AlertMatchesView(route: route, alert: alerts.first { $0.id == route.alertID }, changed: {
-                    if let index = feed.firstIndex(where: { $0.id == route.notificationID }), feed[index].seenAt == nil {
-                        feed[index].seenAt = Date()
-                    }
                     Task { await refresh() }
                 })
             }
             .refreshable { await refresh() }
-            .task { await refresh(); navigateToPush() }
+            .task { saved.synchronize(); await refresh(); navigateToPush() }
+            .onChange(of: filter) { _, _ in Task { await refresh() } }
+            .onChange(of: saved.isSyncing) { wasSyncing, syncing in
+                if wasSyncing && !syncing && filter == .saved { Task { await refresh() } }
+            }
             .onChange(of: coordinator.matchRevision) { _, _ in Task { await refresh() } }
             .onChange(of: coordinator.openAlertID) { _, _ in navigateToPush() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await refresh() } } }
             .onChange(of: account.state.viewer?.id) { _, _ in
-                alerts = []; feed = []; feedGeneration += 1; path = []; error = nil
+                alerts = []; feed = []; feedCursor = nil; feedGeneration += 1; path = []; selected = nil; error = nil
                 Task { await refresh() }
             }
             .sheet(isPresented: $showAccount, onDismiss: { Task { await refresh() } }) {
                 AccountGateView(feature: .listingAlerts, done: { showAccount = false })
+            }
+            .sheet(item: $selected) { item in
+                NavigationStack {
+                    DetailView(listing: item.displayedListing, namespace: listingNamespace, referrer: .listingAlerts,
+                        alertSaveContext: item.saveContext)
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { selected = nil } } }
+                }
+                .task { await recordOpen(item) }
             }
             .sheet(isPresented: $showCreate) { createSheet }
             .sheet(isPresented: $showManage) { manageSheet }
@@ -135,6 +154,9 @@ struct ListingAlertsView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(alert.query).font(.headline)
+                        if alert.minPrice != nil || alert.maxPrice != nil {
+                            Text(AlertPriceInput.summary(min: alert.minPrice, max: alert.maxPrice)).font(.subheadline).foregroundStyle(.secondary)
+                        }
                         Text(alert.paused ? "Paused" : "Active").font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
@@ -151,6 +173,7 @@ struct ListingAlertsView: View {
                     TextField("e.g. Nintendo Switch OLED", text: $query, axis: .vertical).lineLimit(3...6)
                     Text("Include the model and any requirements that matter to you.").font(.caption).foregroundStyle(.secondary)
                 }
+                AlertPriceFields(input: $priceInput, expanded: $showPrices)
                 DatePicker("Daily around", selection: $alertTime, displayedComponents: .hourAndMinute)
                 if let error { Text(error).foregroundStyle(.red) }
             }
@@ -159,7 +182,7 @@ struct ListingAlertsView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showCreate = false } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { Task { await create() } }
-                        .disabled(busy || query.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || query.count > 300 || prefs.resolvedPlace == nil)
+                        .disabled(busy || query.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || query.count > 300 || prefs.resolvedPlace == nil || priceInput.validationMessage != nil)
                 }
             }
         }
@@ -171,14 +194,15 @@ struct ListingAlertsView: View {
             showLinkRequired = true
             return
         }
-        guard !busy, let place = prefs.resolvedPlace else { return }
+        guard !busy, priceInput.validationMessage == nil, let place = prefs.resolvedPlace else { return }
         busy = true; error = nil
         defer { busy = false }
         do {
             let location = AlertLocation(citySlug: place.segment, name: place.name, radiusKM: prefs.radiusKM, latitude: place.latitude, longitude: place.longitude)
             let schedule = AlertSchedule(date: alertTime)
             let created = try await service.call("create", .init(query: query, location: location,
-                alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone), as: ListingAlertsService.Created.self)
+                alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone,
+                minPrice: priceInput.minPrice, maxPrice: priceInput.maxPrice), as: ListingAlertsService.Created.self)
             Analytics.capture(.listingAlertCreated, [
                 "alert_id": created.id, "alert_hour": schedule.hour,
                 "alert_minute": schedule.minute, "time_zone": schedule.timeZone
@@ -189,38 +213,119 @@ struct ListingAlertsView: View {
         } catch { self.error = error.localizedDescription }
     }
 
+    private var visibleFeed: [AlertInboxItem] {
+        feed.filter { item in
+            switch filter {
+            case .all: return true
+            case .unread: return item.viewedAt == nil
+            case .saved: return saved.contains(item.displayedListing)
+            }
+        }
+    }
+
+    private var inboxDays: [Date] {
+        Array(Set(visibleFeed.map { Calendar.current.startOfDay(for: $0.createdAt) })).sorted(by: >)
+    }
+
+    private var emptyTitle: String {
+        switch filter {
+        case .all: return alerts.isEmpty ? "No alerts yet" : "No matches yet"
+        case .unread: return "You’re all caught up"
+        case .saved: return "No saved matches"
+        }
+    }
+
+    private var emptyDescription: String {
+        switch filter {
+        case .all: return alerts.isEmpty ? "Create an alert for something you’re looking for." : "New finds from your alerts will appear here."
+        case .unread: return "New listings from your alerts will appear here."
+        case .saved: return "Tap the bookmark beside a listing to keep it here and in Saved."
+        }
+    }
+
+    private func beginCreate() {
+        if !account.state.hasSocialSignIn { showLinkRequired = true }
+        else if alerts.count >= 3 { showLimit = true }
+        else {
+            query = ""; priceInput = AlertPriceInput(); showPrices = false
+            alertTime = AlertSchedule.defaultTime(); error = nil; showCreate = true
+        }
+    }
+
+    private func toggleSave(_ item: AlertInboxItem) {
+        let listing = item.displayedListing
+        let wasSaved = saved.contains(listing)
+        store.remember(listing)
+        withAnimation(.snappy(duration: 0.2)) { saved.toggle(listing, alertContext: item.saveContext) }
+        Analytics.capture(wasSaved ? .listingUnsaved : .listingSaved, [
+            "listing_id": listing.id, "alert_id": item.alertID, "notification_id": item.notificationID,
+            "surface": Analytics.Surface.listingAlerts.rawValue
+        ])
+    }
+
+    private func open(_ item: AlertInboxItem) {
+        listingInteractionID = UUID().uuidString
+        var properties = Analytics.listingOpenProperties(item.displayedListing, surface: .listingAlerts,
+            position: visibleFeed.firstIndex(where: { $0.id == item.id }) ?? 0,
+            isSaved: saved.contains(item.displayedListing), isSeen: item.viewedAt != nil)
+        properties["alert_id"] = item.alertID; properties["notification_id"] = item.notificationID
+        properties["interaction_id"] = listingInteractionID
+        Analytics.capture(.listingOpened, properties)
+        selected = item
+    }
+
+    private func recordOpen(_ item: AlertInboxItem) async {
+        let owner = account.state.viewer?.id
+        do {
+            let _: ListingAlertsService.Empty = try await service.call("interaction", .init(id: item.alertID, event: "listing_opened",
+                interactionID: listingInteractionID, notificationID: item.notificationID, source: "alerts_tab", listingID: item.listing.id), as: ListingAlertsService.Empty.self)
+            guard owner == account.state.viewer?.id else { return }
+            for index in feed.indices where feed[index].alertID == item.alertID && feed[index].listing.id == item.listing.id {
+                feed[index].viewedAt = feed[index].viewedAt ?? Date()
+            }
+        } catch { if owner == account.state.viewer?.id { self.error = error.localizedDescription } }
+    }
+
     private func refresh() async {
-        guard !refreshing else { return }
         refreshing = true
         feedGeneration += 1
-        defer { refreshing = false }
+        let generation = feedGeneration
+        let selectedFilter = filter
+        let localSaved = selectedFilter == .saved ? feed.filter { saved.contains($0.displayedListing) } : []
+        defer { if generation == feedGeneration { refreshing = false } }
         let owner = account.state.viewer?.id
         await push.refreshStatus()
         push.registerIfAuthorized()
         connected = await SessionState.isSignedIn()
         await account.reportFacebookConnection(connected)
-        guard account.isSignedIn else { alerts = []; feed = []; return }
+        guard generation == feedGeneration else { return }
+        guard account.isSignedIn else { alerts = []; feed = []; feedCursor = nil; return }
         do {
             async let loadedAlerts = service.call("list", as: ListingAlertsService.AlertList.self)
-            async let loadedFeed = service.call("notification-feed", as: ListingAlertsService.NotificationFeed.self)
+            async let loadedFeed = service.call("inbox", .init(filter: selectedFilter.rawValue), as: ListingAlertsService.Inbox.self)
             let (alertList, recent) = try await (loadedAlerts, loadedFeed)
-            guard owner == account.state.viewer?.id else { return }
+            guard owner == account.state.viewer?.id, generation == feedGeneration, selectedFilter == filter else { return }
             alerts = alertList.alerts
-            feed = recent.groups; feedMore = recent.groups.count == 50; error = nil
-        } catch { self.error = error.localizedDescription }
+            feed = recent.items + localSaved.filter { local in !recent.items.contains { $0.id == local.id } && alertList.alerts.contains { $0.id == local.alertID } }
+            feed.sort { $0.createdAt == $1.createdAt ? $0.id > $1.id : $0.createdAt > $1.createdAt }
+            feedCursor = recent.items.last
+            feedMore = recent.items.count == 50; error = nil
+        } catch { if generation == feedGeneration { self.error = error.localizedDescription } }
     }
 
     private func loadMore() async {
-        guard !feedLoading, !refreshing, let last = feed.last else { return }
+        guard !feedLoading, !refreshing, let last = feedCursor else { return }
         feedLoading = true
         defer { feedLoading = false }
         let generation = feedGeneration
         do {
-            let loaded = try await service.call("notification-feed", .init(beforeID: last.id, before: last.createdCursor), as: ListingAlertsService.NotificationFeed.self)
+            let loaded = try await service.call("inbox", .init(beforeID: last.listing.id, before: last.createdCursor,
+                notificationID: last.notificationID, filter: filter.rawValue), as: ListingAlertsService.Inbox.self)
             guard generation == feedGeneration else { return }
-            feed += loaded.groups.filter { item in !feed.contains { $0.id == item.id } }
-            feedMore = loaded.groups.count == 50; error = nil
-        } catch { self.error = error.localizedDescription }
+            feed += loaded.items.filter { item in !feed.contains { $0.id == item.id } }
+            feedCursor = loaded.items.last
+            feedMore = loaded.items.count == 50; error = nil
+        } catch { if generation == feedGeneration { self.error = error.localizedDescription } }
     }
 
     private func navigateToPush() {
@@ -259,6 +364,7 @@ private struct AlertMatchesView: View {
                 }
             } else if route.notificationID == nil, let alert {
                 Section {
+                    LabeledContent("Price", value: AlertPriceInput.summary(min: alert.minPrice, max: alert.maxPrice))
                     LabeledContent("Checks", value: "Daily around \(alert.nextCheckAt.formatted(date: .omitted, time: .shortened))")
                     if paused { Text("Paused").foregroundStyle(.secondary) }
                 }
@@ -314,7 +420,8 @@ private struct AlertMatchesView: View {
         .refreshable { await load(reset: true) }
         .sheet(item: $selected) { match in
             NavigationStack {
-                DetailView(listing: match.listing.listing, namespace: listingNamespace, referrer: .listingAlerts)
+                DetailView(listing: match.displayedListing, namespace: listingNamespace, referrer: .listingAlerts,
+                    alertSaveContext: .init(alertID: alertID, notificationID: route.notificationID, source: route.source))
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { selected = nil } } }
             }
             .task {
@@ -340,7 +447,7 @@ private struct AlertMatchesView: View {
 
     private func open(_ match: AlertMatch) {
         listingInteractionID = UUID().uuidString
-        let listing = match.listing.listing
+        let listing = match.displayedListing
         var properties = Analytics.listingOpenProperties(listing, surface: .listingAlerts,
             position: matches.firstIndex(where: { $0.id == match.id }) ?? 0,
             isSaved: SavedListings.shared.contains(listing), isSeen: ViewedListings.shared.contains(listing.id))
@@ -418,54 +525,103 @@ private func alertDayLabel(_ date: Date) -> String {
     }
 }
 
-struct AlertNotificationRow: View {
-    let group: AlertNotificationGroup
+struct AlertPriceFields: View {
+    @Binding var input: AlertPriceInput
+    @Binding var expanded: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Text("Listings matching \(group.query)")
-                    .font(.headline).lineLimit(2).multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                if group.seenAt == nil {
-                    Text("New").font(.caption.bold()).foregroundStyle(.blue)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(.blue.opacity(0.1), in: Capsule())
+        Section {
+            DisclosureGroup(isExpanded: $expanded) {
+                LabeledContent("Minimum") {
+                    TextField("No minimum", text: $input.minimum)
+                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Minimum price")
                 }
-                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-            }
-            if !group.previews.isEmpty {
-                GeometryReader { geometry in
-                    let count = group.previews.count
-                    let width = min(geometry.size.height, (geometry.size.width - CGFloat(count - 1) * 8) / CGFloat(count))
-                    HStack(spacing: 8) {
-                        ForEach(Array(group.previews.enumerated()), id: \.element.id) { index, listing in
-                            AsyncImage(url: URL(string: listing.thumbnailURL)) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Rectangle().fill(Color(.tertiarySystemFill))
-                                    .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
-                            }
-                            .frame(width: width, height: geometry.size.height)
-                            .clipped()
-                            .overlay {
-                                if index == count - 1 && group.matchCount > count {
-                                    Color.black.opacity(0.45)
-                                    Text("+\(group.matchCount - count)").font(.title3.bold()).foregroundStyle(.white)
-                                }
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .accessibilityLabel(listing.title)
-                        }
-                    }
+                LabeledContent("Maximum") {
+                    TextField("No maximum", text: $input.maximum)
+                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Maximum price")
                 }
-                .frame(height: group.previews.count == 1 ? 128 : 96)
+                Text("Optional. Use whole amounts in the marketplace’s currency. Leave either blank for no limit.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !input.minimum.isEmpty || !input.maximum.isEmpty {
+                    Button("Clear price limits") { input = AlertPriceInput() }
+                }
+            } label: {
+                LabeledContent("Price", value: input.validationMessage == nil
+                    ? AlertPriceInput.summary(min: input.minPrice, max: input.maxPrice) : "Check limits")
             }
-            Text(alertDayLabel(group.createdAt)).font(.caption).foregroundStyle(.secondary)
+            if let message = input.validationMessage {
+                Text(message).font(.caption).foregroundStyle(.red)
+            }
         }
-        .foregroundStyle(.primary)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+    }
+}
+
+struct AlertInboxFilters: View {
+    @Binding var selection: AlertInboxFilter
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(AlertInboxFilter.allCases, id: \.self) { filter in
+                Button { selection = filter } label: {
+                    Text(filter.title).font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 22).padding(.vertical, 8)
+                        .foregroundStyle(selection == filter ? Color.black : Color.primary)
+                        .background(selection == filter ? Color.mint : Color(.secondarySystemFill), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == filter ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+struct AlertInboxRow: View {
+    let item: AlertInboxItem
+    let isSaved: Bool
+    let open: () -> Void
+    let save: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: open) {
+                HStack(alignment: .top, spacing: 12) {
+                    Circle().fill(item.viewedAt == nil ? Color.mint : Color.clear)
+                        .frame(width: 7, height: 7).padding(.top, 9)
+                        .accessibilityHidden(true)
+                    AsyncImage(url: item.displayedListing.thumbnailURL) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: 11).fill(Color(.tertiarySystemFill))
+                            .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+                    }
+                    .frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 11))
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(item.listing.title).font(.subheadline.weight(.medium)).lineLimit(2)
+                        Text(item.displayedListing.displayPrice ?? item.listing.priceText)
+                            .font(.subheadline.weight(.semibold))
+                        Text([item.listing.locationText, item.createdAt.formatted(.relative(presentation: .named))]
+                            .filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(item.viewedAt == nil ? "Unread" : "Read")
+            Button(action: save) {
+                Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(isSaved ? Color.mint : Color.primary)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isSaved ? "Remove saved listing" : "Save listing")
+            .accessibilityValue(item.listing.title)
+        }
     }
 }

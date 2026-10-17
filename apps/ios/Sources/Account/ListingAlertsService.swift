@@ -12,6 +12,8 @@ struct AlertLocation: Codable {
 struct ListingAlert: Decodable, Identifiable {
     var id: String
     var query: String
+    var minPrice: Int?
+    var maxPrice: Int?
     var location: AlertLocation
     var createdAt: Date
     var alertHour: Int
@@ -34,7 +36,7 @@ struct AlertListing: Codable, Identifiable {
     var listing: Listing {
         Listing(id: "fb:\(id)", title: title, priceText: priceText,
                 locationText: locationText, conditionText: condition.isEmpty ? nil : condition,
-                thumbnailURL: URL(string: thumbnailURL),
+                thumbnailURL: URL(string: thumbnailURL).flatMap { $0.scheme == "https" ? $0 : nil },
                 itemURL: URL(string: "https://www.facebook.com/marketplace/item/\(id)/"),
                 cardIndex: 0, capturedAt: Date())
     }
@@ -46,6 +48,11 @@ struct AlertMatch: Decodable, Identifiable {
     var matchedAt: Date
     var viewedAt: Date?
     var id: String { listing.id }
+    var displayedListing: Listing {
+        var value = listing.listing
+        value.capturedAt = matchedAt
+        return value
+    }
 }
 
 struct AlertNotificationGroup: Decodable, Identifiable {
@@ -147,10 +154,14 @@ final class ListingAlertsService {
         var source: String?
         var listingID: String?
         var beforeAlertID: String?
+        var minPrice: Int?
+        var maxPrice: Int?
+        var filter: String?
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
     struct AlertList: Decodable { var alerts: [ListingAlert] }
+    struct Inbox: Decodable { var items: [AlertInboxItem] }
     struct NotificationFeed: Decodable { var groups: [AlertNotificationGroup] }
     struct MatchList: Decodable { var matches: [AlertMatch]; var notification: AlertNotificationDetails? }
     struct WorkList: Decodable { var work: [AlertWork] }
@@ -213,4 +224,60 @@ struct AlertSchedule {
         guard let hour = calendar.dateInterval(of: .hour, for: now) else { return now }
         return now.timeIntervalSince(hour.start) < hour.duration / 2 ? hour.start : hour.end
     }
+}
+
+struct AlertPriceInput {
+    var minimum = ""
+    var maximum = ""
+
+    var minPrice: Int? { Int(minimum.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    var maxPrice: Int? { Int(maximum.trimmingCharacters(in: .whitespacesAndNewlines)) }
+
+    var validationMessage: String? {
+        for text in [minimum, maximum] {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard trimmed.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let value = Int(trimmed), (0...2_147_483_647).contains(value) else {
+                return "Enter whole prices from 0 to 2,147,483,647."
+            }
+        }
+        if let minPrice, let maxPrice, minPrice > maxPrice {
+            return "Minimum price must not exceed maximum price."
+        }
+        return nil
+    }
+
+    static func summary(min: Int?, max: Int?) -> String {
+        switch (min, max) {
+        case let (min?, max?): return "\(min.formatted())–\(max.formatted())"
+        case let (min?, nil): return "\(min.formatted()) or more"
+        case let (nil, max?): return "Up to \(max.formatted())"
+        case (nil, nil): return "Any price"
+        }
+    }
+}
+
+struct AlertInboxItem: Decodable, Identifiable {
+    let notificationID: String
+    let alertID: String
+    let query: String
+    let listing: AlertListing
+    let createdAt: Date
+    let createdCursor: String
+    var viewedAt: Date?
+    var savedAt: Date?
+
+    var id: String { notificationID + ":" + listing.id }
+    var saveContext: AlertSaveContext { .init(alertID: alertID, notificationID: notificationID) }
+    var displayedListing: Listing {
+        var value = listing.listing
+        value.capturedAt = createdAt
+        return value
+    }
+}
+
+enum AlertInboxFilter: String, CaseIterable {
+    case all, unread, saved
+    var title: String { rawValue.capitalized }
 }

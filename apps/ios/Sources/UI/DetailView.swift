@@ -9,6 +9,7 @@ struct DetailView: View {
     let listing: Listing
     let namespace: Namespace.ID
     let referrer: Analytics.Surface
+    let alertSaveContext: AlertSaveContext?
 
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
@@ -23,10 +24,11 @@ struct DetailView: View {
     @StateObject private var sellerAccess = SellerAccess()
     @EnvironmentObject private var following: FollowedSellers
 
-    init(listing: Listing, namespace: Namespace.ID, referrer: Analytics.Surface) {
+    init(listing: Listing, namespace: Namespace.ID, referrer: Analytics.Surface, alertSaveContext: AlertSaveContext? = nil) {
         self.listing = listing
         self.namespace = namespace
         self.referrer = referrer
+        self.alertSaveContext = alertSaveContext
         _current = State(initialValue: listing)
     }
 
@@ -174,7 +176,7 @@ struct DetailView: View {
             // Record before flagging, so the saved-items screen always has a
             // card to draw even when this fires before enrichment lands.
             store.remember(current)
-            withAnimation(.snappy(duration: 0.2)) { saved.toggle(current) }
+            withAnimation(.snappy(duration: 0.2)) { saved.toggle(current, alertContext: alertSaveContext) }
             // `isSaved` is the state before the toggle, so the event names what
             // just happened. Two events, because a bookmark rate and a regret
             // rate are different questions.

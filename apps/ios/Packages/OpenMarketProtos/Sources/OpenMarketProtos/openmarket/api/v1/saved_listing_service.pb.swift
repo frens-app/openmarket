@@ -282,6 +282,32 @@ public nonisolated struct Openmarket_Api_V1_SavedListingSnapshot: @unchecked Sen
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
+/// The alert match from which the user chose Save. Retained in offline retries.
+public nonisolated struct Openmarket_Api_V1_ListingAlertSaveSource: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var alertID: String = String()
+
+  public var notificationID: String {
+    get {_notificationID ?? String()}
+    set {_notificationID = newValue}
+  }
+  /// Returns true if `notificationID` has been explicitly set.
+  public var hasNotificationID: Bool {self._notificationID != nil}
+  /// Clears the value of `notificationID`. Subsequent reads from it will return its default value.
+  public mutating func clearNotificationID() {self._notificationID = nil}
+
+  public var source: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _notificationID: String? = nil
+}
+
 public nonisolated struct Openmarket_Api_V1_SavedListingChange: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -320,6 +346,15 @@ public nonisolated struct Openmarket_Api_V1_SavedListingChange: Sendable {
   /// Clears the value of `savedAt`. Subsequent reads from it will return its default value.
   public mutating func clearSavedAt() {self._savedAt = nil}
 
+  public var alertSource: Openmarket_Api_V1_ListingAlertSaveSource {
+    get {_alertSource ?? Openmarket_Api_V1_ListingAlertSaveSource()}
+    set {_alertSource = newValue}
+  }
+  /// Returns true if `alertSource` has been explicitly set.
+  public var hasAlertSource: Bool {self._alertSource != nil}
+  /// Clears the value of `alertSource`. Subsequent reads from it will return its default value.
+  public mutating func clearAlertSource() {self._alertSource = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -327,6 +362,7 @@ public nonisolated struct Openmarket_Api_V1_SavedListingChange: Sendable {
   fileprivate var _saved: Bool? = nil
   fileprivate var _snapshot: Openmarket_Api_V1_SavedListingSnapshot? = nil
   fileprivate var _savedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _alertSource: Openmarket_Api_V1_ListingAlertSaveSource? = nil
 }
 
 public nonisolated struct Openmarket_Api_V1_ApplySavedListingChangesRequest: Sendable {
@@ -691,9 +727,53 @@ nonisolated extension Openmarket_Api_V1_SavedListingSnapshot: SwiftProtobuf.Mess
   }
 }
 
+nonisolated extension Openmarket_Api_V1_ListingAlertSaveSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListingAlertSaveSource"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}alert_id\0\u{3}notification_id\0\u{1}source\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.alertID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._notificationID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.source) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.alertID.isEmpty {
+      try visitor.visitSingularStringField(value: self.alertID, fieldNumber: 1)
+    }
+    try { if let v = self._notificationID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    if !self.source.isEmpty {
+      try visitor.visitSingularStringField(value: self.source, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Openmarket_Api_V1_ListingAlertSaveSource, rhs: Openmarket_Api_V1_ListingAlertSaveSource) -> Bool {
+    if lhs.alertID != rhs.alertID {return false}
+    if lhs._notificationID != rhs._notificationID {return false}
+    if lhs.source != rhs.source {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Openmarket_Api_V1_SavedListingChange: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SavedListingChange"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}mutation_id\0\u{3}facebook_listing_id\0\u{1}saved\0\u{1}snapshot\0\u{3}saved_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}mutation_id\0\u{3}facebook_listing_id\0\u{1}saved\0\u{1}snapshot\0\u{3}saved_at\0\u{3}alert_source\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -706,6 +786,7 @@ nonisolated extension Openmarket_Api_V1_SavedListingChange: SwiftProtobuf.Messag
       case 3: try { try decoder.decodeSingularBoolField(value: &self._saved) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._snapshot) }()
       case 5: try { try decoder.decodeSingularMessageField(value: &self._savedAt) }()
+      case 6: try { try decoder.decodeSingularMessageField(value: &self._alertSource) }()
       default: break
       }
     }
@@ -731,6 +812,9 @@ nonisolated extension Openmarket_Api_V1_SavedListingChange: SwiftProtobuf.Messag
     try { if let v = self._savedAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
     } }()
+    try { if let v = self._alertSource {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -740,6 +824,7 @@ nonisolated extension Openmarket_Api_V1_SavedListingChange: SwiftProtobuf.Messag
     if lhs._saved != rhs._saved {return false}
     if lhs._snapshot != rhs._snapshot {return false}
     if lhs._savedAt != rhs._savedAt {return false}
+    if lhs._alertSource != rhs._alertSource {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

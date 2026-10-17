@@ -18,11 +18,14 @@ import (
 	"frens.lol/openmarket/backend/pkg/config"
 	"frens.lol/openmarket/backend/pkg/db"
 	"frens.lol/openmarket/backend/pkg/llm"
+	v1 "frens.lol/openmarket/backend/pkg/protos/openmarket/api/v1"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type fakeAlertPush struct {
@@ -87,6 +90,52 @@ func TestAlertValidation(t *testing.T) {
 		}
 	}
 }
+func TestAlertPriceValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		min, max *int
+		valid    bool
+	}{
+		{"any", nil, nil, true},
+		{"minimum", intPtr(10), nil, true},
+		{"maximum", nil, intPtr(100), true},
+		{"free", nil, intPtr(0), true},
+		{"equal", intPtr(50), intPtr(50), true},
+		{"range", intPtr(10), intPtr(100), true},
+		{"limit", nil, intPtr(2147483647), true},
+		{"negative minimum", intPtr(-1), nil, false},
+		{"negative maximum", nil, intPtr(-1), false},
+		{"too large", nil, intPtr(2147483648), false},
+		{"reversed", intPtr(100), intPtr(10), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := alertRequest{Query: "Switch", Location: alertLocation{CitySlug: "toronto", RadiusKM: 16}, MinPrice: tc.min, MaxPrice: tc.max}
+			if err := validateAlert(r); (err == nil) != tc.valid {
+				t.Fatalf("validation = %v, valid = %v", err, tc.valid)
+			}
+		})
+	}
+}
+
+func intPtr(value int) *int { return &value }
+
+func TestAlertEvaluationPriceRequirements(t *testing.T) {
+	for _, tc := range []struct {
+		min, max *int
+		want     string
+	}{
+		{nil, nil, ""},
+		{intPtr(10), nil, "Minimum price: 10 (inclusive)."},
+		{nil, intPtr(0), "Maximum price: 0 (inclusive)."},
+		{intPtr(10), intPtr(100), "Minimum price: 10 (inclusive). Maximum price: 100 (inclusive)."},
+	} {
+		target := alertEvaluationTarget("Switch OLED", tc.min, tc.max)
+		if target.Title != "Switch OLED" || !strings.HasPrefix(target.Description, tc.want) || (tc.want == "" && target.Description != "") {
+			t.Fatalf("unexpected target: %+v", target)
+		}
+	}
+}
+
 func TestAlertsHTTPRequiresAuthentication(t *testing.T) {
 	s := &alertsServer{logger: zap.NewNop()}
 	w := httptest.NewRecorder()
@@ -171,6 +220,228 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		return v.(map[string]any)["work"].([]alertWork)
 	}
+
+	for _, tc := range []struct {
+		name     string
+		min, max *int
+	}{
+		{"any", nil, nil}, {"minimum", intPtr(10), nil},
+		{"maximum", nil, intPtr(100)}, {"range", intPtr(10), intPtr(100)},
+		{"free", nil, intPtr(0)},
+	} {
+		t.Run("saved price limits "+tc.name, func(t *testing.T) {
+			s, c, user, _, _, evaluator := fixture(t)
+			request := alertRequest{Query: "Switch OLED", Location: alertLocation{CitySlug: "toronto", RadiusKM: 16}, MinPrice: tc.min, MaxPrice: tc.max}
+			created, err := s.handle(c, "create", request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := created.(map[string]string)["id"]
+			listed, err := s.list(c, user)
+			if err != nil {
+				t.Fatal(err)
+			}
+			alert := listed.(map[string]any)["alerts"].([]listingAlert)[0]
+			assertBounds := func(min, max *int) {
+				t.Helper()
+				if (min == nil) != (tc.min == nil) || (max == nil) != (tc.max == nil) ||
+					(min != nil && *min != *tc.min) || (max != nil && *max != *tc.max) {
+					t.Fatalf("price limits did not round trip: %v/%v", min, max)
+				}
+			}
+			assertBounds(alert.MinPrice, alert.MaxPrice)
+			encoded, _ := json.Marshal(alert)
+			if (tc.min == nil && strings.Contains(string(encoded), `"minPrice"`)) || (tc.max == nil && strings.Contains(string(encoded), `"maxPrice"`)) {
+				t.Fatal("unset bounds must be omitted", string(encoded))
+			}
+			exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 minute' WHERE id=$1`, id)
+			dispatch(t, s)
+			work := getWork(t, s, c)[0]
+			assertBounds(work.SearchOptions.MinPrice, work.SearchOptions.MaxPrice)
+			traced, err := s.handle(c, "work", alertRequest{Trigger: "foreground"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fetch := traced.(map[string]any)["work"].([]alertWork)[0]
+			var snapshot []byte
+			if err = pool.QueryRow(ctx, `SELECT search_request FROM listing_alert_background_fetch_attempts WHERE id=$1`, fetch.FetchAttemptID).Scan(&snapshot); err != nil {
+				t.Fatal(err)
+			}
+			var saved alertWork
+			if err = json.Unmarshal(snapshot, &saved); err != nil {
+				t.Fatal(err)
+			}
+			assertBounds(saved.SearchOptions.MinPrice, saved.SearchOptions.MaxPrice)
+			_, err = s.handle(c, "page", alertRequest{CheckID: work.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "123", Title: "Switch OLED", PriceText: "$50"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = s.evaluateBatch(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if len(evaluator.inputs) != 1 || evaluator.inputs[0].Target != alertEvaluationTarget(request.Query, tc.min, tc.max) {
+				t.Fatal("saved limits did not reach evaluator", evaluator.inputs)
+			}
+		})
+	}
+
+	t.Run("flat inbox pagination filters and atomic save attribution", func(t *testing.T) {
+		s, c, user, _, _, _ := fixture(t)
+		_, otherContext, otherUser, _, _, _ := fixture(t)
+		seed := func(alertID string, count int) string {
+			t.Helper()
+			var checkID, notificationID string
+			if err := pool.QueryRow(ctx, `INSERT INTO listing_alert_check_runs(alert_id,scan_complete,completed_at) VALUES($1,true,now()) RETURNING id`, alertID).Scan(&checkID); err != nil {
+				t.Fatal(err)
+			}
+			ids := []string{}
+			for i := 0; i < count; i++ {
+				id := fmt.Sprint(1000 + i)
+				ids = append(ids, id)
+				raw, _ := json.Marshal(alertListing{ID: id, Title: "Switch OLED", PriceText: "$50"})
+				exec(t, `INSERT INTO listing_alert_listings(alert_id,listing_id,check_id,listing,matched,matched_at) VALUES($1,$2,$3,$4,true,now())`, alertID, id, checkID, raw)
+			}
+			if err := pool.QueryRow(ctx, `INSERT INTO listing_alert_notification_outbox(alert_id,check_id,listing_ids,created_at) VALUES($1,$2,$3,'2026-10-17T12:34:56.123456Z') RETURNING id`, alertID, checkID, ids).Scan(&notificationID); err != nil {
+				t.Fatal(err)
+			}
+			return notificationID
+		}
+		firstAlert, secondAlert := create(t, s, c), create(t, s, c)
+		firstNotification, secondNotification := seed(firstAlert, 55), seed(secondAlert, 2)
+		inbox := func(owner uuid.UUID, request alertRequest) []alertInboxItem {
+			t.Helper()
+			out, err := s.inbox(ctx, owner, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return out.(map[string]any)["items"].([]alertInboxItem)
+		}
+		listingID := func(item alertInboxItem) string {
+			var listing alertListing
+			if err := json.Unmarshal(item.Listing, &listing); err != nil {
+				t.Fatal(err)
+			}
+			return listing.ID
+		}
+		page := inbox(user, alertRequest{})
+		if len(page) != 50 {
+			t.Fatalf("first inbox page = %d", len(page))
+		}
+		last := page[len(page)-1]
+		before, err := time.Parse(time.RFC3339Nano, last.CreatedCursor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next := inbox(user, alertRequest{Before: &before, NotificationID: last.NotificationID, BeforeID: listingID(last)})
+		if len(next) != 7 {
+			t.Fatalf("next inbox page = %d", len(next))
+		}
+		seen := map[string]bool{}
+		for _, item := range append(page, next...) {
+			key := item.NotificationID + ":" + listingID(item)
+			if seen[key] {
+				t.Fatal("duplicate inbox row", key)
+			}
+			seen[key] = true
+			if item.CreatedCursor != "2026-10-17T12:34:56.123456Z" {
+				t.Fatal("lost cursor precision")
+			}
+		}
+		if len(inbox(otherUser, alertRequest{})) != 0 {
+			t.Fatal("inbox leaked to another account")
+		}
+		for _, request := range []alertRequest{{Filter: "invalid"}, {Before: &before, NotificationID: "bad", BeforeID: "1000"}} {
+			if _, err := s.inbox(ctx, user, request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatal("accepted invalid inbox request", err)
+			}
+		}
+		saves := &savedListingServer{pool: pool, queries: db.New(pool)}
+		makeSave := func(alert, notification string) *v1.SavedListingChange {
+			now := timestamppb.Now()
+			return &v1.SavedListingChange{MutationId: uuid.NewString(), FacebookListingId: "1000", Saved: proto.Bool(true), SavedAt: now,
+				Snapshot:    &v1.SavedListingSnapshot{FacebookListingId: "1000", Title: proto.String("Switch OLED"), CardObservedAt: now},
+				AlertSource: &v1.ListingAlertSaveSource{AlertId: alert, NotificationId: &notification, Source: "alerts_tab"}}
+		}
+		change := makeSave(firstAlert, firstNotification)
+		for i := 0; i < 2; i++ {
+			response, err := saves.ApplySavedListingChanges(c, connect.NewRequest(&v1.ApplySavedListingChangesRequest{Changes: []*v1.SavedListingChange{change}}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(response.Msg.Results) != 1 || response.Msg.Results[0].Error != "" {
+				t.Fatal("save endpoint rejected attribution", response.Msg)
+			}
+		}
+		var saveCount, eventCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM saved_listings s JOIN listings l ON l.id=s.listing_id WHERE s.user_id=$1 AND l.facebook_listing_id='1000'`, user).Scan(&saveCount); err != nil || saveCount != 1 {
+			t.Fatal("save endpoint did not save", saveCount, err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM listing_alert_interactions WHERE alert_id=$1 AND notification_id=$2 AND listing_id='1000' AND kind='listing_saved'`, firstAlert, firstNotification).Scan(&eventCount); err != nil || eventCount != 1 {
+			t.Fatal("save attribution not idempotent", eventCount, err)
+		}
+		var savedAt time.Time
+		if err := pool.QueryRow(ctx, `SELECT saved_at FROM listing_alert_listings WHERE alert_id=$1 AND listing_id='1000'`, firstAlert).Scan(&savedAt); err != nil {
+			t.Fatal(err)
+		}
+		var otherSaved *time.Time
+		if err := pool.QueryRow(ctx, `SELECT saved_at FROM listing_alert_listings WHERE alert_id=$1 AND listing_id='1000'`, secondAlert).Scan(&otherSaved); err != nil || otherSaved != nil {
+			t.Fatal("attributed to wrong alert", err)
+		}
+		if len(inbox(user, alertRequest{Filter: "saved"})) != 2 {
+			t.Fatal("saved filter must reflect current bookmark across both matches")
+		}
+		groups, err := s.notificationFeed(ctx, user, alertRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, group := range groups.(map[string]any)["groups"].([]alertNotificationGroup) {
+			if group.SeenAt != nil {
+				t.Fatal("saving marked notification read")
+			}
+		}
+		if err := s.recordInteraction(c, user, alertRequest{ID: firstAlert, NotificationID: firstNotification, ListingID: "1000", InteractionID: uuid.NewString(), Event: "listing_saved", Source: "alerts_tab"}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatal("save engagement was accepted outside the saved-listing endpoint", err)
+		}
+		opened := alertRequest{ID: firstAlert, NotificationID: firstNotification, ListingID: "1000", InteractionID: uuid.NewString(), Event: "listing_opened", Source: "alerts_tab"}
+		if err := s.recordInteraction(c, user, opened); err != nil {
+			t.Fatal(err)
+		}
+		unread := inbox(user, alertRequest{Filter: "unread"})
+		for _, item := range unread {
+			if item.AlertID == firstAlert && listingID(item) == "1000" {
+				t.Fatal("opened listing stayed unread")
+			}
+		}
+		// A foreign account or mismatched batch cannot attribute a save to this match.
+		if err := saves.apply(otherContext, otherUser, makeSave(secondAlert, secondNotification)); err != nil {
+			t.Fatal(err)
+		}
+		if err := saves.apply(ctx, user, makeSave(secondAlert, firstNotification)); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT saved_at FROM listing_alert_listings WHERE alert_id=$1 AND listing_id='1000'`, secondAlert).Scan(&otherSaved); err != nil || otherSaved != nil {
+			t.Fatal("invalid attribution accepted", err)
+		}
+		remove := &v1.SavedListingChange{MutationId: uuid.NewString(), FacebookListingId: "1000", Saved: proto.Bool(false)}
+		if err := saves.apply(ctx, user, remove); err != nil {
+			t.Fatal(err)
+		}
+		if err := saves.apply(ctx, user, change); err != nil {
+			t.Fatal(err)
+		} // Lost save acknowledgment after an unsave.
+		if len(inbox(user, alertRequest{Filter: "saved"})) != 0 {
+			t.Fatal("old retry recreated removed save")
+		}
+		var retained time.Time
+		if err := pool.QueryRow(ctx, `SELECT saved_at FROM listing_alert_listings WHERE alert_id=$1 AND listing_id='1000'`, firstAlert).Scan(&retained); err != nil || !retained.Equal(savedAt) {
+			t.Fatal("unsave erased save history", err)
+		}
+		stale := makeSave(secondAlert, secondNotification)
+		exec(t, `DELETE FROM user_listing_alerts WHERE id=$1`, secondAlert)
+		if err := saves.apply(ctx, user, stale); err != nil {
+			t.Fatal("deleted alert prevented offline save", err)
+		}
+	})
 
 	for _, provider := range []string{"GOOGLE", "APPLE"} {
 		t.Run("alerts require linked "+provider, func(t *testing.T) {
@@ -475,7 +746,7 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		s.searchOptions = options
 		updated := getWork(t, s, c)
-		if len(updated) != 1 || updated[0].ID != initial[0].ID || updated[0].SearchOptions.Sort != "price_ascend" || updated[0].SearchOptions.MaxPrice == nil || *updated[0].SearchOptions.MaxPrice != 100 || len(p.sent) != 1 {
+		if len(updated) != 1 || updated[0].ID != initial[0].ID || updated[0].SearchOptions.Sort != "price_ascend" || updated[0].SearchOptions.MinPrice != nil || updated[0].SearchOptions.MaxPrice != nil || len(p.sent) != 1 {
 			t.Fatalf("settings did not update for existing check: %+v", updated)
 		}
 		encoded, err := json.Marshal(updated[0])
@@ -1304,10 +1575,10 @@ func TestListingAlertMigrationUpgradesMain(t *testing.T) {
 		t.Fatalf("legacy notification migration: %d/%d/%d %v", pending, succeeded, unknown, err)
 	}
 	var preserved bool
-	if err = pool.QueryRow(ctx, `SELECT alert_hour=0 AND alert_minute=0 AND time_zone='UTC' FROM user_listing_alerts WHERE id=$1`, legacyAlert).Scan(&preserved); err != nil || !preserved {
+	if err = pool.QueryRow(ctx, `SELECT alert_hour=0 AND alert_minute=0 AND time_zone='UTC' AND min_price IS NULL AND max_price IS NULL FROM user_listing_alerts WHERE id=$1`, legacyAlert).Scan(&preserved); err != nil || !preserved {
 		t.Fatal("legacy schedule changed", err)
 	}
-	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 27 {
+	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 29 {
 		t.Fatalf("migration version = %d, error = %v", version, err)
 	}
 	assertMainData()

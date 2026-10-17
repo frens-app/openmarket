@@ -51,15 +51,17 @@ func (s *alertsServer) fetchWork(ctx context.Context, user, session uuid.UUID, i
 		}
 		checkID = &id
 	}
-	rows, err := tx.Query(ctx, `SELECT c.id,a.id,a.query,a.location,c.cursor,c.facebook_actor,c.page_number FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete AND ($3::uuid IS NULL OR c.id=$3) ORDER BY c.created_at LIMIT 3 FOR UPDATE OF a,c`, user, device, checkID)
+	rows, err := tx.Query(ctx, `SELECT c.id,a.id,a.query,a.min_price,a.max_price,a.location,c.cursor,c.facebook_actor,c.page_number FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id WHERE a.user_id=$1 AND a.device_id=$2 AND NOT a.paused AND c.completed_at IS NULL AND NOT c.scan_complete AND ($3::uuid IS NULL OR c.id=$3) ORDER BY c.created_at LIMIT 3 FOR UPDATE OF a,c`, user, device, checkID)
 	if err != nil {
 		return nil, err
 	}
 	work := []alertWork{}
 	for rows.Next() {
 		var v alertWork
+		// Saved bounds, including nil, replace legacy global price settings.
+		v.SearchOptions = s.searchOptions
 		var location []byte
-		if err = rows.Scan(&v.ID, &v.AlertID, &v.Query, &location, &v.Cursor, &v.Actor, &v.PageNumber); err != nil {
+		if err = rows.Scan(&v.ID, &v.AlertID, &v.Query, &v.SearchOptions.MinPrice, &v.SearchOptions.MaxPrice, &location, &v.Cursor, &v.Actor, &v.PageNumber); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -70,7 +72,6 @@ func (s *alertsServer) fetchWork(ctx context.Context, user, session uuid.UUID, i
 		if hasDeviceLocation {
 			v.Location = in.Location
 		}
-		v.SearchOptions = s.searchOptions
 		work = append(work, v)
 	}
 	err = rows.Err()

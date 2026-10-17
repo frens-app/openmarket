@@ -4,6 +4,122 @@ import SwiftUI
 
 @MainActor
 final class ListingAlertsTests: XCTestCase {
+    func testInboxKeepsListingAndNotificationIdentity() throws {
+        let json = #"{"items":[{"notificationID":"batch","alertID":"alert","query":"Plants","listing":{"id":"123","title":"Anthurium","priceText":"CA$68","locationText":"Toronto","thumbnailURL":"","description":"","condition":""},"createdAt":"2026-10-17T12:34:56.123456Z","createdCursor":"2026-10-17T12:34:56.123456Z","viewedAt":null,"savedAt":"2026-10-17T13:00:00Z"}]}"#
+        let item = try XCTUnwrap(ListingAlertsService.decoder().decode(ListingAlertsService.Inbox.self, from: Data(json.utf8)).items.first)
+        XCTAssertEqual(item.id, "batch:123")
+        XCTAssertEqual(item.saveContext.notificationID, "batch")
+        XCTAssertEqual(item.saveContext.alertID, "alert")
+        XCTAssertNil(item.viewedAt)
+        XCTAssertNotNil(item.savedAt)
+        XCTAssertEqual(item.displayedListing.capturedAt, item.createdAt)
+        XCTAssertNil(item.displayedListing.thumbnailURL)
+        let request = ListingAlertsService.Request(beforeID: item.listing.id, before: item.createdCursor,
+            notificationID: item.notificationID, filter: "saved")
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(encoded["beforeID"] as? String, "123")
+        XCTAssertEqual(encoded["notificationID"] as? String, "batch")
+        XCTAssertEqual(encoded["filter"] as? String, "saved")
+        XCTAssertEqual(encoded["before"] as? String, "2026-10-17T12:34:56.123456Z")
+    }
+
+    func testFlatInboxRendersInLightAndDarkMode() async throws {
+        let now = Date()
+        let samples = [("Variegated anthurium", "CA$68"), ("Anthurium ‘African Mask’ Pink variegated", "CA$200"),
+            ("Nintendo Switch OLED", "CA$280"), ("Monstera albo variegata", "CA$150"), ("Sony A7 III", "CA$1,200")]
+        let items = samples.enumerated().map { index, sample in
+            AlertInboxItem(notificationID: "batch", alertID: "alert", query: "Plants",
+                listing: AlertListing(id: String(index), title: sample.0, priceText: sample.1,
+                    locationText: "Toronto, ON", thumbnailURL: "", description: "", condition: ""),
+                createdAt: now.addingTimeInterval(-Double(index + 1) * 3600), createdCursor: "", viewedAt: index == 4 ? now : nil, savedAt: nil)
+        }
+        for scheme in [ColorScheme.light, .dark] {
+            let content = NavigationStack {
+                List {
+                    AlertInboxFilters(selection: .constant(.all)).listRowSeparator(.hidden)
+                    Section {
+                        ForEach(items) { item in
+                            AlertInboxRow(item: item, isSaved: item.listing.id == "2", open: {}, save: {})
+                                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 12))
+                        }
+                    } header: { Text("Today").textCase(nil) }
+                    Section {
+                        AlertInboxRow(item: items[0], isSaved: false, open: {}, save: {})
+                    } header: { Text("Yesterday").textCase(nil) }
+                }
+                .listStyle(.plain).navigationTitle("Alerts")
+                .toolbar { Image(systemName: "ellipsis.circle") }
+            }.environment(\.colorScheme, scheme)
+            let controller = UIHostingController(rootView: content)
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = controller; window.makeKeyAndVisible()
+            defer { window.isHidden = true }
+            try await Task.sleep(for: .milliseconds(250))
+            controller.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+                controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Flat alert inbox \(scheme)"; attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
+    func testOptionalPriceInputAndRequestEncoding() throws {
+        for (minimum, maximum, min, max) in [
+            ("", "", nil, nil), ("10", "", 10, nil), ("", "100", nil, 100),
+            ("10", "100", 10, 100), ("", "0", nil, 0), ("50", "50", 50, 50),
+            ("  ", " 100 ", nil, 100)
+        ] as [(String, String, Int?, Int?)] {
+            let input = AlertPriceInput(minimum: minimum, maximum: maximum)
+            XCTAssertNil(input.validationMessage)
+            XCTAssertEqual(input.minPrice, min)
+            XCTAssertEqual(input.maxPrice, max)
+            let request = ListingAlertsService.Request(query: "Switch", minPrice: input.minPrice, maxPrice: input.maxPrice)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+            XCTAssertEqual(json["minPrice"] as? Int, min)
+            XCTAssertEqual(json["maxPrice"] as? Int, max)
+            if min == nil { XCTAssertNil(json["minPrice"]) }
+            if max == nil { XCTAssertNil(json["maxPrice"]) }
+        }
+        for (minimum, maximum) in [("-1", ""), ("", "-1"), ("10", "5"), ("1.5", ""), ("abc", ""), ("", "2147483648"), ("", "999999999999999999999999"), ("+10", "")] {
+            XCTAssertNotNil(AlertPriceInput(minimum: minimum, maximum: maximum).validationMessage)
+        }
+    }
+
+    func testSavedAlertDecodesOptionalPriceBounds() throws {
+        let json = #"{"id":"alert","query":"Switch","location":{"citySlug":"toronto","name":"Toronto","radiusKM":16,"latitude":43,"longitude":-79},"createdAt":"2026-10-17T12:00:00Z","alertHour":12,"nextCheckAt":"2026-10-18T12:00:00Z","paused":false,"matchCount":0,"unreadCount":0}"#
+        let legacy = try ListingAlertsService.decoder().decode(ListingAlert.self, from: Data(json.utf8))
+        XCTAssertNil(legacy.minPrice)
+        XCTAssertNil(legacy.maxPrice)
+        let bounded = json.replacingOccurrences(of: #""query":"Switch""#, with: #""query":"Switch","minPrice":0,"maxPrice":100"#)
+        let alert = try ListingAlertsService.decoder().decode(ListingAlert.self, from: Data(bounded.utf8))
+        XCTAssertEqual(alert.minPrice, 0)
+        XCTAssertEqual(alert.maxPrice, 100)
+    }
+
+    func testPriceFieldsRenderCollapsedAndExpanded() async throws {
+        for expanded in [false, true] {
+            let content = Form {
+                AlertPriceFields(input: .constant(AlertPriceInput()), expanded: .constant(expanded))
+            }.frame(width: 390, height: 480)
+            let controller = UIHostingController(rootView: content)
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 480))
+            window.rootViewController = controller
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true }
+            try await Task.sleep(for: .milliseconds(200))
+            controller.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+                controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Alert price fields \(expanded ? "expanded" : "collapsed")"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     func testNotificationNavigationKeepsNotificationID() {
         let coordinator = ListingAlertCoordinator.shared
         coordinator.open("alert", notificationID: "notification")
@@ -35,24 +151,6 @@ final class ListingAlertsTests: XCTestCase {
         let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(cursor)) as? [String: Any])
         XCTAssertEqual(encoded["before"] as? String, "2026-10-17T12:34:56.123456Z")
         XCTAssertEqual(encoded["beforeID"] as? String, "notification-a")
-    }
-
-    func testNotificationRowsRender() throws {
-        let previews = (0..<4).map { AlertListing(id: String($0), title: "Anthurium", priceText: "$15", locationText: "Toronto", thumbnailURL: "", description: "", condition: "") }
-        let content = VStack(spacing: 16) {
-            AlertNotificationRow(group: .init(id: "multiple", alertID: "alert", query: "Anthurium", createdAt: Date(), createdCursor: "", matchCount: 13, unreadCount: 13, previews: previews))
-                .padding(16).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-            AlertNotificationRow(group: .init(id: "single", alertID: "alert", query: "Anthurium", createdAt: Date().addingTimeInterval(-172800), createdCursor: "", matchCount: 1, unreadCount: 1, seenAt: Date(), previews: Array(previews.prefix(1))))
-                .padding(16).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-        }.padding(16).frame(width: 390).background(Color(.systemGroupedBackground))
-        for scheme in [ColorScheme.light, .dark] {
-            let renderer = ImageRenderer(content: content.environment(\.colorScheme, scheme))
-            renderer.scale = 2
-            let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
-            attachment.name = "Alert notification groups \(scheme)"
-            attachment.lifetime = .keepAlways
-            add(attachment)
-        }
     }
 
     func testWorkUsesSuggestedAvailableSearchAndSavedLocation() throws {

@@ -43,6 +43,13 @@ message SavedListingSnapshot {
   optional string original_price_amount_decimal = 28 [(buf.validate.field).string.pattern = "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,2})?$"];
 }
 
+// The alert match from which the user chose Save. Retained in offline retries.
+message ListingAlertSaveSource {
+  string alert_id = 1 [(buf.validate.field).string.uuid = true];
+  optional string notification_id = 2 [(buf.validate.field).string.uuid = true];
+  string source = 3 [(buf.validate.field).string = {in: ["alerts_tab", "notification", "creation"]}];
+}
+
 message SavedListingChange {
   string mutation_id = 1 [(buf.validate.field).string.uuid = true];
   string facebook_listing_id = 2 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
@@ -51,6 +58,7 @@ message SavedListingChange {
   SavedListingSnapshot snapshot = 4;
   // When the user saved it. Legacy imports use their import time.
   google.protobuf.Timestamp saved_at = 5;
+  ListingAlertSaveSource alert_source = 6;
 }
 
 message ApplySavedListingChangesRequest {

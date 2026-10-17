@@ -48,6 +48,8 @@ type alertLocation struct {
 type listingAlert struct {
 	ID            string        `json:"id"`
 	Query         string        `json:"query"`
+	MinPrice      *int          `json:"minPrice,omitempty"`
+	MaxPrice      *int          `json:"maxPrice,omitempty"`
 	Location      alertLocation `json:"location"`
 	CreatedAt     time.Time     `json:"createdAt"`
 	AlertHour     int           `json:"alertHour"`
@@ -69,6 +71,7 @@ type alertListing struct {
 	Condition    string `json:"condition"`
 }
 type alertRequest struct {
+	Filter         string         `json:"filter"`
 	BeforeAlertID  string         `json:"beforeAlertID"`
 	InteractionID  string         `json:"interactionID"`
 	NotificationID string         `json:"notificationID"`
@@ -84,6 +87,8 @@ type alertRequest struct {
 	FailureCode    string         `json:"failureCode"`
 	ID             string         `json:"id"`
 	Query          string         `json:"query"`
+	MinPrice       *int           `json:"minPrice,omitempty"`
+	MaxPrice       *int           `json:"maxPrice,omitempty"`
 	Location       alertLocation  `json:"location"`
 	Paused         bool           `json:"paused"`
 	CheckID        string         `json:"checkID"`
@@ -178,6 +183,8 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 	switch action {
 	case "interaction":
 		return nil, s.recordInteraction(ctx, userID, in)
+	case "inbox":
+		return s.inbox(ctx, userID, in)
 	case "notification-feed":
 		return s.notificationFeed(ctx, userID, in)
 	case "feed":
@@ -227,7 +234,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		}
 		location, _ := json.Marshal(in.Location)
 		var id string
-		err = tx.QueryRow(ctx, `INSERT INTO user_listing_alerts(user_id,device_id,query,location,created_at,alert_hour,alert_minute,time_zone,next_check_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, userID, device, in.Query, location, now, hour, minute, zone, schedule).Scan(&id)
+		err = tx.QueryRow(ctx, `INSERT INTO user_listing_alerts(user_id,device_id,query,location,created_at,alert_hour,alert_minute,time_zone,next_check_at,min_price,max_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`, userID, device, in.Query, location, now, hour, minute, zone, schedule, in.MinPrice, in.MaxPrice).Scan(&id)
 		if err != nil {
 			return nil, err
 		}
@@ -350,6 +357,14 @@ var alertCity = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
 var alertListingID = regexp.MustCompile(`^[0-9]{1,40}$`)
 
 func validateAlert(in alertRequest) error {
+	for _, price := range []*int{in.MinPrice, in.MaxPrice} {
+		if price != nil && (*price < 0 || *price > 2147483647) {
+			return alertError(connect.CodeInvalidArgument, "Enter whole prices between 0 and 2147483647.")
+		}
+	}
+	if in.MinPrice != nil && in.MaxPrice != nil && *in.MinPrice > *in.MaxPrice {
+		return alertError(connect.CodeInvalidArgument, "Minimum price must not exceed maximum price.")
+	}
 	if in.AlertHour != nil || in.AlertMinute != nil || in.TimeZone != "" {
 		if in.AlertHour == nil || in.AlertMinute == nil || *in.AlertHour < 0 || *in.AlertHour > 23 || *in.AlertMinute < 0 || *in.AlertMinute > 59 || in.TimeZone == "" || in.TimeZone == "Local" || len(in.TimeZone) > 100 {
 			return alertError(connect.CodeInvalidArgument, "Choose a valid daily time and time zone.")
@@ -371,7 +386,7 @@ func validateAlertLocation(l alertLocation) error {
 	return nil
 }
 func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
-	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.location,a.created_at,a.alert_hour,a.alert_minute,a.time_zone,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM user_listing_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
+	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.min_price,a.max_price,a.location,a.created_at,a.alert_hour,a.alert_minute,a.time_zone,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM user_listing_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +395,7 @@ func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
 	for rows.Next() {
 		var a listingAlert
 		var location []byte
-		if err = rows.Scan(&a.ID, &a.Query, &location, &a.CreatedAt, &a.AlertHour, &a.AlertMinute, &a.TimeZone, &a.NextCheckAt, &a.LastCheckedAt, &a.Paused, &a.MatchCount, &a.UnreadCount); err != nil {
+		if err = rows.Scan(&a.ID, &a.Query, &a.MinPrice, &a.MaxPrice, &location, &a.CreatedAt, &a.AlertHour, &a.AlertMinute, &a.TimeZone, &a.NextCheckAt, &a.LastCheckedAt, &a.Paused, &a.MatchCount, &a.UnreadCount); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal(location, &a.Location); err != nil {

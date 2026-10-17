@@ -289,6 +289,67 @@ func (x *SavedListingSnapshot) GetOriginalPriceAmountDecimal() string {
 	return ""
 }
 
+// The alert match from which the user chose Save. Retained in offline retries.
+type ListingAlertSaveSource struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AlertId        string                 `protobuf:"bytes,1,opt,name=alert_id,json=alertId,proto3" json:"alert_id,omitempty"`
+	NotificationId *string                `protobuf:"bytes,2,opt,name=notification_id,json=notificationId,proto3,oneof" json:"notification_id,omitempty"`
+	Source         string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListingAlertSaveSource) Reset() {
+	*x = ListingAlertSaveSource{}
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListingAlertSaveSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListingAlertSaveSource) ProtoMessage() {}
+
+func (x *ListingAlertSaveSource) ProtoReflect() protoreflect.Message {
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListingAlertSaveSource.ProtoReflect.Descriptor instead.
+func (*ListingAlertSaveSource) Descriptor() ([]byte, []int) {
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListingAlertSaveSource) GetAlertId() string {
+	if x != nil {
+		return x.AlertId
+	}
+	return ""
+}
+
+func (x *ListingAlertSaveSource) GetNotificationId() string {
+	if x != nil && x.NotificationId != nil {
+		return *x.NotificationId
+	}
+	return ""
+}
+
+func (x *ListingAlertSaveSource) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
 type SavedListingChange struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	MutationId        string                 `protobuf:"bytes,1,opt,name=mutation_id,json=mutationId,proto3" json:"mutation_id,omitempty"`
@@ -297,14 +358,15 @@ type SavedListingChange struct {
 	Saved    *bool                 `protobuf:"varint,3,opt,name=saved,proto3,oneof" json:"saved,omitempty"`
 	Snapshot *SavedListingSnapshot `protobuf:"bytes,4,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
 	// When the user saved it. Legacy imports use their import time.
-	SavedAt       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=saved_at,json=savedAt,proto3" json:"saved_at,omitempty"`
+	SavedAt       *timestamppb.Timestamp  `protobuf:"bytes,5,opt,name=saved_at,json=savedAt,proto3" json:"saved_at,omitempty"`
+	AlertSource   *ListingAlertSaveSource `protobuf:"bytes,6,opt,name=alert_source,json=alertSource,proto3" json:"alert_source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SavedListingChange) Reset() {
 	*x = SavedListingChange{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[1]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -316,7 +378,7 @@ func (x *SavedListingChange) String() string {
 func (*SavedListingChange) ProtoMessage() {}
 
 func (x *SavedListingChange) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[1]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -329,7 +391,7 @@ func (x *SavedListingChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavedListingChange.ProtoReflect.Descriptor instead.
 func (*SavedListingChange) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{1}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SavedListingChange) GetMutationId() string {
@@ -367,6 +429,13 @@ func (x *SavedListingChange) GetSavedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *SavedListingChange) GetAlertSource() *ListingAlertSaveSource {
+	if x != nil {
+		return x.AlertSource
+	}
+	return nil
+}
+
 type ApplySavedListingChangesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Validate entries independently so one bad snapshot cannot block the queue.
@@ -377,7 +446,7 @@ type ApplySavedListingChangesRequest struct {
 
 func (x *ApplySavedListingChangesRequest) Reset() {
 	*x = ApplySavedListingChangesRequest{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[2]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +458,7 @@ func (x *ApplySavedListingChangesRequest) String() string {
 func (*ApplySavedListingChangesRequest) ProtoMessage() {}
 
 func (x *ApplySavedListingChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[2]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +471,7 @@ func (x *ApplySavedListingChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySavedListingChangesRequest.ProtoReflect.Descriptor instead.
 func (*ApplySavedListingChangesRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{2}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ApplySavedListingChangesRequest) GetChanges() []*SavedListingChange {
@@ -423,7 +492,7 @@ type SavedListingChangeResult struct {
 
 func (x *SavedListingChangeResult) Reset() {
 	*x = SavedListingChangeResult{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[3]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +504,7 @@ func (x *SavedListingChangeResult) String() string {
 func (*SavedListingChangeResult) ProtoMessage() {}
 
 func (x *SavedListingChangeResult) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[3]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +517,7 @@ func (x *SavedListingChangeResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavedListingChangeResult.ProtoReflect.Descriptor instead.
 func (*SavedListingChangeResult) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{3}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SavedListingChangeResult) GetMutationId() string {
@@ -474,7 +543,7 @@ type ApplySavedListingChangesResponse struct {
 
 func (x *ApplySavedListingChangesResponse) Reset() {
 	*x = ApplySavedListingChangesResponse{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[4]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -486,7 +555,7 @@ func (x *ApplySavedListingChangesResponse) String() string {
 func (*ApplySavedListingChangesResponse) ProtoMessage() {}
 
 func (x *ApplySavedListingChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[4]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -499,7 +568,7 @@ func (x *ApplySavedListingChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySavedListingChangesResponse.ProtoReflect.Descriptor instead.
 func (*ApplySavedListingChangesResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{4}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ApplySavedListingChangesResponse) GetResults() []*SavedListingChangeResult {
@@ -520,7 +589,7 @@ type SavedListing struct {
 
 func (x *SavedListing) Reset() {
 	*x = SavedListing{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[5]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +601,7 @@ func (x *SavedListing) String() string {
 func (*SavedListing) ProtoMessage() {}
 
 func (x *SavedListing) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[5]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +614,7 @@ func (x *SavedListing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavedListing.ProtoReflect.Descriptor instead.
 func (*SavedListing) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{5}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SavedListing) GetListingId() string {
@@ -578,7 +647,7 @@ type ListSavedListingsRequest struct {
 
 func (x *ListSavedListingsRequest) Reset() {
 	*x = ListSavedListingsRequest{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[6]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -590,7 +659,7 @@ func (x *ListSavedListingsRequest) String() string {
 func (*ListSavedListingsRequest) ProtoMessage() {}
 
 func (x *ListSavedListingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[6]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -603,7 +672,7 @@ func (x *ListSavedListingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSavedListingsRequest.ProtoReflect.Descriptor instead.
 func (*ListSavedListingsRequest) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{6}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListSavedListingsRequest) GetAfterId() string {
@@ -623,7 +692,7 @@ type ListSavedListingsResponse struct {
 
 func (x *ListSavedListingsResponse) Reset() {
 	*x = ListSavedListingsResponse{}
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[7]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -635,7 +704,7 @@ func (x *ListSavedListingsResponse) String() string {
 func (*ListSavedListingsResponse) ProtoMessage() {}
 
 func (x *ListSavedListingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[7]
+	mi := &file_openmarket_api_v1_saved_listing_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -648,7 +717,7 @@ func (x *ListSavedListingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSavedListingsResponse.ProtoReflect.Descriptor instead.
 func (*ListSavedListingsResponse) Descriptor() ([]byte, []int) {
-	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{7}
+	return file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListSavedListingsResponse) GetListings() []*SavedListing {
@@ -729,14 +798,21 @@ const file_openmarket_api_v1_saved_listing_service_proto_rawDesc = "" +
 	"\x0e_public_meetupB\x17\n" +
 	"\x15_price_amount_decimalB\x16\n" +
 	"\x14_price_currency_codeB \n" +
-	"\x1e_original_price_amount_decimal\"\xa6\x02\n" +
+	"\x1e_original_price_amount_decimal\"\xcc\x01\n" +
+	"\x16ListingAlertSaveSource\x12#\n" +
+	"\balert_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aalertId\x126\n" +
+	"\x0fnotification_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x0enotificationId\x88\x01\x01\x12A\n" +
+	"\x06source\x18\x03 \x01(\tB)\xbaH&r$R\n" +
+	"alerts_tabR\fnotificationR\bcreationR\x06sourceB\x12\n" +
+	"\x10_notification_id\"\xf4\x02\n" +
 	"\x12SavedListingChange\x12)\n" +
 	"\vmutation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
 	"mutationId\x12D\n" +
 	"\x13facebook_listing_id\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f2\r^[0-9]{1,64}$R\x11facebookListingId\x12\x19\n" +
 	"\x05saved\x18\x03 \x01(\bH\x00R\x05saved\x88\x01\x01\x12C\n" +
 	"\bsnapshot\x18\x04 \x01(\v2'.openmarket.api.v1.SavedListingSnapshotR\bsnapshot\x125\n" +
-	"\bsaved_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\asavedAtB\b\n" +
+	"\bsaved_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\asavedAt\x12L\n" +
+	"\falert_source\x18\x06 \x01(\v2).openmarket.api.v1.ListingAlertSaveSourceR\valertSourceB\b\n" +
 	"\x06_saved\"j\n" +
 	"\x1fApplySavedListingChangesRequest\x12G\n" +
 	"\achanges\x18\x01 \x03(\v2%.openmarket.api.v1.SavedListingChangeB\x06\xbaH\x03\xd8\x01\x03R\achanges\"Q\n" +
@@ -773,41 +849,43 @@ func file_openmarket_api_v1_saved_listing_service_proto_rawDescGZIP() []byte {
 	return file_openmarket_api_v1_saved_listing_service_proto_rawDescData
 }
 
-var file_openmarket_api_v1_saved_listing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_openmarket_api_v1_saved_listing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_openmarket_api_v1_saved_listing_service_proto_goTypes = []any{
 	(*SavedListingSnapshot)(nil),             // 0: openmarket.api.v1.SavedListingSnapshot
-	(*SavedListingChange)(nil),               // 1: openmarket.api.v1.SavedListingChange
-	(*ApplySavedListingChangesRequest)(nil),  // 2: openmarket.api.v1.ApplySavedListingChangesRequest
-	(*SavedListingChangeResult)(nil),         // 3: openmarket.api.v1.SavedListingChangeResult
-	(*ApplySavedListingChangesResponse)(nil), // 4: openmarket.api.v1.ApplySavedListingChangesResponse
-	(*SavedListing)(nil),                     // 5: openmarket.api.v1.SavedListing
-	(*ListSavedListingsRequest)(nil),         // 6: openmarket.api.v1.ListSavedListingsRequest
-	(*ListSavedListingsResponse)(nil),        // 7: openmarket.api.v1.ListSavedListingsResponse
-	(*FacebookSeller)(nil),                   // 8: openmarket.api.v1.FacebookSeller
-	(*timestamppb.Timestamp)(nil),            // 9: google.protobuf.Timestamp
+	(*ListingAlertSaveSource)(nil),           // 1: openmarket.api.v1.ListingAlertSaveSource
+	(*SavedListingChange)(nil),               // 2: openmarket.api.v1.SavedListingChange
+	(*ApplySavedListingChangesRequest)(nil),  // 3: openmarket.api.v1.ApplySavedListingChangesRequest
+	(*SavedListingChangeResult)(nil),         // 4: openmarket.api.v1.SavedListingChangeResult
+	(*ApplySavedListingChangesResponse)(nil), // 5: openmarket.api.v1.ApplySavedListingChangesResponse
+	(*SavedListing)(nil),                     // 6: openmarket.api.v1.SavedListing
+	(*ListSavedListingsRequest)(nil),         // 7: openmarket.api.v1.ListSavedListingsRequest
+	(*ListSavedListingsResponse)(nil),        // 8: openmarket.api.v1.ListSavedListingsResponse
+	(*FacebookSeller)(nil),                   // 9: openmarket.api.v1.FacebookSeller
+	(*timestamppb.Timestamp)(nil),            // 10: google.protobuf.Timestamp
 }
 var file_openmarket_api_v1_saved_listing_service_proto_depIdxs = []int32{
-	8,  // 0: openmarket.api.v1.SavedListingSnapshot.seller:type_name -> openmarket.api.v1.FacebookSeller
-	9,  // 1: openmarket.api.v1.SavedListingSnapshot.card_observed_at:type_name -> google.protobuf.Timestamp
-	9,  // 2: openmarket.api.v1.SavedListingSnapshot.price_observed_at:type_name -> google.protobuf.Timestamp
-	9,  // 3: openmarket.api.v1.SavedListingSnapshot.detail_observed_at:type_name -> google.protobuf.Timestamp
-	9,  // 4: openmarket.api.v1.SavedListingSnapshot.availability_observed_at:type_name -> google.protobuf.Timestamp
+	9,  // 0: openmarket.api.v1.SavedListingSnapshot.seller:type_name -> openmarket.api.v1.FacebookSeller
+	10, // 1: openmarket.api.v1.SavedListingSnapshot.card_observed_at:type_name -> google.protobuf.Timestamp
+	10, // 2: openmarket.api.v1.SavedListingSnapshot.price_observed_at:type_name -> google.protobuf.Timestamp
+	10, // 3: openmarket.api.v1.SavedListingSnapshot.detail_observed_at:type_name -> google.protobuf.Timestamp
+	10, // 4: openmarket.api.v1.SavedListingSnapshot.availability_observed_at:type_name -> google.protobuf.Timestamp
 	0,  // 5: openmarket.api.v1.SavedListingChange.snapshot:type_name -> openmarket.api.v1.SavedListingSnapshot
-	9,  // 6: openmarket.api.v1.SavedListingChange.saved_at:type_name -> google.protobuf.Timestamp
-	1,  // 7: openmarket.api.v1.ApplySavedListingChangesRequest.changes:type_name -> openmarket.api.v1.SavedListingChange
-	3,  // 8: openmarket.api.v1.ApplySavedListingChangesResponse.results:type_name -> openmarket.api.v1.SavedListingChangeResult
-	0,  // 9: openmarket.api.v1.SavedListing.snapshot:type_name -> openmarket.api.v1.SavedListingSnapshot
-	9,  // 10: openmarket.api.v1.SavedListing.saved_at:type_name -> google.protobuf.Timestamp
-	5,  // 11: openmarket.api.v1.ListSavedListingsResponse.listings:type_name -> openmarket.api.v1.SavedListing
-	2,  // 12: openmarket.api.v1.SavedListingService.ApplySavedListingChanges:input_type -> openmarket.api.v1.ApplySavedListingChangesRequest
-	6,  // 13: openmarket.api.v1.SavedListingService.ListSavedListings:input_type -> openmarket.api.v1.ListSavedListingsRequest
-	4,  // 14: openmarket.api.v1.SavedListingService.ApplySavedListingChanges:output_type -> openmarket.api.v1.ApplySavedListingChangesResponse
-	7,  // 15: openmarket.api.v1.SavedListingService.ListSavedListings:output_type -> openmarket.api.v1.ListSavedListingsResponse
-	14, // [14:16] is the sub-list for method output_type
-	12, // [12:14] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	10, // 6: openmarket.api.v1.SavedListingChange.saved_at:type_name -> google.protobuf.Timestamp
+	1,  // 7: openmarket.api.v1.SavedListingChange.alert_source:type_name -> openmarket.api.v1.ListingAlertSaveSource
+	2,  // 8: openmarket.api.v1.ApplySavedListingChangesRequest.changes:type_name -> openmarket.api.v1.SavedListingChange
+	4,  // 9: openmarket.api.v1.ApplySavedListingChangesResponse.results:type_name -> openmarket.api.v1.SavedListingChangeResult
+	0,  // 10: openmarket.api.v1.SavedListing.snapshot:type_name -> openmarket.api.v1.SavedListingSnapshot
+	10, // 11: openmarket.api.v1.SavedListing.saved_at:type_name -> google.protobuf.Timestamp
+	6,  // 12: openmarket.api.v1.ListSavedListingsResponse.listings:type_name -> openmarket.api.v1.SavedListing
+	3,  // 13: openmarket.api.v1.SavedListingService.ApplySavedListingChanges:input_type -> openmarket.api.v1.ApplySavedListingChangesRequest
+	7,  // 14: openmarket.api.v1.SavedListingService.ListSavedListings:input_type -> openmarket.api.v1.ListSavedListingsRequest
+	5,  // 15: openmarket.api.v1.SavedListingService.ApplySavedListingChanges:output_type -> openmarket.api.v1.ApplySavedListingChangesResponse
+	8,  // 16: openmarket.api.v1.SavedListingService.ListSavedListings:output_type -> openmarket.api.v1.ListSavedListingsResponse
+	15, // [15:17] is the sub-list for method output_type
+	13, // [13:15] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_openmarket_api_v1_saved_listing_service_proto_init() }
@@ -818,13 +896,14 @@ func file_openmarket_api_v1_saved_listing_service_proto_init() {
 	file_openmarket_api_v1_seller_service_proto_init()
 	file_openmarket_api_v1_saved_listing_service_proto_msgTypes[0].OneofWrappers = []any{}
 	file_openmarket_api_v1_saved_listing_service_proto_msgTypes[1].OneofWrappers = []any{}
+	file_openmarket_api_v1_saved_listing_service_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openmarket_api_v1_saved_listing_service_proto_rawDesc), len(file_openmarket_api_v1_saved_listing_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

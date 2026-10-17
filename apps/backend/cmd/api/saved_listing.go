@@ -61,6 +61,12 @@ func validateListingChange(c *v1.SavedListingChange, now time.Time) error {
 	if err := protovalidate.Validate(c); err != nil {
 		return err
 	}
+	if c.AlertSource != nil && !c.GetSaved() {
+		return errors.New("alert attribution requires a save")
+	}
+	if c.AlertSource != nil && c.AlertSource.NotificationId != nil && c.AlertSource.Source == "creation" {
+		return errors.New("creation cannot reference a notification")
+	}
 	if c.GetSaved() && !validListingTime(c.SavedAt, now) {
 		return errors.New("valid saved_at is required")
 	}
@@ -302,6 +308,11 @@ func (s *savedListingServer) apply(ctx context.Context, userID uuid.UUID, c *v1.
 			return err
 		}
 	}
+	if c.AlertSource != nil {
+		if err = recordAlertSave(ctx, tx, userID, mutationID, c); err != nil {
+			return err
+		}
+	}
 	if err = q.RecordSavedListingMutation(ctx, db.RecordSavedListingMutationParams{UserID: userID, MutationID: mutationID, RequestHash: hash[:]}); err != nil {
 		return err
 	}
@@ -356,4 +367,29 @@ func (s *savedListingServer) ListSavedListings(ctx context.Context, req *connect
 		response.NextAfterId = response.Listings[len(response.Listings)-1].Snapshot.FacebookListingId
 	}
 	return connect.NewResponse(response), nil
+}
+
+// Attribution shares the save transaction and retry receipt. An alert deleted
+// while a save was offline must not prevent the listing itself from being saved.
+// Ownership and batch membership are checked before recording any engagement.
+func recordAlertSave(ctx context.Context, tx pgx.Tx, user, mutation uuid.UUID, c *v1.SavedListingChange) error {
+	source := c.AlertSource
+	var alertID uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT a.id FROM user_listing_alerts a
+ JOIN listing_alert_listings l ON l.alert_id=a.id AND l.listing_id=$3 AND l.matched
+ WHERE a.id=$1 AND a.user_id=$2 AND ($4::uuid IS NULL OR EXISTS (
+ SELECT 1 FROM listing_alert_notification_outbox n WHERE n.id=$4 AND n.alert_id=a.id AND l.listing_id=ANY(n.listing_ids)))
+ FOR UPDATE OF a`, source.AlertId, user, c.FacebookListingId, source.NotificationId).Scan(&alertID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE listing_alert_listings SET saved_at=COALESCE(saved_at,clock_timestamp()) WHERE alert_id=$1 AND listing_id=$2`, alertID, c.FacebookListingId); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO listing_alert_interactions(id,alert_id,notification_id,listing_id,kind,source)
+ VALUES($1,$2,$3,$4,'listing_saved',$5) ON CONFLICT(id) DO NOTHING`, mutation, alertID, source.NotificationId, c.FacebookListingId, source.Source)
+	return err
 }

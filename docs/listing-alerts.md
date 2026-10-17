@@ -26,27 +26,66 @@ tokens remain in the phone's WebKit store; the backend never receives them.
 
 ## Alerts tab
 
-Use the plus button to create an alert with one text field for the product and
-any preferences or requirements. A daily time picker defaults to the nearest
+Use Create alert in the ellipsis menu to create an alert with one text field for the product and
+any preferences or requirements. Price defaults to “Any price” with its fields
+collapsed. Expand it to set an optional minimum, maximum, or both in whole units
+of the searched marketplace's currency. Blank bounds are omitted from requests
+and saved as null; zero is a valid bound. Limits are inclusive and the minimum
+cannot exceed the maximum. Clear price limits restores any price. Saved limits
+appear in Manage and the alert details. Existing alerts have no structured limits.
+A daily time picker defaults to the nearest
 hour when the form opens and accepts a chosen hour and minute. There is no
-separate location field. The tab is titled Alerts and shows one row per completed
-notification batch. Each row says “Listings matching [query]”, displays up to four
-photos (with an overflow count), and a calendar-day label such as Today, Yesterday,
-or 2 days ago. A single match gets one photo. A New badge remains until that notification group is opened. Viewing the feed
-alone does not mark a group seen. Opening a group clears its badge without marking
-any individual listing viewed. Each later notification starts unseen.
+separate location field.
 
-Tapping a feed row or a push opens only the listing IDs saved in that notification,
-not the alert's entire history. Each listing opens the existing detail screen and
-records its view. Groups remain available if APNs failed to deliver the push.
-The feed includes batches from paused alerts and pages 50 groups at a time,
-using the exact notification creation timestamp and notification ID as its cursor.
+The tab is titled Alerts and presents a flat inbox of individual listings,
+grouped by notification date (Today, Yesterday, then older days). Each row shows
+a thumbnail, title, price, location, relative time, an unread dot, and a bookmark
+button. All, Unread, and Saved pills filter the inbox on the server before
+pagination. Unread is based on the individual match's `viewed_at`; opening an
+alert group does not mark its listings read. The Saved filter uses the user's
+current saved listings, not historical save engagement.
 
-Manage opens the user's saved alerts with their full match history, daily schedule,
-and pause/resume/delete controls. The feed does not display schedules. A foreground
-match notification refreshes the feed; returning to the app or pulling to refresh
-does as well. The feed is available without a currently connected Facebook
-session; creating and resuming alerts still require it.
+The ellipsis menu contains Create alert and Manage alerts. Manage retains the
+full match history, daily schedule, and pause/resume/delete controls. Tapping an
+inbox row opens the listing detail directly. Push notifications still open the
+specific batch of listings from that notification. Each entry preserves its
+alert, notification, listing, and entry-source attribution. Batches remain
+available if APNs failed to deliver the push, and paused alerts remain in the
+inbox. Pull to refresh, foreground notifications, and returning to the app refresh
+the feed. Reading the inbox does not require a connected Facebook session.
+
+The `inbox` action pages 50 listings at a time using the exact notification
+creation timestamp, notification UUID, and listing ID as a compound cursor.
+`before`, `notificationID`, and `beforeID` carry those three values. `filter` is
+`all` (default), `unread`, or `saved`. Paging can split a notification batch, and
+the same listing can appear under multiple alerts. Existing `notification-feed`
+and `feed` responses remain available for older clients.
+
+### Saving an alert listing
+
+Both the inbox bookmark and Save in an alert's listing detail use
+`SavedListings.toggle` and the existing `ApplySavedListingChanges` endpoint.
+The local saved entry and frozen mutation are persisted together. Optional
+`alert_source` contains the alert ID, notification ID when known, and entry
+source; it survives offline retries, app restarts, and account switching.
+Removing a bookmark does not send a new save attribution.
+
+The backend saves the listing, sets the match's first `saved_at`, inserts a
+`listing_saved` interaction with the notification and listing IDs, and records
+the mutation receipt in one transaction. It checks alert ownership and batch
+membership before attributing engagement. Replaying the mutation does not
+produce another event or recreate a bookmark removed later. Historical
+`saved_at` and save events remain after unsaving; current bookmark state remains
+in `saved_listings`. Saving alone does not mark the listing or notification read.
+
+If the originating alert was deleted while a save was offline, the listing still
+saves normally and attribution is skipped. Foreign alerts, unrelated batches,
+and listings outside the match cannot receive attribution. The public alert
+`interaction` action continues to accept only opens; save engagement can only be
+recorded by a successful saved-listing mutation.
+
+Deploy the backend with migration `00029_listing_alert_saves.sql` before the new
+iOS app. No new environment configuration is required.
 
 ## Deployment configuration
 
@@ -88,7 +127,9 @@ preference. The more permissive Price Check comparable rules remain separate.
 
 The existing `DATABASE_URL`, authentication, and other required backend settings
 still apply. Migrations `00024_listing_alerts.sql`,
-`00025_listing_alert_fetch_tracking.sql`, and `00026_listing_alert_schedule.sql`
+`00025_listing_alert_fetch_tracking.sql`, `00026_listing_alert_schedule.sql`,
+`00027_listing_alert_interactions.sql`, `00028_listing_alert_prices.sql`,
+and `00029_listing_alert_saves.sql`
 run automatically at API startup, after
 main's existing migrations through `00023_link_sign_in.sql`.
 There is no external cron service: the API hosts the recurring worker. Keep at
@@ -125,16 +166,17 @@ Supported fields:
 | Field | Values | Default |
 | --- | --- | --- |
 | `sort` | `best_match`, `creation_time_descend`, `distance_ascend`, `price_ascend`, `price_descend` | `best_match` |
-| `minPrice`, `maxPrice` | Whole units of the searched marketplace's currency, 0–2147483647 | No bound |
 | `daysSinceListed` | `0`, `1`, `7`, `30` | `0` (any age) |
 | `delivery` | `""`, `local_pick_up`, `shipping` | `""` (any) |
 | `conditions` | Array containing `new`, `used_like_new`, `used_good`, `used_fair` | `[]` (any) |
 
 Update configuration and restart/redeploy the backend to apply it; no iOS build
 is needed after the app version supporting `searchOptions` is installed. Invalid
-values and unknown configuration keys prevent startup. Bounds are global, so a
-price range will narrow every alert on that deployment. The buyer's text remains
-authoritative, and Jev still checks the buyer's criteria.
+values and unknown configuration keys prevent startup. Price bounds come from each saved alert and replace any legacy `minPrice` or
+`maxPrice` in this configuration, including when either saved bound is absent.
+Other search options remain global. The buyer's text and saved price limits are
+passed to Jev as mandatory matching criteria, so older clients that ignore search
+options still receive server-side price evaluation.
 Availability stays available-only, and each check stays limited to one page.
 Changing these settings affects future searches, not previously checked listings.
 
@@ -162,7 +204,7 @@ across daylight-saving changes. A skipped local time runs after the spring gap;
 a repeated local time uses its later occurrence, so it runs once. Travel does
 not change the saved time zone; the Alerts list displays the next check in the
 device's current time zone. Older alerts retain their UTC hour and minute zero;
-clients omitting the new fields retain the rounded-creation-time behavior.
+clients omitting the schedule fields retain the rounded-creation-time behavior.
 
 `next_check_at` is the scheduling authority. A fixed 24-hour eligibility gate
 would incorrectly delay an 8 p.m. check after a 23-hour daylight-saving day.
@@ -227,7 +269,7 @@ a notification can leave its delivery outcome unknown; it is not sent again.
 The authenticated JSON endpoints are `POST /v1/listing-alerts/{action}`. They reuse
 the existing access-token and active-session authentication. Actions are `list`,
 `create`, `state` (pause/resume), `delete`, `work`, `fetch-event`, `page`, `matches`,
-`notification-feed`, `interaction`, and the legacy `feed` and `viewed` actions.
+`inbox`, `notification-feed`, `interaction`, and the legacy `feed` and `viewed` actions.
 `matches` accepts an optional `notificationID` to scope results to that batch;
 the server validates that it belongs to both the requested alert and account.
 The Go request/response types live in `cmd/api/alerts.go`; iOS wire types are in
@@ -255,7 +297,7 @@ accounts. They cover concurrent limits, scheduling, permissions, cross-account
 access, upload retries, cursor recovery, matched/rejected deduplication,
 single-send notification behavior, pagination, interaction attribution, and viewed state. A separate migration test
 applies main through version 23, seeds existing account, listing price,
-saved-listing/view, and sign-in linking data, then upgrades through version 27 and
+saved-listing/view, and sign-in linking data, then upgrades through version 29 and
 rolls back/reapplies the alert migrations, checking that the existing data remains intact. The APNs tests verify signed
 provider tokens and push headers against a local HTTP server. No unit/integration
 test sends real pushes or bills Jev.
@@ -346,7 +388,7 @@ opening a listing records `listing_opened` and preserves the listing's first
 Notification entry carries its outbox ID through subsequent listing opens, so
 clicks join back to the notification, check, and background fetch. Opening an
 alert or displaying the recent feed does not mark all of its listings viewed.
-Feed group and listing taps use `source=alerts_tab` with the group’s notification
+Inbox and legacy feed group/listing taps use `source=alerts_tab` with the group’s notification
 ID. Push taps use `source=notification` with that same ID, preserving the entry
 path. Listing interactions with a notification ID must belong to that batch.
 
@@ -372,7 +414,7 @@ phone failed to respond: `work_requested_at`, `search_started_at`, and
 
 ## Notification seen status versus listing engagement
 
-The notification feed exposes `seenAt`: the earliest server-recorded interaction
+The legacy grouped notification feed exposes `seenAt`: the earliest server-recorded open interaction
 for that notification ID. Opening its row or tapping its push records
 `alert_opened`, which makes the group seen. A recorded listing open also proves
 the group was seen if the group-open request was missed. This uses the existing
@@ -387,7 +429,7 @@ and are a signal for relevance; they are not ground-truth judgments of match qua
 
 ```sql
 SELECT n.id, n.alert_id, n.created_at, cardinality(n.listing_ids) AS match_count,
-       min(i.created_at) AS seen_at,
+       min(i.created_at) FILTER (WHERE i.kind IN ('alert_opened','listing_opened')) AS seen_at,
        count(*) FILTER (WHERE i.kind='listing_opened') AS listing_open_count,
        count(DISTINCT i.listing_id) FILTER (WHERE i.kind='listing_opened') AS distinct_listings_opened
 FROM listing_alert_notification_outbox n

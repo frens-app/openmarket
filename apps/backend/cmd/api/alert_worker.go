@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"frens.lol/openmarket/backend/pkg/llm"
@@ -124,7 +125,8 @@ func (s *alertsServer) dispatch(ctx context.Context, interval time.Duration) err
 func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	var checkID, alertID, userID uuid.UUID
 	var query string
-	err := s.pool.QueryRow(ctx, `SELECT c.id,a.id,a.user_id,a.query FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id JOIN users u ON u.id=a.user_id WHERE NOT a.paused AND u.deleted_at IS NULL AND `+eligibleListingAlertUser+` AND c.completed_at IS NULL AND c.evaluation_after<=now() AND (c.scan_complete OR EXISTS(SELECT 1 FROM listing_alert_listings l WHERE l.check_id=c.id AND l.checked_at IS NULL)) ORDER BY c.evaluation_after,c.created_at LIMIT 1`).Scan(&checkID, &alertID, &userID, &query)
+	var minPrice, maxPrice *int
+	err := s.pool.QueryRow(ctx, `SELECT c.id,a.id,a.user_id,a.query,a.min_price,a.max_price FROM listing_alert_check_runs c JOIN user_listing_alerts a ON a.id=c.alert_id JOIN users u ON u.id=a.user_id WHERE NOT a.paused AND u.deleted_at IS NULL AND `+eligibleListingAlertUser+` AND c.completed_at IS NULL AND c.evaluation_after<=now() AND (c.scan_complete OR EXISTS(SELECT 1 FROM listing_alert_listings l WHERE l.check_id=c.id AND l.checked_at IS NULL)) ORDER BY c.evaluation_after,c.created_at LIMIT 1`).Scan(&checkID, &alertID, &userID, &query, &minPrice, &maxPrice)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -135,7 +137,7 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	in := llm.EvaluationInput{Target: llm.ComparisonItem{Title: query}, Requirements: true}
+	in := llm.EvaluationInput{Target: alertEvaluationTarget(query, minPrice, maxPrice), Requirements: true}
 	for rows.Next() {
 		var raw []byte
 		var listing alertListing
@@ -267,4 +269,21 @@ func (s *alertsServer) invalidateToken(ctx context.Context, device uuid.UUID, to
 			s.logger.Warn("clear invalid APNs token", zap.Error(e))
 		}
 	}
+}
+
+// Keep structured limits out of the product search text while also giving the
+// evaluator the bounds, including for clients that ignore searchOptions.
+func alertEvaluationTarget(query string, minPrice, maxPrice *int) llm.ComparisonItem {
+	target := llm.ComparisonItem{Title: query}
+	var requirements []string
+	if minPrice != nil {
+		requirements = append(requirements, fmt.Sprintf("Minimum price: %d (inclusive).", *minPrice))
+	}
+	if maxPrice != nil {
+		requirements = append(requirements, fmt.Sprintf("Maximum price: %d (inclusive).", *maxPrice))
+	}
+	if len(requirements) > 0 {
+		target.Description = strings.Join(requirements, " ") + " Prices are in the searched marketplace's currency. These are mandatory price limits."
+	}
+	return target
 }
