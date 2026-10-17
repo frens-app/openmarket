@@ -15,15 +15,12 @@ struct PriceAlertsView: View {
     @ObservedObject private var push = PushRegistrar.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var alerts: [PriceAlert] = []
-    @State private var feed: [AlertFeedItem] = []
+    @State private var feed: [AlertNotificationGroup] = []
     @State private var feedMore = false
     @State private var feedLoading = false
     @State private var refreshing = false
     @State private var feedGeneration = 0
     @State private var showManage = false
-    @State private var selectedMatch: AlertFeedItem?
-    @State private var feedInteractionID = UUID().uuidString
-    @Namespace private var feedNamespace
     @State private var path: [AlertRoute] = []
     @State private var query = ""
     @State private var alertTime = AlertSchedule.defaultTime()
@@ -59,33 +56,14 @@ struct PriceAlertsView: View {
                     ContentUnavailableView(alerts.isEmpty ? "No alerts yet" : "No matches yet", systemImage: "bell",
                         description: Text(alerts.isEmpty ? "Create an alert for something you’re looking for." : "New finds from your alerts will appear here."))
                 }
-                ForEach(feed) { item in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Button { path.append(AlertRoute(alertID: item.alertID)) } label: {
-                                HStack(spacing: 4) {
-                                    Text(item.query).lineLimit(1)
-                                    Image(systemName: "chevron.right").font(.caption2)
-                                }.font(.subheadline.weight(.semibold))
-                            }.buttonStyle(.plain)
-                            Spacer()
-                            if item.match.viewedAt == nil {
-                                Text("New").font(.caption.bold()).foregroundStyle(.blue)
-                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(.blue.opacity(0.1), in: Capsule())
-                            }
-                        }
-                        Button {
-                            feedInteractionID = UUID().uuidString
-                            selectedMatch = item
-                        } label: {
-                            AlertListingRow(match: item.match, showNew: false)
-                        }.buttonStyle(.plain)
-                        Text(alertDayLabel(item.match.matchedAt))
-                            .font(.caption).foregroundStyle(.secondary)
+                ForEach(feed) { group in
+                    Button {
+                        path.append(AlertRoute(alertID: group.alertID, notificationID: group.id))
+                    } label: {
+                        AlertNotificationRow(group: group)
                     }
-                    .padding(.vertical, 6)
-                    .listRowBackground(item.match.viewedAt == nil ? Color.blue.opacity(0.04) : Color(.secondarySystemGroupedBackground))
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color(.secondarySystemGroupedBackground))
                 }
                 if feedMore {
                     Button("Load earlier matches") { Task { await loadMore() } }.disabled(feedLoading || refreshing)
@@ -127,20 +105,6 @@ struct PriceAlertsView: View {
             }
             .sheet(isPresented: $showCreate) { createSheet }
             .sheet(isPresented: $showManage) { manageSheet }
-            .sheet(item: $selectedMatch) { item in
-                NavigationStack {
-                    DetailView(listing: item.match.listing.listing, namespace: feedNamespace, referrer: .priceAlerts)
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { selectedMatch = nil } } }
-                }
-                .task {
-                    do {
-                        let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: item.alertID, event: "listing_opened",
-                            interactionID: feedInteractionID, source: "alerts_tab", listingID: item.match.id), as: PriceAlertsService.Empty.self)
-                        if let index = feed.firstIndex(where: { $0.id == item.id }) { feed[index].match.viewedAt = Date() }
-                        await refresh()
-                    } catch { self.error = error.localizedDescription }
-                }
-            }
             .alert("Alert limit reached", isPresented: $showLimit) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -216,11 +180,11 @@ struct PriceAlertsView: View {
         guard account.isSignedIn else { alerts = []; feed = []; return }
         do {
             async let loadedAlerts = service.call("list", as: PriceAlertsService.AlertList.self)
-            async let loadedFeed = service.call("feed", as: PriceAlertsService.Feed.self)
+            async let loadedFeed = service.call("notification-feed", as: PriceAlertsService.NotificationFeed.self)
             let (alertList, recent) = try await (loadedAlerts, loadedFeed)
             guard owner == account.state.viewer?.id else { return }
             alerts = alertList.alerts
-            feed = recent.items; feedMore = recent.items.count == 50; error = nil
+            feed = recent.groups; feedMore = recent.groups.count == 50; error = nil
         } catch { self.error = error.localizedDescription }
     }
 
@@ -230,11 +194,10 @@ struct PriceAlertsView: View {
         defer { feedLoading = false }
         let generation = feedGeneration
         do {
-            let loaded = try await service.call("feed", .init(beforeID: last.match.id, before: last.match.matchedCursor,
-                beforeAlertID: last.alertID), as: PriceAlertsService.Feed.self)
+            let loaded = try await service.call("notification-feed", .init(beforeID: last.id, before: last.createdCursor), as: PriceAlertsService.NotificationFeed.self)
             guard generation == feedGeneration else { return }
-            feed += loaded.items.filter { item in !feed.contains { $0.id == item.id } }
-            feedMore = loaded.items.count == 50; error = nil
+            feed += loaded.groups.filter { item in !feed.contains { $0.id == item.id } }
+            feedMore = loaded.groups.count == 50; error = nil
         } catch { self.error = error.localizedDescription }
     }
 
@@ -251,6 +214,7 @@ private struct AlertMatchesView: View {
     let alert: PriceAlert?
     let changed: () -> Void
     @State private var matches: [AlertMatch] = []
+    @State private var notification: AlertNotificationDetails?
     @State private var error: String?
     @State private var more = false
     @State private var loading = false
@@ -264,7 +228,12 @@ private struct AlertMatchesView: View {
 
     var body: some View {
         List {
-            if let alert {
+            if let notification {
+                Section {
+                    Text("\(notification.matchCount) listings · \(alertDayLabel(notification.createdAt))")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+            } else if route.notificationID == nil, let alert {
                 Section {
                     LabeledContent("Checks", value: "Daily around \(alert.nextCheckAt.formatted(date: .omitted, time: .shortened))")
                     if paused { Text("Paused").foregroundStyle(.secondary) }
@@ -282,7 +251,7 @@ private struct AlertMatchesView: View {
             if more { Button("Load more matches") { Task { await load(reset: false) } }.disabled(loading) }
             if loading { ProgressView() }
         }
-        .navigationTitle(alert?.query ?? "Alert matches")
+        .navigationTitle(notification?.query ?? alert?.query ?? "Alert matches")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Menu {
@@ -328,9 +297,11 @@ private struct AlertMatchesView: View {
             let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
                 interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: PriceAlertsService.Empty.self)
             let last = reset ? nil : matches.last
-            let loaded = try await service.call("matches", .init(id: alertID, beforeID: last?.id, before: last?.matchedCursor), as: PriceAlertsService.MatchList.self).matches
-            if reset { matches = loaded } else { matches += loaded.filter { item in !matches.contains { $0.id == item.id } } }
-            more = loaded.count == 100; error = nil
+            let loaded = try await service.call("matches", .init(id: alertID, beforeID: last?.id, before: last?.matchedCursor,
+                notificationID: route.notificationID), as: PriceAlertsService.MatchList.self)
+            notification = loaded.notification
+            if reset { matches = loaded.matches } else { matches += loaded.matches.filter { item in !matches.contains { $0.id == item.id } } }
+            more = loaded.matches.count == 100; error = nil
         } catch { self.error = error.localizedDescription }
     }
 
@@ -377,5 +348,57 @@ private func alertDayLabel(_ date: Date) -> String {
     case ...0: return "Today"
     case 1: return "Yesterday"
     default: return "\(days) days ago"
+    }
+}
+
+struct AlertNotificationRow: View {
+    let group: AlertNotificationGroup
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Text("Listings matching \(group.query)")
+                    .font(.headline).lineLimit(2).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                if group.unreadCount > 0 {
+                    Text("New").font(.caption.bold()).foregroundStyle(.blue)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(.blue.opacity(0.1), in: Capsule())
+                }
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            if !group.previews.isEmpty {
+                GeometryReader { geometry in
+                    let count = group.previews.count
+                    let width = min(geometry.size.height, (geometry.size.width - CGFloat(count - 1) * 8) / CGFloat(count))
+                    HStack(spacing: 8) {
+                        ForEach(Array(group.previews.enumerated()), id: \.element.id) { index, listing in
+                            AsyncImage(url: URL(string: listing.thumbnailURL)) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                Rectangle().fill(Color(.tertiarySystemFill))
+                                    .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+                            }
+                            .frame(width: width, height: geometry.size.height)
+                            .clipped()
+                            .overlay {
+                                if index == count - 1 && group.matchCount > count {
+                                    Color.black.opacity(0.45)
+                                    Text("+\(group.matchCount - count)").font(.title3.bold()).foregroundStyle(.white)
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .accessibilityLabel(listing.title)
+                        }
+                    }
+                }
+                .frame(height: group.previews.count == 1 ? 128 : 96)
+            }
+            Text(alertDayLabel(group.createdAt)).font(.caption).foregroundStyle(.secondary)
+        }
+        .foregroundStyle(.primary)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }

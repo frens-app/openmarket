@@ -49,3 +49,55 @@ func (s *alertsServer) feed(ctx context.Context, user uuid.UUID, in alertRequest
 	}
 	return map[string]any{"items": items}, rows.Err()
 }
+
+type alertNotificationGroup struct {
+	ID            string          `json:"id"`
+	AlertID       string          `json:"alertID"`
+	Query         string          `json:"query"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	CreatedCursor string          `json:"createdCursor"`
+	MatchCount    int             `json:"matchCount"`
+	UnreadCount   int             `json:"unreadCount"`
+	Previews      json.RawMessage `json:"previews"`
+}
+
+func (s *alertsServer) notificationFeed(ctx context.Context, user uuid.UUID, in alertRequest) (any, error) {
+	beforeID := uuid.Nil
+	if in.Before != nil {
+		var err error
+		beforeID, err = uuid.Parse(in.BeforeID)
+		if err != nil {
+			return nil, alertError(connect.CodeInvalidArgument, "Invalid notification cursor.")
+		}
+	}
+	rows, err := s.pool.Query(ctx, `SELECT n.id,a.id,a.query,n.created_at,
+ (SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.listing_id=ANY(n.listing_ids)),
+ (SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL AND l.listing_id=ANY(n.listing_ids)),
+ (SELECT coalesce(jsonb_agg(p.listing ORDER BY p.matched_at DESC,p.listing_id DESC),'[]'::jsonb) FROM (
+ SELECT l.listing,l.matched_at,l.listing_id FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.listing_id=ANY(n.listing_ids)
+ ORDER BY l.matched_at DESC,l.listing_id DESC LIMIT 4) p)
+ FROM listing_alert_notification_outbox n JOIN user_listing_alerts a ON a.id=n.alert_id
+ WHERE a.user_id=$1 AND ($2::timestamptz IS NULL OR (n.created_at,n.id)<($2,$3))
+ ORDER BY n.created_at DESC,n.id DESC LIMIT 50`, user, in.Before, beforeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	groups := []alertNotificationGroup{}
+	for rows.Next() {
+		var group alertNotificationGroup
+		if err = rows.Scan(&group.ID, &group.AlertID, &group.Query, &group.CreatedAt, &group.MatchCount, &group.UnreadCount, &group.Previews); err != nil {
+			return nil, err
+		}
+		group.CreatedCursor = group.CreatedAt.UTC().Format(time.RFC3339Nano)
+		groups = append(groups, group)
+	}
+	return map[string]any{"groups": groups}, rows.Err()
+}
+
+type alertNotificationDetails struct {
+	ID         string    `json:"id"`
+	Query      string    `json:"query"`
+	CreatedAt  time.Time `json:"createdAt"`
+	MatchCount int       `json:"matchCount"`
+}

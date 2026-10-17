@@ -48,11 +48,22 @@ struct AlertMatch: Decodable, Identifiable {
     var id: String { listing.id }
 }
 
-struct AlertFeedItem: Decodable, Identifiable {
+struct AlertNotificationGroup: Decodable, Identifiable {
+    let id: String
     let alertID: String
     let query: String
-    var match: AlertMatch
-    var id: String { alertID + ":" + match.id }
+    let createdAt: Date
+    let createdCursor: String
+    let matchCount: Int
+    let unreadCount: Int
+    let previews: [AlertListing]
+}
+
+struct AlertNotificationDetails: Decodable {
+    let id: String
+    let query: String
+    let createdAt: Date
+    let matchCount: Int
 }
 
 struct AlertSearchOptions: Decodable {
@@ -139,8 +150,8 @@ final class PriceAlertsService {
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
     struct AlertList: Decodable { var alerts: [PriceAlert] }
-    struct Feed: Decodable { var items: [AlertFeedItem] }
-    struct MatchList: Decodable { var matches: [AlertMatch] }
+    struct NotificationFeed: Decodable { var groups: [AlertNotificationGroup] }
+    struct MatchList: Decodable { var matches: [AlertMatch]; var notification: AlertNotificationDetails? }
     struct WorkList: Decodable { var work: [AlertWork] }
     struct Created: Decodable { var id: String }
 

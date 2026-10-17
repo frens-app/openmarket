@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import OpenMarket
 
 @MainActor
@@ -14,16 +15,39 @@ final class PriceAlertsTests: XCTestCase {
         coordinator.openAlertID = nil
     }
 
-    func testFeedKeepsAlertIdentityAndCursor() throws {
-        let json = #"{"items":[{"alertID":"alert-a","query":"Anthurium","match":{"listing":{"id":"123","title":"Anthurium","priceText":"$50","locationText":"Toronto","thumbnailURL":"","description":"","condition":""},"matchedAt":"2026-10-17T12:34:56.123456Z","matchedCursor":"2026-10-17T12:34:56.123456Z","viewedAt":null}},{"alertID":"alert-b","query":"Plants","match":{"listing":{"id":"123","title":"Anthurium","priceText":"$50","locationText":"Toronto","thumbnailURL":"","description":"","condition":""},"matchedAt":"2026-10-17T12:34:56.123456Z","matchedCursor":"2026-10-17T12:34:56.123456Z","viewedAt":"2026-10-17T12:35:00Z"}}]}"#
-        let items = try PriceAlertsService.decoder().decode(PriceAlertsService.Feed.self, from: Data(json.utf8)).items
-        XCTAssertNotEqual(items[0].id, items[1].id)
-        XCTAssertNil(items[0].match.viewedAt)
-        XCTAssertNotNil(items[1].match.viewedAt)
-        let request = PriceAlertsService.Request(beforeID: items[1].match.id, before: items[1].match.matchedCursor, beforeAlertID: items[1].alertID)
+    func testNotificationFeedKeepsBatchIdentityAndCursor() throws {
+        let json = #"{"groups":[{"id":"notification-a","alertID":"alert-a","query":"Anthurium","createdAt":"2026-10-17T12:34:56.123456Z","createdCursor":"2026-10-17T12:34:56.123456Z","matchCount":13,"unreadCount":12,"previews":[{"id":"123","title":"Anthurium","priceText":"$50","locationText":"Toronto","thumbnailURL":"","description":"","condition":""}]}]}"#
+        let group = try PriceAlertsService.decoder().decode(PriceAlertsService.NotificationFeed.self, from: Data(json.utf8)).groups[0]
+        XCTAssertEqual(group.id, "notification-a")
+        XCTAssertEqual(group.matchCount, 13)
+        XCTAssertEqual(group.unreadCount, 12)
+        XCTAssertEqual(group.previews.count, 1)
+        let request = PriceAlertsService.Request(id: group.alertID, notificationID: group.id)
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
-        XCTAssertEqual(body["before"] as? String, "2026-10-17T12:34:56.123456Z")
-        XCTAssertEqual(body["beforeAlertID"] as? String, "alert-b")
+        XCTAssertEqual(body["id"] as? String, "alert-a")
+        XCTAssertEqual(body["notificationID"] as? String, "notification-a")
+        let cursor = PriceAlertsService.Request(beforeID: group.id, before: group.createdCursor)
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(cursor)) as? [String: Any])
+        XCTAssertEqual(encoded["before"] as? String, "2026-10-17T12:34:56.123456Z")
+        XCTAssertEqual(encoded["beforeID"] as? String, "notification-a")
+    }
+
+    func testNotificationRowsRender() throws {
+        let previews = (0..<4).map { AlertListing(id: String($0), title: "Anthurium", priceText: "$15", locationText: "Toronto", thumbnailURL: "", description: "", condition: "") }
+        let content = VStack(spacing: 16) {
+            AlertNotificationRow(group: .init(id: "multiple", alertID: "alert", query: "Anthurium", createdAt: Date(), createdCursor: "", matchCount: 13, unreadCount: 13, previews: previews))
+                .padding(16).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+            AlertNotificationRow(group: .init(id: "single", alertID: "alert", query: "Anthurium", createdAt: Date().addingTimeInterval(-172800), createdCursor: "", matchCount: 1, unreadCount: 0, previews: Array(previews.prefix(1))))
+                .padding(16).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        }.padding(16).frame(width: 390).background(Color(.systemGroupedBackground))
+        for scheme in [ColorScheme.light, .dark] {
+            let renderer = ImageRenderer(content: content.environment(\.colorScheme, scheme))
+            renderer.scale = 2
+            let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
+            attachment.name = "Alert notification groups \(scheme)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     func testWorkUsesSuggestedAvailableSearchAndSavedLocation() throws {

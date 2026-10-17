@@ -741,6 +741,119 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal("resume did not reset device cursor")
 		}
 	})
+	t.Run("notification groups and exact batch navigation", func(t *testing.T) {
+		s, c, _, _, _, _ := fixture(t)
+		alert := create(t, s, c)
+		var groupIDs []string
+		for batch := 0; batch < 53; batch++ {
+			var check, notification string
+			if err := pool.QueryRow(ctx, `INSERT INTO listing_alert_check_runs(alert_id,scan_complete,completed_at) VALUES($1,true,now()) RETURNING id`, alert).Scan(&check); err != nil {
+				t.Fatal(err)
+			}
+			count := 1
+			if batch == 52 {
+				count = 13
+			}
+			listingIDs := []string{}
+			for index := 0; index < count; index++ {
+				id := fmt.Sprint(10000 + batch*100 + index)
+				listingIDs = append(listingIDs, id)
+				raw, _ := json.Marshal(alertListing{ID: id, Title: "Anthurium"})
+				exec(t, `INSERT INTO listing_alert_listings(alert_id,listing_id,check_id,listing,matched,matched_at) VALUES($1,$2,$3,$4,true,'2026-10-17T12:34:56.123456Z')`, alert, id, check, raw)
+			}
+			if err := pool.QueryRow(ctx, `INSERT INTO listing_alert_notification_outbox(alert_id,check_id,listing_ids,created_at) VALUES($1,$2,$3,'2026-10-17T12:34:56.123456Z') RETURNING id`, alert, check, listingIDs).Scan(&notification); err != nil {
+				t.Fatal(err)
+			}
+			groupIDs = append(groupIDs, notification)
+		}
+		exec(t, `UPDATE user_listing_alerts SET paused=true WHERE id=$1`, alert)
+		request := alertRequest{}
+		seen := map[string]bool{}
+		for page := 0; page < 2; page++ {
+			result, err := s.handle(c, "notification-feed", request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			groups := result.(map[string]any)["groups"].([]alertNotificationGroup)
+			expected := 50
+			if page == 1 {
+				expected = 3
+			}
+			if len(groups) != expected {
+				t.Fatalf("page %d groups=%d", page, len(groups))
+			}
+			for _, group := range groups {
+				if seen[group.ID] {
+					t.Fatal("duplicate notification")
+				}
+				seen[group.ID] = true
+				var previews []alertListing
+				if err := json.Unmarshal(group.Previews, &previews); err != nil {
+					t.Fatal(err)
+				}
+				if group.ID == groupIDs[52] && (group.MatchCount != 13 || group.UnreadCount != 13 || len(previews) != 4) {
+					t.Fatalf("wrong grouped preview %+v", group)
+				}
+				if group.CreatedCursor != "2026-10-17T12:34:56.123456Z" {
+					t.Fatal("lost cursor precision")
+				}
+				request = alertRequest{Before: &group.CreatedAt, BeforeID: group.ID}
+			}
+		}
+		if len(seen) != 53 {
+			t.Fatal("missing batches")
+		}
+		_, other, _, _, _, _ := fixture(t)
+		result, err := s.handle(other, "notification-feed", alertRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.(map[string]any)["groups"].([]alertNotificationGroup)) != 0 {
+			t.Fatal("cross-user feed")
+		}
+		batchRequest := alertRequest{ID: alert, NotificationID: groupIDs[52]}
+		result, err = s.handle(c, "matches", batchRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		matches := result.(map[string]any)["matches"].([]any)
+		if len(matches) != 13 {
+			t.Fatalf("batch leaked other matches: %d", len(matches))
+		}
+		if result.(map[string]any)["notification"].(*alertNotificationDetails).ID != groupIDs[52] {
+			t.Fatal("wrong metadata")
+		}
+		batchRequest.NotificationID = groupIDs[0]
+		result, err = s.handle(c, "matches", batchRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.(map[string]any)["matches"].([]any)) != 1 {
+			t.Fatal("single batch leaked matches")
+		}
+		if _, err = s.handle(other, "matches", batchRequest); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("cross-account batch: %v", err)
+		}
+		wrongAlert := create(t, s, c)
+		batchRequest.ID = wrongAlert
+		if _, err = s.handle(c, "matches", batchRequest); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("cross-alert batch: %v", err)
+		}
+		click := alertRequest{ID: alert, NotificationID: groupIDs[52], Source: "alerts_tab", Event: "listing_opened", InteractionID: uuid.NewString(), ListingID: "15200"}
+		if _, err = s.handle(c, "interaction", click); err != nil {
+			t.Fatal(err)
+		}
+		click.ListingID = "10000"
+		click.InteractionID = uuid.NewString()
+		if _, err = s.handle(c, "interaction", click); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("cross-batch click: %v", err)
+		}
+		var source, notification string
+		if err := pool.QueryRow(ctx, `SELECT source,notification_id FROM listing_alert_interactions WHERE alert_id=$1 AND listing_id='15200'`, alert).Scan(&source, &notification); err != nil || source != "alerts_tab" || notification != groupIDs[52] {
+			t.Fatalf("lost click attribution: %v", err)
+		}
+	})
+
 	t.Run("recent feed combines owned alerts with stable pagination", func(t *testing.T) {
 		s, c, _, _, _, _ := fixture(t)
 		ids := []string{create(t, s, c), create(t, s, c)}

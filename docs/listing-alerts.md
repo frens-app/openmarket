@@ -20,19 +20,24 @@ tokens remain in the phone's WebKit store; the backend never receives them.
 Use the plus button to create an alert with one text field for the product and
 any preferences or requirements. A daily time picker defaults to the nearest
 hour when the form opens and accepts a chosen hour and minute. There is no
-separate location field. The tab is titled Alerts and shows a chronological feed
-of matches across the user's alerts, with photos, prices, alert names, and a New
-badge for unopened listings. Tap a listing directly to open it and record its
-view, or tap its alert name for the full alert. Viewing the feed alone does not
-mark listings read. The feed includes matches from paused alerts and pages older
-results in groups of 50, using timestamp, alert ID, and listing ID for stable ordering.
+separate location field. The tab is titled Alerts and shows one row per completed
+notification batch. Each row says “Listings matching [query]”, displays up to four
+photos (with an overflow count), and a calendar-day label such as Today, Yesterday,
+or 2 days ago. A single match gets one photo. A New badge remains while any listing
+in that batch is unopened. Viewing the feed or opening a group does not mark its
+listings read.
 
-Manage opens the user's saved alerts; their details show the daily schedule and
-an options menu to pause, resume, or delete. The feed does not display schedules.
-Opening a push notification still takes you to that alert. A foreground match
-notification refreshes the feed; returning to the app or pulling to refresh does
-as well. The feed is available without a currently connected Facebook session;
-creating and resuming alerts still require it.
+Tapping a feed row or a push opens only the listing IDs saved in that notification,
+not the alert's entire history. Each listing opens the existing detail screen and
+records its view. Groups remain available if APNs failed to deliver the push.
+The feed includes batches from paused alerts and pages 50 groups at a time,
+using the exact notification creation timestamp and notification ID as its cursor.
+
+Manage opens the user's saved alerts with their full match history, daily schedule,
+and pause/resume/delete controls. The feed does not display schedules. A foreground
+match notification refreshes the feed; returning to the app or pulling to refresh
+does as well. The feed is available without a currently connected Facebook
+session; creating and resuming alerts still require it.
 
 ## Deployment configuration
 
@@ -213,7 +218,9 @@ a notification can leave its delivery outcome unknown; it is not sent again.
 The authenticated JSON endpoints are `POST /v1/price-alerts/{action}`. They reuse
 the existing access-token and active-session authentication. Actions are `list`,
 `create`, `state` (pause/resume), `delete`, `work`, `fetch-event`, `page`, `matches`,
-`feed`, `interaction`, and the legacy `viewed` action.
+`notification-feed`, `interaction`, and the legacy `feed` and `viewed` actions.
+`matches` accepts an optional `notificationID` to scope results to that batch;
+the server validates that it belongs to both the requested alert and account.
 The Go request/response types live in `cmd/api/alerts.go`; iOS wire types are in
 `PriceAlertsService.swift`. Responses use RFC3339 timestamps. Match pagination
 uses the exact `matchedCursor` string and listing ID as a pair so equal timestamps
@@ -325,7 +332,9 @@ opening a listing records `listing_opened` and preserves the listing's first
 Notification entry carries its outbox ID through subsequent listing opens, so
 clicks join back to the notification, check, and background fetch. Opening an
 alert or displaying the recent feed does not mark all of its listings viewed.
-Direct feed listing taps use `source=alerts_tab` without a notification ID.
+Feed group and listing taps use `source=alerts_tab` with the group’s notification
+ID. Push taps use `source=notification` with that same ID, preserving the entry
+path. Listing interactions with a notification ID must belong to that batch.
 
 The authenticated `interaction` action accepts a client-generated `interactionID`
 for idempotency, alert `id`, `event`, `source`, optional `notificationID`, and

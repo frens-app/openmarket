@@ -25,7 +25,7 @@ func (s *alertsServer) recordInteraction(ctx context.Context, user uuid.UUID, in
 	var notification *uuid.UUID
 	if in.NotificationID != "" {
 		parsed, e := uuid.Parse(in.NotificationID)
-		if e != nil || in.Source != "notification" {
+		if e != nil || (in.Source != "notification" && in.Source != "alerts_tab") {
 			return alertError(connect.CodeInvalidArgument, "Invalid notification ID.")
 		}
 		notification = &parsed
@@ -40,7 +40,7 @@ func (s *alertsServer) recordInteraction(ctx context.Context, user uuid.UUID, in
 		return alertNotFound(err)
 	}
 	if notification != nil {
-		if err = tx.QueryRow(ctx, `SELECT id FROM listing_alert_notification_outbox WHERE id=$1 AND alert_id=$2`, notification, id).Scan(&exists); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT id FROM listing_alert_notification_outbox WHERE id=$1 AND alert_id=$2 AND ($3='' OR $3=ANY(listing_ids))`, notification, id, in.ListingID).Scan(&exists); err != nil {
 			return alertNotFound(err)
 		}
 	}

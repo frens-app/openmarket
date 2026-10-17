@@ -178,6 +178,8 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 	switch action {
 	case "interaction":
 		return nil, s.recordInteraction(ctx, userID, in)
+	case "notification-feed":
+		return s.notificationFeed(ctx, userID, in)
 	case "feed":
 		return s.feed(ctx, userID, in)
 	case "list":
@@ -274,7 +276,21 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		if err != nil {
 			return nil, alertError(connect.CodeInvalidArgument, "Invalid alert ID.")
 		}
-		rows, err := s.pool.Query(ctx, `SELECT l.listing,l.matched_at,l.viewed_at FROM listing_alert_listings l JOIN user_listing_alerts a ON a.id=l.alert_id WHERE a.id=$1 AND a.user_id=$2 AND l.matched AND ($3::timestamptz IS NULL OR (l.matched_at,l.listing_id)<($3,$4)) ORDER BY l.matched_at DESC,l.listing_id DESC LIMIT 100`, id, userID, in.Before, in.BeforeID)
+		var notificationID *uuid.UUID
+		var notification *alertNotificationDetails
+		if in.NotificationID != "" {
+			parsed, e := uuid.Parse(in.NotificationID)
+			if e != nil {
+				return nil, alertError(connect.CodeInvalidArgument, "Invalid notification ID.")
+			}
+			notificationID = &parsed
+			notification = &alertNotificationDetails{}
+			e = s.pool.QueryRow(ctx, `SELECT n.id,a.query,n.created_at,cardinality(n.listing_ids) FROM listing_alert_notification_outbox n JOIN user_listing_alerts a ON a.id=n.alert_id WHERE n.id=$1 AND a.id=$2 AND a.user_id=$3`, parsed, id, userID).Scan(&notification.ID, &notification.Query, &notification.CreatedAt, &notification.MatchCount)
+			if e != nil {
+				return nil, alertNotFound(e)
+			}
+		}
+		rows, err := s.pool.Query(ctx, `SELECT l.listing,l.matched_at,l.viewed_at FROM listing_alert_listings l JOIN user_listing_alerts a ON a.id=l.alert_id WHERE a.id=$1 AND a.user_id=$2 AND l.matched AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM listing_alert_notification_outbox n WHERE n.id=$5 AND n.alert_id=a.id AND l.listing_id=ANY(n.listing_ids))) AND ($3::timestamptz IS NULL OR (l.matched_at,l.listing_id)<($3,$4)) ORDER BY l.matched_at DESC,l.listing_id DESC LIMIT 100`, id, userID, in.Before, in.BeforeID, notificationID)
 		if err != nil {
 			return nil, err
 		}
@@ -289,7 +305,7 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			}
 			matches = append(matches, map[string]any{"listing": raw, "matchedAt": matched, "matchedCursor": matched.UTC().Format(time.RFC3339Nano), "viewedAt": viewed})
 		}
-		return map[string]any{"matches": matches}, rows.Err()
+		return map[string]any{"matches": matches, "notification": notification}, rows.Err()
 	case "viewed":
 		if len(in.ListingIDs) > 100 {
 			return nil, alertError(connect.CodeInvalidArgument, "Too many listings.")
