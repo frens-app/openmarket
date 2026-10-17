@@ -14,10 +14,22 @@ final class PriceAlertsTests: XCTestCase {
         coordinator.openAlertID = nil
     }
 
-    func testWorkUsesNewestAvailableSearchAndSavedLocation() throws {
+    func testFeedKeepsAlertIdentityAndCursor() throws {
+        let json = #"{"items":[{"alertID":"alert-a","query":"Anthurium","match":{"listing":{"id":"123","title":"Anthurium","priceText":"$50","locationText":"Toronto","thumbnailURL":"","description":"","condition":""},"matchedAt":"2026-10-17T12:34:56.123456Z","matchedCursor":"2026-10-17T12:34:56.123456Z","viewedAt":null}},{"alertID":"alert-b","query":"Plants","match":{"listing":{"id":"123","title":"Anthurium","priceText":"$50","locationText":"Toronto","thumbnailURL":"","description":"","condition":""},"matchedAt":"2026-10-17T12:34:56.123456Z","matchedCursor":"2026-10-17T12:34:56.123456Z","viewedAt":"2026-10-17T12:35:00Z"}}]}"#
+        let items = try PriceAlertsService.decoder().decode(PriceAlertsService.Feed.self, from: Data(json.utf8)).items
+        XCTAssertNotEqual(items[0].id, items[1].id)
+        XCTAssertNil(items[0].match.viewedAt)
+        XCTAssertNotNil(items[1].match.viewedAt)
+        let request = PriceAlertsService.Request(beforeID: items[1].match.id, before: items[1].match.matchedCursor, beforeAlertID: items[1].alertID)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(body["before"] as? String, "2026-10-17T12:34:56.123456Z")
+        XCTAssertEqual(body["beforeAlertID"] as? String, "alert-b")
+    }
+
+    func testWorkUsesSuggestedAvailableSearchAndSavedLocation() throws {
         let data = Data(#"{"work":[{"id":"check","alertID":"alert","query":"Switch OLED","location":{"citySlug":"sanfrancisco","name":"San Francisco","radiusKM":16,"latitude":37.77,"longitude":-122.42},"cursor":"next-page","actor":"123","pageNumber":2}]}"#.utf8)
         let work = try PriceAlertsService.decoder().decode(PriceAlertsService.WorkList.self, from: data).work[0]
-        XCTAssertEqual(work.searchQuery.sort, .newest)
+        XCTAssertEqual(work.searchQuery.sort, .bestMatch)
         XCTAssertEqual(work.searchQuery.availability, .available)
         XCTAssertEqual(work.searchQuery.citySlug, "sanfrancisco")
         XCTAssertEqual(work.searchQuery.coordinate?.latitude, 37.77)
@@ -26,7 +38,7 @@ final class PriceAlertsTests: XCTestCase {
         let request = try AnonymousFeedClient.request(for: work.searchQuery, cursor: nil)
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         let variables = try XCTUnwrap(URLComponents(string: "?" + body)?.queryItems?.first(where: { $0.name == "variables" })?.value)
-        XCTAssertTrue(variables.contains("CREATION_TIME_DESCEND"))
+        XCTAssertFalse(variables.contains("commerce_search_sort_by"))
         XCTAssertTrue(variables.contains("commerce_search_and_rp_available"))
     }
 
@@ -66,7 +78,7 @@ final class PriceAlertsTests: XCTestCase {
 
     func testSearchOptionsDefaultMissingFieldsAndRejectInvalidConstraints() throws {
         let options = try PriceAlertsService.decoder().decode(AlertSearchOptions.self, from: Data(#"{"maxPrice":50,"futureField":true}"#.utf8))
-        XCTAssertEqual(options.sort, .newest)
+        XCTAssertEqual(options.sort, .bestMatch)
         XCTAssertEqual(options.maxPrice, 50)
         XCTAssertNil(options.minPrice)
         for json in [#"{"sort":"unsupported"}"#, #"{"daysSinceListed":2}"#, #"{"minPrice":-1}"#, #"{"maxPrice":2147483648}"#, #"{"minPrice":100,"maxPrice":50}"#] {
@@ -81,7 +93,7 @@ final class PriceAlertsTests: XCTestCase {
         let request = try await PriceAlertCoordinator.searchFirstPage(work, actor: "123", client: client)
         XCTAssertEqual(client.calls, 1)
         XCTAssertNil(client.requestedCursor)
-        XCTAssertEqual(client.query?.sort, .newest)
+        XCTAssertEqual(client.query?.sort, .bestMatch)
         XCTAssertEqual(client.query?.availability, .available)
         XCTAssertEqual(request.checkID, "check")
         XCTAssertEqual(request.pageNumber, 2)

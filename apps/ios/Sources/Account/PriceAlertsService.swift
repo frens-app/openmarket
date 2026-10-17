@@ -48,8 +48,15 @@ struct AlertMatch: Decodable, Identifiable {
     var id: String { listing.id }
 }
 
+struct AlertFeedItem: Decodable, Identifiable {
+    let alertID: String
+    let query: String
+    var match: AlertMatch
+    var id: String { alertID + ":" + match.id }
+}
+
 struct AlertSearchOptions: Decodable {
-    var sort: SearchQuery.Sort = .newest
+    var sort: SearchQuery.Sort = .bestMatch
     var delivery: SearchQuery.Delivery = .any
     var daysSinceListed: SearchQuery.Age = .any
     var conditions: [SearchQuery.Condition] = []
@@ -64,7 +71,7 @@ struct AlertSearchOptions: Decodable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        sort = try values.decodeIfPresent(SearchQuery.Sort.self, forKey: .sort) ?? .newest
+        sort = try values.decodeIfPresent(SearchQuery.Sort.self, forKey: .sort) ?? .bestMatch
         delivery = try values.decodeIfPresent(SearchQuery.Delivery.self, forKey: .delivery) ?? .any
         daysSinceListed = try values.decodeIfPresent(SearchQuery.Age.self, forKey: .daysSinceListed) ?? .any
         conditions = try values.decodeIfPresent([SearchQuery.Condition].self, forKey: .conditions) ?? []
@@ -127,10 +134,12 @@ final class PriceAlertsService {
         var notificationID: String?
         var source: String?
         var listingID: String?
+        var beforeAlertID: String?
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
     struct AlertList: Decodable { var alerts: [PriceAlert] }
+    struct Feed: Decodable { var items: [AlertFeedItem] }
     struct MatchList: Decodable { var matches: [AlertMatch] }
     struct WorkList: Decodable { var work: [AlertWork] }
     struct Created: Decodable { var id: String }
@@ -171,7 +180,7 @@ final class PriceAlertsService {
         guard let response = response as? HTTPURLResponse else { throw APIError.network }
         guard (200..<300).contains(response.statusCode) else {
             if response.statusCode == 401 { throw APIError.unauthenticated }
-            throw APIError.message((try? JSONDecoder().decode(Failure.self, from: data).error) ?? "Couldn't load listing alerts.")
+            throw APIError.message((try? JSONDecoder().decode(Failure.self, from: data).error) ?? "Couldn't load alerts.")
         }
         return try Self.decoder().decode(type, from: data)
     }

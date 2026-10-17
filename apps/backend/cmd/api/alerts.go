@@ -69,6 +69,7 @@ type alertListing struct {
 	Condition    string `json:"condition"`
 }
 type alertRequest struct {
+	BeforeAlertID  string         `json:"beforeAlertID"`
 	InteractionID  string         `json:"interactionID"`
 	NotificationID string         `json:"notificationID"`
 	Source         string         `json:"source"`
@@ -177,6 +178,8 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 	switch action {
 	case "interaction":
 		return nil, s.recordInteraction(ctx, userID, in)
+	case "feed":
+		return s.feed(ctx, userID, in)
 	case "list":
 		return s.list(ctx, userID)
 	case "create":

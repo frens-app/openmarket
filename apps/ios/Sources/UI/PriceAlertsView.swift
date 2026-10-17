@@ -15,6 +15,15 @@ struct PriceAlertsView: View {
     @ObservedObject private var push = PushRegistrar.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var alerts: [PriceAlert] = []
+    @State private var feed: [AlertFeedItem] = []
+    @State private var feedMore = false
+    @State private var feedLoading = false
+    @State private var refreshing = false
+    @State private var feedGeneration = 0
+    @State private var showManage = false
+    @State private var selectedMatch: AlertFeedItem?
+    @State private var feedInteractionID = UUID().uuidString
+    @Namespace private var feedNamespace
     @State private var path: [AlertRoute] = []
     @State private var query = ""
     @State private var alertTime = AlertSchedule.defaultTime()
@@ -24,7 +33,6 @@ struct PriceAlertsView: View {
     @State private var showCreate = false
     @State private var showLimit = false
     @State private var showAccount = false
-    @State private var deleteID: String?
     private let service = PriceAlertsService()
 
     var body: some View {
@@ -47,30 +55,49 @@ struct PriceAlertsView: View {
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
-                if alerts.isEmpty && account.isSignedIn {
-                    ContentUnavailableView("No listing alerts yet", systemImage: "bell", description: Text("Create an alert for a product you want to find."))
+                if feed.isEmpty && account.isSignedIn && !refreshing {
+                    ContentUnavailableView(alerts.isEmpty ? "No alerts yet" : "No matches yet", systemImage: "bell",
+                        description: Text(alerts.isEmpty ? "Create an alert for something you’re looking for." : "New finds from your alerts will appear here."))
                 }
-                ForEach(alerts) { alert in
-                    NavigationLink(value: AlertRoute(alertID: alert.id)) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(alert.query).font(.headline)
-                                if alert.unreadCount > 0 {
-                                    Text("\(alert.unreadCount) new").font(.caption.bold()).foregroundStyle(.blue)
-                                }
+                ForEach(feed) { item in
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Button { path.append(AlertRoute(alertID: item.alertID)) } label: {
+                                HStack(spacing: 4) {
+                                    Text(item.query).lineLimit(1)
+                                    Image(systemName: "chevron.right").font(.caption2)
+                                }.font(.subheadline.weight(.semibold))
+                            }.buttonStyle(.plain)
+                            Spacer()
+                            if item.match.viewedAt == nil {
+                                Text("New").font(.caption.bold()).foregroundStyle(.blue)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(.blue.opacity(0.1), in: Capsule())
                             }
-                            Text(alert.paused ? "Paused" : "Daily around \(alert.nextCheckAt.formatted(date: .omitted, time: .shortened))")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                            Text("\(alert.matchCount) matches")
-                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        .contextMenu { options(alert) }
+                        Button {
+                            feedInteractionID = UUID().uuidString
+                            selectedMatch = item
+                        } label: {
+                            AlertListingRow(match: item.match, showNew: false)
+                        }.buttonStyle(.plain)
+                        Text(item.match.matchedAt, style: .relative)
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .swipeActions { Button("Delete", role: .destructive) { deleteID = alert.id } }
+                    .padding(.vertical, 6)
+                    .listRowBackground(item.match.viewedAt == nil ? Color.blue.opacity(0.04) : Color(.secondarySystemGroupedBackground))
                 }
+                if feedMore {
+                    Button("Load earlier matches") { Task { await loadMore() } }.disabled(feedLoading || refreshing)
+                }
+                if feedLoading || (refreshing && feed.isEmpty) { ProgressView().frame(maxWidth: .infinity) }
             }
-            .navigationTitle("Listing alerts")
+            .navigationTitle("Alerts")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Manage", systemImage: "slider.horizontal.3") { showManage = true }
+                        .disabled(alerts.isEmpty)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         if alerts.count >= 3 {
@@ -79,7 +106,7 @@ struct PriceAlertsView: View {
                             query = ""; alertTime = AlertSchedule.defaultTime(); error = nil; showCreate = true
                         }
                     } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("Create listing alert")
+                        .accessibilityLabel("Create alert")
                         .disabled(!account.isSignedIn || !connected || !push.isEnabled || busy)
                 }
             }
@@ -88,35 +115,56 @@ struct PriceAlertsView: View {
             }
             .refreshable { await refresh() }
             .task { await refresh(); navigateToPush() }
+            .onChange(of: coordinator.matchRevision) { _, _ in Task { await refresh() } }
             .onChange(of: coordinator.openAlertID) { _, _ in navigateToPush() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await refresh() } } }
             .onChange(of: account.state.viewer?.id) { _, _ in
-                alerts = []; path = []; error = nil
+                alerts = []; feed = []; feedGeneration += 1; path = []; error = nil
                 Task { await refresh() }
             }
             .sheet(isPresented: $showAccount, onDismiss: { Task { await refresh() } }) {
                 AccountGateView(feature: .priceAlerts, done: { showAccount = false })
             }
             .sheet(isPresented: $showCreate) { createSheet }
+            .sheet(isPresented: $showManage) { manageSheet }
+            .sheet(item: $selectedMatch) { item in
+                NavigationStack {
+                    DetailView(listing: item.match.listing.listing, namespace: feedNamespace, referrer: .priceAlerts)
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { selectedMatch = nil } } }
+                }
+                .task {
+                    do {
+                        let _: PriceAlertsService.Empty = try await service.call("interaction", .init(id: item.alertID, event: "listing_opened",
+                            interactionID: feedInteractionID, source: "alerts_tab", listingID: item.match.id), as: PriceAlertsService.Empty.self)
+                        if let index = feed.firstIndex(where: { $0.id == item.id }) { feed[index].match.viewedAt = Date() }
+                        await refresh()
+                    } catch { self.error = error.localizedDescription }
+                }
+            }
             .alert("Alert limit reached", isPresented: $showLimit) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("You can have up to 3 alerts, including paused alerts. Delete an alert to create another.")
             }
-            .confirmationDialog("Delete this alert and its saved matches?", isPresented: Binding(get: { deleteID != nil }, set: { if !$0 { deleteID = nil } })) {
-                Button("Delete alert", role: .destructive) {
-                    if let id = deleteID { Task { await mutate("delete", .init(id: id)) } }
-                    deleteID = nil
-                }
-            }
+
         }
     }
 
-    @ViewBuilder private func options(_ alert: PriceAlert) -> some View {
-        Button(alert.paused ? "Resume alert" : "Pause alert", systemImage: alert.paused ? "play" : "pause") {
-            Task { await mutate("state", .init(id: alert.id, paused: !alert.paused)) }
+    private var manageSheet: some View {
+        NavigationStack {
+            List(alerts) { alert in
+                NavigationLink {
+                    AlertMatchesView(route: AlertRoute(alertID: alert.id), alert: alert, changed: { Task { await refresh() } })
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(alert.query).font(.headline)
+                        Text(alert.paused ? "Paused" : "Active").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Your alerts")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showManage = false } } }
         }
-        Button("Delete alert", systemImage: "trash", role: .destructive) { deleteID = alert.id }
     }
 
     private var createSheet: some View {
@@ -129,7 +177,7 @@ struct PriceAlertsView: View {
                 DatePicker("Daily around", selection: $alertTime, displayedComponents: .hourAndMinute)
                 if let error { Text(error).foregroundStyle(.red) }
             }
-            .navigationTitle("New listing alert")
+            .navigationTitle("New alert")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showCreate = false } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -155,26 +203,38 @@ struct PriceAlertsView: View {
         } catch { self.error = error.localizedDescription }
     }
 
-    private func mutate(_ action: String, _ request: PriceAlertsService.Request) async {
-        busy = true; error = nil
-        defer { busy = false }
-        do {
-            let _: PriceAlertsService.Empty = try await service.call(action, request, as: PriceAlertsService.Empty.self)
-            await refresh()
-        } catch { self.error = error.localizedDescription }
-    }
-
     private func refresh() async {
+        guard !refreshing else { return }
+        refreshing = true
+        feedGeneration += 1
+        defer { refreshing = false }
         let owner = account.state.viewer?.id
         await push.refreshStatus()
         push.registerIfAuthorized()
         connected = await SessionState.isSignedIn()
         await account.reportFacebookConnection(connected)
-        guard account.isSignedIn else { alerts = []; return }
+        guard account.isSignedIn else { alerts = []; feed = []; return }
         do {
-            let loaded = try await service.call("list", as: PriceAlertsService.AlertList.self).alerts
+            async let loadedAlerts = service.call("list", as: PriceAlertsService.AlertList.self)
+            async let loadedFeed = service.call("feed", as: PriceAlertsService.Feed.self)
+            let (alertList, recent) = try await (loadedAlerts, loadedFeed)
             guard owner == account.state.viewer?.id else { return }
-            alerts = loaded; error = nil
+            alerts = alertList.alerts
+            feed = recent.items; feedMore = recent.items.count == 50; error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func loadMore() async {
+        guard !feedLoading, !refreshing, let last = feed.last else { return }
+        feedLoading = true
+        defer { feedLoading = false }
+        let generation = feedGeneration
+        do {
+            let loaded = try await service.call("feed", .init(beforeID: last.match.id, before: last.match.matchedCursor,
+                beforeAlertID: last.alertID), as: PriceAlertsService.Feed.self)
+            guard generation == feedGeneration else { return }
+            feed += loaded.items.filter { item in !feed.contains { $0.id == item.id } }
+            feedMore = loaded.items.count == 50; error = nil
         } catch { self.error = error.localizedDescription }
     }
 
@@ -204,22 +264,19 @@ private struct AlertMatchesView: View {
 
     var body: some View {
         List {
+            if let alert {
+                Section {
+                    LabeledContent("Checks", value: "Daily around \(alert.nextCheckAt.formatted(date: .omitted, time: .shortened))")
+                    if paused { Text("Paused").foregroundStyle(.secondary) }
+                }
+            }
             if let error { Text(error).foregroundStyle(.red) }
             if matches.isEmpty && !loading {
                 ContentUnavailableView("No matches yet", systemImage: "bell", description: Text("Matching listings will appear here after a check completes."))
             }
             ForEach(matches) { match in
                 Button { listingInteractionID = UUID().uuidString; selected = match } label: {
-                    HStack(spacing: 12) {
-                        AsyncImage(url: URL(string: match.listing.thumbnailURL)) { image in image.resizable().scaledToFill() } placeholder: { Color(.secondarySystemBackground) }
-                            .frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 10))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(match.listing.title).font(.headline)
-                            Text(match.listing.priceText)
-                            Text(match.listing.locationText).font(.caption).foregroundStyle(.secondary)
-                            if match.viewedAt == nil { Text("New").font(.caption.bold()).foregroundStyle(.blue) }
-                        }
-                    }.foregroundStyle(.primary)
+                    AlertListingRow(match: match)
                 }
             }
             if more { Button("Load more matches") { Task { await load(reset: false) } }.disabled(loading) }
@@ -282,5 +339,32 @@ private struct AlertMatchesView: View {
             let _: PriceAlertsService.Empty = try await service.call("state", .init(id: alertID, paused: !paused), as: PriceAlertsService.Empty.self)
             paused.toggle(); changed()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct AlertListingRow: View {
+    let match: AlertMatch
+    var showNew = true
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            AsyncImage(url: URL(string: match.listing.thumbnailURL)) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 12).fill(Color(.tertiarySystemFill))
+                    .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+            }
+            .frame(width: 104, height: 104).clipShape(RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(match.listing.title).font(.subheadline.weight(.medium)).lineLimit(3)
+                Text(match.listing.priceText).font(.headline)
+                Text(match.listing.locationText).font(.caption).foregroundStyle(.secondary)
+                if showNew && match.viewedAt == nil { Text("New").font(.caption.bold()).foregroundStyle(.blue) }
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }

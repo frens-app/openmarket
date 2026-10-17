@@ -370,7 +370,7 @@ func TestAlertsIntegration(t *testing.T) {
 		if len(initial) != 1 || initial[0].Location.CitySlug != "sanfrancisco" {
 			t.Fatal("missing device location did not fall back to saved alert")
 		}
-		if len(initial) != 1 || initial[0].SearchOptions.Sort != "creation_time_descend" {
+		if len(initial) != 1 || initial[0].SearchOptions.Sort != "best_match" {
 			t.Fatalf("default work: %+v", initial)
 		}
 		options, err := config.ParseAlertSearchOptions(`{"sort":"price_ascend","minPrice":10,"maxPrice":100,"daysSinceListed":1}`)
@@ -436,7 +436,7 @@ func TestAlertsIntegration(t *testing.T) {
 		if v.(map[string]any)["work"].([]alertWork)[0].Location != deviceLocation {
 			t.Fatal("retry changed snapshotted location")
 		}
-		if v.(map[string]any)["work"].([]alertWork)[0].SearchOptions.Sort != "creation_time_descend" {
+		if v.(map[string]any)["work"].([]alertWork)[0].SearchOptions.Sort != "best_match" {
 			t.Fatal("retry changed snapshotted search")
 		}
 		if _, err = s.handle(c, "fetch-event", alertRequest{FetchAttemptID: attempt, Event: "search_started"}); err != nil {
@@ -741,6 +741,74 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatal("resume did not reset device cursor")
 		}
 	})
+	t.Run("recent feed combines owned alerts with stable pagination", func(t *testing.T) {
+		s, c, _, _, _, _ := fixture(t)
+		ids := []string{create(t, s, c), create(t, s, c)}
+		for _, id := range ids {
+			var check uuid.UUID
+			if err := pool.QueryRow(ctx, `INSERT INTO listing_alert_check_runs(alert_id) VALUES($1) RETURNING id`, id).Scan(&check); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 28; i++ {
+				l := alertListing{ID: fmt.Sprint(1000 + i), Title: "Match"}
+				raw, _ := json.Marshal(l)
+				exec(t, `INSERT INTO listing_alert_listings(alert_id,listing_id,check_id,listing,matched,matched_at) VALUES($1,$2,$3,$4,$5,'2026-10-17T12:34:56.123456Z')`, id, l.ID, check, raw, i < 27)
+			}
+		}
+		exec(t, `UPDATE user_listing_alerts SET paused=true WHERE id=$1`, ids[0])
+		exec(t, `UPDATE listing_alert_listings SET viewed_at=now() WHERE alert_id=$1 AND listing_id='1000'`, ids[0])
+		seen := map[string]bool{}
+		request := alertRequest{}
+		viewed := 0
+		for page := 0; page < 2; page++ {
+			result, err := s.handle(c, "feed", request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			items := result.(map[string]any)["items"].([]alertFeedItem)
+			expected := 50
+			if page == 1 {
+				expected = 4
+			}
+			if len(items) != expected {
+				t.Fatalf("page %d count %d", page, len(items))
+			}
+			for _, item := range items {
+				var listing alertListing
+				if err := json.Unmarshal(item.Match.Listing, &listing); err != nil {
+					t.Fatal(err)
+				}
+				key := item.AlertID + ":" + listing.ID
+				if seen[key] {
+					t.Fatal("repeated feed item")
+				}
+				seen[key] = true
+				if item.Match.ViewedAt != nil {
+					viewed++
+				}
+				if item.Match.MatchedCursor != "2026-10-17T12:34:56.123456Z" {
+					t.Fatal("lost cursor precision")
+				}
+				request = alertRequest{Before: &item.Match.MatchedAt, BeforeAlertID: item.AlertID, BeforeID: listing.ID}
+			}
+		}
+		if len(seen) != 54 || viewed != 1 {
+			t.Fatalf("missing feed state %d %d", len(seen), viewed)
+		}
+		_, other, _, _, _, _ := fixture(t)
+		result, err := s.handle(other, "feed", alertRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.(map[string]any)["items"].([]alertFeedItem)) != 0 {
+			t.Fatal("cross-account feed")
+		}
+		request.BeforeAlertID = "bad"
+		if _, err := s.handle(c, "feed", request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("invalid cursor: %v", err)
+		}
+	})
+
 	t.Run("stable match pagination and account isolation", func(t *testing.T) {
 		s, c, _, _, _, _ := fixture(t)
 		id := create(t, s, c)

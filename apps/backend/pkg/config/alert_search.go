@@ -18,7 +18,7 @@ type AlertSearchOptions struct {
 }
 
 func ParseAlertSearchOptions(raw string) (AlertSearchOptions, error) {
-	options := AlertSearchOptions{Sort: "creation_time_descend", Conditions: []string{}}
+	options := AlertSearchOptions{Sort: "best_match", Conditions: []string{}}
 	if strings.TrimSpace(raw) == "" {
 		return options, nil
 	}

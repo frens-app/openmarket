@@ -55,6 +55,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        if notification.request.content.userInfo["kind"] as? String == "price_alert_match" {
+            Task { @MainActor in PriceAlertCoordinator.shared.matchRevision += 1 }
+        }
         completionHandler([.banner, .sound, .list])
     }
 

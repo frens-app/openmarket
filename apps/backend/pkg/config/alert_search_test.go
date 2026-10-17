@@ -5,7 +5,7 @@ import "testing"
 func TestAlertSearchOptions(t *testing.T) {
 	for _, raw := range []string{"", "{}"} {
 		got, err := ParseAlertSearchOptions(raw)
-		if err != nil || got.Sort != "creation_time_descend" || got.MinPrice != nil || got.MaxPrice != nil || got.DaysSinceListed != 0 {
+		if err != nil || got.Sort != "best_match" || got.MinPrice != nil || got.MaxPrice != nil || got.DaysSinceListed != 0 {
 			t.Fatalf("defaults: %+v, %v", got, err)
 		}
 	}

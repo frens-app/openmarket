@@ -6,6 +6,7 @@ import UserNotifications
 final class PriceAlertCoordinator: ObservableObject {
     static let shared = PriceAlertCoordinator()
     @Published var selectedTab = 0
+    @Published var matchRevision = 0
     @Published var openAlertID: String?
     private(set) var openNotificationID: String?
     @Published private(set) var webView: WKWebView?

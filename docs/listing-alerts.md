@@ -20,12 +20,19 @@ tokens remain in the phone's WebKit store; the backend never receives them.
 Use the plus button to create an alert with one text field for the product and
 any preferences or requirements. A daily time picker defaults to the nearest
 hour when the form opens and accepts a chosen hour and minute. There is no
-separate location field. The tab
-lists active and paused alerts
-with match and unread counts. Open an alert to see its matching listings, or use
-its options menu to pause, resume, or delete it. Opening a push notification takes
-you to that alert. Matches have individual viewed status; there is no separate
-notification-history inbox.
+separate location field. The tab is titled Alerts and shows a chronological feed
+of matches across the user's alerts, with photos, prices, alert names, and a New
+badge for unopened listings. Tap a listing directly to open it and record its
+view, or tap its alert name for the full alert. Viewing the feed alone does not
+mark listings read. The feed includes matches from paused alerts and pages older
+results in groups of 50, using timestamp, alert ID, and listing ID for stable ordering.
+
+Manage opens the user's saved alerts; their details show the daily schedule and
+an options menu to pause, resume, or delete. The feed does not display schedules.
+Opening a push notification still takes you to that alert. A foreground match
+notification refreshes the feed; returning to the app or pulling to refresh does
+as well. The feed is available without a currently connected Facebook session;
+creating and resuming alerts still require it.
 
 ## Deployment configuration
 
@@ -92,7 +99,7 @@ Settings are read when work is fetched, so even a previously sent push can use
 updated server settings. Foreground recovery uses the same path.
 
 `LISTING_ALERT_SEARCH_OPTIONS` is one optional JSON object, applied to all alerts
-on that backend. Leave it unset to retain newest-first, available listings with
+on that backend. Leave it unset to use suggested/best-match, available listings with
 no price, age, delivery, or condition restriction. For example:
 
 ```dotenv
@@ -103,7 +110,7 @@ Supported fields:
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `sort` | `best_match`, `creation_time_descend`, `distance_ascend`, `price_ascend`, `price_descend` | `creation_time_descend` |
+| `sort` | `best_match`, `creation_time_descend`, `distance_ascend`, `price_ascend`, `price_descend` | `best_match` |
 | `minPrice`, `maxPrice` | Whole units of the searched marketplace's currency, 0–2147483647 | No bound |
 | `daysSinceListed` | `0`, `1`, `7`, `30` | `0` (any age) |
 | `delivery` | `""`, `local_pick_up`, `shipping` | `""` (any) |
@@ -118,8 +125,9 @@ Availability stays available-only, and each check stays limited to one page.
 Changing these settings affects future searches, not previously checked listings.
 
 Older apps ignore `searchOptions` and continue using their built-in search
-settings. Updated apps also accept a server that omits `searchOptions`, retaining
-the newest-first defaults. Unknown fields in a work response are ignored; unknown
+settings. The server explicitly supplies `best_match` to supported clients,
+including builds whose fallback was newest-first. Updated apps also accept a server that omits `searchOptions`, retaining
+the suggested/best-match defaults. Unknown fields in a work response are ignored; unknown
 values for supported options fail the search rather than silently dropping a
 constraint. Entirely new search capabilities or Facebook protocol changes can
 still require an app release. Jev matching logic runs on the server and can be
@@ -205,7 +213,7 @@ a notification can leave its delivery outcome unknown; it is not sent again.
 The authenticated JSON endpoints are `POST /v1/price-alerts/{action}`. They reuse
 the existing access-token and active-session authentication. Actions are `list`,
 `create`, `state` (pause/resume), `delete`, `work`, `fetch-event`, `page`, `matches`,
-`interaction`, and the legacy `viewed` action.
+`feed`, `interaction`, and the legacy `viewed` action.
 The Go request/response types live in `cmd/api/alerts.go`; iOS wire types are in
 `PriceAlertsService.swift`. Responses use RFC3339 timestamps. Match pagination
 uses the exact `matchedCursor` string and listing ID as a pair so equal timestamps
@@ -316,7 +324,8 @@ opening a listing records `listing_opened` and preserves the listing's first
 `viewed_at`. Sources distinguish `notification`, `alerts_tab`, and `creation`.
 Notification entry carries its outbox ID through subsequent listing opens, so
 clicks join back to the notification, check, and background fetch. Opening an
-alert does not mark all of its listings viewed.
+alert or displaying the recent feed does not mark all of its listings viewed.
+Direct feed listing taps use `source=alerts_tab` without a notification ID.
 
 The authenticated `interaction` action accepts a client-generated `interactionID`
 for idempotency, alert `id`, `event`, `source`, optional `notificationID`, and
