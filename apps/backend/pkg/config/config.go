@@ -59,6 +59,7 @@ func init() {
 
 	pflag.String("listing_alert_search_options", "", "JSON search options for listing alerts; empty uses suggested available results")
 	pflag.Bool("listing_alerts_enabled", false, "enable listing alerts and the recurring worker")
+	pflag.Int("dev_listing_alert_limit", 3, "included active alert slots in development only; production always includes one")
 	pflag.Duration("listing_alerts_interval", 10*time.Minute, "minimum time between staggered alert dispatches")
 	pflag.String("apns_key_id", "", "Apple APNs signing key ID")
 	pflag.String("apns_team_id", "", "Apple developer team ID")
@@ -123,6 +124,7 @@ type ServiceConfig struct {
 	ListingAlertSearchOptionsJSON string             `mapstructure:"listing_alert_search_options"`
 	ListingAlertSearchOptions     AlertSearchOptions `mapstructure:"-"`
 	ListingAlertsEnabled          bool               `mapstructure:"listing_alerts_enabled"`
+	DevListingAlertLimit          int                `mapstructure:"dev_listing_alert_limit"`
 	ListingAlertsInterval         time.Duration      `mapstructure:"listing_alerts_interval"`
 	APNSKeyID                     string             `mapstructure:"apns_key_id"`
 	APNSTeamID                    string             `mapstructure:"apns_team_id"`
@@ -143,6 +145,15 @@ type ServiceConfig struct {
 
 // IsProduction reports whether this is the production environment.
 func (c ServiceConfig) IsProduction() bool { return c.Env == "production" }
+
+// ListingAlertBaseLimit excludes account-specific bonus slots. Only an explicit
+// development environment gets the larger testing allowance.
+func (c ServiceConfig) ListingAlertBaseLimit() int {
+	if c.Env == "development" {
+		return max(1, c.DevListingAlertLimit)
+	}
+	return 1
+}
 
 // Provider names accepted by llm_provider.
 const (

@@ -16,6 +16,7 @@ struct ResultsView: View {
     @EnvironmentObject private var saved: SavedListings
     @EnvironmentObject private var viewed: ViewedListings
     @EnvironmentObject private var discover: DiscoverFeed
+    @ObservedObject private var searchAlerts = SearchAlerts.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isVisible = false
@@ -34,6 +35,9 @@ struct ResultsView: View {
     @State private var showFilters = false
     @State private var showSaved = false
     @State private var showLocationPicker = false
+    @State private var alertDraft: ListingAlertDraft?
+    @State private var selectedSearchAlert: SearchAlert?
+    @State private var searchAlertSource = "search"
 
     @State private var showSignIn = false
     /// One sheet serves two offers — the wall mid-search and the footer at the
@@ -47,6 +51,7 @@ struct ResultsView: View {
     private var canRecordShownListings: Bool {
         isVisible && scenePhase == .active && !isSearching && selected == nil
             && !showAccountLink && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
+            && alertDraft == nil && selectedSearchAlert == nil
     }
 
     /// Which listings the "only new" filter is hiding right now.
@@ -94,6 +99,12 @@ struct ResultsView: View {
         }
         .sheet(isPresented: $showLocationPicker) {
             LocationPickerSheet()
+        }
+        .sheet(item: $alertDraft) { draft in
+            CreateListingAlertView(draft: draft, created: { _ in })
+        }
+        .sheet(item: $selectedSearchAlert) { alert in
+            SearchAlertDetailsSheet(route: AlertRoute(alertID: alert.id, source: searchAlertSource))
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { profileButton }
@@ -243,7 +254,11 @@ struct ResultsView: View {
                 .accessibilityHidden(surface != .search || isSearching)
 
             if isSearching {
-                SearchSuggestions(onSelect: replaySearch)
+                SearchSuggestions(onSelect: replaySearch, onAlert: { alert in
+                    isSearching = false
+                    searchAlertSource = "search_history"
+                    selectedSearchAlert = alert
+                })
             }
         }
         .navigationTitle("Openmarket")
@@ -296,6 +311,27 @@ struct ResultsView: View {
 
     // MARK: - Pieces
 
+    private var currentSearchTerm: String {
+        guard case .search(let term) = store.query?.kind else { return "" }
+        return term
+    }
+
+    private var currentSearchAlert: SearchAlert? {
+        searchAlerts.matching(query: currentSearchTerm, minPrice: prefs.minPrice,
+                              maxPrice: prefs.maxPrice, for: account.state.viewer?.id)
+    }
+
+    private func openSearchAlert() {
+        isSearching = false
+        searchAlertSource = "search"
+        if let alert = currentSearchAlert {
+            selectedSearchAlert = alert
+        } else {
+            alertDraft = ListingAlertDraft(query: currentSearchTerm, minPrice: prefs.minPrice,
+                                          maxPrice: prefs.maxPrice, source: "search")
+        }
+    }
+
     /// An explicit row keeps filters beside the field on every supported iOS
     /// version, including while the keyboard and search suggestions are open.
     private var searchBar: some View {
@@ -325,6 +361,10 @@ struct ResultsView: View {
             .padding(.trailing, searchText.isEmpty && !isSearching ? 12 : 0)
             .frame(minHeight: 44)
             .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+            if surface == .search && !isSearching {
+                SearchAlertButton(alert: currentSearchAlert, iconOnly: true, action: openSearchAlert)
+            }
 
             filtersButton
                 .frame(width: 44, height: 44)
@@ -930,23 +970,45 @@ private struct PaginatedListingGrid<Footer: View>: View {
 /// Suggestions stay above the mounted feeds while the search field has focus.
 private struct SearchSuggestions: View {
     @EnvironmentObject private var prefs: Preferences
+    @EnvironmentObject private var account: AccountSession
+    @ObservedObject private var searchAlerts = SearchAlerts.shared
     let onSelect: (String) -> Void
+    let onAlert: (SearchAlert) -> Void
 
     var body: some View {
         List {
             if !prefs.recentSearches.isEmpty {
                 Section("Recent") {
                     ForEach(prefs.recentSearches, id: \.self) { term in
-                        Button { onSelect(term) } label: {
-                            Label(term, systemImage: "clock.arrow.circlepath")
-                                .foregroundStyle(.primary)
-                        }
+                        SearchHistoryRow(term: term,
+                            alert: searchAlerts.matchingHistory(term, for: account.state.viewer?.id),
+                            onSelect: { onSelect(term) }, onAlert: onAlert)
                     }
                 }
             }
         }
         .listStyle(.plain)
         .background(Color(.systemBackground))
+    }
+}
+
+struct SearchHistoryRow: View {
+    let term: String
+    let alert: SearchAlert?
+    let onSelect: () -> Void
+    let onAlert: (SearchAlert) -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onSelect) {
+                Label(term, systemImage: "clock.arrow.circlepath")
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if let alert { SearchAlertButton(alert: alert) { onAlert(alert) } }
+        }
     }
 }
 

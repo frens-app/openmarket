@@ -64,8 +64,8 @@ func validateListingChange(c *v1.SavedListingChange, now time.Time) error {
 	if c.AlertSource != nil && !c.GetSaved() {
 		return errors.New("alert attribution requires a save")
 	}
-	if c.AlertSource != nil && c.AlertSource.NotificationId != nil && c.AlertSource.Source == "creation" {
-		return errors.New("creation cannot reference a notification")
+	if c.AlertSource != nil && c.AlertSource.NotificationId != nil && c.AlertSource.Source != "alerts_tab" && c.AlertSource.Source != "notification" {
+		return errors.New("this alert source cannot reference a notification")
 	}
 	if c.GetSaved() && !validListingTime(c.SavedAt, now) {
 		return errors.New("valid saved_at is required")

@@ -25,20 +25,19 @@ struct ActiveFilterBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                locationReadout
-                sortReadout
-                    .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 0)
-            }
-            if !chips.isEmpty {
-                chipRow
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    locationReadout.fixedSize(horizontal: true, vertical: false)
+                    sortReadout.fixedSize(horizontal: true, vertical: false)
+                    if !chips.isEmpty { chipRow }
+                }
+                .padding(.horizontal, 1)
             }
             switchNotice
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
-        // The search header supplies one shared background for both rows.
+        // The search header supplies the shared background.
     }
 
     // MARK: - Readouts
@@ -177,25 +176,23 @@ struct ActiveFilterBar: View {
     // MARK: - Chips
 
     private var chipRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips) { chip in
-                    chipView(chip)
-                }
-                Button("Clear all") {
-                    // Radius and location are deliberately untouched: they are
-                    // the readouts above, not chips, and wiping the place a
-                    // user chose because they cleared a price filter would be
-                    // its own bug.
-                    let neededRerun = chips.contains { $0.needsRerun }
-                    for chip in chips { chip.clear() }
-                    if neededRerun { onRerun() }
-                }
-                .font(.footnote)
-                .padding(.leading, 4)
+        HStack(spacing: 8) {
+            ForEach(chips) { chip in
+                chipView(chip)
             }
-            .padding(.horizontal, 1)    // keeps focus rings from clipping
+            Button("Clear all") {
+                // Radius and location are deliberately untouched: they are
+                // the readouts above, not chips, and wiping the place a
+                // user chose because they cleared a price filter would be
+                // its own bug.
+                let neededRerun = chips.contains { $0.needsRerun }
+                for chip in chips { chip.clear() }
+                if neededRerun { onRerun() }
+            }
+            .font(.footnote)
+            .padding(.leading, 4)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func chipView(_ chip: Chip) -> some View {

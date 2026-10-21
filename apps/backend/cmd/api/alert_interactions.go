@@ -16,7 +16,7 @@ func (s *alertsServer) recordInteraction(ctx context.Context, user uuid.UUID, in
 	if err != nil {
 		return alertError(connect.CodeInvalidArgument, "Invalid interaction ID.")
 	}
-	if in.Source != "notification" && in.Source != "alerts_tab" && in.Source != "creation" {
+	if in.Source != "notification" && in.Source != "alerts_tab" && in.Source != "creation" && in.Source != "search" && in.Source != "search_history" {
 		return alertError(connect.CodeInvalidArgument, "Invalid interaction source.")
 	}
 	if (in.Event != "alert_opened" && in.Event != "listing_opened") || (in.Event == "listing_opened") != (in.ListingID != "") {

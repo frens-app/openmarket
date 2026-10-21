@@ -291,6 +291,7 @@ private struct LaunchView: View {
 /// App navigation and the webviews backing its tools.
 struct AppView: View {
     @ObservedObject private var alerts = ListingAlertCoordinator.shared
+    @ObservedObject private var searchAlerts = SearchAlerts.shared
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: ListingStore
     @EnvironmentObject private var prefs: Preferences
@@ -352,12 +353,18 @@ struct AppView: View {
                     .offset(x: 3000)
             }
         }
-        .onChange(of: account.state.viewer?.id) { _, _ in
+        .onChange(of: account.state.viewer?.id) { _, id in
+            searchAlerts.setAccount(id)
             shopping.accountChanged()
             alerts.cancel()
         }
+        .task(id: account.state.viewer?.id) {
+            searchAlerts.setAccount(account.state.viewer?.id)
+            await searchAlerts.refresh(for: account.state.viewer?.id)
+        }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            await searchAlerts.refresh(for: account.state.viewer?.id)
             while !Task.isCancelled {
                 if account.isSignedIn { _ = await alerts.perform() }
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }

@@ -40,7 +40,7 @@ func (q *Queries) CreateAuthMethod(ctx context.Context, arg CreateAuthMethodPara
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (time_zone)
 VALUES ($1)
-RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
+RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email, listing_alert_bonus_slots
 `
 
 func (q *Queries) CreateUser(ctx context.Context, timeZone *string) (User, error) {
@@ -58,6 +58,7 @@ func (q *Queries) CreateUser(ctx context.Context, timeZone *string) (User, error
 		&i.LastName,
 		&i.FacebookLastConnectedAt,
 		&i.Email,
+		&i.ListingAlertBonusSlots,
 	)
 	return i, err
 }
@@ -95,7 +96,7 @@ SET first_name = COALESCE(first_name, $2),
     display_name = COALESCE(display_name, $4),
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
+RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email, listing_alert_bonus_slots
 `
 
 type FillMissingUserNamesParams struct {
@@ -125,6 +126,7 @@ func (q *Queries) FillMissingUserNames(ctx context.Context, arg FillMissingUserN
 		&i.LastName,
 		&i.FacebookLastConnectedAt,
 		&i.Email,
+		&i.ListingAlertBonusSlots,
 	)
 	return i, err
 }
@@ -175,7 +177,7 @@ func (q *Queries) GetAuthMethodForUser(ctx context.Context, userID uuid.UUID) (U
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
+SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email, listing_alert_bonus_slots
 FROM users
 WHERE id = $1
   AND deleted_at IS NULL
@@ -196,12 +198,13 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.LastName,
 		&i.FacebookLastConnectedAt,
 		&i.Email,
+		&i.ListingAlertBonusSlots,
 	)
 	return i, err
 }
 
 const lockUser = `-- name: LockUser :one
-SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email, listing_alert_bonus_slots FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 func (q *Queries) LockUser(ctx context.Context, id uuid.UUID) (User, error) {
@@ -219,6 +222,7 @@ func (q *Queries) LockUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.LastName,
 		&i.FacebookLastConnectedAt,
 		&i.Email,
+		&i.ListingAlertBonusSlots,
 	)
 	return i, err
 }
@@ -313,7 +317,7 @@ SET
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
   AND deleted_at IS NULL
-RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email
+RETURNING id, display_name, time_zone, onboarding_completed_at, created_at, updated_at, deleted_at, first_name, last_name, facebook_last_connected_at, email, listing_alert_bonus_slots
 `
 
 type UpdateUserParams struct {
@@ -354,6 +358,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.LastName,
 		&i.FacebookLastConnectedAt,
 		&i.Email,
+		&i.ListingAlertBonusSlots,
 	)
 	return i, err
 }

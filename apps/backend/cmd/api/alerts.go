@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -30,13 +31,18 @@ type alertEvaluator interface {
 	Evaluate(context.Context, llm.Subject, llm.EvaluationInput) ([]llm.Decision, error)
 }
 type alertsServer struct {
-	searchOptions config.AlertSearchOptions
-	pool          *pgxpool.Pool
-	queries       *db.Queries
-	jwtSecret     string
-	evaluator     alertEvaluator
-	push          alertPushSender
-	logger        *zap.Logger
+	baseAlertLimit int
+	searchOptions  config.AlertSearchOptions
+	pool           *pgxpool.Pool
+	queries        *db.Queries
+	jwtSecret      string
+	evaluator      alertEvaluator
+	push           alertPushSender
+	logger         *zap.Logger
+}
+type alertAllowance struct {
+	Active int `json:"active"`
+	Limit  int `json:"limit"`
 }
 type alertLocation struct {
 	CitySlug  string  `json:"citySlug"`
@@ -204,17 +210,12 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			return nil, err
 		}
 		defer tx.Rollback(ctx)
-		// Serializing on the account also coordinates with soft deletion.
-		var exists uuid.UUID
-		if err = tx.QueryRow(ctx, `SELECT id FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, userID).Scan(&exists); err != nil {
+		limit, err := s.lockAlertAllowance(ctx, tx, userID)
+		if err != nil {
 			return nil, err
 		}
-		var count int
-		if err = tx.QueryRow(ctx, `SELECT count(*) FROM user_listing_alerts WHERE user_id=$1`, userID).Scan(&count); err != nil {
+		if err = requireAlertSlot(ctx, tx, userID, limit); err != nil {
 			return nil, err
-		}
-		if count >= 3 {
-			return nil, alertError(connect.CodeResourceExhausted, "You can have up to 3 alerts. Delete an alert to create another.")
 		}
 		device, err := s.eligibleDevice(ctx, tx, sessionID)
 		if err != nil {
@@ -249,8 +250,12 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 			return nil, err
 		}
 		defer tx.Rollback(ctx)
-		var owner uuid.UUID
-		if err = tx.QueryRow(ctx, `SELECT user_id FROM user_listing_alerts WHERE id=$1 AND user_id=$2 FOR UPDATE`, id, userID).Scan(&owner); err != nil {
+		limit, err := s.lockAlertAllowance(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		var paused bool
+		if err = tx.QueryRow(ctx, `SELECT paused FROM user_listing_alerts WHERE id=$1 AND user_id=$2 FOR UPDATE`, id, userID).Scan(&paused); err != nil {
 			return nil, alertNotFound(err)
 		}
 		if action == "delete" {
@@ -258,6 +263,12 @@ func (s *alertsServer) handle(ctx context.Context, action string, in alertReques
 		} else if in.Paused {
 			_, err = tx.Exec(ctx, `UPDATE user_listing_alerts SET paused=true WHERE id=$1`, id)
 		} else {
+			// An already-active alert uses no additional slot, including on retries.
+			if paused {
+				if err = requireAlertSlot(ctx, tx, userID, limit); err != nil {
+					return nil, err
+				}
+			}
 			device, e := s.eligibleDevice(ctx, tx, sessionID)
 			if e != nil {
 				return nil, e
@@ -332,6 +343,29 @@ type alertQuerier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
+// Always lock the account before its alerts. Create, pause, resume and delete
+// share this lock with allowance updates and account deletion across replicas.
+func (s *alertsServer) lockAlertAllowance(ctx context.Context, tx pgx.Tx, user uuid.UUID) (int, error) {
+	var bonus int
+	err := tx.QueryRow(ctx, `SELECT listing_alert_bonus_slots FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, user).Scan(&bonus)
+	return max(1, s.baseAlertLimit) + bonus, alertNotFound(err)
+}
+
+func requireAlertSlot(ctx context.Context, tx pgx.Tx, user uuid.UUID, limit int) error {
+	var active int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM user_listing_alerts WHERE user_id=$1 AND NOT paused`, user).Scan(&active); err != nil {
+		return err
+	}
+	if active >= limit {
+		noun := "alerts"
+		if limit == 1 {
+			noun = "alert"
+		}
+		return alertError(connect.CodeResourceExhausted, fmt.Sprintf("Your limit is %d active %s. Pause or delete an alert to free up a slot.", limit, noun))
+	}
+	return nil
+}
+
 func (s *alertsServer) eligibleDevice(ctx context.Context, q alertQuerier, session uuid.UUID) (uuid.UUID, error) {
 	var device uuid.UUID
 	var socialSignIn bool
@@ -386,6 +420,11 @@ func validateAlertLocation(l alertLocation) error {
 	return nil
 }
 func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
+	var bonus int
+	if err := s.pool.QueryRow(ctx, `SELECT listing_alert_bonus_slots FROM users WHERE id=$1 AND deleted_at IS NULL`, user).Scan(&bonus); err != nil {
+		return nil, alertNotFound(err)
+	}
+	allowance := alertAllowance{Limit: max(1, s.baseAlertLimit) + bonus}
 	rows, err := s.pool.Query(ctx, `SELECT a.id,a.query,a.min_price,a.max_price,a.location,a.created_at,a.alert_hour,a.alert_minute,a.time_zone,a.next_check_at,a.last_checked_at,a.paused,(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched),(SELECT count(*) FROM listing_alert_listings l WHERE l.alert_id=a.id AND l.matched AND l.viewed_at IS NULL) FROM user_listing_alerts a WHERE a.user_id=$1 ORDER BY a.created_at`, user)
 	if err != nil {
 		return nil, err
@@ -402,8 +441,11 @@ func (s *alertsServer) list(ctx context.Context, user uuid.UUID) (any, error) {
 			return nil, err
 		}
 		alerts = append(alerts, a)
+		if !a.Paused {
+			allowance.Active++
+		}
 	}
-	return map[string]any{"alerts": alerts}, rows.Err()
+	return map[string]any{"alerts": alerts, "allowance": allowance}, rows.Err()
 }
 
 func (s *alertsServer) submitPage(ctx context.Context, user, session uuid.UUID, in alertRequest) error {

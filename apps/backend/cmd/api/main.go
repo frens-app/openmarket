@@ -187,7 +187,7 @@ func main() {
 			}
 		}
 	}()
-	alertsSvc := &alertsServer{searchOptions: cfg.ListingAlertSearchOptions, pool: pool, queries: queries, jwtSecret: cfg.JWTSecret, logger: logger.Named("alerts")}
+	alertsSvc := &alertsServer{baseAlertLimit: cfg.ListingAlertBaseLimit(), searchOptions: cfg.ListingAlertSearchOptions, pool: pool, queries: queries, jwtSecret: cfg.JWTSecret, logger: logger.Named("alerts")}
 	if cfg.ListingAlertsEnabled {
 		alertsSvc.evaluator = llm.NewEvaluationRunner(llm.NewJevEvaluator(gatewayKey), queries, logger.Named("alert-matching"), llm.Config{
 			MaxAttempts: cfg.LLMMaxAttempts,

@@ -89,6 +89,8 @@ func TestAlertSaveSourceValidation(t *testing.T) {
 		func(c *v1.SavedListingChange) { c.AlertSource.NotificationId = proto.String("invalid") },
 		func(c *v1.SavedListingChange) { c.AlertSource.Source = "unknown" },
 		func(c *v1.SavedListingChange) { c.AlertSource.Source = "creation" },
+		func(c *v1.SavedListingChange) { c.AlertSource.Source = "search" },
+		func(c *v1.SavedListingChange) { c.AlertSource.Source = "search_history" },
 		func(c *v1.SavedListingChange) { c.Saved = nil },
 		func(c *v1.SavedListingChange) { c.Saved = proto.Bool(false); c.Snapshot = nil },
 	} {
@@ -98,11 +100,13 @@ func TestAlertSaveSourceValidation(t *testing.T) {
 			t.Fatal("accepted invalid save attribution")
 		}
 	}
-	c := valid()
-	c.AlertSource.Source = "creation"
-	c.AlertSource.NotificationId = nil
-	if err := validateListingChange(c, now); err != nil {
-		t.Fatal(err)
+	for _, source := range []string{"creation", "search", "search_history"} {
+		c := valid()
+		c.AlertSource.Source = source
+		c.AlertSource.NotificationId = nil
+		if err := validateListingChange(c, now); err != nil {
+			t.Fatalf("%s: %v", source, err)
+		}
 	}
 }
 

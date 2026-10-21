@@ -1,8 +1,9 @@
 # Listing alerts
 
 Alerts require an account linked to Google or Apple, Facebook connected on the
-device, and enabled notifications with a registered push token. Phone-only
-accounts see an OK-only linking message when they tap Create. The backend also
+device, and enabled notifications with a registered push token. Creation opens a
+shared form that guides users through missing setup, including linking phone-only
+accounts to Apple or Google without losing the draft. The backend also
 checks the linked provider for creation, resume, work fetching, uploads,
 evaluation, and notification dispatch. Existing history, pause, and deletion
 remain accessible. Linking uses the existing account upgrade flow; no new
@@ -13,8 +14,8 @@ The `user_listing_alerts` table stores each user’s alert and its schedule.
 `listing_alert_background_fetch_attempts` traces silent pings and foreground recovery.
 `listing_alert_notification_outbox` stores grouped match notifications and their single-send outcome.
 `listing_alert_interactions` records alert and listing opens, their entry source, and the originating notification when applicable.
-An account can hold three alerts, including paused alerts. Each alert saves the
-buyer's text, a fallback search location, and the current device. Deleting an
+An account includes one active alert in production. Paused alerts do not use a
+slot. Each alert saves the buyer’s text, a fallback search location, and the current device. Deleting an
 alert frees a slot and deletes its checks, listing records, and notification
 queue. Account deletion also removes all alert data.
 
@@ -24,9 +25,75 @@ and a registered APNs token.
 Resuming binds an alert to the current device. Facebook cookies and request
 tokens remain in the phone's WebKit store; the backend never receives them.
 
+## Active alert allowance
+
+The backend owns each account's allowance:
+
+`active alert limit = included slots + users.listing_alert_bonus_slots`
+
+Production includes one slot. `ENV=development` includes three by default,
+configurable with `DEV_LISTING_ALERT_LIMIT` (minimum one); that override is ignored
+in other environments. Every existing and new user starts with zero bonus slots.
+Active usage is counted from unpaused `user_listing_alerts`, not stored separately.
+The migration leaves existing alerts running. An account already at or above its
+allowance cannot create or resume another alert until it frees enough capacity.
+Pausing and deleting remain available, and retrying an already-active alert does
+not consume another slot.
+
+Creation and resume enforce the same limit in a database transaction. Both lock
+the user before checking active usage and changing alert state, so concurrent
+requests across devices or API replicas cannot exceed the allowance. Pause and
+delete follow the same lock order. Bonus-slot updates also lock that user row.
+Clients cannot change the allowance through the alert API.
+
+`list` returns `allowance: {"active": 1, "limit": 1}` alongside `alerts`. The iOS
+Manage alerts sheet shows that allowance. The creation form checks it on submission
+and shows an error if no slot is available; it does not display a usage counter or
+hardcode a maximum. Older clients still receive the backend's limit error, and newer
+clients can read older servers that omit `allowance`. Deploy migration
+`00032_listing_alert_allowance.sql` with the backend before relying on this rule.
+
+Referral rewards are not implemented yet. A future backend flow should verify a
+qualifying referral, record a unique reward for that referral, and increment the
+inviter's bonus slots in the same transaction. The unique referral/reward record
+must make retries idempotent and preserve attribution; tapping Share alone should
+not grant capacity. That flow can add slots without changing alert enforcement or
+the client allowance display. This column provides the current entitlement;
+the future reward records will explain how it was earned.
+
+## Creating alerts from search
+
+Browse shows an icon-only neutral bell between the search field and the filter
+button after a search is submitted. The 44-point button opens the shared creation sheet with the
+submitted search term and current price bounds filled in. Creation keeps the user
+on Browse and changes the bell to a white checked bell on a solid blue **Alerts on** button. An existing
+paused alert shows a neutral slashed bell. Both states open its matches and
+management controls. VoiceOver announces Get alerts, Alerts on, or Alerts paused.
+The location, sort, and filter chips keep their own full-width scrolling row.
+
+Search matching ignores case and repeated whitespace and compares both price
+bounds exactly, including zero versus an absent bound. Local recent-search history
+stores only terms, so it shows **Alerts on** when any alert for that term is active,
+even if that alert has different price limits from today's Browse filters. If all
+matching alerts are paused, it shows **Alerts paused**. Tapping the term replays
+the search; tapping the pill opens the matching alert. Alert state is account-scoped,
+refreshed on sign-in/foreground, and updated after creation, pause/resume, and
+deletion. It is not persisted into local search history.
+
+The search creation sheet is titled **Get Daily Alerts** and contains the query,
+optional price bounds, daily time, and Create alert button, without helper text.
+Alerts use the current Browse location and can include surrounding areas. Only
+the term and price bounds are copied from search; other filters still follow the
+server-controlled options below. Daily checks remain approximate.
+
+Deploy migration `00031_search_alert_sources.sql` and the backend before this iOS
+version. Opens and saves from these entry points use `search` or `search_history`;
+neither source can claim a notification batch. The saved-listing protobuf accepts
+these two new sources as well.
+
 ## Alerts tab
 
-Use Create alert in the ellipsis menu to create an alert with one text field for the product and
+Use Create alert in the ellipsis menu to open the same form with one text field for the product and
 any preferences or requirements. Price defaults to “Any price” with its fields
 collapsed. Expand it to set an optional minimum, maximum, or both in whole units
 of the searched marketplace's currency. Blank bounds are omitted from requests
@@ -104,8 +171,9 @@ APNS_ENVIRONMENT=production
 `LISTING_ALERTS_INTERVAL` is optional and defaults to `10m`. Keep it configurable
 for faster development polling (`10s`) versus production pacing. The enable flag
 lets development run without push credentials. Credentials, signing configuration,
-and these environment-specific controls stay in configuration; the three-alert
-limit and daily schedule are product rules in code.
+and these environment-specific controls stay in configuration. Production's one
+included alert slot and the daily schedule are product rules in code; per-account
+bonus slots live in the database.
 
 `APNS_PRIVATE_KEY` accepts actual PEM newlines or literal `\n` sequences. Keep it
 in server secrets, never in the iOS app. The Xcode project currently uses team
@@ -129,7 +197,8 @@ The existing `DATABASE_URL`, authentication, and other required backend settings
 still apply. Migrations `00024_listing_alerts.sql`,
 `00025_listing_alert_fetch_tracking.sql`, `00026_listing_alert_schedule.sql`,
 `00027_listing_alert_interactions.sql`, `00028_listing_alert_prices.sql`,
-and `00029_listing_alert_saves.sql`
+`00029_listing_alert_saves.sql`, `00030_user_listing_clicks.sql`,
+`00031_search_alert_sources.sql`, and `00032_listing_alert_allowance.sql`
 run automatically at API startup, after
 main's existing migrations through `00023_link_sign_in.sql`.
 There is no external cron service: the API hosts the recurring worker. Keep at
@@ -297,7 +366,7 @@ accounts. They cover concurrent limits, scheduling, permissions, cross-account
 access, upload retries, cursor recovery, matched/rejected deduplication,
 single-send notification behavior, pagination, interaction attribution, and viewed state. A separate migration test
 applies main through version 23, seeds existing account, listing price,
-saved-listing/view, and sign-in linking data, then upgrades through version 29 and
+saved-listing/view, and sign-in linking data, then upgrades through version 32 and
 rolls back/reapplies the alert migrations, checking that the existing data remains intact. The APNs tests verify signed
 provider tokens and push headers against a local HTTP server. No unit/integration
 test sends real pushes or bills Jev.

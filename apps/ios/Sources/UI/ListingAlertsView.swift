@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-private struct AlertRoute: Hashable {
+struct AlertRoute: Hashable {
     let alertID: String
     var source = "alerts_tab"
     var notificationID: String?
@@ -17,6 +17,7 @@ struct ListingAlertsView: View {
     @ObservedObject private var push = PushRegistrar.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var alerts: [ListingAlert] = []
+    @State private var allowance: ListingAlertAllowance?
     @State private var feed: [AlertInboxItem] = []
     @State private var feedCursor: AlertInboxItem?
     @State private var filter: AlertInboxFilter = .all
@@ -29,16 +30,9 @@ struct ListingAlertsView: View {
     @State private var feedGeneration = 0
     @State private var showManage = false
     @State private var path: [AlertRoute] = []
-    @State private var query = ""
-    @State private var priceInput = AlertPriceInput()
-    @State private var showPrices = false
-    @State private var alertTime = AlertSchedule.defaultTime()
     @State private var error: String?
-    @State private var busy = false
     @State private var connected = false
     @State private var showCreate = false
-    @State private var showLimit = false
-    @State private var showLinkRequired = false
     @State private var showAccount = false
     private let service = ListingAlertsService()
 
@@ -93,8 +87,7 @@ struct ListingAlertsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("Create alert", systemImage: "plus") { beginCreate() }
-                            .disabled(!account.isSignedIn || !connected || !push.isEnabled || busy)
+                        Button("Create alert", systemImage: "plus") { showCreate = true }
                         Button("Manage alerts", systemImage: "slider.horizontal.3") { showManage = true }
                             .disabled(alerts.isEmpty)
                     } label: { Image(systemName: "ellipsis.circle") }
@@ -116,7 +109,7 @@ struct ListingAlertsView: View {
             .onChange(of: coordinator.openAlertID) { _, _ in navigateToPush() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await refresh() } } }
             .onChange(of: account.state.viewer?.id) { _, _ in
-                alerts = []; feed = []; feedCursor = nil; feedGeneration += 1; path = []; selected = nil; error = nil
+                alerts = []; allowance = nil; feed = []; feedCursor = nil; feedGeneration += 1; path = []; selected = nil; error = nil
                 Task { await refresh() }
             }
             .sheet(isPresented: $showAccount, onDismiss: { Task { await refresh() } }) {
@@ -130,87 +123,39 @@ struct ListingAlertsView: View {
                 }
                 .task { await recordOpen(item) }
             }
-            .sheet(isPresented: $showCreate) { createSheet }
+            .sheet(isPresented: $showCreate) {
+                CreateListingAlertView(draft: ListingAlertDraft()) { id in
+                    Task { await refresh() }
+                    path = [AlertRoute(alertID: id, source: "creation")]
+                }
+            }
             .sheet(isPresented: $showManage) { manageSheet }
-            .alert("Link your account", isPresented: $showLinkRequired) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Link your account to Google or Apple to create listing alerts. A phone number alone isn’t enough.")
-            }
-            .alert("Alert limit reached", isPresented: $showLimit) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("You can have up to 3 alerts, including paused alerts. Delete an alert to create another.")
-            }
-
         }
     }
 
     private var manageSheet: some View {
         NavigationStack {
-            List(alerts) { alert in
-                NavigationLink {
-                    AlertMatchesView(route: AlertRoute(alertID: alert.id), alert: alert, changed: { Task { await refresh() } })
-                } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(alert.query).font(.headline)
-                        if alert.minPrice != nil || alert.maxPrice != nil {
-                            Text(AlertPriceInput.summary(min: alert.minPrice, max: alert.maxPrice)).font(.subheadline).foregroundStyle(.secondary)
+            List {
+                if let allowance {
+                    Section { AlertAllowanceSummary(allowance: allowance) }
+                }
+                ForEach(alerts) { alert in
+                    NavigationLink {
+                        AlertMatchesView(route: AlertRoute(alertID: alert.id), alert: alert, changed: { Task { await refresh() } })
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(alert.query).font(.headline)
+                            if alert.minPrice != nil || alert.maxPrice != nil {
+                                Text(AlertPriceInput.summary(min: alert.minPrice, max: alert.maxPrice)).font(.subheadline).foregroundStyle(.secondary)
+                            }
+                            Text(alert.paused ? "Paused" : "Active").font(.subheadline).foregroundStyle(.secondary)
                         }
-                        Text(alert.paused ? "Paused" : "Active").font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
             }
             .navigationTitle("Your alerts")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showManage = false } } }
         }
-    }
-
-    private var createSheet: some View {
-        NavigationStack {
-            Form {
-                Section("What are you looking for?") {
-                    TextField("e.g. Nintendo Switch OLED", text: $query, axis: .vertical).lineLimit(3...6)
-                    Text("Include the model and any requirements that matter to you.").font(.caption).foregroundStyle(.secondary)
-                }
-                AlertPriceFields(input: $priceInput, expanded: $showPrices)
-                DatePicker("Daily around", selection: $alertTime, displayedComponents: .hourAndMinute)
-                if let error { Text(error).foregroundStyle(.red) }
-            }
-            .navigationTitle("New alert")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showCreate = false } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { Task { await create() } }
-                        .disabled(busy || query.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || query.count > 300 || prefs.resolvedPlace == nil || priceInput.validationMessage != nil)
-                }
-            }
-        }
-    }
-
-    private func create() async {
-        guard account.state.hasSocialSignIn else {
-            showCreate = false
-            showLinkRequired = true
-            return
-        }
-        guard !busy, priceInput.validationMessage == nil, let place = prefs.resolvedPlace else { return }
-        busy = true; error = nil
-        defer { busy = false }
-        do {
-            let location = AlertLocation(citySlug: place.segment, name: place.name, radiusKM: prefs.radiusKM, latitude: place.latitude, longitude: place.longitude)
-            let schedule = AlertSchedule(date: alertTime)
-            let created = try await service.call("create", .init(query: query, location: location,
-                alertHour: schedule.hour, alertMinute: schedule.minute, timeZone: schedule.timeZone,
-                minPrice: priceInput.minPrice, maxPrice: priceInput.maxPrice), as: ListingAlertsService.Created.self)
-            Analytics.capture(.listingAlertCreated, [
-                "alert_id": created.id, "alert_hour": schedule.hour,
-                "alert_minute": schedule.minute, "time_zone": schedule.timeZone
-            ])
-            showCreate = false
-            await refresh()
-            path = [AlertRoute(alertID: created.id, source: "creation")]
-        } catch { self.error = error.localizedDescription }
     }
 
     private var visibleFeed: [AlertInboxItem] {
@@ -240,15 +185,6 @@ struct ListingAlertsView: View {
         case .all: return alerts.isEmpty ? "Create an alert for something you’re looking for." : "New finds from your alerts will appear here."
         case .unread: return "New listings from your alerts will appear here."
         case .saved: return "Tap the bookmark beside a listing to keep it here and in Saved."
-        }
-    }
-
-    private func beginCreate() {
-        if !account.state.hasSocialSignIn { showLinkRequired = true }
-        else if alerts.count >= 3 { showLimit = true }
-        else {
-            query = ""; priceInput = AlertPriceInput(); showPrices = false
-            alertTime = AlertSchedule.defaultTime(); error = nil; showCreate = true
         }
     }
 
@@ -299,13 +235,16 @@ struct ListingAlertsView: View {
         connected = await SessionState.isSignedIn()
         await account.reportFacebookConnection(connected)
         guard generation == feedGeneration else { return }
-        guard account.isSignedIn else { alerts = []; feed = []; feedCursor = nil; return }
+        guard account.isSignedIn else { alerts = []; allowance = nil; feed = []; feedCursor = nil; return }
+        let alertRevision = SearchAlerts.shared.revision
         do {
             async let loadedAlerts = service.call("list", as: ListingAlertsService.AlertList.self)
             async let loadedFeed = service.call("inbox", .init(filter: selectedFilter.rawValue), as: ListingAlertsService.Inbox.self)
             let (alertList, recent) = try await (loadedAlerts, loadedFeed)
             guard owner == account.state.viewer?.id, generation == feedGeneration, selectedFilter == filter else { return }
             alerts = alertList.alerts
+            allowance = alertList.allowance
+            SearchAlerts.shared.replace(alertList.alerts, for: owner, since: alertRevision)
             feed = recent.items + localSaved.filter { local in !recent.items.contains { $0.id == local.id } && alertList.alerts.contains { $0.id == local.alertID } }
             feed.sort { $0.createdAt == $1.createdAt ? $0.id > $1.id : $0.createdAt > $1.createdAt }
             feedCursor = recent.items.last
@@ -335,7 +274,8 @@ struct ListingAlertsView: View {
     }
 }
 
-private struct AlertMatchesView: View {
+struct AlertMatchesView: View {
+    @EnvironmentObject private var account: AccountSession
     let route: AlertRoute
     private var alertID: String { route.alertID }
     let alert: ListingAlert?
@@ -390,16 +330,19 @@ private struct AlertMatchesView: View {
                 }
                 Button("Delete alert", systemImage: "trash", role: .destructive) { confirmDelete = true }
             } label: { Image(systemName: "ellipsis.circle") }
-            .disabled(changingState)
+            .disabled(changingState || alert == nil)
         }
         .confirmationDialog("Delete this alert and its saved matches?", isPresented: $confirmDelete) {
             Button("Delete alert", role: .destructive) {
                 Task {
                     guard !changingState else { return }
+                    let owner = account.state.viewer?.id
                     changingState = true
                     defer { changingState = false }
                     do {
                         let _: ListingAlertsService.Empty = try await service.call("delete", .init(id: alertID), as: ListingAlertsService.Empty.self)
+                        guard owner == account.state.viewer?.id else { return }
+                        SearchAlerts.shared.remove(id: alertID, for: owner)
                         Analytics.capture(.listingAlertStateChanged, ["alert_id": alertID, "action": "deleted"])
                         changed(); dismiss()
                     } catch { self.error = error.localizedDescription }
@@ -478,8 +421,11 @@ private struct AlertMatchesView: View {
         changingState = true
         defer { changingState = false }
         let nextPaused = !paused
+        let owner = account.state.viewer?.id
         do {
             let _: ListingAlertsService.Empty = try await service.call("state", .init(id: alertID, paused: nextPaused), as: ListingAlertsService.Empty.self)
+            guard owner == account.state.viewer?.id else { return }
+            SearchAlerts.shared.setPaused(nextPaused, id: alertID, for: owner)
             paused = nextPaused
             Analytics.capture(.listingAlertStateChanged, ["alert_id": alertID, "action": paused ? "paused" : "resumed"])
             changed()

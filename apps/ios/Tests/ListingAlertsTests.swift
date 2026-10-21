@@ -4,6 +4,19 @@ import SwiftUI
 
 @MainActor
 final class ListingAlertsTests: XCTestCase {
+    func testServerAlertAllowanceAndOlderDeployments() throws {
+        for (active, limit, available) in [(0, 1, true), (1, 1, false), (1, 2, true), (3, 1, false)] {
+            let json = "{\"alerts\":[],\"allowance\":{\"active\":\(active),\"limit\":\(limit)}}"
+            let list = try ListingAlertsService.decoder().decode(ListingAlertsService.AlertList.self, from: Data(json.utf8))
+            let allowance = try XCTUnwrap(list.allowance)
+            XCTAssertEqual(allowance.active, active)
+            XCTAssertEqual(allowance.limit, limit)
+            XCTAssertEqual(allowance.hasAvailableSlot, available)
+        }
+        let legacy = try ListingAlertsService.decoder().decode(ListingAlertsService.AlertList.self, from: Data(#"{"alerts":[]}"#.utf8))
+        XCTAssertNil(legacy.allowance)
+    }
+
     func testInboxKeepsListingAndNotificationIdentity() throws {
         let json = #"{"items":[{"notificationID":"batch","alertID":"alert","query":"Plants","listing":{"id":"123","title":"Anthurium","priceText":"CA$68","locationText":"Toronto","thumbnailURL":"","description":"","condition":""},"createdAt":"2026-10-17T12:34:56.123456Z","createdCursor":"2026-10-17T12:34:56.123456Z","viewedAt":null,"savedAt":"2026-10-17T13:00:00Z"}]}"#
         let item = try XCTUnwrap(ListingAlertsService.decoder().decode(ListingAlertsService.Inbox.self, from: Data(json.utf8)).items.first)

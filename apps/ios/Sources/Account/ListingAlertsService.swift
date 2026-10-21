@@ -24,6 +24,16 @@ struct ListingAlert: Decodable, Identifiable {
     var unreadCount: Int
 }
 
+struct ListingAlertAllowance: Decodable, Equatable {
+    let active: Int
+    let limit: Int
+
+    var hasAvailableSlot: Bool { active < limit }
+    var limitMessage: String {
+        "Your limit is \(limit) active \(limit == 1 ? "alert" : "alerts"). Pause or delete an alert to free up a slot."
+    }
+}
+
 struct AlertListing: Codable, Identifiable {
     var id: String
     var title: String
@@ -160,7 +170,11 @@ final class ListingAlertsService {
     }
     struct Failure: Decodable { var error: String }
     struct Empty: Decodable {}
-    struct AlertList: Decodable { var alerts: [ListingAlert] }
+    struct AlertList: Decodable {
+        var alerts: [ListingAlert]
+        // Older deployments omit this; creation still uses the server's enforcement.
+        var allowance: ListingAlertAllowance?
+    }
     struct Inbox: Decodable { var items: [AlertInboxItem] }
     struct NotificationFeed: Decodable { var groups: [AlertNotificationGroup] }
     struct MatchList: Decodable { var matches: [AlertMatch]; var notification: AlertNotificationDetails? }

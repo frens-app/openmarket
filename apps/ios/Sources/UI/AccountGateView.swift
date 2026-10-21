@@ -56,7 +56,7 @@ struct AccountGateView: View {
                 ZStack {
                     switch step {
                     case .account:
-                        AccountLoginView { _ in
+                        AccountLoginView(isLinking: feature == .listingAlerts && account.isSignedIn) { _ in
                             Task { await advance() }
                         }
                         .transition(.opacity)
@@ -174,7 +174,8 @@ struct AccountGateView: View {
             ])
         }
 
-        step = Step.next(hasAccount: account.isSignedIn, facebookConnected: connected)
+        step = Step.next(hasAccount: feature == .listingAlerts ? account.state.hasSocialSignIn : account.isSignedIn,
+                         facebookConnected: connected)
         guard step == .complete else { return }
 
         isActive = false

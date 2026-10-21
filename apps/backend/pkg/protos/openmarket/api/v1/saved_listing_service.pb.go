@@ -798,12 +798,12 @@ const file_openmarket_api_v1_saved_listing_service_proto_rawDesc = "" +
 	"\x0e_public_meetupB\x17\n" +
 	"\x15_price_amount_decimalB\x16\n" +
 	"\x14_price_currency_codeB \n" +
-	"\x1e_original_price_amount_decimal\"\xcc\x01\n" +
+	"\x1e_original_price_amount_decimal\"\xe4\x01\n" +
 	"\x16ListingAlertSaveSource\x12#\n" +
 	"\balert_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aalertId\x126\n" +
-	"\x0fnotification_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x0enotificationId\x88\x01\x01\x12A\n" +
-	"\x06source\x18\x03 \x01(\tB)\xbaH&r$R\n" +
-	"alerts_tabR\fnotificationR\bcreationR\x06sourceB\x12\n" +
+	"\x0fnotification_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x0enotificationId\x88\x01\x01\x12Y\n" +
+	"\x06source\x18\x03 \x01(\tBA\xbaH>r<R\n" +
+	"alerts_tabR\fnotificationR\bcreationR\x06searchR\x0esearch_historyR\x06sourceB\x12\n" +
 	"\x10_notification_id\"\xf4\x02\n" +
 	"\x12SavedListingChange\x12)\n" +
 	"\vmutation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +

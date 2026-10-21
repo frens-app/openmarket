@@ -47,7 +47,7 @@ message SavedListingSnapshot {
 message ListingAlertSaveSource {
   string alert_id = 1 [(buf.validate.field).string.uuid = true];
   optional string notification_id = 2 [(buf.validate.field).string.uuid = true];
-  string source = 3 [(buf.validate.field).string = {in: ["alerts_tab", "notification", "creation"]}];
+  string source = 3 [(buf.validate.field).string = {in: ["alerts_tab", "notification", "creation", "search", "search_history"]}];
 }
 
 message SavedListingChange {

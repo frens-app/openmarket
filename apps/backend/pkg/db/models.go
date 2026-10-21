@@ -432,6 +432,7 @@ type User struct {
 	LastName                *string
 	FacebookLastConnectedAt pgtype.Timestamptz
 	Email                   *string
+	ListingAlertBonusSlots  int32
 }
 
 type UserAuthMethod struct {

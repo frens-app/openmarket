@@ -188,7 +188,7 @@ func TestAlertsIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s := &alertsServer{searchOptions: options, pool: pool, queries: db.New(pool), push: p, evaluator: e, logger: zap.NewNop()}
+		s := &alertsServer{baseAlertLimit: 3, searchOptions: options, pool: pool, queries: db.New(pool), push: p, evaluator: e, logger: zap.NewNop()}
 		return s, auth.WithSessionID(auth.WithUserID(ctx, user), session), user, device, p, e
 	}
 	create := func(t *testing.T, s *alertsServer, ctx context.Context) string {
@@ -604,10 +604,27 @@ func TestAlertsIntegration(t *testing.T) {
 		if _, err := s.handle(c, "interaction", request); connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Fatalf("invalid source: %v", err)
 		}
+		for _, source := range []string{"search", "search_history"} {
+			request.Source = source
+			request.NotificationID = ""
+			request.InteractionID = uuid.NewString()
+			if _, err := s.handle(c, "interaction", request); err != nil {
+				t.Fatalf("%s: %v", source, err)
+			}
+			var storedSource string
+			if err := pool.QueryRow(ctx, `SELECT source FROM listing_alert_interactions WHERE id=$1`, request.InteractionID).Scan(&storedSource); err != nil || storedSource != source {
+				t.Fatalf("search attribution: %q %v", storedSource, err)
+			}
+			request.NotificationID = notification
+			if _, err := s.handle(c, "interaction", request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("search cannot claim a notification: %v", err)
+			}
+		}
 	})
 
 	t.Run("concurrent limit and exact schedule", func(t *testing.T) {
 		s, c, user, _, _, _ := fixture(t)
+		s.baseAlertLimit = 1
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 		success, limited := 0, 0
@@ -628,7 +645,7 @@ func TestAlertsIntegration(t *testing.T) {
 			}()
 		}
 		wg.Wait()
-		if success != 3 || limited != 5 {
+		if success != 1 || limited != 7 {
 			t.Fatalf("success=%d limited=%d", success, limited)
 		}
 		var created, next time.Time
@@ -641,8 +658,103 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		exec(t, `UPDATE user_listing_alerts SET paused=true WHERE user_id=$1`, user)
 		_, err := s.handle(c, "create", alertRequest{Query: "Fourth alert", Location: alertLocation{CitySlug: "sf", RadiusKM: 16}})
-		if connect.CodeOf(err) != connect.CodeResourceExhausted {
-			t.Fatalf("paused alerts escaped limit: %v", err)
+		if err != nil {
+			t.Fatalf("paused alert did not free its slot: %v", err)
+		}
+	})
+	t.Run("allowance is per account and counts only active alerts", func(t *testing.T) {
+		s, c, user, _, _, _ := fixture(t)
+		s.baseAlertLimit = 1
+		checkAllowance := func(active, limit int) {
+			t.Helper()
+			out, err := s.handle(c, "list", alertRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := out.(map[string]any)["allowance"].(alertAllowance); got != (alertAllowance{Active: active, Limit: limit}) {
+				t.Fatalf("allowance = %+v, want active=%d limit=%d", got, active, limit)
+			}
+		}
+		state := func(id string, paused bool) {
+			t.Helper()
+			if _, err := s.handle(c, "state", alertRequest{ID: id, Paused: paused}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		checkAllowance(0, 1)
+		first := create(t, s, c)
+		checkAllowance(1, 1)
+		state(first, true)
+		checkAllowance(0, 1)
+		second := create(t, s, c)
+		if _, err := s.handle(c, "state", alertRequest{ID: first}); connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Fatalf("resume exceeded allowance: %v", err)
+		}
+		// A future referral grant changes this server-owned value, not alert rows.
+		exec(t, `UPDATE users SET listing_alert_bonus_slots=1 WHERE id=$1`, user)
+		state(first, false)
+		checkAllowance(2, 2)
+		other, otherCtx, _, _, _, _ := fixture(t)
+		other.baseAlertLimit = 1
+		out, err := other.handle(otherCtx, "list", alertRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.(map[string]any)["allowance"].(alertAllowance).Limit != 1 {
+			t.Fatal("bonus leaked to another account")
+		}
+		if _, err := pool.Exec(ctx, `UPDATE users SET listing_alert_bonus_slots=-1 WHERE id=$1`, user); err == nil {
+			t.Fatal("negative bonus accepted")
+		}
+		// Lowering an allowance preserves existing alerts but prevents new activations.
+		exec(t, `UPDATE users SET listing_alert_bonus_slots=0 WHERE id=$1`, user)
+		checkAllowance(2, 1)
+		state(first, false) // Retrying an already-active alert needs no extra slot.
+		if _, err := s.handle(c, "create", alertRequest{Query: "Another alert", Location: alertLocation{CitySlug: "sf", RadiusKM: 16}}); connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Fatalf("over-limit account created another alert: %v", err)
+		}
+		state(first, true)
+		if _, err := s.handle(c, "state", alertRequest{ID: first}); connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Fatalf("resume at limit succeeded: %v", err)
+		}
+		if _, err := s.handle(c, "delete", alertRequest{ID: second}); err != nil {
+			t.Fatal(err)
+		}
+		state(first, false)
+		checkAllowance(1, 1)
+	})
+	t.Run("concurrent creation and resumption share the last slot", func(t *testing.T) {
+		s, c, user, _, _, _ := fixture(t)
+		ids := []string{create(t, s, c), create(t, s, c), create(t, s, c)}
+		exec(t, `UPDATE user_listing_alerts SET paused=true WHERE user_id=$1`, user)
+		s.baseAlertLimit = 1
+		results := make(chan error, 6)
+		for _, id := range ids {
+			go func() { _, err := s.handle(c, "state", alertRequest{ID: id}); results <- err }()
+			go func() {
+				_, err := s.handle(c, "create", alertRequest{Query: "New search", Location: alertLocation{CitySlug: "sf", RadiusKM: 16}})
+				results <- err
+			}()
+		}
+		success, limited := 0, 0
+		for range 6 {
+			if err := <-results; err == nil {
+				success++
+			} else if connect.CodeOf(err) == connect.CodeResourceExhausted {
+				limited++
+			} else {
+				t.Error(err)
+			}
+		}
+		if success != 1 || limited != 5 {
+			t.Fatalf("success=%d limited=%d", success, limited)
+		}
+		var active int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_listing_alerts WHERE user_id=$1 AND NOT paused`, user).Scan(&active); err != nil {
+			t.Fatal(err)
+		}
+		if active != 1 {
+			t.Fatalf("active=%d", active)
 		}
 	})
 	t.Run("chosen daily time and daylight saving schedule", func(t *testing.T) {
@@ -1575,10 +1687,10 @@ func TestListingAlertMigrationUpgradesMain(t *testing.T) {
 		t.Fatalf("legacy notification migration: %d/%d/%d %v", pending, succeeded, unknown, err)
 	}
 	var preserved bool
-	if err = pool.QueryRow(ctx, `SELECT alert_hour=0 AND alert_minute=0 AND time_zone='UTC' AND min_price IS NULL AND max_price IS NULL FROM user_listing_alerts WHERE id=$1`, legacyAlert).Scan(&preserved); err != nil || !preserved {
-		t.Fatal("legacy schedule changed", err)
+	if err = pool.QueryRow(ctx, `SELECT a.alert_hour=0 AND a.alert_minute=0 AND a.time_zone='UTC' AND a.min_price IS NULL AND a.max_price IS NULL AND NOT a.paused AND u.listing_alert_bonus_slots=0 FROM user_listing_alerts a JOIN users u ON u.id=a.user_id WHERE a.id=$1`, legacyAlert).Scan(&preserved); err != nil || !preserved {
+		t.Fatal("legacy alert or initial allowance changed", err)
 	}
-	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 29 {
+	if version, err := goose.GetDBVersion(sqlDB); err != nil || version != 32 {
 		t.Fatalf("migration version = %d, error = %v", version, err)
 	}
 	assertMainData()
