@@ -252,6 +252,8 @@ struct SearchAlertDetailsSheet: View {
             loadError = nil
             if alert == nil { dismiss() }
         } catch {
+            guard !Task.isCancelled, !(error is CancellationError),
+                  (error as? URLError)?.code != .cancelled else { return }
             if current == generation, account.state.viewer?.id == owner { loadError = error.localizedDescription }
         }
     }

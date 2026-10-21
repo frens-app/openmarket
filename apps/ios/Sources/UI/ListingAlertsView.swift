@@ -276,10 +276,13 @@ struct ListingAlertsView: View {
 
 struct AlertMatchesView: View {
     @EnvironmentObject private var account: AccountSession
-    let route: AlertRoute
+    // Keep one opening identity when a parent refresh reconstructs this view.
+    @State private var route: AlertRoute
     private var alertID: String { route.alertID }
     let alert: ListingAlert?
     let changed: () -> Void
+    @State private var hasLoaded = false
+    @State private var loadGeneration = 0
     @State private var matches: [AlertMatch] = []
     @State private var notification: AlertNotificationDetails?
     @State private var error: String?
@@ -294,6 +297,12 @@ struct AlertMatchesView: View {
     @Environment(\.dismiss) private var dismiss
     @Namespace private var listingNamespace
     private let service = ListingAlertsService()
+
+    init(route: AlertRoute, alert: ListingAlert?, changed: @escaping () -> Void) {
+        _route = State(initialValue: route)
+        self.alert = alert
+        self.changed = changed
+    }
 
     var body: some View {
         List {
@@ -310,7 +319,7 @@ struct AlertMatchesView: View {
                 }
             }
             if let error { Text(error).foregroundStyle(.red) }
-            if matches.isEmpty && !loading {
+            if matches.isEmpty && hasLoaded && !loading && error == nil {
                 ContentUnavailableView("No matches yet", systemImage: "bell", description: Text("Matching listings will appear here after a check completes."))
             }
             ForEach(matches) { match in
@@ -319,7 +328,10 @@ struct AlertMatchesView: View {
                 }
             }
             if more { Button("Load more matches") { Task { await load(reset: false) } }.disabled(loading) }
-            if loading { ProgressView() }
+            if loading || (!hasLoaded && error == nil) { ProgressView("Loading matches…") }
+            if error != nil {
+                Button("Try again") { Task { await load(reset: true) } }.disabled(loading)
+            }
         }
         .navigationTitle(notification?.query ?? alert?.query ?? "Alert matches")
         .navigationBarTitleDisplayMode(.inline)
@@ -359,6 +371,15 @@ struct AlertMatchesView: View {
             }
             await load(reset: true)
         }
+        .task(id: route.interactionID) {
+            // Recording an open must not delay or prevent loading the matches.
+            do {
+                let _: ListingAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
+                    interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: ListingAlertsService.Empty.self)
+                try Task.checkCancellation()
+                if route.notificationID != nil { changed() }
+            } catch { /* Open receipts are best effort. */ }
+        }
         .onChange(of: alert?.paused) { _, value in if let value { paused = value } }
         .refreshable { await load(reset: true) }
         .sheet(item: $selected) { match in
@@ -373,7 +394,11 @@ struct AlertMatchesView: View {
                         interactionID: listingInteractionID, notificationID: route.notificationID, source: route.source, listingID: match.id), as: ListingAlertsService.Empty.self)
                     if let index = matches.firstIndex(where: { $0.id == match.id }) { matches[index].viewedAt = Date() }
                     changed()
-                } catch { self.error = error.localizedDescription }
+                } catch {
+                    guard !Task.isCancelled, !(error is CancellationError),
+                          (error as? URLError)?.code != .cancelled else { return }
+                    self.error = error.localizedDescription
+                }
             }
         }
     }
@@ -401,19 +426,28 @@ struct AlertMatchesView: View {
     }
 
     private func load(reset: Bool) async {
-        guard !loading else { return }
-        loading = true; defer { loading = false }
+        guard reset || !loading else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
+        loading = true
+        error = nil
+        defer { if generation == loadGeneration { loading = false } }
         do {
-            let _: ListingAlertsService.Empty = try await service.call("interaction", .init(id: alertID, event: "alert_opened",
-                interactionID: route.interactionID, notificationID: route.notificationID, source: route.source), as: ListingAlertsService.Empty.self)
-            if route.notificationID != nil { changed() }
             let last = reset ? nil : matches.last
             let loaded = try await service.call("matches", .init(id: alertID, beforeID: last?.id, before: last?.matchedCursor,
                 notificationID: route.notificationID), as: ListingAlertsService.MatchList.self)
+            try Task.checkCancellation()
+            guard generation == loadGeneration else { return }
             notification = loaded.notification
             if reset { matches = loaded.matches } else { matches += loaded.matches.filter { item in !matches.contains { $0.id == item.id } } }
-            more = loaded.matches.count == 100; error = nil
-        } catch { self.error = error.localizedDescription }
+            more = loaded.matches.count == 100
+            hasLoaded = true
+            error = nil
+        } catch {
+            guard generation == loadGeneration, !Task.isCancelled,
+                  !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }
+            self.error = error.localizedDescription
+        }
     }
 
     private func setPaused() async {
