@@ -804,10 +804,8 @@ final class ListingStore: ObservableObject {
     /// `onStage` can publish cache, text, gallery, then complete details. Each is built from
     /// the original card rather than accumulated, so a late partial can't
     /// interleave with an earlier one into a state neither described.
-    func enrich(_ listing: Listing, reportView: Bool = false, onStage: @escaping @MainActor (Listing) -> Void = { _ in }) async -> Listing {
+    func enrich(_ listing: Listing, viewSubmission: ListingViewSubmission? = nil, onStage: @escaping @MainActor (Listing) -> Void = { _ in }) async -> Listing {
         let started = Date()
-        let view = reportView ? ListingViewSubmission() : nil
-        view?.submit(listing)
         let viewSession = session
         var best = listing
 
@@ -826,8 +824,11 @@ final class ListingStore: ObservableObject {
         var source = ListingViewSource.unspecified
         if let fresh = await fetchLive(best, startedAt: started, onStage: onStage, onSource: { source = $0 }) {
             best = fresh
-            if session == viewSession { view?.submit(fresh, source: source) }
+        } else {
+            source = .unspecified
         }
+        // One upload after the attempt, with fresh details only when available.
+        viewSubmission?.submit(best, source: session == viewSession ? source : .unspecified)
         return best
     }
 

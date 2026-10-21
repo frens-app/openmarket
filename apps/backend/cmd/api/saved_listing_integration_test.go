@@ -231,6 +231,9 @@ func TestSavedListingIntegration(t *testing.T) {
 	if len(list(tokenB, "").Listings) != 1 {
 		t.Fatal("view changed bookmarks")
 	}
+	t.Run("user listing click summaries", func(t *testing.T) {
+		verifyUserListingClicks(t, ctx, pool, viewClient, userA.ID, userB.ID, tokenA, tokenB)
+	})
 	if _, err := q.CreateAuthMethod(ctx, db.CreateAuthMethodParams{UserID: userA.ID, AuthService: db.AuthServiceGOOGLE, Subject: userA.ID.String()}); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +245,7 @@ func TestSavedListingIntegration(t *testing.T) {
 	if err != nil || row.LastDetailUpdatedBy != nil || row.LastViewedBy == nil || *row.LastViewedBy != userB.ID {
 		t.Fatal("deletion failed to clear observer or cleared another viewer", err)
 	}
-	for _, table := range []string{"saved_listings", "saved_listing_mutations"} {
+	for _, table := range []string{"saved_listings", "saved_listing_mutations", "user_listing_clicks"} {
 		var count int
 		if err := pool.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE user_id=$1", userA.ID).Scan(&count); err != nil || count != 0 {
 			t.Fatal("account data survived deletion", table, count, err)
@@ -250,6 +253,10 @@ func TestSavedListingIntegration(t *testing.T) {
 	}
 	if len(list(tokenB, "").Listings) != 1 {
 		t.Fatal("deleted another account's saves")
+	}
+	var clickRows int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM user_listing_clicks WHERE user_id=$1", userB.ID).Scan(&clickRows); err != nil || clickRows != 1 {
+		t.Fatal("deleted another account's clicks", clickRows, err)
 	}
 	if _, err := apply(tokenA, makeSave("999")); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatal("deleted account can write", err)

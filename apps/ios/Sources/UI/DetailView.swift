@@ -21,6 +21,7 @@ struct DetailView: View {
     @State private var didFail = false
     @State private var isEnriching = true
     @State private var showSignIn = false
+    @State private var viewSubmission: ListingViewSubmission?
     @StateObject private var sellerAccess = SellerAccess()
     @EnvironmentObject private var following: FollowedSellers
 
@@ -118,7 +119,9 @@ struct DetailView: View {
             // Words land seconds before the gallery, so they're shown the
             // moment they exist rather than waiting on the photos. The strip
             // keeps its own placeholders until the second stage arrives.
-            let enriched = await store.enrich(listing, reportView: true) { staged in
+            // Preserve the open's identity if SwiftUI restarts this screen's task.
+            if viewSubmission == nil { viewSubmission = ListingViewSubmission(referrer: referrer) }
+            let enriched = await store.enrich(listing, viewSubmission: viewSubmission) { staged in
                 withAnimation(.easeOut(duration: 0.2)) {
                     current = staged
                     isEnriching = false

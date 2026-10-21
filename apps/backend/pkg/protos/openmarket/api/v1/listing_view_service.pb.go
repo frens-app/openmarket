@@ -89,9 +89,13 @@ type SubmitListingViewRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	FacebookListingId string                 `protobuf:"bytes,1,opt,name=facebook_listing_id,json=facebookListingId,proto3" json:"facebook_listing_id,omitempty"`
 	ViewedAt          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=viewed_at,json=viewedAt,proto3" json:"viewed_at,omitempty"`
-	// Absent for the initial click or a failed detail fetch.
-	Snapshot      *SavedListingSnapshot `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	Source        ListingViewSource     `protobuf:"varint,4,opt,name=source,proto3,enum=openmarket.api.v1.ListingViewSource" json:"source,omitempty"`
+	// Absent for a failed detail fetch (or an older client's initial upload).
+	Snapshot *SavedListingSnapshot `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Source   ListingViewSource     `protobuf:"varint,4,opt,name=source,proto3,enum=openmarket.api.v1.ListingViewSource" json:"source,omitempty"`
+	// The app entry point, independent of the Facebook detail extraction source.
+	// Send once per open, after the fetch attempt. Older clients omit this field
+	// and do not contribute to click counts because they upload each open twice.
+	Referrer      *string `protobuf:"bytes,5,opt,name=referrer,proto3,oneof" json:"referrer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -154,6 +158,13 @@ func (x *SubmitListingViewRequest) GetSource() ListingViewSource {
 	return ListingViewSource_LISTING_VIEW_SOURCE_UNSPECIFIED
 }
 
+func (x *SubmitListingViewRequest) GetReferrer() string {
+	if x != nil && x.Referrer != nil {
+		return *x.Referrer
+	}
+	return ""
+}
+
 type SubmitListingViewResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -194,12 +205,14 @@ var File_openmarket_api_v1_listing_view_service_proto protoreflect.FileDescripto
 
 const file_openmarket_api_v1_listing_view_service_proto_rawDesc = "" +
 	"\n" +
-	",openmarket/api/v1/listing_view_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a-openmarket/api/v1/saved_listing_service.proto\"\xae\x02\n" +
+	",openmarket/api/v1/listing_view_service.proto\x12\x11openmarket.api.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a-openmarket/api/v1/saved_listing_service.proto\"\xe7\x03\n" +
 	"\x18SubmitListingViewRequest\x12D\n" +
 	"\x13facebook_listing_id\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f2\r^[0-9]{1,64}$R\x11facebookListingId\x12?\n" +
 	"\tviewed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\bviewedAt\x12C\n" +
 	"\bsnapshot\x18\x03 \x01(\v2'.openmarket.api.v1.SavedListingSnapshotR\bsnapshot\x12F\n" +
-	"\x06source\x18\x04 \x01(\x0e2$.openmarket.api.v1.ListingViewSourceB\b\xbaH\x05\x82\x01\x02\x10\x01R\x06source\"\x1b\n" +
+	"\x06source\x18\x04 \x01(\x0e2$.openmarket.api.v1.ListingViewSourceB\b\xbaH\x05\x82\x01\x02\x10\x01R\x06source\x12\xa9\x01\n" +
+	"\breferrer\x18\x05 \x01(\tB\x87\x01\xbaH\x83\x01r\x80\x01R\bdiscoverR\x06searchR\tai_searchR\x0elisting_alertsR\x0frecently_viewedR\x05savedR\x14price_check_evidenceR\x13listing_price_checkR\x0eseller_profileH\x00R\breferrer\x88\x01\x01B\v\n" +
+	"\t_referrer\"\x1b\n" +
 	"\x19SubmitListingViewResponse*\xd8\x02\n" +
 	"\x11ListingViewSource\x12#\n" +
 	"\x1fLISTING_VIEW_SOURCE_UNSPECIFIED\x10\x00\x12)\n" +
@@ -253,6 +266,7 @@ func file_openmarket_api_v1_listing_view_service_proto_init() {
 		return
 	}
 	file_openmarket_api_v1_saved_listing_service_proto_init()
+	file_openmarket_api_v1_listing_view_service_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

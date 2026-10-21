@@ -313,13 +313,22 @@ restoration. Snapshot URLs can expire; sync retains metadata, not image binaries
 `POST /openmarket.api.v1.ListingViewService/SubmitListingView` records an item
 open, independently of saving it. Send `facebook_listing_id` and `viewed_at`;
 a successful live read also sends `snapshot` and `source`. The iOS detail screen
-submits the click immediately, then the refreshed snapshot after extraction.
-Uploads run independently of screen dismissal; failures are logged and are not
-currently queued for offline retry. Unresolved mobile cards submit once their
-Facebook listing ID is known.
+submits once after the fetch attempt: the click and fresh details on success,
+or just the click on failure. The click timestamp is captured when opening the
+screen. Closing the app before the attempt finishes can lose that click.
+Uploads run independently of screen dismissal; failures are logged without retry.
+Unresolved mobile cards can only submit if their Facebook listing ID is resolved.
 
-An authenticated OpenMarket account is required. Guest browsing never submits
-views. The server derives `listings.last_viewed_by` from the verified session;
+Migration `00030` adds `user_listing_clicks`, one row per `(user_id, listing_id)`,
+with `first_clicked_at`, `last_clicked_at`, `click_count`, `first_clicked_from`,
+and `last_clicked_from`. Each upload with a `referrer` increments the count;
+first/latest times and their app entry points follow the client `viewed_at`.
+Older clients omit `referrer` and do not count, since they upload each open twice.
+There is no event log or retry deduplication. Account deletion removes summaries.
+
+An authenticated OpenMarket account is required. Guest clicks still emit analytics
+events but never submit listing views to the API. The server derives
+`listings.last_viewed_by` from the verified session;
 `last_view_received_at` determines the latest view, while `last_viewed_at` retains
 the client clock time for that submission. Client clock skew cannot stop a later
 received view from becoming the latest. Facebook authentication is separate from

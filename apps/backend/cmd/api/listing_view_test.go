@@ -25,7 +25,13 @@ func TestListingViewValidation(t *testing.T) {
 	if err := validateListingView(fresh, now); err != nil {
 		t.Fatal(err)
 	}
+	fresh.Referrer = proto.String("search")
+	if err := validateListingView(fresh, now); err != nil {
+		t.Fatal(err)
+	}
 	for name, change := range map[string]func(*v1.SubmitListingViewRequest){
+		"unknown referrer":         func(r *v1.SubmitListingViewRequest) { r.Referrer = proto.String("Search") },
+		"empty referrer":           func(r *v1.SubmitListingViewRequest) { r.Referrer = proto.String("") },
 		"future view":              func(r *v1.SubmitListingViewRequest) { r.ViewedAt = timestamppb.New(now.Add(time.Hour)) },
 		"missing source":           func(r *v1.SubmitListingViewRequest) { r.Source = 0 },
 		"unknown source":           func(r *v1.SubmitListingViewRequest) { r.Source = 99 },

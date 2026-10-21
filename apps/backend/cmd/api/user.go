@@ -330,6 +330,9 @@ func (s *userServer) DeleteAccount(
 	if err := qtx.ClearListingViewerForUser(ctx, &userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	if err := qtx.DeleteListingClicksForUser(ctx, userID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	if err := qtx.DeleteSavedListingsForUser(ctx, userID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete saved listings: %w", err))
 	}

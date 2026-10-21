@@ -23,8 +23,15 @@ service ListingViewService {
 message SubmitListingViewRequest {
   string facebook_listing_id = 1 [(buf.validate.field).string.pattern = "^[0-9]{1,64}$"];
   google.protobuf.Timestamp viewed_at = 2 [(buf.validate.field).required = true];
-  // Absent for the initial click or a failed detail fetch.
+  // Absent for a failed detail fetch (or an older client's initial upload).
   SavedListingSnapshot snapshot = 3;
   ListingViewSource source = 4 [(buf.validate.field).enum.defined_only = true];
+  // The app entry point, independent of the Facebook detail extraction source.
+  // Send once per open, after the fetch attempt. Older clients omit this field
+  // and do not contribute to click counts because they upload each open twice.
+  optional string referrer = 5 [(buf.validate.field).string = {
+    in: ["discover", "search", "ai_search", "listing_alerts", "recently_viewed",
+         "saved", "price_check_evidence", "listing_price_check", "seller_profile"]
+  }];
 }
 message SubmitListingViewResponse {}

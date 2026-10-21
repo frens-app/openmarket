@@ -68,6 +68,14 @@ func (s *listingViewServer) SubmitListingView(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	view.ID = row.ID
+	if r.Referrer != nil {
+		if err = q.RecordUserListingClick(ctx, db.RecordUserListingClickParams{
+			UserID: userID, ListingID: row.ID,
+			ClickedAt: view.ViewedAt, Referrer: r.GetReferrer(),
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
 	if err = q.RecordListingView(ctx, view); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

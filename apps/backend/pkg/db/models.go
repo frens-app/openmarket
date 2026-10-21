@@ -321,6 +321,7 @@ type ListingAlertListing struct {
 	MatchedAt          pgtype.Timestamptz
 	ViewedAt           pgtype.Timestamptz
 	NotificationSentAt pgtype.Timestamptz
+	SavedAt            pgtype.Timestamptz
 }
 
 type ListingAlertNotificationOutbox struct {
@@ -470,6 +471,18 @@ type UserListingAlert struct {
 	Paused        bool
 	AlertMinute   int16
 	TimeZone      string
+	MinPrice      *int32
+	MaxPrice      *int32
+}
+
+type UserListingClick struct {
+	UserID           uuid.UUID
+	ListingID        uuid.UUID
+	FirstClickedAt   pgtype.Timestamptz
+	FirstClickedFrom string
+	LastClickedAt    pgtype.Timestamptz
+	LastClickedFrom  string
+	ClickCount       int64
 }
 
 type UserSession struct {

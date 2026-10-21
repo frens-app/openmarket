@@ -9,12 +9,20 @@ import os
 final class ListingViewSubmission {
     private let userID = AccountSession.shared.state.viewer?.id
     private let viewedAt = Date()
+    private let referrer: Analytics.Surface
+    private var didSubmit = false
+
+    init(referrer: Analytics.Surface) {
+        self.referrer = referrer
+    }
 
     func submit(_ listing: Listing, source: ListingViewSource = .unspecified) {
-        guard let userID, let id = listing.facebookListingID else { return }
+        guard !didSubmit, let userID, let id = listing.facebookListingID else { return }
+        didSubmit = true
         var request = SubmitListingViewRequest()
         request.facebookListingID = id
         request.viewedAt = Google_Protobuf_Timestamp(date: viewedAt)
+        request.referrer = referrer.rawValue
         if source != .unspecified {
             request.snapshot = listing.savedSnapshot
             request.source = source

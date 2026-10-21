@@ -91,7 +91,7 @@ public nonisolated struct Openmarket_Api_V1_SubmitListingViewRequest: Sendable {
   /// Clears the value of `viewedAt`. Subsequent reads from it will return its default value.
   public mutating func clearViewedAt() {self._viewedAt = nil}
 
-  /// Absent for the initial click or a failed detail fetch.
+  /// Absent for a failed detail fetch (or an older client's initial upload).
   public var snapshot: Openmarket_Api_V1_SavedListingSnapshot {
     get {_snapshot ?? Openmarket_Api_V1_SavedListingSnapshot()}
     set {_snapshot = newValue}
@@ -103,12 +103,25 @@ public nonisolated struct Openmarket_Api_V1_SubmitListingViewRequest: Sendable {
 
   public var source: Openmarket_Api_V1_ListingViewSource = .unspecified
 
+  /// The app entry point, independent of the Facebook detail extraction source.
+  /// Send once per open, after the fetch attempt. Older clients omit this field
+  /// and do not contribute to click counts because they upload each open twice.
+  public var referrer: String {
+    get {_referrer ?? String()}
+    set {_referrer = newValue}
+  }
+  /// Returns true if `referrer` has been explicitly set.
+  public var hasReferrer: Bool {self._referrer != nil}
+  /// Clears the value of `referrer`. Subsequent reads from it will return its default value.
+  public mutating func clearReferrer() {self._referrer = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _viewedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _snapshot: Openmarket_Api_V1_SavedListingSnapshot? = nil
+  fileprivate var _referrer: String? = nil
 }
 
 public nonisolated struct Openmarket_Api_V1_SubmitListingViewResponse: Sendable {
@@ -131,7 +144,7 @@ nonisolated extension Openmarket_Api_V1_ListingViewSource: SwiftProtobuf._ProtoN
 
 nonisolated extension Openmarket_Api_V1_SubmitListingViewRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SubmitListingViewRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}facebook_listing_id\0\u{3}viewed_at\0\u{1}snapshot\0\u{1}source\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}facebook_listing_id\0\u{3}viewed_at\0\u{1}snapshot\0\u{1}source\0\u{1}referrer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -143,6 +156,7 @@ nonisolated extension Openmarket_Api_V1_SubmitListingViewRequest: SwiftProtobuf.
       case 2: try { try decoder.decodeSingularMessageField(value: &self._viewedAt) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._snapshot) }()
       case 4: try { try decoder.decodeSingularEnumField(value: &self.source) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._referrer) }()
       default: break
       }
     }
@@ -165,6 +179,9 @@ nonisolated extension Openmarket_Api_V1_SubmitListingViewRequest: SwiftProtobuf.
     if self.source != .unspecified {
       try visitor.visitSingularEnumField(value: self.source, fieldNumber: 4)
     }
+    try { if let v = self._referrer {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -173,6 +190,7 @@ nonisolated extension Openmarket_Api_V1_SubmitListingViewRequest: SwiftProtobuf.
     if lhs._viewedAt != rhs._viewedAt {return false}
     if lhs._snapshot != rhs._snapshot {return false}
     if lhs.source != rhs.source {return false}
+    if lhs._referrer != rhs._referrer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
