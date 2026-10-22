@@ -85,13 +85,12 @@ struct ListingAlertsView: View {
             .listStyle(.plain)
             .navigationTitle("Alerts")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Create alert", systemImage: "plus") { showCreate = true }
-                        Button("Manage alerts", systemImage: "slider.horizontal.3") { showManage = true }
-                            .disabled(alerts.isEmpty)
-                    } label: { Image(systemName: "ellipsis.circle") }
-                    .accessibilityLabel("Alert options")
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Manage alerts", systemImage: "slider.horizontal.3") { showManage = true }
+                        .labelStyle(.iconOnly)
+                        .disabled(alerts.isEmpty)
+                    Button("Create alert", systemImage: "plus") { showCreate = true }
+                        .labelStyle(.iconOnly)
                 }
             }
             .navigationDestination(for: AlertRoute.self) { route in
