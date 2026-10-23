@@ -29,6 +29,7 @@ struct ResultsView: View {
     @State private var selected: Listing?
     @State private var selectedReferrer: Analytics.Surface = .discover
     @State private var showAccountLink = false
+    @State private var showAccountLogin = false
     @State private var linkedProvider: String?
     @State private var showLinkConfirmation = false
     @State private var showSettings = false
@@ -50,7 +51,7 @@ struct ResultsView: View {
 
     private var canRecordShownListings: Bool {
         isVisible && scenePhase == .active && !isSearching && selected == nil
-            && !showAccountLink && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
+            && !showAccountLink && !showAccountLogin && !showSettings && !showLocationPicker && !showFilters && !showSaved && !showSignIn
             && alertDraft == nil && selectedSearchAlert == nil
     }
 
@@ -122,6 +123,16 @@ struct ResultsView: View {
             }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showAccountLogin) {
+            NavigationStack {
+                AccountLoginView { _ in showAccountLogin = false }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showAccountLogin = false }
+                        }
+                    }
+            }
+        }
         .sheet(isPresented: $showAccountLink, onDismiss: {
             if linkedProvider != nil { showLinkConfirmation = true }
         }) {
@@ -272,6 +283,11 @@ struct ResultsView: View {
     private var discoverSurface: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                if !account.isSignedIn {
+                    accountSignInBanner
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                }
                 if account.needsPhoneLink {
                     PhoneAccountLinkBanner {
                         linkedProvider = nil
@@ -314,6 +330,30 @@ struct ResultsView: View {
     }
 
     // MARK: - Pieces
+
+    private var accountSignInBanner: some View {
+        Button { showAccountLogin = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.title2)
+                    .accessibilityHidden(true)
+                Text("Sign in to enable smart daily listing alerts and other AI features")
+                    .font(.subheadline.weight(.medium))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Color.accentColor)
+            .padding(16)
+            .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("discover-sign-in-banner")
+    }
 
     private var currentSearchTerm: String {
         guard case .search(let term) = store.query?.kind else { return "" }
