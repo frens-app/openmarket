@@ -196,9 +196,9 @@ struct SearchAlertButton: View {
     }
 
     private var icon: some View {
-        Image(systemName: alert.map { $0.paused ? "bell.slash" : "bell.fill" } ?? "bell")
+        Image(systemName: isActive ? "bell.fill" : "bell")
             .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(isActive ? Color.white : Color.secondary)
+            .foregroundStyle(isActive ? Color.white : Color.accentColor)
             .overlay(alignment: .topTrailing) {
                 if isActive {
                     Image(systemName: "checkmark")

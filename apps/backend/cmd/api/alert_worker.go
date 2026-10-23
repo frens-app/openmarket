@@ -220,14 +220,17 @@ func (s *alertsServer) evaluateBatch(ctx context.Context) error {
 func (s *alertsServer) notifyMatches(ctx context.Context) error {
 	var notificationID, alertID, deviceID uuid.UUID
 	var token, query string
-	var ids []string
+	var ids, titles []string
 	err := s.pool.QueryRow(ctx, `WITH next AS (
-        SELECT n.id,a.id AS alert_id,d.id AS device_id,d.push_token,a.query,n.listing_ids
+        SELECT n.id,a.id AS alert_id,d.id AS device_id,d.push_token,a.query,n.listing_ids,
+          ARRAY(SELECT COALESCE(l.listing->>'title','') FROM listing_alert_listings l
+                WHERE l.alert_id=a.id AND l.listing_id=ANY(n.listing_ids)
+                ORDER BY array_position(n.listing_ids,l.listing_id)) AS listing_titles
         FROM listing_alert_notification_outbox n JOIN user_listing_alerts a ON a.id=n.alert_id JOIN user_devices d ON d.id=a.device_id
         WHERE n.send_started_at IS NULL AND NOT a.paused AND `+eligibleAlertDevice+`
         ORDER BY n.created_at LIMIT 1 FOR UPDATE OF n SKIP LOCKED
     ) UPDATE listing_alert_notification_outbox n SET send_started_at=clock_timestamp()
-      FROM next WHERE n.id=next.id RETURNING n.id,next.alert_id,next.device_id,next.push_token,next.query,next.listing_ids`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids)
+      FROM next WHERE n.id=next.id RETURNING n.id,next.alert_id,next.device_id,next.push_token,next.query,next.listing_ids,next.listing_titles`).Scan(&notificationID, &alertID, &deviceID, &token, &query, &ids, &titles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -235,12 +238,8 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 		return err
 	}
 
-	listingLabel := "listings"
-	if len(ids) == 1 {
-		listingLabel = "listing"
-	}
-	body := fmt.Sprintf("We found %d new %s matching your alert.", len(ids), listingLabel)
-	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": query + " alert", "body": body}, "sound": "default", "thread-id": alertID.String()}, "kind": "listing_alert_match", "alert_id": alertID.String(), "notification_id": notificationID.String()})
+	title, body := listingAlertNotification(query, len(ids), titles)
+	err = s.push.Send(ctx, token, "match-"+notificationID.String(), false, map[string]any{"aps": map[string]any{"alert": map[string]string{"title": title, "body": body}, "sound": "default", "thread-id": alertID.String()}, "kind": "listing_alert_match", "alert_id": alertID.String(), "notification_id": notificationID.String()})
 	s.invalidateToken(ctx, deviceID, token, err)
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
@@ -260,6 +259,29 @@ func (s *alertsServer) notifyMatches(ctx context.Context) error {
 
 	_, err = s.pool.Exec(ctx, `UPDATE listing_alert_listings SET notification_sent_at=COALESCE(notification_sent_at,now()) WHERE alert_id=$1 AND listing_id=ANY($2)`, alertID, ids)
 	return err
+}
+
+func listingAlertNotification(query string, count int, titles []string) (string, string) {
+	listingLabel := "listings"
+	if count == 1 {
+		listingLabel = "listing"
+	}
+	title := fmt.Sprintf("%d new %s found for %s", count, listingLabel, query)
+	names := make([]string, 0, len(titles))
+	for _, name := range titles {
+		if name = strings.Join(strings.Fields(name), " "); name != "" {
+			names = append(names, name)
+		}
+	}
+	body := []rune(strings.Join(names, ", "))
+	const maxBodyLength = 180
+	if len(body) > maxBodyLength {
+		return title, strings.TrimRight(string(body[:maxBodyLength-1]), " ,") + "…"
+	}
+	if len(body) == 0 {
+		return title, "Open to view your new matches."
+	}
+	return title, string(body)
 }
 
 func (s *alertsServer) invalidateToken(ctx context.Context, device uuid.UUID, token string, err error) {

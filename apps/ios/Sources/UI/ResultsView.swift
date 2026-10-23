@@ -254,10 +254,14 @@ struct ResultsView: View {
                 .accessibilityHidden(surface != .search || isSearching)
 
             if isSearching {
-                SearchSuggestions(onSelect: replaySearch, onAlert: { alert in
+                SearchSuggestions(onSelect: replaySearch, onAlert: { term, alert in
                     isSearching = false
                     searchAlertSource = "search_history"
-                    selectedSearchAlert = alert
+                    if let alert {
+                        selectedSearchAlert = alert
+                    } else {
+                        alertDraft = ListingAlertDraft(query: term, source: "search_history")
+                    }
                 })
             }
         }
@@ -973,7 +977,7 @@ private struct SearchSuggestions: View {
     @EnvironmentObject private var account: AccountSession
     @ObservedObject private var searchAlerts = SearchAlerts.shared
     let onSelect: (String) -> Void
-    let onAlert: (SearchAlert) -> Void
+    let onAlert: (String, SearchAlert?) -> Void
 
     var body: some View {
         List {
@@ -981,8 +985,9 @@ private struct SearchSuggestions: View {
                 Section("Recent") {
                     ForEach(prefs.recentSearches, id: \.self) { term in
                         SearchHistoryRow(term: term,
+                            searchCount: prefs.searchCount(for: term),
                             alert: searchAlerts.matchingHistory(term, for: account.state.viewer?.id),
-                            onSelect: { onSelect(term) }, onAlert: onAlert)
+                            onSelect: { onSelect(term) }, onAlert: { alert in onAlert(term, alert) })
                     }
                 }
             }
@@ -994,9 +999,10 @@ private struct SearchSuggestions: View {
 
 struct SearchHistoryRow: View {
     let term: String
+    var searchCount = 0
     let alert: SearchAlert?
     let onSelect: () -> Void
-    let onAlert: (SearchAlert) -> Void
+    let onAlert: (SearchAlert?) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1007,7 +1013,14 @@ struct SearchHistoryRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if let alert { SearchAlertButton(alert: alert) { onAlert(alert) } }
+            if searchCount > 0 {
+                Text(searchCount, format: .number)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Searched \(searchCount) \(searchCount == 1 ? "time" : "times")")
+            }
+            SearchAlertButton(alert: alert, iconOnly: true) { onAlert(alert) }
+                .accessibilityLabel("\(term): \(alert?.paused == false ? "Alerts on" : "Alerts off")")
         }
     }
 }

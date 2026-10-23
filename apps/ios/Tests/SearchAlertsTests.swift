@@ -4,6 +4,47 @@ import SwiftUI
 
 @MainActor
 final class SearchAlertsTests: XCTestCase {
+    func testSearchCountsPersistAndDoNotInventLegacyCounts() throws {
+        let suite = "SearchCountsTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["Anthurium"], forKey: "recentSearches")
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertEqual(prefs.recentSearches, ["Anthurium"])
+        XCTAssertEqual(prefs.searchCount(for: "Anthurium"), 0)
+
+        prefs.recordSearch(" Anthurium ")
+        prefs.recordSearch("ANTHURIUM")
+        prefs.recordSearch("Queen")
+        let reloaded = Preferences(defaults: defaults)
+        XCTAssertEqual(reloaded.searchCount(for: "anthurium"), 2)
+        XCTAssertEqual(reloaded.searchCount(for: "Queen"), 1)
+        XCTAssertEqual(reloaded.recentSearches, ["Queen", "ANTHURIUM"])
+    }
+
+    func testSearchCountsRespectHistorySettingAndClear() throws {
+        let suite = "SearchCountsTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prefs = Preferences(defaults: defaults)
+        prefs.recordSearch("Anthurium")
+        prefs.recordSearch(" \n ")
+        prefs.recordSearchHistory = false
+        prefs.recordSearch("Anthurium")
+        prefs.recordSearch("Queen")
+        XCTAssertEqual(prefs.searchCount(for: "Anthurium"), 1)
+        XCTAssertEqual(prefs.searchCount(for: "Queen"), 0)
+        XCTAssertEqual(prefs.recentSearches, ["Anthurium"])
+
+        prefs.clearSearchHistory()
+        let reloaded = Preferences(defaults: defaults)
+        XCTAssertTrue(reloaded.recentSearches.isEmpty)
+        XCTAssertEqual(reloaded.searchCount(for: "Anthurium"), 0)
+        reloaded.recordSearchHistory = true
+        reloaded.recordSearch("Anthurium")
+        XCTAssertEqual(reloaded.searchCount(for: "Anthurium"), 1)
+    }
+
     func testSearchUsesPricesWhileHistoryUsesTheTerm() {
         let store = SearchAlerts(load: { [] })
         store.setAccount("buyer")
@@ -118,8 +159,8 @@ final class SearchAlertsTests: XCTestCase {
                         ActiveFilterBar(onLocation: {}, onRerun: {})
                         List {
                             Section("Recent") {
-                                SearchHistoryRow(term: "Accent chair", alert: active, onSelect: {}, onAlert: { _ in })
-                                SearchHistoryRow(term: "Standing desk", alert: paused, onSelect: {}, onAlert: { _ in })
+                                SearchHistoryRow(term: "Accent chair", searchCount: 3, alert: active, onSelect: {}, onAlert: { _ in })
+                                SearchHistoryRow(term: "Standing desk", searchCount: 12, alert: paused, onSelect: {}, onAlert: { _ in })
                                 SearchHistoryRow(term: "Nintendo Switch", alert: nil, onSelect: {}, onAlert: { _ in })
                             }
                         }.listStyle(.plain)

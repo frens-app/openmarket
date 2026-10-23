@@ -145,6 +145,35 @@ func TestAlertsHTTPRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestListingAlertNotification(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		count  int
+		titles []string
+		title  string
+		body   string
+	}{
+		{"multiple matches", 3, []string{"Anthurium Carla Blackeye", "Anthurium Queen", "Anthurium Crystal"},
+			"3 new listings found for Anthurium", "Anthurium Carla Blackeye, Anthurium Queen, Anthurium Crystal"},
+		{"single match", 1, []string{"  Anthurium\n Queen  "},
+			"1 new listing found for Anthurium", "Anthurium Queen"},
+		{"missing title", 2, []string{"", "Anthurium Queen"},
+			"2 new listings found for Anthurium", "Anthurium Queen"},
+		{"no titles", 1, nil, "1 new listing found for Anthurium", "Open to view your new matches."},
+		{"unicode truncation", 1, []string{strings.Repeat("🌿", 181)},
+			"1 new listing found for Anthurium", strings.Repeat("🌿", 179) + "…"},
+		{"exact length", 1, []string{strings.Repeat("a", 180)},
+			"1 new listing found for Anthurium", strings.Repeat("a", 180)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			title, body := listingAlertNotification("Anthurium", tc.count, tc.titles)
+			if title != tc.title || body != tc.body {
+				t.Fatalf("notification = %q / %q; want %q / %q", title, body, tc.title, tc.body)
+			}
+		})
+	}
+}
+
 // Use a disposable Postgres 18 database; never a development or production database.
 func TestAlertsIntegration(t *testing.T) {
 	dsn := os.Getenv("ALERTS_TEST_DATABASE_URL")
@@ -1041,12 +1070,13 @@ func TestAlertsIntegration(t *testing.T) {
 		exec(t, `UPDATE user_listing_alerts SET next_check_at=now()-interval '1 hour' WHERE id=$1`, id)
 		dispatch(t, s)
 		w := getWork(t, s, c)[0]
-		if _, err := s.handle(c, "page", alertRequest{CheckID: w.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "301", Title: "Switch OLED"}}}); err != nil {
+		if _, err := s.handle(c, "page", alertRequest{CheckID: w.ID, Actor: "123", Complete: true, Listings: []alertListing{{ID: "301", Title: "Switch OLED"}, {ID: "302", Title: "Switch OLED White"}, {ID: "303", Title: "wrong product"}}}); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.evaluateBatch(ctx); err != nil {
 			t.Fatal(err)
 		}
+		exec(t, `UPDATE listing_alert_notification_outbox SET listing_ids=ARRAY['302','301'] WHERE check_id=$1`, w.ID)
 		var wg sync.WaitGroup
 		for range 8 {
 			wg.Add(1)
@@ -1060,6 +1090,10 @@ func TestAlertsIntegration(t *testing.T) {
 		wg.Wait()
 		if len(p.sent) != 2 {
 			t.Fatalf("visible push count: %d", len(p.sent)-1)
+		}
+		message := p.sent[1]["aps"].(map[string]any)["alert"].(map[string]string)
+		if message["title"] != "2 new listings found for Switch OLED" || message["body"] != "Switch OLED White, Switch OLED" {
+			t.Fatalf("wrong matched listing notification: %v", message)
 		}
 		var recorded bool
 		if err := pool.QueryRow(ctx, `SELECT send_started_at IS NOT NULL AND send_finished_at IS NOT NULL AND sent_at IS NOT NULL AND send_error IS NULL FROM listing_alert_notification_outbox WHERE check_id=$1`, w.ID).Scan(&recorded); err != nil || !recorded {
@@ -1118,6 +1152,10 @@ func TestAlertsIntegration(t *testing.T) {
 		}
 		if len(p.sent) != 2 {
 			t.Fatalf("duplicate or missing visible push: %d", len(p.sent))
+		}
+		message := p.sent[1]["aps"].(map[string]any)["alert"].(map[string]string)
+		if message["title"] != "1 new listing found for Switch OLED" || message["body"] != "Switch OLED" {
+			t.Fatalf("wrong single listing notification: %v", message)
 		}
 		matches, err := s.handle(c, "matches", alertRequest{ID: id})
 		if err != nil {

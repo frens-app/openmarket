@@ -75,7 +75,7 @@ struct SettingsView: View {
 
                 Section("History") {
                     Toggle("Include searches in history", isOn: $prefs.recordSearchHistory)
-                    Button("Clear search history") { prefs.recentSearches = [] }
+                    Button("Clear search history") { prefs.clearSearchHistory() }
                         .disabled(prefs.recentSearches.isEmpty)
                     Button("Clear viewing history") { viewed.clear() }
                         .disabled(viewed.isEmpty)

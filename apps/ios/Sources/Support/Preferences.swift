@@ -9,6 +9,7 @@ final class Preferences: ObservableObject {
 
     private enum Key {
         static let recentSearches = "recentSearches"
+        static let searchCounts = "searchCounts"
         static let recordSearchHistory = "recordSearchHistory"
         static let radiusKM = "radiusKM"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
@@ -26,7 +27,8 @@ final class Preferences: ObservableObject {
 
     private let defaults: UserDefaults
 
-    @Published var recentSearches: [String] { didSet { defaults.set(recentSearches, forKey: Key.recentSearches) } }
+    @Published private(set) var recentSearches: [String] { didSet { defaults.set(recentSearches, forKey: Key.recentSearches) } }
+    @Published private var searchCounts: [String: Int] { didSet { defaults.set(searchCounts, forKey: Key.searchCounts) } }
     /// Whether a search the user runs is added to that list. Off does not clear
     /// anything — existing history stays until cleared explicitly.
     @Published var recordSearchHistory: Bool { didSet { defaults.set(recordSearchHistory, forKey: Key.recordSearchHistory) } }
@@ -182,6 +184,7 @@ final class Preferences: ObservableObject {
         defaults.removeObject(forKey: "lastQueryKind")
         defaults.removeObject(forKey: "lastQueryValue")
         recentSearches = defaults.stringArray(forKey: Key.recentSearches) ?? []
+        searchCounts = defaults.dictionary(forKey: Key.searchCounts) as? [String: Int] ?? [:]
         // `object(forKey:)`, not `bool(forKey:)`: the latter returns false for a
         // key that was never written, silently shipping history recording off
         // for every existing install.
@@ -248,9 +251,19 @@ final class Preferences: ObservableObject {
         guard recordSearchHistory else { return }
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        searchCounts[trimmed.lowercased(), default: 0] += 1
         var next = recentSearches.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
         next.insert(trimmed, at: 0)
         recentSearches = Array(next.prefix(Self.maxRecentSearches))
+    }
+
+    func searchCount(for term: String) -> Int {
+        searchCounts[term.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), default: 0]
+    }
+
+    func clearSearchHistory() {
+        recentSearches = []
+        searchCounts = [:]
     }
 
 }
