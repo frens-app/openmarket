@@ -88,6 +88,9 @@ struct DetailView: View {
                 sellerBlock
                 mapBlock
                 if didFail { unavailableNotice }
+                if MarketCheckModel.canCheck(current) {
+                    AmazonCheckBlock(listing: current, canAsk: !availability.isGone)
+                }
             }
             .padding(.horizontal)
             .padding(.bottom, 100)

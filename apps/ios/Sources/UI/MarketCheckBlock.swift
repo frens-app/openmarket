@@ -31,7 +31,6 @@ struct MarketCheckBlock: View {
             case .failed(let message):
                 InlineNotice(text: message, actionTitle: "Try again") { startCheck() }
             }
-            AmazonCheckBlock(listing: listing, canAsk: canAsk)
         }
         .animation(.easeOut(duration: 0.2), value: checks.phase(for: listing))
         .sheet(isPresented: $showSignIn, onDismiss: {
