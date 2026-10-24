@@ -154,11 +154,17 @@ func TestListingAlertNotification(t *testing.T) {
 		body   string
 	}{
 		{"multiple matches", 3, []string{"Anthurium Carla Blackeye", "Anthurium Queen", "Anthurium Crystal"},
-			"3 new listings found for Anthurium", "Anthurium Carla Blackeye, Anthurium Queen, Anthurium Crystal"},
+			"3 new listings found for Anthurium", "Anthurium Carla Blackeye, Anthurium Queen, and 1 more"},
+		{"five matches", 5, []string{"anthurium carlablackaie", "anthurium pali", "third", "fourth", "fifth"},
+			"5 new listings found for Anthurium", "anthurium carlablackaie, anthurium pali, and 3 more"},
+		{"two matches", 2, []string{"Anthurium Queen", "Anthurium Crystal"},
+			"2 new listings found for Anthurium", "Anthurium Queen and Anthurium Crystal"},
+		{"long titles preserve count", 5, []string{strings.Repeat("🌿", 181), strings.Repeat("a", 181)},
+			"5 new listings found for Anthurium", strings.Repeat("🌿", 82) + "…, " + strings.Repeat("a", 82) + "…, and 3 more"},
 		{"single match", 1, []string{"  Anthurium\n Queen  "},
 			"1 new listing found for Anthurium", "Anthurium Queen"},
 		{"missing title", 2, []string{"", "Anthurium Queen"},
-			"2 new listings found for Anthurium", "Anthurium Queen"},
+			"2 new listings found for Anthurium", "Anthurium Queen and 1 more"},
 		{"no titles", 1, nil, "1 new listing found for Anthurium", "Open to view your new matches."},
 		{"unicode truncation", 1, []string{strings.Repeat("🌿", 181)},
 			"1 new listing found for Anthurium", strings.Repeat("🌿", 179) + "…"},
@@ -1092,7 +1098,7 @@ func TestAlertsIntegration(t *testing.T) {
 			t.Fatalf("visible push count: %d", len(p.sent)-1)
 		}
 		message := p.sent[1]["aps"].(map[string]any)["alert"].(map[string]string)
-		if message["title"] != "2 new listings found for Switch OLED" || message["body"] != "Switch OLED White, Switch OLED" {
+		if message["title"] != "2 new listings found for Switch OLED" || message["body"] != "Switch OLED White and Switch OLED" {
 			t.Fatalf("wrong matched listing notification: %v", message)
 		}
 		var recorded bool

@@ -267,21 +267,35 @@ func listingAlertNotification(query string, count int, titles []string) (string,
 		listingLabel = "listing"
 	}
 	title := fmt.Sprintf("%d new %s found for %s", count, listingLabel, query)
-	names := make([]string, 0, len(titles))
+	names := make([]string, 0, 2)
 	for _, name := range titles {
 		if name = strings.Join(strings.Fields(name), " "); name != "" {
 			names = append(names, name)
+			if len(names) == 2 {
+				break
+			}
 		}
 	}
-	body := []rune(strings.Join(names, ", "))
-	const maxBodyLength = 180
-	if len(body) > maxBodyLength {
-		return title, strings.TrimRight(string(body[:maxBodyLength-1]), " ,") + "…"
-	}
-	if len(body) == 0 {
+	if len(names) == 0 {
 		return title, "Open to view your new matches."
 	}
-	return title, string(body)
+	separator := " and "
+	suffix := ""
+	if remaining := count - len(names); remaining > 0 {
+		separator = ", "
+		if len(names) == 2 {
+			suffix = ","
+		}
+		suffix += fmt.Sprintf(" and %d more", remaining)
+	}
+	const maxBodyLength = 180
+	nameBudget := (maxBodyLength - len([]rune(suffix)) - (len(names)-1)*len(separator)) / len(names)
+	for i, name := range names {
+		if runes := []rune(name); len(runes) > nameBudget {
+			names[i] = strings.TrimSpace(string(runes[:nameBudget-1])) + "…"
+		}
+	}
+	return title, strings.Join(names, separator) + suffix
 }
 
 func (s *alertsServer) invalidateToken(ctx context.Context, device uuid.UUID, token string, err error) {
