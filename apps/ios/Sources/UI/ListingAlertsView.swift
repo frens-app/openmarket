@@ -32,7 +32,7 @@ struct ListingAlertsView: View {
     @State private var path: [AlertRoute] = []
     @State private var error: String?
     @State private var connected = false
-    @State private var showCreate = false
+    @State private var alertDraft: ListingAlertDraft?
     @State private var showAccount = false
     private let service = ListingAlertsService()
 
@@ -60,9 +60,44 @@ struct ListingAlertsView: View {
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
                 if visibleFeed.isEmpty && account.isSignedIn && !refreshing {
-                    ContentUnavailableView(emptyTitle, systemImage: filter == .saved ? "bookmark" : "bell",
-                        description: Text(emptyDescription))
-                        .listRowSeparator(.hidden)
+                    VStack(spacing: 0) {
+                        ContentUnavailableView {
+                            Label(emptyTitle, systemImage: filter == .saved ? "bookmark" : "bell")
+                        } description: {
+                            Text(emptyDescription)
+                        }
+                        if filter == .all && alerts.isEmpty {
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 8) {
+                                    ForEach(prefs.suggestedAlertSearches, id: \.self) { term in
+                                        Button {
+                                            alertDraft = ListingAlertDraft(query: term, source: "alerts_suggestion")
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "bell")
+                                                Text(term)
+                                            }
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(Color.accentColor)
+                                            .fixedSize(horizontal: true, vertical: true)
+                                            .padding(.horizontal, 12)
+                                            .frame(minHeight: 44)
+                                            .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                                            .contentShape(RoundedRectangle(cornerRadius: 12))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Create alert for \(term)")
+                                    }
+                                }
+                            }
+                            .scrollIndicators(.hidden)
+                            .frame(maxWidth: .infinity)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
+                        }
+                    }
+                    .listRowSeparator(.hidden)
                 }
                 ForEach(inboxDays, id: \.self) { day in
                     Section {
@@ -89,7 +124,7 @@ struct ListingAlertsView: View {
                     Button("Manage alerts", systemImage: "slider.horizontal.3") { showManage = true }
                         .labelStyle(.iconOnly)
                         .disabled(alerts.isEmpty)
-                    Button("Create alert", systemImage: "plus") { showCreate = true }
+                    Button("Create alert", systemImage: "plus") { alertDraft = ListingAlertDraft() }
                         .labelStyle(.iconOnly)
                 }
             }
@@ -122,8 +157,8 @@ struct ListingAlertsView: View {
                 }
                 .task { await recordOpen(item) }
             }
-            .sheet(isPresented: $showCreate) {
-                CreateListingAlertView(draft: ListingAlertDraft()) { id in
+            .sheet(item: $alertDraft) { draft in
+                CreateListingAlertView(draft: draft) { id in
                     Task { await refresh() }
                     path = [AlertRoute(alertID: id, source: "creation")]
                 }

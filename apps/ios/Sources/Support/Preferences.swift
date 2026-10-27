@@ -10,6 +10,7 @@ final class Preferences: ObservableObject {
     private enum Key {
         static let recentSearches = "recentSearches"
         static let searchCounts = "searchCounts"
+        static let hasTappedAlertsTab = "hasTappedAlertsTab"
         static let recordSearchHistory = "recordSearchHistory"
         static let radiusKM = "radiusKM"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
@@ -29,6 +30,7 @@ final class Preferences: ObservableObject {
 
     @Published private(set) var recentSearches: [String] { didSet { defaults.set(recentSearches, forKey: Key.recentSearches) } }
     @Published private var searchCounts: [String: Int] { didSet { defaults.set(searchCounts, forKey: Key.searchCounts) } }
+    @Published var hasTappedAlertsTab: Bool { didSet { defaults.set(hasTappedAlertsTab, forKey: Key.hasTappedAlertsTab) } }
     /// Whether a search the user runs is added to that list. Off does not clear
     /// anything — existing history stays until cleared explicitly.
     @Published var recordSearchHistory: Bool { didSet { defaults.set(recordSearchHistory, forKey: Key.recordSearchHistory) } }
@@ -185,6 +187,7 @@ final class Preferences: ObservableObject {
         defaults.removeObject(forKey: "lastQueryValue")
         recentSearches = defaults.stringArray(forKey: Key.recentSearches) ?? []
         searchCounts = defaults.dictionary(forKey: Key.searchCounts) as? [String: Int] ?? [:]
+        hasTappedAlertsTab = defaults.bool(forKey: Key.hasTappedAlertsTab)
         // `object(forKey:)`, not `bool(forKey:)`: the latter returns false for a
         // key that was never written, silently shipping history recording off
         // for every existing install.
@@ -259,6 +262,20 @@ final class Preferences: ObservableObject {
 
     func searchCount(for term: String) -> Int {
         searchCounts[term.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), default: 0]
+    }
+
+    /// Frequent recent searches, with recency breaking ties. Only suggest terms
+    /// that can be submitted by the alert form.
+    var suggestedAlertSearches: [String] {
+        recentSearches.enumerated()
+            .filter { (2...300).contains($0.element.count) }
+            .sorted {
+                let lhsCount = searchCount(for: $0.element)
+                let rhsCount = searchCount(for: $1.element)
+                return lhsCount == rhsCount ? $0.offset < $1.offset : lhsCount > rhsCount
+            }
+            .prefix(4)
+            .map(\.element)
     }
 
     func clearSearchHistory() {

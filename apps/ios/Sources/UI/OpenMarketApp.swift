@@ -304,7 +304,10 @@ struct AppView: View {
 
     var body: some View {
         ZStack {
-            TabView(selection: $alerts.selectedTab) {
+            TabView(selection: Binding(get: { alerts.selectedTab }, set: { tab in
+                if tab == 3 { prefs.hasTappedAlertsTab = true }
+                alerts.selectedTab = tab
+            })) {
                 ResultsView()
                     .tabItem { Label("Browse", systemImage: "magnifyingglass") }.tag(0)
                 ShoppingView()
@@ -313,6 +316,7 @@ struct AppView: View {
                     .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(2)
                 ListingAlertsView()
                     .tabItem { Label("Alerts", systemImage: "bell") }.tag(3)
+                    .badge(prefs.hasTappedAlertsTab ? nil : "New")
             }
 
             // The engines' webviews must be in the hierarchy or WebKit

@@ -4,6 +4,31 @@ import SwiftUI
 
 @MainActor
 final class SearchAlertsTests: XCTestCase {
+    func testAlertSuggestionsRankByFrequencyThenRecencyAndRespectClearedHistory() throws {
+        let suite = "AlertSuggestionsTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prefs = Preferences(defaults: defaults)
+        for term in ["Chair", "CHAIR", "Desk", "Lamp", "Sofa", "Table", "x", String(repeating: "a", count: 301)] {
+            prefs.recordSearch(term)
+        }
+        XCTAssertEqual(prefs.suggestedAlertSearches, ["CHAIR", "Table", "Sofa", "Lamp"])
+        XCTAssertEqual(Preferences(defaults: defaults).suggestedAlertSearches, prefs.suggestedAlertSearches)
+
+        prefs.clearSearchHistory()
+        XCTAssertTrue(prefs.suggestedAlertSearches.isEmpty)
+    }
+
+    func testAlertsTabVisitPersistsAcrossLaunches() throws {
+        let suite = "AlertsTabTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertFalse(prefs.hasTappedAlertsTab)
+        prefs.hasTappedAlertsTab = true
+        XCTAssertTrue(Preferences(defaults: defaults).hasTappedAlertsTab)
+    }
+
     func testSearchCountsPersistAndDoNotInventLegacyCounts() throws {
         let suite = "SearchCountsTests-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
