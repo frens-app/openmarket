@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import WebKit
 import UserNotifications
 
@@ -37,11 +38,24 @@ final class ListingAlertCoordinator: ObservableObject {
         }
     }
 
-    static func searchFirstPage(_ check: AlertWork, actor: String, client: any GraphQLFeedLoading) async throws -> ListingAlertsService.Request {
+    static func searchFirstPage(_ check: AlertWork, actor: String, client: any GraphQLFeedLoading,
+                                distances: DistanceResolver = .shared) async throws -> ListingAlertsService.Request {
         let page = try await client.page(for: check.searchQuery, cursor: nil)
         try Task.checkCancellation()
+        if check.location.radiusKM > 0 {
+            await distances.resolveAll(page.listings.map(\.locationText))
+            try Task.checkCancellation()
+        }
+        // Facebook can return listings outside the requested area. Measure from
+        // this work's location snapshot, without changing Browse's shared origin.
+        let center = CLLocation(latitude: check.location.latitude, longitude: check.location.longitude)
         let listings = page.listings.compactMap { item -> AlertListing? in
             guard item.isSold != true, let title = item.title, !title.isEmpty else { return nil }
+            if check.location.radiusKM > 0, let point = distances.coordinate(for: item.locationText) {
+                let distance = CLLocation(latitude: point.latitude, longitude: point.longitude).distance(from: center)
+                guard distance <= Double(check.location.radiusKM) * 1000 else { return nil }
+            }
+            // As in Browse, retain listings whose city could not be resolved.
             return AlertListing(id: item.id, title: title, priceText: item.priceFormatted ?? "",
                                 locationText: item.locationText ?? "", thumbnailURL: item.photoURL ?? "",
                                 description: "", condition: "")

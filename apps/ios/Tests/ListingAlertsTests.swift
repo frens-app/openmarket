@@ -242,6 +242,44 @@ final class ListingAlertsTests: XCTestCase {
         XCTAssertEqual(request.listings?.count, 0)
     }
 
+    func testAlertFiltersDistantRecommendationsUsingWorkLocation() async throws {
+        let suite = "ListingAlertsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set([
+            "San Francisco, CA": [37.77, -122.42],
+            "San Jose, CA": [37.34, -121.89],
+            "Clarksville, TN": [36.53, -87.36]
+        ], forKey: "placeCoordinates")
+        let distances = DistanceResolver(defaults: defaults)
+        // Browse may have moved since this check's location was snapshotted.
+        distances.setUserLocation(.init(latitude: 36.53, longitude: -87.36))
+        let data = Data(#"{"id":"check","alertID":"alert","query":"anthurium","location":{"citySlug":"sanfrancisco","name":"San Francisco","radiusKM":100,"latitude":37.77,"longitude":-122.42},"pageNumber":0}"#.utf8)
+        var work = try ListingAlertsService.decoder().decode(AlertWork.self, from: data)
+        let client = MorePagesClient()
+        client.listings = try JSONDecoder().decode([PayloadListing].self, from: Data(#"[{"id":"tn","title":"Variegated Anthurium Clarinervium","city":"Clarksville","state":"TN","deliveryTypes":["SHIPPING_ONSITE"]},{"id":"sf","title":"Anthurium Justin x Besseae aff","city":"San Francisco","state":"CA","deliveryTypes":[]},{"id":"sj","title":"Anthurium Goliath","city":"San Jose","state":"CA","deliveryTypes":[]},{"id":"unknown","title":"Anthurium","deliveryTypes":[]},{"id":"sold","title":"Sold plant","city":"San Francisco","state":"CA","deliveryTypes":[],"isSold":true}]"#.utf8))
+
+        var upload = try await ListingAlertCoordinator.searchFirstPage(work, actor: "123", client: client, distances: distances)
+        XCTAssertEqual(upload.listings?.map(\.id), ["sf", "sj", "unknown"])
+        XCTAssertEqual(upload.complete, true)
+        XCTAssertEqual(distances.userLocation?.coordinate.latitude, 36.53)
+
+        work.location.radiusKM = 16
+        upload = try await ListingAlertCoordinator.searchFirstPage(work, actor: "123", client: client, distances: distances)
+        XCTAssertEqual(upload.listings?.map(\.id), ["sf", "unknown"])
+
+        work.location.radiusKM = 0
+        upload = try await ListingAlertCoordinator.searchFirstPage(work, actor: "123", client: client, distances: distances)
+        XCTAssertEqual(upload.listings?.map(\.id), ["tn", "sf", "sj", "unknown"])
+
+        work.location.radiusKM = 16
+        client.listings = Array(client.listings.prefix(1))
+        upload = try await ListingAlertCoordinator.searchFirstPage(work, actor: "123", client: client, distances: distances)
+        XCTAssertEqual(upload.listings?.count, 0)
+        XCTAssertEqual(upload.complete, true)
+        XCTAssertNil(upload.cursor)
+    }
+
     func testMatchesKeepExactPaginationTimestampAndCanonicalListingID() throws {
         let data = Data(#"{"matches":[{"listing":{"id":"123456789","title":"Switch OLED","priceText":"$150","locationText":"San Francisco","thumbnailURL":"","description":"","condition":""},"matchedAt":"2026-10-01T12:34:56.123456Z","matchedCursor":"2026-10-01T12:34:56.123456Z","viewedAt":null}]}"#.utf8)
         let match = try ListingAlertsService.decoder().decode(ListingAlertsService.MatchList.self, from: data).matches[0]
@@ -290,11 +328,12 @@ private final class MorePagesClient: GraphQLFeedLoading {
     var calls = 0
     var requestedCursor: String?
     var query: SearchQuery?
+    var listings: [PayloadListing] = []
 
     func page(for query: SearchQuery, cursor: String?) async throws -> GraphQLFeedPage {
         calls += 1
         requestedCursor = cursor
         self.query = query
-        return GraphQLFeedPage(listings: [], endCursor: "next-page", hasNextPage: true)
+        return GraphQLFeedPage(listings: listings, endCursor: "next-page", hasNextPage: true)
     }
 }
