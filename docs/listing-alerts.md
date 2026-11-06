@@ -297,6 +297,13 @@ saved location, the server falls back to the location stored when the alert was
 created. Each fetch snapshots the actual location used; a retry keeps that
 snapshot. Alerts do not request a new GPS fix during a background wake.
 
+Before uploading candidates, the phone resolves their city names through the
+shared distance cache and removes listings beyond that check's saved radius.
+Facebook's radius alone does not reliably exclude distant recommendations.
+Distances use city centers, as in Browse; unresolved locations are retained,
+and an “Any distance” radius disables this check. This requires the updated iOS
+app and does not remove matches already stored in alert history.
+
 Jev evaluation runs on the backend in batches of 30. Failed evaluations remain
 pending and retry after an hour; they never become negative matches. All matched
 listings are stored before a durable notification outbox creates one summary per
